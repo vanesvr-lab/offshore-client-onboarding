@@ -40,25 +40,29 @@ export default function RegisterPage() {
         email: form.email,
         password: form.password,
         options: {
-          data: {
-            full_name: form.fullName,
-            company_name: form.companyName,
-            role: "client",
-          },
+          data: { full_name: form.fullName },
         },
       });
       if (error) throw error;
 
-      // Update profile with company_name (trigger creates profile but may not have company_name)
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user) {
-        await supabase
-          .from("profiles")
-          .update({ company_name: form.companyName })
-          .eq("id", user.id);
-      }
+      if (!user) throw new Error("Sign-up succeeded but no user returned");
+
+      // Create the client company record
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .insert({ company_name: form.companyName })
+        .select()
+        .single();
+      if (clientError) throw clientError;
+
+      // Associate this user with the company as owner
+      const { error: cuError } = await supabase
+        .from("client_users")
+        .insert({ client_id: clientData.id, user_id: user.id, role: "owner" });
+      if (cuError) throw cuError;
 
       toast.success("Account created! Redirecting…");
       router.push("/dashboard");

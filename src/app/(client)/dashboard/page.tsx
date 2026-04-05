@@ -12,17 +12,24 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("company_name, full_name")
-    .eq("id", user!.id)
-    .single();
+  // Resolve which company this user belongs to
+  const { data: clientUser } = await supabase
+    .from("client_users")
+    .select("client_id, clients(company_name)")
+    .eq("user_id", user!.id)
+    .maybeSingle();
 
-  const { data: applications } = await supabase
-    .from("applications")
-    .select("*, service_templates(name)")
-    .eq("client_id", user!.id)
-    .order("created_at", { ascending: false });
+  const companyName =
+    (clientUser?.clients as { company_name?: string } | null)?.company_name;
+
+  // All applications for this company (not just this user)
+  const { data: applications } = clientUser
+    ? await supabase
+        .from("applications")
+        .select("*, service_templates(name)")
+        .eq("client_id", clientUser.client_id)
+        .order("created_at", { ascending: false })
+    : { data: [] };
 
   type AppWithTemplate = Application & {
     service_templates?: { name: string };
@@ -33,7 +40,7 @@ export default async function DashboardPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">
-            Welcome, {profile?.company_name || profile?.full_name}
+            Welcome{companyName ? `, ${companyName}` : ""}
           </h1>
           <p className="text-gray-500 mt-1">
             Manage your GWMS onboarding applications

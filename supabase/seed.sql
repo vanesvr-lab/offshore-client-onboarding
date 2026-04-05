@@ -142,11 +142,14 @@ insert into document_requirements (template_id, name, description, category, is_
 --    Email: vanes.vr@gmail.com
 --    Password: GWMSAdmin2026!   (change this after first login)
 --    Check "Auto Confirm User"
--- 2. Copy the new user's UUID, then run:
+-- 2. The trigger will auto-create a profiles row.
+--    Update their name, then insert into admin_users:
 --
---    UPDATE profiles
---    SET role = 'admin', full_name = 'Jane Doe', company_name = 'GWMS Ltd'
+--    UPDATE profiles SET full_name = 'Jane Doe'
 --    WHERE email = 'vanes.vr@gmail.com';
 --
--- The trigger auto-creates a client profile; this UPDATE promotes it to admin.
+--    INSERT INTO admin_users (user_id)
+--    SELECT id FROM profiles WHERE email = 'vanes.vr@gmail.com';
+--
+-- That's it. Role is now derived from the admin_users table, not profiles.
 -- ============================================================

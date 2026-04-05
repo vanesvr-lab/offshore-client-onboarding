@@ -45,24 +45,23 @@ export async function middleware(request: NextRequest) {
 
   // Redirect authenticated users away from auth pages
   if (user && isAuthRoute) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    const destination =
-      profile?.role === "admin" ? "/admin/dashboard" : "/dashboard";
+    const { data: adminRecord } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const destination = adminRecord ? "/admin/dashboard" : "/dashboard";
     return NextResponse.redirect(new URL(destination, request.url));
   }
 
-  // Protect admin routes from non-admins
+  // Protect admin routes: must have an admin_users record
   if (user && isAdminRoute) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    if (profile?.role !== "admin") {
+    const { data: adminRecord } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!adminRecord) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }

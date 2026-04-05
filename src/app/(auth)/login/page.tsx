@@ -33,15 +33,13 @@ export default function LoginPage() {
       });
       if (error) throw error;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .single();
+      const { data: adminRecord } = await supabase
+        .from("admin_users")
+        .select("id")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
 
-      router.push(
-        profile?.role === "admin" ? "/admin/dashboard" : "/dashboard"
-      );
+      router.push(adminRecord ? "/admin/dashboard" : "/dashboard");
       router.refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Login failed");

@@ -130,10 +130,18 @@ export default function BusinessDetailsPage({
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      // Resolve the company this user belongs to
+      const { data: clientUser } = await supabase
+        .from("client_users")
+        .select("client_id")
+        .eq("user_id", user!.id)
+        .single();
+
       const payload = {
         ...form,
         template_id: params.templateId,
-        client_id: user!.id,
+        client_id: clientUser!.client_id,
         ubo_data: ubos,
         status: "draft" as const,
         updated_at: new Date().toISOString(),

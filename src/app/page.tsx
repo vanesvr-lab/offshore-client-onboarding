@@ -9,11 +9,11 @@ export default async function RootPage() {
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const { data: adminRecord } = await supabase
+    .from("admin_users")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  redirect(profile?.role === "admin" ? "/admin/dashboard" : "/dashboard");
+  redirect(adminRecord ? "/admin/dashboard" : "/dashboard");
 }

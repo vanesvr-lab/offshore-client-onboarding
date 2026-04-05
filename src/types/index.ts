@@ -1,4 +1,5 @@
 export type UserRole = "client" | "admin";
+export type ClientUserRole = "owner" | "member";
 
 export type ApplicationStatus =
   | "draft"
@@ -15,11 +16,25 @@ export type DocumentCategory = "corporate" | "kyc" | "compliance";
 
 export interface Profile {
   id: string;
-  role: UserRole;
   full_name: string | null;
-  company_name: string | null;
   email: string | null;
   phone: string | null;
+  created_at: string;
+}
+
+export interface Client {
+  id: string;
+  company_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientUser {
+  id: string;
+  client_id: string;
+  user_id: string;
+  role: ClientUserRole;
+  invited_by: string | null;
   created_at: string;
 }
 
