@@ -17,7 +17,7 @@ import { ChevronUp, ChevronDown } from "lucide-react";
 import type { Application, ApplicationStatus } from "@/types";
 
 type ApplicationWithRelations = Application & {
-  profiles?: { full_name: string | null; company_name: string | null };
+  clients?: { company_name: string | null };
   service_templates?: { name: string };
 };
 
@@ -47,8 +47,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
       const q = search.toLowerCase();
       return (
         a.business_name?.toLowerCase().includes(q) ||
-        a.profiles?.full_name?.toLowerCase().includes(q) ||
-        a.profiles?.company_name?.toLowerCase().includes(q)
+        a.clients?.company_name?.toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -88,9 +87,6 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">
-                Client
-              </th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">
                 Company
               </th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">
@@ -121,7 +117,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-gray-400"
                 >
                   No applications found
@@ -133,13 +129,8 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
                   key={app.id}
                   className="hover:bg-gray-50 transition-colors"
                 >
-                  <td className="px-4 py-3 text-gray-700">
-                    {app.profiles?.full_name || "—"}
-                  </td>
                   <td className="px-4 py-3 font-medium">
-                    {app.business_name ||
-                      app.profiles?.company_name ||
-                      "—"}
+                    {app.business_name || app.clients?.company_name || "—"}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {app.service_templates?.name || "—"}
