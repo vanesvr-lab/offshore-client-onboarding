@@ -10,3 +10,5 @@
 | 2026-04-05 | Used `sonner` for toast notifications | Modern replacement for shadcn toast; cleaner API | shadcn toast component |
 | 2026-04-05 | Files organized under `src/` directory | create-next-app@14 default with App Router generates `src/app/` structure | Flat `app/` at root |
 | 2026-04-05 | shadcn base-nova style (v2 default) | Latest shadcn default; oklch color system | New York style |
+| 2026-04-05 | Supabase Auth for POC authentication | Zero-setup, integrates directly with RLS for POC speed | Clerk, Auth.js, custom JWT |
+| 2026-04-05 | **FUTURE: Replace Supabase Auth** | Supabase controlling authentication is not desirable long-term. POC only. Production build should migrate to self-hosted auth (Auth.js/NextAuth or custom JWT). Data model, RLS, and UI do not need to change — only the auth layer. | Auth.js (recommended), Clerk, custom JWT |

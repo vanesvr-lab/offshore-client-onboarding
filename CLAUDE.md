@@ -121,6 +121,11 @@ UPDATE profiles SET full_name = 'Jane Doe' WHERE email = 'vanes.vr@gmail.com';
 INSERT INTO admin_users (user_id) SELECT id FROM profiles WHERE email = 'vanes.vr@gmail.com';
 ```
 
+## Known Future Migration
+
+**Auth: Supabase Auth must be replaced before production.**
+Supabase Auth was used for POC speed only. The production build should use self-hosted auth (Auth.js/NextAuth recommended). The data model, RLS policies, and all UI are unaffected — only `src/lib/supabase/client.ts`, `server.ts`, the login/register pages, and middleware need to change.
+
 ## Code Quality Rules
 
 - Run `npm run build` before considering any task done — it runs lint + type check
