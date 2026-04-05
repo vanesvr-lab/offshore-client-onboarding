@@ -26,7 +26,7 @@ export default async function AdminDashboardPage() {
     supabase
       .from("audit_log")
       .select(
-        "id, action, created_at, actor_id, application_id, applications(business_name)"
+        "id, action, actor_name, actor_role, created_at, actor_id, application_id, applications(business_name)"
       )
       .order("created_at", { ascending: false })
       .limit(10),

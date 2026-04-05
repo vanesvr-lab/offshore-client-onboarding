@@ -129,8 +129,14 @@ export interface VerificationResult {
 export interface AuditLogEntry {
   id: string;
   application_id: string;
-  actor_id: string;
+  actor_id: string | null;
+  actor_role: "client" | "admin" | "system" | null;
+  actor_name: string | null;
   action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  previous_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
   detail: Record<string, unknown> | null;
   created_at: string;
   profiles?: Profile;

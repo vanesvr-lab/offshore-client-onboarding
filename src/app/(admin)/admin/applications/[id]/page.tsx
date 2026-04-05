@@ -46,7 +46,7 @@ export default async function ApplicationDetailPage({
       .order("uploaded_at"),
     supabase
       .from("audit_log")
-      .select("*, profiles(full_name)")
+      .select("id, application_id, action, actor_id, actor_role, actor_name, entity_type, entity_id, previous_value, new_value, detail, created_at, profiles(full_name)")
       .eq("application_id", params.id)
       .order("created_at", { ascending: false }),
     supabase
@@ -248,7 +248,7 @@ export default async function ApplicationDetailPage({
             <CardContent>
               <AuditTrail
                 entries={
-                  (auditLog || []) as (AuditLogEntry & {
+                  (auditLog || []) as unknown as (AuditLogEntry & {
                     profiles?: { full_name: string | null };
                   })[]
                 }
