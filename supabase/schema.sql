@@ -136,6 +136,22 @@ create table if not exists audit_log (
   created_at     timestamptz default now()
 );
 
+-- CLIENT ACCOUNT MANAGERS
+-- Tracks which admin is responsible for a client account over time.
+-- ended_at IS NULL means currently active. When a new manager is assigned,
+-- the current row gets ended_at = now() and a new row is inserted.
+-- Any admin can assign/reassign for now (no ownership check).
+create table if not exists client_account_managers (
+  id          uuid primary key default uuid_generate_v4(),
+  client_id   uuid references clients(id) on delete cascade not null,
+  admin_id    uuid references profiles(id) not null,   -- the admin taking responsibility
+  started_at  timestamptz not null default now(),
+  ended_at    timestamptz,                              -- null = currently active
+  notes       text,
+  assigned_by uuid references profiles(id),            -- who made this assignment
+  created_at  timestamptz default now()
+);
+
 -- EMAIL LOG
 create table if not exists email_log (
   id uuid primary key default uuid_generate_v4(),
@@ -152,51 +168,77 @@ create table if not exists email_log (
 -- ROW LEVEL SECURITY
 -- -------------------------------------------------------
 
-alter table profiles          enable row level security;
-alter table clients           enable row level security;
-alter table client_users      enable row level security;
-alter table admin_users       enable row level security;
-alter table applications      enable row level security;
-alter table document_uploads  enable row level security;
-alter table audit_log         enable row level security;
-alter table email_log         enable row level security;
-alter table service_templates    enable row level security;
-alter table document_requirements enable row level security;
+alter table profiles                  enable row level security;
+alter table clients                   enable row level security;
+alter table client_users              enable row level security;
+alter table admin_users               enable row level security;
+alter table client_account_managers   enable row level security;
+alter table applications              enable row level security;
+alter table document_uploads          enable row level security;
+alter table audit_log                 enable row level security;
+alter table email_log                 enable row level security;
+alter table service_templates         enable row level security;
+alter table document_requirements     enable row level security;
 
--- profiles: each user sees only their own row
+-- Helper: returns true if the calling user has an admin_users record
+-- Used in RLS policies so admins can see all data
+create or replace function public.is_admin()
+returns boolean as $$
+  select exists(select 1 from public.admin_users where user_id = auth.uid())
+$$ language sql security definer stable;
+
+-- profiles: own row, or admins can read any profile (e.g. to show names)
 create policy "users_own_profile" on profiles
   for all using (auth.uid() = id);
+create policy "admins_read_all_profiles" on profiles
+  for select using (public.is_admin());
 
--- clients: members of the company can read it
--- Any authenticated user can create one (during registration)
+-- clients: members see their own company; admins see all
 create policy "client_members_read" on clients
   for select using (
     id in (select client_id from client_users where user_id = auth.uid())
   );
+create policy "admins_read_all_clients" on clients
+  for select using (public.is_admin());
+-- Any authenticated user can create a client (during registration)
 create policy "authenticated_create_client" on clients
   for insert with check (auth.role() = 'authenticated');
+-- Owners or admins can update a client
 create policy "client_owners_update" on clients
   for update using (
     id in (select client_id from client_users where user_id = auth.uid() and role = 'owner')
+    or public.is_admin()
   );
 
--- client_users: each user sees and manages their own associations
+-- client_users: users see their own; admins see all
 create policy "users_own_client_users" on client_users
   for select using (user_id = auth.uid());
+create policy "admins_read_all_client_users" on client_users
+  for select using (public.is_admin());
 create policy "users_insert_own_client_user" on client_users
   for insert with check (user_id = auth.uid());
 
--- admin_users: admins see their own record (used for role checks)
-create policy "admin_users_select_own" on admin_users
-  for select using (user_id = auth.uid());
+-- admin_users: admins see all records (needed to populate manager dropdown)
+create policy "admins_read_all_admin_users" on admin_users
+  for select using (public.is_admin());
 
--- applications: any member of the client company can read/write
+-- client_account_managers: admins can do everything; clients can read their own
+create policy "admins_manage_account_managers" on client_account_managers
+  for all using (public.is_admin());
+create policy "clients_read_own_account_manager" on client_account_managers
+  for select using (
+    client_id in (select client_id from client_users where user_id = auth.uid())
+  );
+
+-- applications: company members or admins
 create policy "clients_own_applications" on applications
   for all using (
     client_id in (select client_id from client_users where user_id = auth.uid())
   );
+create policy "admins_read_all_applications" on applications
+  for select using (public.is_admin());
 
--- document_uploads: through the application → client membership
+-- document_uploads: through application → client membership, or admin
 create policy "clients_own_uploads" on document_uploads
   for all using (
     application_id in (
@@ -205,8 +247,10 @@ create policy "clients_own_uploads" on document_uploads
       where cu.user_id = auth.uid()
     )
   );
+create policy "admins_read_all_uploads" on document_uploads
+  for select using (public.is_admin());
 
--- audit_log: clients can read entries for their applications
+-- audit_log: clients read their own; admins read all
 create policy "clients_read_own_audit" on audit_log
   for select using (
     application_id in (
@@ -215,6 +259,8 @@ create policy "clients_read_own_audit" on audit_log
       where cu.user_id = auth.uid()
     )
   );
+create policy "admins_read_all_audit" on audit_log
+  for select using (public.is_admin());
 
 -- service_templates and requirements: readable by all authenticated users
 create policy "authenticated_read_templates" on service_templates

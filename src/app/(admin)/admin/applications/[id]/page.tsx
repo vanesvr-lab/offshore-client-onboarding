@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { StageSelector } from "@/components/admin/StageSelector";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { EmailComposer } from "@/components/admin/EmailComposer";
+import { AccountManagerPanel } from "@/components/admin/AccountManagerPanel";
 import {
   Card,
   CardContent,
@@ -19,6 +21,7 @@ import type {
   AuditLogEntry,
   EmailLogEntry,
   ApplicationStatus,
+  ClientAccountManager,
 } from "@/types";
 
 export default async function ApplicationDetailPage({
@@ -27,12 +30,16 @@ export default async function ApplicationDetailPage({
   params: { id: string };
 }) {
   const supabase = createAdminClient();
+  // Server client used only to get the current user's ID for the manager panel
+  const serverClient = await createClient();
+  const { data: { user: currentUser } } = await serverClient.auth.getUser();
 
   const [
     { data: application },
     { data: uploads },
     { data: auditLog },
     { data: emailLog },
+    { data: allAdmins },
   ] = await Promise.all([
     supabase
       .from("applications")
@@ -54,9 +61,27 @@ export default async function ApplicationDetailPage({
       .select("*")
       .eq("application_id", params.id)
       .order("sent_at", { ascending: false }),
+    // All admin users for the assignment dropdown
+    supabase
+      .from("admin_users")
+      .select("user_id, profiles(full_name, email)")
+      .order("created_at"),
   ]);
 
   if (!application) notFound();
+
+  // Fetch account manager history for this client
+  const clientId = (application as { client_id: string }).client_id;
+  const { data: managerHistory } = await supabase
+    .from("client_account_managers")
+    .select("*, profiles(full_name, email)")
+    .eq("client_id", clientId)
+    .order("started_at", { ascending: false });
+
+  const currentManager =
+    (managerHistory || []).find((m) => m.ended_at === null) ?? null;
+  const pastManagers =
+    (managerHistory || []).filter((m) => m.ended_at !== null);
 
   const app = application as Application & {
     profiles?: {
@@ -238,6 +263,14 @@ export default async function ApplicationDetailPage({
               />
             </CardContent>
           </Card>
+
+          <AccountManagerPanel
+            clientId={clientId}
+            currentUserId={currentUser?.id ?? ""}
+            current={currentManager as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null }) | null}
+            history={pastManagers as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null })[]}
+            admins={(allAdmins || []) as unknown as { user_id: string; profiles: { full_name: string | null; email: string | null } | null }[]}
+          />
 
           <Card>
             <CardHeader>

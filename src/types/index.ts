@@ -38,6 +38,18 @@ export interface ClientUser {
   created_at: string;
 }
 
+export interface ClientAccountManager {
+  id: string;
+  client_id: string;
+  admin_id: string;
+  started_at: string;
+  ended_at: string | null;   // null = currently active
+  notes: string | null;
+  assigned_by: string | null;
+  created_at: string;
+  profiles?: Pick<Profile, "full_name" | "email">;
+}
+
 export interface ServiceTemplate {
   id: string;
   name: string;
