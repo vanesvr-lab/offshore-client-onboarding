@@ -66,7 +66,7 @@ export function ApplicationTable({ applications }: ApplicationTableProps) {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
         />
-        <Select value={filter} onValueChange={setFilter}>
+        <Select value={filter} onValueChange={(v) => setFilter(v ?? "all")}>
           <SelectTrigger className="w-48">
             <SelectValue />
           </SelectTrigger>

@@ -116,8 +116,8 @@ export default function BusinessDetailsPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingAppId, params.templateId]);
 
-  function updateField(field: string, value: string) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  function updateField(field: string, value: string | null) {
+    setForm((prev) => ({ ...prev, [field]: value ?? "" }));
   }
 
   async function saveProgress(andContinue = false) {
@@ -193,7 +193,7 @@ export default function BusinessDetailsPage({
               <div className="space-y-2">
                 <Label>Business type *</Label>
                 <Select
-                  value={form.business_type}
+                  value={form.business_type ?? ""}
                   onValueChange={(v) => updateField("business_type", v)}
                 >
                   <SelectTrigger>
@@ -211,7 +211,7 @@ export default function BusinessDetailsPage({
               <div className="space-y-2">
                 <Label>Country of incorporation *</Label>
                 <Select
-                  value={form.business_country}
+                  value={form.business_country ?? ""}
                   onValueChange={(v) => updateField("business_country", v)}
                 >
                   <SelectTrigger>

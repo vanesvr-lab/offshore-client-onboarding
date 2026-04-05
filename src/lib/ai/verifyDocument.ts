@@ -87,7 +87,7 @@ If all required rules pass, set overall_status: "verified".`;
           media_type: "application/pdf",
           data: base64,
         },
-      } as Anthropic.RequestDocumentBlock);
+      } as Anthropic.DocumentBlockParam);
 
   const response = await anthropic.messages.create({
     model: "claude-opus-4-6",

@@ -64,11 +64,11 @@ export function EmailComposer({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+      <SheetTrigger render={
         <Button variant="outline" size="sm" className="gap-2">
           <Mail className="h-4 w-4" /> Email Client
         </Button>
-      </SheetTrigger>
+      } />
       <SheetContent
         className="w-[480px] sm:max-w-[480px] overflow-y-auto"
         side="right"
