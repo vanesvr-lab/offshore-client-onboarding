@@ -1,35 +1,10 @@
-import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { auth } from "@/lib/auth";
+import { NextResponse } from "next/server";
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+export default auth((req) => {
+  const session = req.auth;
+  const path = req.nextUrl.pathname;
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const path = request.nextUrl.pathname;
   const isClientRoute =
     path.startsWith("/dashboard") ||
     path.startsWith("/apply") ||
@@ -38,39 +13,36 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute =
     path.startsWith("/login") || path.startsWith("/register");
 
-  // Redirect unauthenticated users to login
-  if (!user && (isClientRoute || isAdminRoute)) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Unauthenticated → login
+  if (!session && (isClientRoute || isAdminRoute)) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isAuthRoute) {
-    const { data: adminRecord } = await supabase
-      .from("admin_users")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    const destination = adminRecord ? "/admin/dashboard" : "/dashboard";
-    return NextResponse.redirect(new URL(destination, request.url));
+  // Authenticated on auth page → home
+  if (session && isAuthRoute) {
+    return NextResponse.redirect(
+      new URL(
+        session.user.role === "admin" ? "/admin/dashboard" : "/dashboard",
+        req.url
+      )
+    );
   }
 
-  // Protect admin routes: must have an admin_users record
-  if (user && isAdminRoute) {
-    const { data: adminRecord } = await supabase
-      .from("admin_users")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!adminRecord) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
+  // Non-admin trying to access admin routes → client dashboard
+  if (session && isAdminRoute && session.user.role !== "admin") {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
-  return supabaseResponse;
-}
+  // Admin trying to access client routes → admin dashboard
+  if (session && isClientRoute && session.user.role === "admin") {
+    return NextResponse.redirect(new URL("/admin/dashboard", req.url));
+  }
+
+  return NextResponse.next();
+});
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

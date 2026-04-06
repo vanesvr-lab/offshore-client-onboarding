@@ -3,8 +3,23 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
 import type { UBO } from "@/types";
+
+const NATIONALITIES = [
+  "Mauritian", "British", "French", "American", "Indian", "Chinese",
+  "Singaporean", "South African", "Emirati", "Swiss", "German",
+  "Dutch", "Luxembourgish", "Australian", "Canadian", "Japanese",
+  "Brazilian", "Italian", "Spanish", "Portuguese", "Belgian",
+  "Irish", "Swedish", "Norwegian", "Danish", "Other",
+];
 
 interface UBOFormProps {
   ubos: UBO[];
@@ -60,7 +75,7 @@ export function UBOForm({ ubos, onChange }: UBOFormProps) {
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs">Full name *</Label>
               <Input
                 value={ubo.full_name}
@@ -69,18 +84,25 @@ export function UBOForm({ ubos, onChange }: UBOFormProps) {
                 required
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs">Nationality *</Label>
-              <Input
-                value={ubo.nationality}
-                onChange={(e) =>
-                  updateUBO(idx, "nationality", e.target.value)
-                }
-                placeholder="British"
-                required
-              />
+              <Select
+                value={ubo.nationality || undefined}
+                onValueChange={(v) => updateUBO(idx, "nationality", v ?? "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select nationality" />
+                </SelectTrigger>
+                <SelectContent>
+                  {NATIONALITIES.map((n) => (
+                    <SelectItem key={n} value={n}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs">Date of birth *</Label>
               <Input
                 type="date"
@@ -91,7 +113,7 @@ export function UBOForm({ ubos, onChange }: UBOFormProps) {
                 required
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <Label className="text-xs">Ownership % *</Label>
               <Input
                 type="number"

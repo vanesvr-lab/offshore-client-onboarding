@@ -23,7 +23,7 @@ export async function verifyDocument({
   const base64 = fileBuffer.toString("base64");
   const isImage = mimeType.startsWith("image/");
 
-  const systemPrompt = `You are a compliance document verification assistant for GWMS Ltd, a licensed management company in Mauritius. Your job is to analyze uploaded documents and verify they meet KYC/AML requirements.
+  const systemPrompt = `You are a compliance document verification assistant for Mauritius Offshore Client Portal, a licensed management company in Mauritius. Your job is to analyze uploaded documents and verify they meet KYC/AML requirements.
 
 You will receive:
 1. A document image or PDF

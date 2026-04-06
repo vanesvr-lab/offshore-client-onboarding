@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   Card,
   CardContent,
@@ -29,7 +28,6 @@ interface AdminOption {
 
 interface AccountManagerPanelProps {
   clientId: string;
-  currentUserId: string;
   current: (ClientAccountManager & {
     profiles: { full_name: string | null; email: string | null } | null;
   }) | null;
@@ -41,12 +39,10 @@ interface AccountManagerPanelProps {
 
 export function AccountManagerPanel({
   clientId,
-  currentUserId,
   current,
   history,
   admins,
 }: AccountManagerPanelProps) {
-  const supabase = createClient();
   const [selectedAdminId, setSelectedAdminId] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -56,32 +52,20 @@ export function AccountManagerPanel({
     if (!selectedAdminId) return;
     setSaving(true);
     try {
-      // End the current active period
-      if (current) {
-        const { error: endError } = await supabase
-          .from("client_account_managers")
-          .update({ ended_at: new Date().toISOString() })
-          .eq("id", current.id);
-        if (endError) throw endError;
-      }
-
-      // Insert the new manager record
-      const { error: insertError } = await supabase
-        .from("client_account_managers")
-        .insert({
-          client_id: clientId,
-          admin_id: selectedAdminId,
-          started_at: new Date().toISOString(),
-          ended_at: null,
-          notes: notes.trim() || null,
-          assigned_by: currentUserId,
-        });
-      if (insertError) throw insertError;
-
+      const res = await fetch(`/api/admin/clients/${clientId}/account-manager`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adminId: selectedAdminId,
+          currentManagerId: current?.id ?? null,
+          notes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to update");
       toast.success("Account manager updated");
       setSelectedAdminId("");
       setNotes("");
-      // Refresh to show updated state
       window.location.reload();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to update");

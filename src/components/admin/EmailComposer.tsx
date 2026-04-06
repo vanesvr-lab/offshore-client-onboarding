@@ -34,7 +34,7 @@ export function EmailComposer({
   const [sending, setSending] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [subject, setSubject] = useState(
-    `Re: Your GWMS Application — ${companyName}`
+    `Re: Your Application — ${companyName}`
   );
   const [body, setBody] = useState("");
 
@@ -63,7 +63,7 @@ export function EmailComposer({
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet disablePointerDismissal open={open} onOpenChange={(o) => setOpen(o)}>
       <SheetTrigger render={
         <Button variant="outline" size="sm" className="gap-2">
           <Mail className="h-4 w-4" /> Email Client

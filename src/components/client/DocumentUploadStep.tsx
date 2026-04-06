@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { createClient } from "@/lib/supabase/client";
 import { VerificationBadge } from "./VerificationBadge";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import {
@@ -30,7 +29,6 @@ export function DocumentUploadStep({
   existingUpload,
   onUploadComplete,
 }: DocumentUploadStepProps) {
-  const supabase = createClient();
   const [uploading, setUploading] = useState(false);
   const [upload, setUpload] = useState<DocumentUpload | null>(existingUpload);
 
@@ -41,56 +39,40 @@ export function DocumentUploadStep({
       setUploading(true);
 
       try {
-        // Upload to Supabase Storage
-        const filePath = `applications/${applicationId}/${requirement.id}/${Date.now()}-${file.name}`;
-        const { error: storageError } = await supabase.storage
-          .from("documents")
-          .upload(filePath, file, { upsert: true });
+        // Upload via API route (handles storage + DB using service role)
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("applicationId", applicationId);
+        formData.append("requirementId", requirement.id);
+        if (upload?.id) formData.append("existingUploadId", upload.id);
 
-        if (storageError) throw storageError;
+        const uploadRes = await fetch("/api/documents/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadJson = await uploadRes.json();
+        if (!uploadRes.ok || uploadJson.error) throw new Error(uploadJson.error || "Upload failed");
 
-        // Create or update document_uploads row
-        const uploadPayload = {
+        const uploadId: string = uploadJson.uploadId;
+        const pendingUpload: DocumentUpload = {
+          id: uploadId,
           application_id: applicationId,
           requirement_id: requirement.id,
-          file_path: filePath,
+          file_path: uploadJson.filePath,
           file_name: file.name,
           file_size: file.size,
           mime_type: file.type,
-          verification_status: "pending" as const,
+          verification_status: "pending",
           verification_result: null,
           admin_override: null,
           admin_override_note: null,
           verified_at: null,
-        };
-
-        let uploadId: string;
-        if (upload?.id) {
-          const { error } = await supabase
-            .from("document_uploads")
-            .update(uploadPayload)
-            .eq("id", upload.id);
-          if (error) throw error;
-          uploadId = upload.id;
-        } else {
-          const { data, error } = await supabase
-            .from("document_uploads")
-            .insert(uploadPayload)
-            .select()
-            .single();
-          if (error) throw error;
-          uploadId = data.id;
-        }
-
-        const pendingUpload: DocumentUpload = {
-          ...uploadPayload,
-          id: uploadId,
           uploaded_at: new Date().toISOString(),
         };
         setUpload(pendingUpload);
 
         // Trigger AI verification
-        const res = await fetch("/api/verify-document", {
+        const verifyRes = await fetch("/api/verify-document", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -100,13 +82,13 @@ export function DocumentUploadStep({
           }),
         });
 
-        const json = await res.json();
-        if (!res.ok || json.error) throw new Error(json.error || "Verification failed");
+        const verifyJson = await verifyRes.json();
+        if (!verifyRes.ok || verifyJson.error) throw new Error(verifyJson.error || "Verification failed");
 
         const finalUpload: DocumentUpload = {
           ...pendingUpload,
-          verification_status: json.verificationStatus,
-          verification_result: json.result,
+          verification_status: verifyJson.verificationStatus,
+          verification_result: verifyJson.result,
           verified_at: new Date().toISOString(),
         };
 
@@ -119,7 +101,7 @@ export function DocumentUploadStep({
         setUploading(false);
       }
     },
-    [applicationId, requirement.id, supabase, upload, onUploadComplete]
+    [applicationId, requirement.id, upload, onUploadComplete]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

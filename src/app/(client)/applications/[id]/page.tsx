@@ -80,7 +80,7 @@ export default async function ApplicationStatusPage({
 
       {app.status === "approved" && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-700">
-          🎉 Your application has been approved. GWMS will be in touch shortly.
+          🎉 Your application has been approved. We will be in touch shortly.
         </div>
       )}
 

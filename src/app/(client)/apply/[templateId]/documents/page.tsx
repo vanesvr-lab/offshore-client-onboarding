@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { WizardLayout } from "@/components/client/WizardLayout";
 import { DocumentUploadStep } from "@/components/client/DocumentUploadStep";
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,6 @@ export default function DocumentsPage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get("applicationId");
-  const supabase = createClient();
 
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
   const [uploads, setUploads] = useState<Record<string, DocumentUpload>>({});
@@ -29,28 +27,17 @@ export default function DocumentsPage({
       router.push(`/apply/${params.templateId}/details`);
       return;
     }
-    async function load() {
-      const { data: reqs } = await supabase
-        .from("document_requirements")
-        .select("*")
-        .eq("template_id", params.templateId)
-        .order("sort_order");
-
-      setRequirements(reqs || []);
-
-      const { data: existingUploads } = await supabase
-        .from("document_uploads")
-        .select("*")
-        .eq("application_id", applicationId!);
-
-      const uploadMap: Record<string, DocumentUpload> = {};
-      (existingUploads || []).forEach((u) => {
-        uploadMap[u.requirement_id] = u as DocumentUpload;
+    fetch(`/api/applications/${applicationId}`)
+      .then((r) => r.json())
+      .then(({ requirements: reqs, uploads: docs }) => {
+        setRequirements(reqs ?? []);
+        const uploadMap: Record<string, DocumentUpload> = {};
+        (docs ?? []).forEach((u: DocumentUpload) => {
+          uploadMap[u.requirement_id] = u;
+        });
+        setUploads(uploadMap);
+        setLoading(false);
       });
-      setUploads(uploadMap);
-      setLoading(false);
-    }
-    load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId, params.templateId]);
 
@@ -168,8 +155,14 @@ export default function DocumentsPage({
           )}
 
           {requirements.length === 0 && (
-            <div className="rounded-lg border bg-white p-8 text-center text-gray-400">
-              No documents required for this template.
+            <div className="rounded-lg border bg-white p-8 text-center space-y-4">
+              <p className="text-gray-400">No documents required for this template.</p>
+              <Button
+                className="bg-brand-navy hover:bg-brand-blue"
+                onClick={() => router.push(`/apply/${params.templateId}/review?applicationId=${applicationId}`)}
+              >
+                Proceed to Review
+              </Button>
             </div>
           )}
         </div>

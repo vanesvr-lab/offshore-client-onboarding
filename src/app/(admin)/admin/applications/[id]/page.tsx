@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { StageSelector } from "@/components/admin/StageSelector";
@@ -30,9 +29,6 @@ export default async function ApplicationDetailPage({
   params: { id: string };
 }) {
   const supabase = createAdminClient();
-  // Server client used only to get the current user's ID for the manager panel
-  const serverClient = await createClient();
-  const { data: { user: currentUser } } = await serverClient.auth.getUser();
 
   const [
     { data: application },
@@ -43,7 +39,7 @@ export default async function ApplicationDetailPage({
   ] = await Promise.all([
     supabase
       .from("applications")
-      .select("*, profiles(*), service_templates(name)")
+      .select("*, clients(company_name), service_templates(name)")
       .eq("id", params.id)
       .single(),
     supabase
@@ -74,7 +70,7 @@ export default async function ApplicationDetailPage({
   const clientId = (application as { client_id: string }).client_id;
   const { data: managerHistory } = await supabase
     .from("client_account_managers")
-    .select("*, profiles(full_name, email)")
+    .select("*, profiles!admin_id(full_name, email)")
     .eq("client_id", clientId)
     .order("started_at", { ascending: false });
 
@@ -84,16 +80,11 @@ export default async function ApplicationDetailPage({
     (managerHistory || []).filter((m) => m.ended_at !== null);
 
   const app = application as Application & {
-    profiles?: {
-      full_name: string | null;
-      company_name: string | null;
-      email: string | null;
-    };
+    clients?: { company_name: string | null };
     service_templates?: { name: string };
   };
 
-  const clientEmail =
-    app.contact_email || app.profiles?.email || "";
+  const clientEmail = app.contact_email || "";
 
   return (
     <div>
@@ -152,7 +143,7 @@ export default async function ApplicationDetailPage({
               <div>
                 <span className="text-gray-500 text-xs">Name</span>
                 <p>
-                  {app.contact_name || app.profiles?.full_name || "—"}
+                  {app.contact_name || "—"}
                 </p>
               </div>
               <div>
@@ -266,7 +257,6 @@ export default async function ApplicationDetailPage({
 
           <AccountManagerPanel
             clientId={clientId}
-            currentUserId={currentUser?.id ?? ""}
             current={currentManager as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null }) | null}
             history={pastManagers as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null })[]}
             admins={(allAdmins || []) as unknown as { user_id: string; profiles: { full_name: string | null; email: string | null } | null }[]}

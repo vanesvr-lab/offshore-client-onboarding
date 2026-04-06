@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
-  title: "GWMS Client Onboarding Portal",
-  description: "GWMS Ltd — Beyond Entities, Building Legacies",
+  title: "Mauritius Offshore Client Portal",
+  description: "Mauritius Offshore Client Portal — Beyond Entities, Building Legacies",
 };
 
 export default function RootLayout({
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        {children}
+        <SessionProvider>
+          {children}
+        </SessionProvider>
         <Toaster />
       </body>
     </html>

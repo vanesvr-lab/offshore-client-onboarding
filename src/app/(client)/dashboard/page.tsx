@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -7,16 +8,14 @@ import { formatDate } from "@/lib/utils/formatters";
 import type { Application } from "@/types";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const session = await auth();
+  const supabase = createAdminClient();
 
   // Resolve which company this user belongs to
   const { data: clientUser } = await supabase
     .from("client_users")
     .select("client_id, clients(company_name)")
-    .eq("user_id", user!.id)
+    .eq("user_id", session!.user.id)
     .maybeSingle();
 
   const companyName =
@@ -43,7 +42,7 @@ export default async function DashboardPage() {
             Welcome{companyName ? `, ${companyName}` : ""}
           </h1>
           <p className="text-gray-500 mt-1">
-            Manage your GWMS onboarding applications
+            Manage your onboarding applications
           </p>
         </div>
         <Link href="/apply">
@@ -61,7 +60,7 @@ export default async function DashboardPage() {
               No applications yet
             </h3>
             <p className="text-gray-500 mb-6 max-w-sm">
-              Start your GWMS onboarding by selecting the service you need
+              Start your onboarding by selecting the service you need
             </p>
             <Link href="/apply">
               <Button className="bg-brand-navy hover:bg-brand-blue">

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,6 @@ import { toast } from "sonner";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
@@ -34,38 +33,31 @@ export default function RegisterPage() {
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
+    if (form.password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Registration failed");
+
+      // Auto sign in after registration
+      const result = await signIn("credentials", {
         email: form.email,
         password: form.password,
-        options: {
-          data: { full_name: form.fullName },
-        },
+        redirect: false,
       });
-      if (error) throw error;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Sign-up succeeded but no user returned");
+      if (result?.error) throw new Error("Account created but sign-in failed");
 
-      // Create the client company record
-      const { data: clientData, error: clientError } = await supabase
-        .from("clients")
-        .insert({ company_name: form.companyName })
-        .select()
-        .single();
-      if (clientError) throw clientError;
-
-      // Associate this user with the company as owner
-      const { error: cuError } = await supabase
-        .from("client_users")
-        .insert({ client_id: clientData.id, user_id: user.id, role: "owner" });
-      if (cuError) throw cuError;
-
-      toast.success("Account created! Redirecting…");
-      router.push("/dashboard");
+      toast.success("Account created!");
+      router.push("/apply");
       router.refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Registration failed");
@@ -77,72 +69,39 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-brand-navy">GWMS Ltd</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Beyond Entities, Building Legacies
-        </p>
+        <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
+        <p className="text-sm text-gray-500 mt-1">Beyond Entities, Building Legacies</p>
       </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Create your account</CardTitle>
-          <CardDescription>
-            Start your GWMS onboarding application
-          </CardDescription>
+          <CardDescription>Start your onboarding application</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="fullName">Full name</Label>
-              <Input
-                id="fullName"
-                value={form.fullName}
-                onChange={update("fullName")}
-                required
-              />
+              <Input id="fullName" value={form.fullName} onChange={update("fullName")} required autoComplete="name" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="companyName">Company name</Label>
-              <Input
-                id="companyName"
-                value={form.companyName}
-                onChange={update("companyName")}
-                required
-              />
+              <Input id="companyName" value={form.companyName} onChange={update("companyName")} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={update("email")}
-                required
-              />
+              <Input id="email" type="email" value={form.email} onChange={update("email")} required autoComplete="email" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={form.password}
-                onChange={update("password")}
-                minLength={8}
-                required
-              />
+              <Input id="password" type="password" value={form.password} onChange={update("password")} minLength={8} required autoComplete="new-password" />
             </div>
-            <Button
-              type="submit"
-              className="w-full bg-brand-navy hover:bg-brand-blue"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full bg-brand-navy hover:bg-brand-blue" disabled={loading}>
               {loading ? "Creating account…" : "Create account"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-gray-600">
             Already have an account?{" "}
-            <Link href="/login" className="text-brand-blue hover:underline">
-              Sign in
-            </Link>
+            <Link href="/login" className="text-brand-blue hover:underline">Sign in</Link>
           </p>
         </CardContent>
       </Card>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,7 +13,6 @@ import { toast } from "sonner";
 import type { DocumentRequirement } from "@/types";
 
 export default function VerificationRulesPage() {
-  const supabase = createClient();
   const [requirements, setRequirements] = useState<
     (DocumentRequirement & { service_templates?: { name: string } })[]
   >([]);
@@ -24,12 +22,17 @@ export default function VerificationRulesPage() {
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from("document_requirements")
-      .select("*, service_templates(name)")
-      .order("template_id")
-      .then(({ data }) => setRequirements(data || []));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetch("/api/admin/settings/templates")
+      .then((r) => r.json())
+      .then(({ templates }) => {
+        const reqs: (DocumentRequirement & { service_templates?: { name: string } })[] = [];
+        for (const t of templates ?? []) {
+          for (const req of t.document_requirements ?? []) {
+            reqs.push({ ...req, service_templates: { name: t.name } });
+          }
+        }
+        setRequirements(reqs);
+      });
   }, []);
 
   function selectRequirement(
@@ -55,11 +58,13 @@ export default function VerificationRulesPage() {
     setSaving(true);
     try {
       const parsed = JSON.parse(jsonValue);
-      const { error } = await supabase
-        .from("document_requirements")
-        .update({ verification_rules: parsed })
-        .eq("id", selected);
-      if (error) throw error;
+      const res = await fetch(`/api/admin/settings/requirements/${selected}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verification_rules: parsed }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Save failed");
       toast.success("Verification rules saved");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Save failed");

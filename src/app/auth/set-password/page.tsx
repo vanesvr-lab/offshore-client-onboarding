@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,15 +15,20 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 
-export default function SetPasswordPage() {
+function SetPasswordForm() {
   const router = useRouter();
-  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!token) {
+      toast.error("Invalid invite link — no token found");
+      return;
+    }
     if (password !== confirm) {
       toast.error("Passwords do not match");
       return;
@@ -34,11 +39,24 @@ export default function SetPasswordPage() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      toast.success("Password set — welcome to GWMS");
-      router.push("/dashboard");
-      router.refresh();
+      const res = await fetch("/api/auth/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to set password");
+
+      // Auto sign-in with the new password
+      const result = await signIn("credentials", {
+        email: data.email,
+        password,
+        redirect: false,
+      });
+      if (result?.error) throw new Error("Password set but sign-in failed — please log in manually");
+
+      toast.success("Password set — welcome to Mauritius Offshore Client Portal");
+      router.push("/apply");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to set password");
     } finally {
@@ -49,14 +67,14 @@ export default function SetPasswordPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-brand-navy">GWMS Ltd</h1>
+        <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
         <p className="text-sm text-gray-500 mt-1">Beyond Entities, Building Legacies</p>
       </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Set your password</CardTitle>
           <CardDescription>
-            Choose a password to secure your GWMS account
+            Choose a password to secure your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -94,5 +112,13 @@ export default function SetPasswordPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function SetPasswordPage() {
+  return (
+    <Suspense>
+      <SetPasswordForm />
+    </Suspense>
   );
 }

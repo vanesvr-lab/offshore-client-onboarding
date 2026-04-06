@@ -1,19 +1,8 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 
 export default async function RootPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: adminRecord } = await supabase
-    .from("admin_users")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  redirect(adminRecord ? "/admin/dashboard" : "/dashboard");
+  const session = await auth();
+  if (!session) redirect("/login");
+  redirect(session.user.role === "admin" ? "/admin/dashboard" : "/dashboard");
 }

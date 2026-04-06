@@ -16,7 +16,7 @@ const WORKFLOW_DESCRIPTION: Record<ApplicationStatus, string> = {
   verification:
     "Application passed initial review and is undergoing final compliance checks.",
   approved:
-    "Application fully approved by GWMS. Client is notified of the outcome.",
+    "Application fully approved. Client is notified of the outcome.",
   rejected:
     "Application has been rejected. The rejection reason is shown to the client.",
 };

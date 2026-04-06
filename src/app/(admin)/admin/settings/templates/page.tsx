@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +32,6 @@ import { toast } from "sonner";
 import type { ServiceTemplate, DocumentRequirement, DocumentCategory } from "@/types";
 
 export default function TemplatesPage() {
-  const supabase = createClient();
   const [templates, setTemplates] = useState<
     (ServiceTemplate & { document_requirements?: DocumentRequirement[] })[]
   >([]);
@@ -53,12 +51,10 @@ export default function TemplatesPage() {
   });
 
   const loadTemplates = useCallback(async () => {
-    const { data } = await supabase
-      .from("service_templates")
-      .select("*, document_requirements(*)")
-      .order("name");
-    setTemplates(data || []);
-  }, [supabase]);
+    const res = await fetch("/api/admin/settings/templates");
+    const data = await res.json();
+    setTemplates(data.templates ?? []);
+  }, []);
 
   useEffect(() => {
     loadTemplates();
@@ -68,14 +64,13 @@ export default function TemplatesPage() {
 
   async function createTemplate() {
     if (!newTemplate.name.trim()) return;
-    const { error } = await supabase.from("service_templates").insert({
-      name: newTemplate.name,
-      description: newTemplate.description || null,
+    const res = await fetch("/api/admin/settings/templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newTemplate),
     });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    const data = await res.json();
+    if (!res.ok || data.error) { toast.error(data.error); return; }
     toast.success("Template created");
     setNewTemplateOpen(false);
     setNewTemplate({ name: "", description: "" });
@@ -83,43 +78,33 @@ export default function TemplatesPage() {
   }
 
   async function toggleTemplateActive(id: string, current: boolean) {
-    await supabase
-      .from("service_templates")
-      .update({ is_active: !current })
-      .eq("id", id);
+    await fetch(`/api/admin/settings/templates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: !current }),
+    });
     loadTemplates();
   }
 
   async function addDocument() {
     if (!selected || !newDoc.name.trim()) return;
-    const maxOrder =
-      (selectedTemplate?.document_requirements?.length || 0) + 1;
-    const { error } = await supabase.from("document_requirements").insert({
-      template_id: selected,
-      name: newDoc.name,
-      description: newDoc.description || null,
-      category: newDoc.category,
-      is_required: newDoc.is_required,
-      sort_order: maxOrder,
+    const maxOrder = (selectedTemplate?.document_requirements?.length || 0) + 1;
+    const res = await fetch(`/api/admin/settings/templates/${selected}/requirements`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...newDoc, sort_order: maxOrder }),
     });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    const data = await res.json();
+    if (!res.ok || data.error) { toast.error(data.error); return; }
     toast.success("Document requirement added");
     setAddDocOpen(false);
-    setNewDoc({
-      name: "",
-      description: "",
-      category: "corporate",
-      is_required: true,
-    });
+    setNewDoc({ name: "", description: "", category: "corporate", is_required: true });
     loadTemplates();
   }
 
   async function deleteDocument(docId: string) {
     if (!confirm("Delete this document requirement?")) return;
-    await supabase.from("document_requirements").delete().eq("id", docId);
+    await fetch(`/api/admin/settings/requirements/${docId}`, { method: "DELETE" });
     loadTemplates();
   }
 
@@ -161,9 +146,7 @@ export default function TemplatesPage() {
                 </span>
                 <Switch
                   checked={t.is_active}
-                  onCheckedChange={() =>
-                    toggleTemplateActive(t.id, t.is_active)
-                  }
+                  onCheckedChange={() => toggleTemplateActive(t.id, t.is_active)}
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
@@ -209,17 +192,11 @@ export default function TemplatesPage() {
                             <span className="text-sm font-medium">
                               {doc.name}
                             </span>
-                            <Badge
-                              variant="outline"
-                              className="text-xs capitalize"
-                            >
+                            <Badge variant="outline" className="text-xs capitalize">
                               {doc.category}
                             </Badge>
                             {!doc.is_required && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs text-gray-400"
-                              >
+                              <Badge variant="outline" className="text-xs text-gray-400">
                                 Optional
                               </Badge>
                             )}
@@ -268,36 +245,23 @@ export default function TemplatesPage() {
               <Label>Template name *</Label>
               <Input
                 value={newTemplate.name}
-                onChange={(e) =>
-                  setNewTemplate({ ...newTemplate, name: e.target.value })
-                }
+                onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
               />
             </div>
             <div className="space-y-1">
               <Label>Description</Label>
               <Textarea
                 value={newTemplate.description}
-                onChange={(e) =>
-                  setNewTemplate({
-                    ...newTemplate,
-                    description: e.target.value,
-                  })
-                }
+                onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setNewTemplateOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setNewTemplateOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={createTemplate}
-              className="bg-brand-navy hover:bg-brand-blue"
-            >
+            <Button onClick={createTemplate} className="bg-brand-navy hover:bg-brand-blue">
               Create
             </Button>
           </DialogFooter>
@@ -315,18 +279,14 @@ export default function TemplatesPage() {
               <Label>Document name *</Label>
               <Input
                 value={newDoc.name}
-                onChange={(e) =>
-                  setNewDoc({ ...newDoc, name: e.target.value })
-                }
+                onChange={(e) => setNewDoc({ ...newDoc, name: e.target.value })}
               />
             </div>
             <div className="space-y-1">
               <Label>Instructions for client</Label>
               <Textarea
                 value={newDoc.description}
-                onChange={(e) =>
-                  setNewDoc({ ...newDoc, description: e.target.value })
-                }
+                onChange={(e) => setNewDoc({ ...newDoc, description: e.target.value })}
                 rows={3}
               />
             </div>
@@ -335,9 +295,7 @@ export default function TemplatesPage() {
                 <Label>Category</Label>
                 <Select
                   value={newDoc.category}
-                  onValueChange={(v) =>
-                    setNewDoc({ ...newDoc, category: v as DocumentCategory })
-                  }
+                  onValueChange={(v) => setNewDoc({ ...newDoc, category: v as DocumentCategory })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -352,9 +310,7 @@ export default function TemplatesPage() {
               <div className="flex items-end gap-2 pb-1">
                 <Switch
                   checked={newDoc.is_required}
-                  onCheckedChange={(v) =>
-                    setNewDoc({ ...newDoc, is_required: v })
-                  }
+                  onCheckedChange={(v) => setNewDoc({ ...newDoc, is_required: v })}
                 />
                 <Label className="text-sm">Required</Label>
               </div>
@@ -364,10 +320,7 @@ export default function TemplatesPage() {
             <Button variant="outline" onClick={() => setAddDocOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={addDocument}
-              className="bg-brand-navy hover:bg-brand-blue"
-            >
+            <Button onClick={addDocument} className="bg-brand-navy hover:bg-brand-blue">
               Add
             </Button>
           </DialogFooter>

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { WizardLayout } from "@/components/client/WizardLayout";
 import { UBOForm } from "@/components/client/UBOForm";
 import { Button } from "@/components/ui/button";
@@ -54,7 +53,6 @@ export default function BusinessDetailsPage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const existingAppId = searchParams.get("applicationId");
-  const supabase = createClient();
   const {
     applicationId,
     setApplicationId,
@@ -92,12 +90,9 @@ export default function BusinessDetailsPage({
     setTemplateId(params.templateId);
     if (existingAppId) {
       setApplicationId(existingAppId);
-      supabase
-        .from("applications")
-        .select("*")
-        .eq("id", existingAppId)
-        .single()
-        .then(({ data }) => {
+      fetch(`/api/applications/${existingAppId}`)
+        .then((r) => r.json())
+        .then(({ application: data }) => {
           if (data) {
             setForm({
               business_name: data.business_name || "",
@@ -127,46 +122,25 @@ export default function BusinessDetailsPage({
     }
     setSaving(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const res = await fetch("/api/applications/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationId: applicationId || existingAppId || undefined,
+          templateId: params.templateId,
+          ...form,
+          ubo_data: ubos,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Save failed");
 
-      // Resolve the company this user belongs to
-      const { data: clientUser } = await supabase
-        .from("client_users")
-        .select("client_id")
-        .eq("user_id", user!.id)
-        .single();
-
-      const payload = {
-        ...form,
-        template_id: params.templateId,
-        client_id: clientUser!.client_id,
-        ubo_data: ubos,
-        status: "draft" as const,
-        updated_at: new Date().toISOString(),
-      };
-
-      let appId = applicationId || existingAppId;
-      if (appId) {
-        await supabase.from("applications").update(payload).eq("id", appId);
-      } else {
-        const { data, error } = await supabase
-          .from("applications")
-          .insert(payload)
-          .select()
-          .single();
-        if (error) throw error;
-        appId = data.id;
-        setApplicationId(appId!);
-      }
-
+      const appId = data.applicationId;
+      setApplicationId(appId);
       setBusinessDetails({ ...form, ubo_data: ubos });
 
       if (andContinue) {
-        router.push(
-          `/apply/${params.templateId}/documents?applicationId=${appId}`
-        );
+        router.push(`/apply/${params.templateId}/documents?applicationId=${appId}`);
       } else {
         toast.success("Progress saved");
       }
@@ -188,7 +162,7 @@ export default function BusinessDetailsPage({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-2">
+              <div className="col-span-2 space-y-1.5">
                 <Label>Business / Entity name *</Label>
                 <Input
                   value={form.business_name}
@@ -198,7 +172,7 @@ export default function BusinessDetailsPage({
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Business type *</Label>
                 <Select
                   value={form.business_type ?? ""}
@@ -216,7 +190,7 @@ export default function BusinessDetailsPage({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Country of incorporation *</Label>
                 <Select
                   value={form.business_country ?? ""}
@@ -234,7 +208,7 @@ export default function BusinessDetailsPage({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="col-span-2 space-y-2">
+              <div className="col-span-2 space-y-1.5">
                 <Label>Registered address *</Label>
                 <Textarea
                   value={form.business_address}
@@ -256,7 +230,7 @@ export default function BusinessDetailsPage({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Full name *</Label>
                 <Input
                   value={form.contact_name}
@@ -266,7 +240,7 @@ export default function BusinessDetailsPage({
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Role / title</Label>
                 <Input
                   value={form.contact_title}
@@ -275,7 +249,7 @@ export default function BusinessDetailsPage({
                   }
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Email *</Label>
                 <Input
                   type="email"
@@ -286,7 +260,7 @@ export default function BusinessDetailsPage({
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Phone</Label>
                 <Input
                   type="tel"

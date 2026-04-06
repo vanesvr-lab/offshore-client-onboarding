@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,15 +15,18 @@ import {
 import { toast } from "sonner";
 import { UserPlus } from "lucide-react";
 
+const EMPTY_FORM = { company_name: "", full_name: "", email: "", phone: "" };
+
 export function CreateClientModal() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    company_name: "",
-    full_name: "",
-    email: "",
-    phone: "",
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  // Reset form whenever the modal closes
+  useEffect(() => {
+    if (!open) setForm(EMPTY_FORM);
+  }, [open]);
 
   function update(field: string) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -41,9 +45,9 @@ export function CreateClientModal() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create client");
 
-      toast.success(`Account created — welcome email sent to ${form.email}`);
+      toast.success(`Client account created for ${form.company_name}`);
       setOpen(false);
-      setForm({ company_name: "", full_name: "", email: "", phone: "" });
+      router.push(`/admin/clients/${data.clientId}`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -52,7 +56,7 @@ export function CreateClientModal() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog disablePointerDismissal open={open} onOpenChange={(o) => setOpen(o)}>
       <DialogTrigger render={
         <Button className="bg-brand-navy hover:bg-brand-blue gap-2">
           <UserPlus className="h-4 w-4" />
@@ -105,7 +109,7 @@ export function CreateClientModal() {
             />
           </div>
           <p className="text-xs text-gray-500">
-            A welcome email with a password setup link will be sent automatically.
+            The account will be created. You can send the welcome email from the client detail page.
           </p>
           <div className="flex gap-3 pt-1">
             <Button
@@ -122,7 +126,7 @@ export function CreateClientModal() {
               className="flex-1 bg-brand-navy hover:bg-brand-blue"
               disabled={loading}
             >
-              {loading ? "Creating…" : "Create & send invite"}
+              {loading ? "Creating…" : "Create client"}
             </Button>
           </div>
         </form>

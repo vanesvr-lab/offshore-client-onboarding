@@ -202,7 +202,7 @@ create policy "admins_read_all_clients" on clients
   for select using (public.is_admin());
 -- Any authenticated user can create a client (during registration)
 create policy "authenticated_create_client" on clients
-  for insert with check (auth.role() = 'authenticated');
+  for insert with check (auth.uid() is not null);
 -- Owners or admins can update a client
 create policy "client_owners_update" on clients
   for update using (
@@ -264,9 +264,9 @@ create policy "admins_read_all_audit" on audit_log
 
 -- service_templates and requirements: readable by all authenticated users
 create policy "authenticated_read_templates" on service_templates
-  for select using (auth.role() = 'authenticated');
+  for select using (auth.uid() is not null);
 create policy "authenticated_read_requirements" on document_requirements
-  for select using (auth.role() = 'authenticated');
+  for select using (auth.uid() is not null);
 
 -- -------------------------------------------------------
 -- AUTO-CREATE PROFILE ON REGISTRATION

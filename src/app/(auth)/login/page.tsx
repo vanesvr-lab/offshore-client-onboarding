@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,6 @@ import { toast } from "sonner";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,22 +26,22 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const result = await signIn("credentials", {
         email,
         password,
+        redirect: false,
       });
-      if (error) throw error;
 
-      const { data: adminRecord } = await supabase
-        .from("admin_users")
-        .select("id")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
+      if (result?.error) {
+        toast.error("Invalid email or password");
+        return;
+      }
 
-      router.push(adminRecord ? "/admin/dashboard" : "/dashboard");
+      // Let middleware handle the redirect based on role
+      router.push("/");
       router.refresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Login failed");
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -51,17 +50,13 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-brand-navy">GWMS Ltd</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Beyond Entities, Building Legacies
-        </p>
+        <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
+        <p className="text-sm text-gray-500 mt-1">Beyond Entities, Building Legacies</p>
       </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign in to your account</CardTitle>
-          <CardDescription>
-            Enter your credentials to access the portal
-          </CardDescription>
+          <CardDescription>Enter your credentials to access the portal</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -74,6 +69,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -84,6 +80,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
               />
             </div>
             <Button

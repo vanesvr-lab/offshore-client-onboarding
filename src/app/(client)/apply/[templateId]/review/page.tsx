@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { WizardLayout } from "@/components/client/WizardLayout";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +22,6 @@ export default function ReviewPage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const applicationId = searchParams.get("applicationId");
-  const supabase = createClient();
 
   const [application, setApplication] = useState<Application | null>(null);
   const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
@@ -32,30 +30,13 @@ export default function ReviewPage({
 
   useEffect(() => {
     if (!applicationId) return;
-    async function load() {
-      const [{ data: app }, { data: reqs }, { data: docs }] = await Promise.all(
-        [
-          supabase
-            .from("applications")
-            .select("*")
-            .eq("id", applicationId!)
-            .single(),
-          supabase
-            .from("document_requirements")
-            .select("*")
-            .eq("template_id", params.templateId)
-            .order("sort_order"),
-          supabase
-            .from("document_uploads")
-            .select("*")
-            .eq("application_id", applicationId!),
-        ]
-      );
-      setApplication(app);
-      setRequirements(reqs || []);
-      setUploads(docs || []);
-    }
-    load();
+    fetch(`/api/applications/${applicationId}`)
+      .then((r) => r.json())
+      .then(({ application: app, requirements: reqs, uploads: docs }) => {
+        setApplication(app ?? null);
+        setRequirements(reqs ?? []);
+        setUploads(docs ?? []);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
@@ -75,25 +56,11 @@ export default function ReviewPage({
     if (!applicationId) return;
     setSubmitting(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      await supabase
-        .from("applications")
-        .update({
-          status: "submitted",
-          submitted_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", applicationId);
-
-      await supabase.from("audit_log").insert({
-        application_id: applicationId,
-        actor_id: user!.id,
-        action: "application_submitted",
-        detail: { previous_status: "draft" },
+      const res = await fetch(`/api/applications/${applicationId}/submit`, {
+        method: "POST",
       });
-
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Submission failed");
       toast.success("Application submitted successfully!");
       router.push(`/applications/${applicationId}`);
     } catch (err: unknown) {
