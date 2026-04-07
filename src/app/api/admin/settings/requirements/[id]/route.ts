@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -15,6 +16,8 @@ export async function DELETE(
     .delete()
     .eq("id", params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidatePath("/admin/settings/templates");
+  revalidatePath("/admin/settings/rules");
   return NextResponse.json({ success: true });
 }
 
@@ -32,5 +35,7 @@ export async function PATCH(
     .update(body)
     .eq("id", params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidatePath("/admin/settings/templates");
+  revalidatePath("/admin/settings/rules");
   return NextResponse.json({ success: true });
 }

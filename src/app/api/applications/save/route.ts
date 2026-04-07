@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     await supabase.from("applications").update(payload).eq("id", applicationId);
+    revalidatePath("/dashboard");
+    revalidatePath(`/applications/${applicationId}`);
     return NextResponse.json({ applicationId });
   } else {
     const { data, error } = await supabase
@@ -47,6 +50,7 @@ export async function POST(request: Request) {
       .select("id")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    revalidatePath("/dashboard");
     return NextResponse.json({ applicationId: data.id });
   }
 }

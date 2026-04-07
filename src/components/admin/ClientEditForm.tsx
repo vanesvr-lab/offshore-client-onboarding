@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ interface ClientEditFormProps {
 }
 
 export function ClientEditForm({ clientId, companyName }: ClientEditFormProps) {
+  const router = useRouter();
   const [name, setName] = useState(companyName);
   const [loading, setLoading] = useState(false);
 
@@ -29,6 +31,7 @@ export function ClientEditForm({ clientId, companyName }: ClientEditFormProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update client");
       toast.success("Client updated");
+      router.refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {

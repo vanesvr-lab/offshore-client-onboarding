@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export const dynamic = "force-dynamic";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { StageSelector } from "@/components/admin/StageSelector";

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -23,10 +24,14 @@ export async function POST(request: Request) {
   if (applicationId) {
     const { error } = await supabase.from("applications").update(payload).eq("id", applicationId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    revalidatePath("/admin/applications");
+    revalidatePath("/admin/dashboard");
     return NextResponse.json({ applicationId });
   } else {
     const { data, error } = await supabase.from("applications").insert(payload).select("id").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    revalidatePath("/admin/applications");
+    revalidatePath("/admin/dashboard");
     return NextResponse.json({ applicationId: data.id });
   }
 }

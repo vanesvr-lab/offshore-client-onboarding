@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { ServiceCard } from "@/components/client/ServiceCard";
 
+export const dynamic = "force-dynamic";
+
 export default async function ServiceSelectorPage() {
   const supabase = await createClient();
 

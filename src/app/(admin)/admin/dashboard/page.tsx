@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
+
+export const dynamic = "force-dynamic";
 import type { ActivityEntry } from "@/components/shared/ActivityFeed";
 import { DashboardAnalytics } from "@/components/admin/DashboardAnalytics";
 import type {

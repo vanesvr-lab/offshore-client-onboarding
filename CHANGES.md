@@ -126,6 +126,62 @@ These files affect the entire app. Coordinate before modifying.
 
 ## Change Log
 
+### 2026-04-07 — Claude Desktop
+
+**Add `uploaded_by` column to `document_uploads`**
+- Root cause: Batch 4 (admin edit feature) added `uploaded_by: session.user.id` to `src/app/api/documents/upload/route.ts` line 81, but the column didn't exist in the schema → upload errors with PGRST204 ("Could not find the 'uploaded_by' column of 'document_uploads' in the schema cache")
+- `supabase/schema.sql` — added `uploaded_by uuid references profiles(id)` to the `document_uploads` table definition
+- Why we kept it (vs removing the line from the API route): tracking who uploaded each document is a real KYC/compliance requirement. The `audit_log` trigger already captures actor at insert time, but having `uploaded_by` directly on the row makes admin queries (e.g. "all docs uploaded by Tony Stark") trivial — and the column is already used by the admin edit feature
+
+**DB migration required (already run):**
+```sql
+ALTER TABLE document_uploads ADD COLUMN IF NOT EXISTS uploaded_by uuid REFERENCES profiles(id);
+```
+
+---
+
+### 2026-04-07 — Claude Code (CLI) — Fix stale data: force-dynamic + revalidatePath + router.refresh()
+
+**Build passes clean. Three-part cache fix.**
+
+**Fix 1: `export const dynamic = "force-dynamic"` added to all data-driven server component pages**
+- `src/app/(admin)/admin/dashboard/page.tsx`
+- `src/app/(admin)/admin/clients/[id]/page.tsx`
+- `src/app/(admin)/admin/applications/[id]/page.tsx`
+- `src/app/(admin)/admin/queue/page.tsx`
+- `src/app/(admin)/admin/settings/workflow/page.tsx`
+- `src/app/(client)/dashboard/page.tsx`
+- `src/app/(client)/applications/[id]/page.tsx`
+- `src/app/(client)/apply/page.tsx`
+- (clients/page.tsx and applications/page.tsx already had it)
+- Skipped "use client" pages (settings/templates, settings/rules, wizard steps) — force-dynamic is invalid in client components
+
+**Fix 2: `revalidatePath()` added to all mutation API routes**
+- `api/admin/create-client` → `/admin/clients`, `/admin/dashboard`
+- `api/admin/clients/[id]` (PATCH) → `/admin/clients`, `/admin/clients/[id]`
+- `api/admin/clients/[id]/send-invite` → `/admin/clients/[id]`
+- `api/admin/clients/[id]/account-manager` → `/admin/clients/[id]`
+- `api/admin/applications/[id]` (PATCH edit) → `/admin/applications/[id]`, `/admin/applications`, `/admin/dashboard`
+- `api/admin/applications/[id]/stage` → `/admin/applications/[id]`, `/admin/applications`, `/admin/queue`, `/admin/dashboard`
+- `api/admin/applications/upsert` → `/admin/applications`, `/admin/dashboard`
+- `api/admin/documents/[id]/override` → `/admin/applications/[id]`
+- `api/admin/settings/templates` (POST) → `/admin/settings/templates`
+- `api/admin/settings/templates/[id]` (PATCH) → `/admin/settings/templates`
+- `api/admin/settings/templates/[id]/requirements` (POST) → `/admin/settings/templates`, `/admin/settings/rules`
+- `api/admin/settings/requirements/[id]` (DELETE + PATCH) → `/admin/settings/templates`, `/admin/settings/rules`
+- `api/applications/save` → `/dashboard`, `/applications/[id]`
+- `api/applications/[id]/submit` → `/dashboard`, `/applications/[id]`, `/admin/queue`, `/admin/applications`, `/admin/dashboard`
+- `api/documents/upload` → `/applications/[id]`, `/admin/applications/[id]`
+- `api/auth/register` → `/admin/clients`, `/admin/dashboard`
+
+**Fix 3: `router.refresh()` added / improved in client components**
+- `ClientEditForm.tsx` — added `useRouter` + `router.refresh()` after successful PATCH
+- `SendInvitePanel.tsx` — added `useRouter` + `router.refresh()` after successful POST
+- `AccountManagerPanel.tsx` — replaced `window.location.reload()` with `router.refresh()`
+- StageSelector, DocumentViewer, EditableApplicationDetails, FlaggedDiscrepanciesCard — already had it
+
+---
+
 ### 2026-04-06 — Claude Code (CLI) — Dashboard analytics KPI grid + admin can edit application fields
 
 **Build passes clean. Two major features.**

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -88,5 +89,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: dbError.message }, { status: 500 });
   }
 
+  revalidatePath(`/applications/${applicationId}`);
+  revalidatePath(`/admin/applications/${applicationId}`);
   return NextResponse.json({ upload });
 }

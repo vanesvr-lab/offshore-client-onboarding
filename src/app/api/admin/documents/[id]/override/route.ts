@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -42,5 +43,6 @@ export async function PATCH(
     detail: { document_id: params.id, verdict, note: note || null },
   });
 
+  revalidatePath(`/admin/applications/${doc.application_id}`);
   return NextResponse.json({ success: true });
 }

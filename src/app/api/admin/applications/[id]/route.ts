@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -85,5 +86,8 @@ export async function PATCH(
     await supabase.from("audit_log").insert(auditInserts);
   }
 
+  revalidatePath(`/admin/applications/${params.id}`);
+  revalidatePath("/admin/applications");
+  revalidatePath("/admin/dashboard");
   return NextResponse.json({ success: true, changedFields });
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
@@ -86,5 +87,6 @@ export async function POST(
     .update({ invite_sent_at: new Date().toISOString() })
     .eq("id", params.id);
 
+  revalidatePath(`/admin/clients/${params.id}`);
   return NextResponse.json({ success: true });
 }

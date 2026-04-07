@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ApplicationStatus } from "@/types";
@@ -40,5 +41,9 @@ export async function PATCH(
     detail: { to: status, note: note || null },
   });
 
+  revalidatePath(`/admin/applications/${params.id}`);
+  revalidatePath("/admin/applications");
+  revalidatePath("/admin/queue");
+  revalidatePath("/admin/dashboard");
   return NextResponse.json({ success: true });
 }

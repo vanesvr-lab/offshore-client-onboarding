@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -22,5 +23,7 @@ export async function POST(
     sort_order: sort_order ?? 1,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidatePath("/admin/settings/templates");
+  revalidatePath("/admin/settings/rules");
   return NextResponse.json({ success: true });
 }

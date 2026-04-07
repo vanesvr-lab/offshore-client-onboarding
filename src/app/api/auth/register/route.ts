@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -65,5 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: cuError.message }, { status: 500 });
   }
 
+  revalidatePath("/admin/clients");
+  revalidatePath("/admin/dashboard");
   return NextResponse.json({ success: true });
 }

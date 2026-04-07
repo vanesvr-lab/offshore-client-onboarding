@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -44,5 +45,10 @@ export async function POST(
     detail: { previous_status: app.status },
   });
 
+  revalidatePath("/dashboard");
+  revalidatePath(`/applications/${params.id}`);
+  revalidatePath("/admin/queue");
+  revalidatePath("/admin/applications");
+  revalidatePath("/admin/dashboard");
   return NextResponse.json({ success: true });
 }

@@ -3,6 +3,8 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { APPLICATION_STATUS_LABELS } from "@/lib/utils/constants";
+
+export const dynamic = "force-dynamic";
 import type { ApplicationStatus } from "@/types";
 
 const WORKFLOW_DESCRIPTION: Record<ApplicationStatus, string> = {

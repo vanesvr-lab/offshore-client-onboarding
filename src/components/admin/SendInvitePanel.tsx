@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -13,6 +14,7 @@ interface SendInvitePanelProps {
 }
 
 export function SendInvitePanel({ clientId, inviteSentAt: initialSentAt }: SendInvitePanelProps) {
+  const router = useRouter();
   const [sentAt, setSentAt] = useState<string | null>(initialSentAt);
   const [sending, setSending] = useState(false);
 
@@ -27,6 +29,7 @@ export function SendInvitePanel({ clientId, inviteSentAt: initialSentAt }: SendI
       const now = new Date().toISOString();
       setSentAt(now);
       toast.success("Welcome email sent");
+      router.refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {

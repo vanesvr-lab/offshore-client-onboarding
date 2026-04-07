@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -43,6 +44,7 @@ export function AccountManagerPanel({
   history,
   admins,
 }: AccountManagerPanelProps) {
+  const router = useRouter();
   const [selectedAdminId, setSelectedAdminId] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -66,7 +68,7 @@ export function AccountManagerPanel({
       toast.success("Account manager updated");
       setSelectedAdminId("");
       setNotes("");
-      window.location.reload();
+      router.refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to update");
     } finally {

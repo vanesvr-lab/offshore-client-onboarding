@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -22,5 +23,7 @@ export async function PATCH(
     .eq("id", params.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidatePath("/admin/clients");
+  revalidatePath(`/admin/clients/${params.id}`);
   return NextResponse.json({ success: true });
 }
