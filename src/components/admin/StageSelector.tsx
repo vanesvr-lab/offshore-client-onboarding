@@ -45,12 +45,26 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const requiresNote = selected === "pending_action" || selected === "rejected";
+  const hasChanged = selected !== currentStatus;
   const requiresConfirm = selected === "approved" || selected === "rejected";
 
+  const notePlaceholder =
+    selected === "rejected"
+      ? "Explain why the application is being rejected…"
+      : selected === "pending_action"
+      ? "Explain what action the client needs to take…"
+      : "Add a note for this stage change…";
+
+  const noteLabel =
+    selected === "rejected"
+      ? "Rejection reason *"
+      : selected === "pending_action"
+      ? "Note for client *"
+      : "Note *";
+
   async function executeUpdate() {
-    if (requiresNote && !note.trim()) {
-      toast.error("A note is required for this status change");
+    if (!note.trim()) {
+      toast.error("A note is required for stage changes");
       return;
     }
     setSaving(true);
@@ -58,7 +72,7 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
       const res = await fetch(`/api/admin/applications/${applicationId}/stage`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: selected, note: note || undefined }),
+        body: JSON.stringify({ status: selected, note: note.trim() }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -75,7 +89,6 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
     }
   }
 
-  // session is used to confirm the user is still authenticated before acting
   if (!session) return null;
 
   function handleUpdateClick() {
@@ -98,21 +111,23 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={handleUpdateClick} disabled={selected === currentStatus || saving} className="bg-brand-navy hover:bg-brand-blue">
+        <Button
+          onClick={handleUpdateClick}
+          disabled={!hasChanged || saving || !note.trim()}
+          className="bg-brand-navy hover:bg-brand-blue"
+        >
           Update
         </Button>
       </div>
 
-      {requiresNote && selected !== currentStatus && (
+      {hasChanged && (
         <div className="space-y-1">
-          <Label className="text-xs text-gray-600">
-            {selected === "rejected" ? "Rejection reason *" : "Note for client *"}
-          </Label>
+          <Label className="text-xs text-gray-600">{noteLabel}</Label>
           <Textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            placeholder={selected === "rejected" ? "Explain why the application is being rejected…" : "Explain what action the client needs to take…"}
+            placeholder={notePlaceholder}
           />
         </div>
       )}
@@ -126,18 +141,23 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
             Are you sure you want to mark this application as{" "}
             <strong>{APPLICATION_STATUS_LABELS[selected]}</strong>?
           </p>
-          {selected === "rejected" && (
-            <div className="space-y-1">
-              <Label className="text-sm">Rejection reason *</Label>
-              <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Explain why…" />
+          {note.trim() && (
+            <div className="rounded border bg-gray-50 px-3 py-2 text-sm text-gray-700 italic">
+              &ldquo;{note.trim()}&rdquo;
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={executeUpdate}
-              disabled={saving || (selected === "rejected" && !note.trim())}
-              className={selected === "rejected" ? "bg-red-600 hover:bg-red-700" : "bg-brand-navy hover:bg-brand-blue"}
+              disabled={saving}
+              className={
+                selected === "rejected"
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-brand-navy hover:bg-brand-blue"
+              }
             >
               Confirm
             </Button>

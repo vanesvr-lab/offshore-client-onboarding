@@ -11,9 +11,14 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          navy: "#1a365d",
-          blue: "#2b6cb0",
+          dark: "#0F172A",
+          navy: "#1e3a8a",
+          blue: "#3b82f6",
           light: "#90cdf4",
+          accent: "#F59E0B",
+          success: "#10B981",
+          danger: "#EF4444",
+          muted: "#64748B",
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

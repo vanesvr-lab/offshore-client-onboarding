@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendClientEmail } from "@/lib/email/sendEmail";
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await auth();
+    if (!session || session.user.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const { to, subject, body, applicationId } = await request.json();
     if (!to || !subject || !body || !applicationId) {
@@ -20,12 +18,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await sendClientEmail({ to, subject, body, applicationId, sentBy: user.id });
+    await sendClientEmail({ to, subject, body, applicationId, sentBy: session.user.id });
 
-    // Write audit log
     await createAdminClient().from("audit_log").insert({
       application_id: applicationId,
-      actor_id: user.id,
+      actor_id: session.user.id,
       action: "email_sent",
       detail: { to, subject },
     });

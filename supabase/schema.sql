@@ -113,6 +113,7 @@ create table if not exists document_uploads (
   verification_result jsonb,
   admin_override  text check (admin_override in ('pass', 'fail')),
   admin_override_note text,
+  uploaded_by     uuid references profiles(id),
   uploaded_at     timestamptz default now(),
   verified_at     timestamptz
 );
