@@ -6,6 +6,10 @@ import { StageSelector } from "@/components/admin/StageSelector";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { EmailComposer } from "@/components/admin/EmailComposer";
 import { AccountManagerPanel } from "@/components/admin/AccountManagerPanel";
+import { WorkflowTracker } from "@/components/admin/WorkflowTracker";
+import { FlaggedDiscrepanciesCard } from "@/components/admin/FlaggedDiscrepanciesCard";
+import { ApplicationStatusPanel } from "@/components/shared/ApplicationStatusPanel";
+import { EditableApplicationDetails } from "@/components/admin/EditableApplicationDetails";
 import {
   Card,
   CardContent,
@@ -21,6 +25,7 @@ import type {
   EmailLogEntry,
   ApplicationStatus,
   ClientAccountManager,
+  VerificationResult,
 } from "@/types";
 
 export default async function ApplicationDetailPage({
@@ -57,7 +62,6 @@ export default async function ApplicationDetailPage({
       .select("*")
       .eq("application_id", params.id)
       .order("sent_at", { ascending: false }),
-    // All admin users for the assignment dropdown
     supabase
       .from("admin_users")
       .select("user_id, profiles(full_name, email)")
@@ -66,7 +70,21 @@ export default async function ApplicationDetailPage({
 
   if (!application) notFound();
 
-  // Fetch account manager history for this client
+  const appTyped = application as Application & {
+    clients?: { company_name: string | null };
+    service_templates?: { name: string };
+  };
+
+  // Fetch requirements for task data and status panel
+  const { data: requirements } = appTyped.template_id
+    ? await supabase
+        .from("document_requirements")
+        .select("id, name, category")
+        .eq("template_id", appTyped.template_id)
+        .order("sort_order")
+    : { data: [] };
+
+  // Fetch account manager history
   const clientId = (application as { client_id: string }).client_id;
   const { data: managerHistory } = await supabase
     .from("client_account_managers")
@@ -79,12 +97,16 @@ export default async function ApplicationDetailPage({
   const pastManagers =
     (managerHistory || []).filter((m) => m.ended_at !== null);
 
-  const app = application as Application & {
-    clients?: { company_name: string | null };
-    service_templates?: { name: string };
-  };
-
+  const app = appTyped;
   const clientEmail = app.contact_email || "";
+
+  const typedUploads = (uploads || []) as (DocumentUpload & {
+    document_requirements?: DocumentRequirement | null;
+  })[];
+
+  const flaggedUploads = typedUploads.filter(
+    (u) => u.verification_status === "flagged"
+  );
 
   return (
     <div>
@@ -104,82 +126,28 @@ export default async function ApplicationDetailPage({
         <StatusBadge status={app.status as ApplicationStatus} />
       </div>
 
+      {/* Workflow progress tracker */}
+      <div className="mb-6 rounded-lg border bg-white px-6 py-5">
+        <WorkflowTracker status={app.status as ApplicationStatus} />
+      </div>
+
       <div className="grid grid-cols-3 gap-6">
-        {/* Left: Application info */}
+        {/* Left: Application info (col-span-2) */}
         <div className="col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-brand-navy text-base">
-                Business Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-gray-500 text-xs">Business name</span>
-                <p className="font-medium">{app.business_name || "—"}</p>
-              </div>
-              <div>
-                <span className="text-gray-500 text-xs">Type</span>
-                <p>{app.business_type || "—"}</p>
-              </div>
-              <div>
-                <span className="text-gray-500 text-xs">Country</span>
-                <p>{app.business_country || "—"}</p>
-              </div>
-              <div>
-                <span className="text-gray-500 text-xs">Address</span>
-                <p>{app.business_address || "—"}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-brand-navy text-base">
-                Primary Contact
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-gray-500 text-xs">Name</span>
-                <p>
-                  {app.contact_name || "—"}
-                </p>
-              </div>
-              <div>
-                <span className="text-gray-500 text-xs">Email</span>
-                <p>{clientEmail || "—"}</p>
-              </div>
-              <div>
-                <span className="text-gray-500 text-xs">Phone</span>
-                <p>{app.contact_phone || "—"}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {app.ubo_data && app.ubo_data.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-brand-navy text-base">
-                  Ultimate Beneficial Owners
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {app.ubo_data.map((ubo, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded border bg-gray-50 p-3 text-sm"
-                  >
-                    <p className="font-medium">{ubo.full_name}</p>
-                    <p className="text-gray-500">
-                      {ubo.nationality} · {ubo.ownership_percentage}% · DOB:{" "}
-                      {ubo.date_of_birth} · Passport: {ubo.passport_number}
-                    </p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          <EditableApplicationDetails
+            app={{
+              id: app.id,
+              business_name: app.business_name ?? null,
+              business_type: app.business_type ?? null,
+              business_country: app.business_country ?? null,
+              business_address: app.business_address ?? null,
+              contact_name: app.contact_name ?? null,
+              contact_email: app.contact_email ?? null,
+              contact_phone: app.contact_phone ?? null,
+              ubo_data: app.ubo_data ?? null,
+              admin_notes: app.admin_notes ?? null,
+            }}
+          />
 
           <Card>
             <CardHeader>
@@ -189,31 +157,24 @@ export default async function ApplicationDetailPage({
             </CardHeader>
             <CardContent>
               <ul className="divide-y">
-                {(uploads || []).map((upload) => {
-                  const u = upload as DocumentUpload & {
-                    document_requirements?: DocumentRequirement;
-                  };
-                  return (
-                    <li
-                      key={u.id}
-                      className="flex items-center justify-between py-2 text-sm"
-                    >
-                      <span>{u.document_requirements?.name}</span>
-                      <div className="flex items-center gap-3">
-                        <VerificationBadge
-                          status={u.verification_status}
-                        />
-                        <Link
-                          href={`/admin/applications/${params.id}/documents/${u.id}`}
-                          className="text-brand-blue text-xs hover:underline"
-                        >
-                          View
-                        </Link>
-                      </div>
-                    </li>
-                  );
-                })}
-                {(!uploads || uploads.length === 0) && (
+                {typedUploads.map((u) => (
+                  <li
+                    key={u.id}
+                    className="flex items-center justify-between py-2 text-sm"
+                  >
+                    <span>{u.document_requirements?.name}</span>
+                    <div className="flex items-center gap-3">
+                      <VerificationBadge status={u.verification_status} />
+                      <Link
+                        href={`/admin/applications/${params.id}/documents/${u.id}`}
+                        className="text-brand-blue text-xs hover:underline"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+                {typedUploads.length === 0 && (
                   <li className="py-4 text-sm text-gray-400 text-center">
                     No documents uploaded yet
                   </li>
@@ -221,10 +182,77 @@ export default async function ApplicationDetailPage({
               </ul>
             </CardContent>
           </Card>
+
+          {/* AI Flagged Discrepancies */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-brand-navy text-base">
+                AI Flagged Discrepancies
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FlaggedDiscrepanciesCard
+                applicationId={params.id}
+                flaggedDocs={flaggedUploads.map((u) => ({
+                  id: u.id,
+                  application_id: u.application_id,
+                  file_name: u.file_name,
+                  verification_result: u.verification_result as VerificationResult | null,
+                  document_requirements: u.document_requirements
+                    ? { name: u.document_requirements.name, category: u.document_requirements.category }
+                    : null,
+                }))}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-brand-navy text-base">
+                Verification Checklist
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2.5">
+                {[
+                  "Identity documents verified",
+                  "Business registration confirmed",
+                  "Source of funds reviewed",
+                  "UBO declarations cross-checked",
+                  "PEP/sanctions screening complete",
+                  "Risk assessment completed",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2.5 text-sm">
+                    <div className="h-4 w-4 rounded border border-gray-300 bg-white flex-shrink-0" />
+                    <span className="text-gray-700">{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-gray-400 mt-4">
+                Checklist automation coming in v2
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right: Actions */}
         <div className="space-y-6">
+          {/* Application Health Panel */}
+          <ApplicationStatusPanel
+            application={{
+              business_name: app.business_name,
+              status: app.status as ApplicationStatus,
+              admin_notes: app.admin_notes,
+            }}
+            requirements={(requirements || []) as Array<{ id: string; name: string; category: string }>}
+            uploads={typedUploads.map((u) => ({
+              id: u.id,
+              requirement_id: u.requirement_id,
+              verification_status: u.verification_status,
+              verification_result: u.verification_result,
+            }))}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-brand-navy text-base">

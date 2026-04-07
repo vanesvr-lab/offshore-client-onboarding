@@ -62,6 +62,7 @@ RLS policies added beyond initial schema.sql:
 | `PATCH /api/admin/clients/[id]` | `src/app/api/admin/clients/[id]/route.ts` | Claude Code |
 | `POST /api/admin/clients/[id]/send-invite` | `src/app/api/admin/clients/[id]/send-invite/route.ts` | Claude Code |
 | `POST /api/admin/applications/upsert` | `src/app/api/admin/applications/upsert/route.ts` | Claude Code |
+| `PATCH /api/admin/applications/[id]` | `src/app/api/admin/applications/[id]/route.ts` | Claude Code |
 | `POST /api/send-email` | `src/app/api/send-email/route.ts` | Claude Code |
 | `POST /api/verify-document` | `src/app/api/verify-document/route.ts` | Claude Code |
 
@@ -75,6 +76,8 @@ RLS policies added beyond initial schema.sql:
 | `AccountManagerPanel.tsx` | Assign/history of account managers | Claude Code |
 | `ApplicationTable.tsx` | Filterable/sortable application list | Claude Code |
 | `AuditTrail.tsx` | Audit log display with actor badges | Claude Code |
+| `DashboardAnalytics.tsx` | 4-card KPI grid with recharts | Claude Code |
+| `EditableApplicationDetails.tsx` | Per-section editable application fields | Claude Code |
 | `ClientEditForm.tsx` | Inline company name editing | Claude Code |
 | `CreateClientModal.tsx` | Admin-initiated client creation | Claude Code |
 | `DocumentViewer.tsx` | AI document review UI | Claude Code |
@@ -122,6 +125,152 @@ These files affect the entire app. Coordinate before modifying.
 ---
 
 ## Change Log
+
+### 2026-04-06 — Claude Code (CLI) — Dashboard analytics KPI grid + admin can edit application fields
+
+**Build passes clean. Two major features.**
+
+**Feature 1: Dashboard Analytics (4-card KPI grid)**
+- `src/app/(admin)/admin/dashboard/page.tsx` — 8 parallel Supabase queries; server-side data computation for all 4 charts; helper functions `getLast6Months()`, `monthLabel()`, `avg()`, `toMonthKey()`; STATUS_HEX map; passes `DashboardAnalyticsData` to `<DashboardAnalytics>`
+- `src/components/admin/DashboardAnalytics.tsx` — NEW "use client" recharts component; 2×2 grid; Card 1: LineChart avg days to approval (last 6 months, `connectNulls={false}`); Card 2: list view time-in-stage with inline progress bars + "Longest phase" highlight; Card 3: BarChart approval rate (last 4 months); Card 4: BarChart applications by status (per-bar `<Cell>` colors); shared `CardShell` wrapper with icon/info/settings/Explore link; section header with Filters | Export | Customize buttons
+- Time-in-stage calculation: groups `status_changed` audit events by application_id, sorts by created_at, computes `events[i+1].ts - events[i].ts` as duration spent in `events[i].status`, averages across all applications
+
+**Feature 2: Admin can edit application fields with audit trail**
+- `src/app/api/admin/applications/[id]/route.ts` — NEW PATCH handler; verifies admin session; fetches current row; diffs each field with `JSON.stringify`; inserts one `audit_log` entry per changed field (`action: "field_updated"`, `previous_value`, `new_value`, optional `detail.note`); updates `applications` row; returns `{ success: true, changedFields }`
+- `src/components/admin/EditableApplicationDetails.tsx` — NEW "use client" component; `SectionKey = "business" | "contact" | "ubo" | "notes"`; `SectionActions` sub-component toggles Edit ↔ Save/Cancel; only one section editable at a time (other Edit buttons disabled); shared optional-note Dialog (skip or save with note); `executeSave()` calls PATCH, toasts, router.refresh(); Business Info uses Select for type + country; UBOs reuse `<UBOForm>`
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — replaced three static cards (Business Information, Primary Contact, UBO) with `<EditableApplicationDetails app={...} />`; Internal Notes section now included and editable; Documents, AI Flagged Discrepancies, Verification Checklist, right column unchanged
+
+**New API route added:**
+- `PATCH /api/admin/applications/[id]` — per-field edit with audit trail
+
+---
+
+### 2026-04-07 — Claude Code (CLI) — Admin nav: clickable clients, search, all-applications page
+
+**Build passes clean. 3 navigation changes.**
+
+**Change 1: Clickable company name on Clients page**
+- `src/app/(admin)/admin/clients/page.tsx` — converted to thin server component; data normalization (owner, manager, appCount) extracted from raw Supabase rows into `ClientRow[]`; `CreateClientModal` + `<ClientsTable>` passed normalized data
+- `src/components/admin/ClientsTable.tsx` — NEW "use client" component; company name wrapped in `<Link href="/admin/clients/[id]">` with `hover:text-brand-blue hover:underline`; "View" button column removed (5 columns down from 6); `colSpan` updated to 5; search bar added (see Change 2)
+
+**Change 2: Search bar on Clients page**
+- `src/components/admin/ClientsTable.tsx` — search input with `Search` lucide icon (left-side); `max-w-md`; case-insensitive filter on `company_name`, `ownerName`, `ownerEmail`; separate empty states: "No clients yet" (zero total) vs "No clients match your search" (filtered); matches Review Queue / ApplicationTable pattern
+
+**Change 3: "Applications" page — all applications across all clients**
+- `src/app/(admin)/admin/applications/page.tsx` — NEW server component; `force-dynamic`; fetches all applications (no status filter), joins `clients(company_name)` and `service_templates(name)`, orders by `updated_at desc`; passes `ApplicationRow[]` to `<ApplicationsTable>`
+- `src/components/admin/ApplicationsTable.tsx` — NEW "use client" component; search across `business_name`, `companyName`, `serviceName`, `status`; 7 columns: Application (brand-navy), Company, Service, Stage (StatusBadge), Created, Last Updated, Notes (first 60 chars); entire row is clickable (`cursor-pointer`, `onClick` → `router.push`); two empty states (no apps / no match)
+- `src/components/shared/Sidebar.tsx` — "Applications" nav item added between Clients and Review Queue; `href: "/admin/applications"`, `icon: FileText`, `exact: true` (prevents matching `/admin/applications/[id]` routes)
+- `src/app/(admin)/admin/queue/page.tsx` — description updated from "All submitted applications" → "Active applications awaiting review"
+
+---
+
+### 2026-04-07 — Claude Code (CLI) — Three component fixes: chevron visibility, status panel light theme + collapsible
+
+**Build passes clean.**
+
+**Fix 1: WorkflowTracker — pending stages visible**
+- `src/components/admin/WorkflowTracker.tsx` — future/pending stages changed from `bg-slate-100 text-brand-muted` → `bg-slate-200 text-slate-500`; removed `shadow-md` from current stage background (drop-shadow handles depth now); added `filter: drop-shadow(0 0 1px rgba(0,0,0,0.13))` to outer container via inline style — CSS drop-shadow respects clip-path shape and gives all chevrons a visible outline edge on white backgrounds; all 6 stages are now clearly visible even with no progress
+
+**Fix 2 & 3: ApplicationStatusPanel — light theme + collapsible (default collapsed)**
+- `src/components/shared/ApplicationStatusPanel.tsx` — converted to "use client"; switched from `bg-brand-dark` (dark) to `bg-white border-gray-200 shadow-sm` (light card); header: `text-gray-500` label, `text-gray-900` business name; document rows: `bg-gray-50 hover:bg-gray-100`, `text-gray-900` title, `text-gray-500` subtitle; action rows keep `border-brand-accent` left strip; "Awaiting" pills changed from `bg-white/10` → `bg-gray-200 text-gray-500`; Elarix AI card: `bg-amber-50 border-amber-100`, `text-amber-700` label, white sparkle icon on `bg-brand-accent` avatar; added `useState(false)` collapse toggle — default CLOSED; header shows summary line when collapsed ("4 verified · 2 flagged · 6 awaiting" format, only non-zero counts); ChevronDown rotates 180° when open; body uses `max-h-0 opacity-0` → `max-h-[2000px] opacity-100` transition-all for smooth height animation; Sidebar and Header untouched (remain dark)
+
+---
+
+### 2026-04-07 — Claude Code (CLI) — Application detail page overhaul: modal fixes, audit table, AI discrepancies, status panel
+
+**Build passes clean. 5 changes applied.**
+
+**Change 1: Modal background fix (root cause + all affected components)**
+- `src/components/ui/dialog.tsx` — `DialogContent` changed from `bg-popover text-popover-foreground` to `bg-white text-gray-900 shadow-xl`; fixes transparent dialogs globally (affects CreateClientModal, StageSelector, AccountManagerPanel, any future dialogs)
+- `src/components/ui/sheet.tsx` — `SheetContent` changed from `bg-popover bg-clip-padding text-popover-foreground` to `bg-white text-gray-900`; fixes EmailComposer and all sheets
+
+**Change 2: Compact AuditTrail table view**
+- `src/components/admin/AuditTrail.tsx` — converted from timeline `ul/li` to compact `table`; now "use client" for expandable rows; columns: Time (relative + full date tooltip) | Actor (initials avatar + name + role badge) | Action (label + status change arrow + quoted note inline); chevron expands row to show full note, before/after values, detail fields; sticky table header; `max-h-[480px]` scrollable body
+
+**Change 3: AI Flagged Discrepancies card**
+- `src/components/admin/FlaggedDiscrepanciesCard.tsx` — NEW "use client" component; shows each flagged document with flag strings from `verification_result.flags` and field-level discrepancies from `match_results` (expected vs found grid); "Override to Pass" button calls `PATCH /api/admin/documents/[id]/override` with `verdict: "pass"` + `router.refresh()`; "Request Re-upload" links to document viewer; empty state shows green checkmark; removed docs optimistically after override
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — FlaggedDiscrepanciesCard card added after Documents card in left column; filters uploads to `verification_status === 'flagged'`
+
+**Change 4: ApplicationStatusPanel**
+- `src/components/shared/ApplicationStatusPanel.tsx` — NEW server component; dark-themed (`bg-brand-dark border-white/10 rounded-xl`); "Application Health" label + business name header; one status row per document requirement (green check = verified, amber shield + left border = flagged/manual_review, gray clock = pending/missing); row subtitles describe document state; "Elarix AI" assistant card at bottom with `getAssistantMessage(status, flaggedCount)` — 8 state-driven messages varying by status + flagged count; UI-only
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — ApplicationStatusPanel added at top of right column above Stage Management card
+- `src/app/(client)/applications/[id]/page.tsx` — layout changed from single column to `grid-cols-3`; left col-span-2 has main content; right col has ApplicationStatusPanel
+
+**Change 5: Remove StageTaskList from WorkflowTracker**
+- `src/components/admin/WorkflowTracker.tsx` — removed `taskData` prop, `StageTaskList` import, and the task list render below the chevron bar; component is now pure chevron pipeline display
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — removed `taskData` prop from WorkflowTracker call
+- `src/app/(client)/applications/[id]/page.tsx` — same; also removed `document_requirements` query that was only used for taskData (re-added for ApplicationStatusPanel with `category` included)
+
+---
+
+### 2026-04-06 — Claude Code (CLI) — Visual identity overhaul: color palette, dark sidebar, header bar, chevron pipeline
+
+**Build passes clean. 4 visual changes applied consistently.**
+
+**Change 1: Brand color palette**
+- `tailwind.config.ts` — added `brand.dark` (#0F172A), updated `brand.navy` (#1e3a8a), `brand.blue` (#3b82f6), added `brand.accent` (#F59E0B gold), `brand.success` (#10B981), `brand.danger` (#EF4444), `brand.muted` (#64748B)
+
+**Change 2: Dark sidebar (Companio-style)**
+- `src/components/shared/Sidebar.tsx` — rewritten; `bg-brand-dark` background; width 260px; logo in white, tagline removed (moved to header); section headers use `text-brand-muted text-xs uppercase tracking-wider`; inactive items `text-brand-muted` with `hover:text-white hover:bg-white/5`; active item `bg-brand-accent text-brand-dark rounded-lg font-semibold`; dividers `border-white/10`; `LogOut` button removed from bottom; bottom section shows user name + role badge
+
+**Change 3: Top header bar**
+- `src/components/shared/Header.tsx` — NEW "use client" component; `bg-brand-dark h-14 border-b border-white/10`; left: bold white "Mauritius Offshore Client Portal" + `brand-muted` tagline "Beyond Entities, Building Legacies"; right: user name in white + outlined Sign out button (`border-white/30 hover:bg-white/10`)
+- `src/app/(admin)/layout.tsx` — wrapped in `flex flex-col`; `<Header>` at top spanning full width; sidebar + main in `flex flex-1 min-h-0` below
+- `src/app/(client)/layout.tsx` — same layout restructure
+
+**Change 4: Chevron-style stage pipeline**
+- `src/components/admin/WorkflowTracker.tsx` — rewritten; 6 chevron-shaped stages using CSS clip-path polygon; completed = `bg-brand-success` white text + checkmark; current = `bg-brand-accent text-brand-dark` (same gold as active sidebar item); future = `bg-slate-100 text-brand-muted`; rejected = `bg-brand-danger` white + X icon; each stage overlaps the previous by `-ml-3` with stacked z-index for clean arrow connection; hover tooltip (gray-900 bg) shows stage name + status label; `StageTaskList` renders below as before
+
+---
+
+### 2026-04-06 — Claude Code (CLI) — Sidebar nav, activity feed, task list, files pages
+
+**Build passes clean. 4 features added.**
+
+**Feature 1: Left sidebar navigation (replaces top Navbar)**
+- `src/components/shared/Sidebar.tsx` — NEW "use client" component; fixed left sidebar 260px wide; white bg, subtle right border; brand logo + tagline at top; active route highlighted (brand-navy bg, white text); hover state (gray bg); admin nav: Dashboard, Clients, Review Queue, Settings section (Templates, Verification Rules, Workflow); client nav: Dashboard, New Application, My Applications (conditional); contextual "Application" section auto-appears when on any `/admin/applications/[id]` or `/applications/[id]` route, with Details + Files links; user name + Sign out at bottom
+- `src/app/(admin)/layout.tsx` — replaced `<Navbar>` with `<Sidebar>`; layout changed to `flex` with `min-h-screen`
+- `src/app/(client)/layout.tsx` — same; added `client_id` to clientUser select; added app count query to pass `hasApplications` prop to Sidebar
+- `src/components/shared/Navbar.tsx` — kept in place but no longer used
+
+**Feature 2: Activity Feed**
+- `src/components/shared/ActivityFeed.tsx` — NEW "use client" component; initials avatar (colored by role), action description, relative timestamp ("2h ago"), quoted stage-change notes, link to application
+- `src/app/(admin)/admin/dashboard/page.tsx` — updated audit_log query to include `detail`; replaced custom activity rendering with `<ActivityFeed>`
+- `src/app/(client)/dashboard/page.tsx` — added audit_log query for client's applications; two-column layout (apps list + activity feed card on the right)
+
+**Feature 3: Stage task list under workflow tracker**
+- `src/components/shared/StageTaskList.tsx` — NEW server component; derives tasks per stage: draft → business details + UBO tasks; document stages → requirements as tasks (uploaded = completed); verification → 6 checklist items (placeholder); pending_action → admin note + doc tasks; mini progress bar + "X/Y complete"; To Do / Completed sections
+- `src/components/admin/WorkflowTracker.tsx` — added optional `taskData` prop; renders `<StageTaskList>` below the stage bar when provided
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — added document_requirements query by template_id; passes taskData to WorkflowTracker
+- `src/app/(client)/applications/[id]/page.tsx` — same requirements query + taskData pass
+
+**Feature 4: Files page per application**
+- `src/components/shared/FileManager.tsx` — NEW "use client" component; search bar + category filter; table view (Name, Category, Uploaded, Size, Status, Actions); admin gets "View" link to document viewer; both get "Download" (calls signed URL API); empty state with folder icon
+- `src/app/api/documents/[id]/download/route.ts` — NEW GET endpoint; auth-gated; fetches file_path from document_uploads; returns 1-hour Supabase Storage signed URL
+- `src/app/(admin)/admin/applications/[id]/files/page.tsx` — NEW; breadcrumb nav; shows FileManager with admin role
+- `src/app/(client)/applications/[id]/files/page.tsx` — NEW; breadcrumb nav; "+ Add File" button links to documents wizard; shows FileManager with client role
+- Sidebar auto-shows "Files" link when on application routes (see Feature 1)
+
+---
+
+### 2026-04-06 — Claude Code (CLI) — Admin application features: notes, checklist, workflow tracker
+
+**Build passes clean.**
+
+**Feature 1: Mandatory notes on every stage change**
+- `src/components/admin/StageSelector.tsx` — note textarea is now always shown when a different stage is selected; note is required for ALL transitions (not just pending_action/rejected); Update button disabled until note is non-empty; confirmation dialog (for approved/rejected) shows the typed note as a quoted preview instead of a redundant textarea
+- `src/app/api/admin/applications/[id]/stage/route.ts` — no changes needed; note is already stored in `audit_log.detail.note`
+- `src/components/admin/AuditTrail.tsx` — stage change notes extracted from `detail.note` and displayed as a bordered italic quote below the status transition; "note" key excluded from the generic detail line to avoid duplication
+
+**Feature 2: Verification Checklist (placeholder)**
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — added Verification Checklist card in left column after Documents; 6 static unchecked items; gray "Checklist automation coming in v2" footer text; UI-only, no DB changes
+
+**Feature 3: Workflow progress tracker**
+- `src/components/admin/WorkflowTracker.tsx` — NEW reusable component; horizontal connected stages (Draft → Submitted → In Review → Action Required → Verification → Approved); completed stages show checkmark in brand-navy; current stage is highlighted with ring; future stages gray; rejected state appends a red X node; uses APPLICATION_STATUS_LABELS from constants
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — WorkflowTracker added above the main grid in a white bordered card
+- `src/app/(client)/applications/[id]/page.tsx` — WorkflowTracker added above the existing StatusTimeline so clients can see their progress
+
+---
 
 ### 2026-04-06 — Claude Desktop
 
