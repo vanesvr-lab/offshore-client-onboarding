@@ -67,6 +67,30 @@ create table if not exists document_requirements (
 );
 
 -- -------------------------------------------------------
+-- KNOWLEDGE BASE
+-- Regulatory knowledge base used by AI preliminary verification.
+-- Admins manage entries (rules, required-document lists, regulatory text
+-- excerpts). When a document is verified, relevant KB entries are included
+-- in the prompt so the AI can reference the actual regulatory context.
+-- -------------------------------------------------------
+
+create table if not exists knowledge_base (
+  id uuid primary key default uuid_generate_v4(),
+  title text not null,
+  category text not null check (category in ('rule', 'document_requirement', 'regulatory_text', 'general')),
+  content text not null,
+  -- applies_to structure: { "template_ids": ["uuid",...], "document_type": "passport", "tags": ["aml","pep"] }
+  applies_to jsonb default '{}'::jsonb,
+  source text,                               -- e.g. "FSC Rules 2022 Section 3.1", "Mauritius FIAMLA Act"
+  is_active boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  created_by uuid references profiles(id)
+);
+
+create index if not exists knowledge_base_category_idx on knowledge_base(category) where is_active;
+
+-- -------------------------------------------------------
 -- APPLICATIONS
 -- client_id references clients — not the individual user
 -- Multiple users from the same company all see the same applications

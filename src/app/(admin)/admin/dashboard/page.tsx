@@ -114,13 +114,13 @@ export default async function AdminDashboardPage() {
       .order("created_at", { ascending: false })
       .limit(10),
     // Card 1: applications approved in the last 6 months
+    // Note: submitted_at can be null if admin approved directly — fall back to created_at
     supabase
       .from("applications")
-      .select("approved_at, submitted_at")
+      .select("approved_at, submitted_at, created_at")
       .eq("status", "approved")
       .gte("approved_at", sixMonthsAgo.toISOString())
-      .not("approved_at", "is", null)
-      .not("submitted_at", "is", null),
+      .not("approved_at", "is", null),
     // Card 2: all status change events (for stage duration calc)
     supabase
       .from("audit_log")
@@ -192,11 +192,14 @@ export default async function AdminDashboardPage() {
   const last6 = getLast6Months();
   const byApprovalMonth: Record<string, number[]> = {};
   (approvedApps || []).forEach((app) => {
-    if (!app.approved_at || !app.submitted_at) return;
+    if (!app.approved_at) return;
+    // Fall back to created_at if submitted_at is null (admin-approved without submit flow)
+    const startDate = app.submitted_at ?? app.created_at;
+    if (!startDate) return;
     const days =
-      (new Date(app.approved_at).getTime() -
-        new Date(app.submitted_at).getTime()) /
+      (new Date(app.approved_at).getTime() - new Date(startDate).getTime()) /
       (1000 * 60 * 60 * 24);
+    if (days < 0) return; // sanity check
     const key = toMonthKey(app.approved_at);
     if (!byApprovalMonth[key]) byApprovalMonth[key] = [];
     byApprovalMonth[key].push(days);

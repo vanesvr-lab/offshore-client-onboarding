@@ -121,26 +121,30 @@ export function ApplicationStatusPanel({
 
   return (
     <div className="rounded-xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-      {/* Header — always visible, click to toggle */}
+      {/* Header — always visible, click to toggle.
+          Title color matches Stage Management card title (text-brand-navy text-base);
+          summary line size matches the "Move to stage" label (text-sm font-medium text-gray-700). */}
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="w-full flex items-start justify-between px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left"
+        className="w-full flex items-start justify-between px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left"
       >
         <div className="min-w-0 flex-1">
-          <p className="text-gray-500 text-[10px] uppercase tracking-wider font-medium">
+          <p className="text-brand-navy text-base font-semibold leading-tight truncate">
             Application Health
           </p>
-          <p className="text-gray-900 font-semibold text-sm mt-0.5 truncate">
+          <p className="text-gray-600 text-xs mt-0.5 truncate">
             {application.business_name || "Application"}
           </p>
           {!isOpen && (
-            <p className="text-gray-400 text-[10px] mt-0.5">{summaryLine}</p>
+            <p className="text-sm font-medium text-gray-700 mt-2">
+              {summaryLine}
+            </p>
           )}
         </div>
         <ChevronDown
           className={cn(
-            "h-4 w-4 text-gray-400 shrink-0 mt-1 ml-2 transition-transform duration-200",
+            "h-5 w-5 text-gray-500 shrink-0 mt-1 ml-2 transition-transform duration-200",
             isOpen && "rotate-180"
           )}
         />
@@ -190,8 +194,8 @@ export function ApplicationStatusPanel({
 
                 {/* Text */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-gray-900 text-xs font-medium truncate">{req.name}</p>
-                  <p className="text-gray-500 text-[10px] truncate mt-0.5">
+                  <p className="text-gray-900 text-sm font-medium truncate">{req.name}</p>
+                  <p className="text-gray-500 text-xs truncate mt-0.5">
                     {getRowSubtitle(vs, req.name)}
                   </p>
                 </div>

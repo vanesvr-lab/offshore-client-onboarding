@@ -68,22 +68,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: storageError.message }, { status: 500 });
   }
 
-  // Upsert document_uploads record
-  const { data: upload, error: dbError } = await supabase
+  // Look up existing row for this requirement (one upload per requirement)
+  const { data: existing } = await supabase
     .from("document_uploads")
-    .upsert({
-      application_id: applicationId,
-      requirement_id: requirementId,
-      file_path: filePath,
-      file_name: file.name,
-      file_size: file.size,
-      mime_type: file.type,
-      verification_status: "pending",
-      uploaded_by: session.user.id,
-      uploaded_at: new Date().toISOString(),
-    }, { onConflict: "application_id,requirement_id" })
-    .select()
-    .single();
+    .select("id")
+    .eq("application_id", applicationId)
+    .eq("requirement_id", requirementId)
+    .maybeSingle();
+
+  let upload;
+  let dbError;
+
+  if (existing?.id) {
+    // Replace the existing row
+    const res = await supabase
+      .from("document_uploads")
+      .update({
+        file_path: filePath,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+        verification_status: "pending",
+        verification_result: null,
+        admin_override: null,
+        admin_override_note: null,
+        verified_at: null,
+        uploaded_by: session.user.id,
+        uploaded_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    upload = res.data;
+    dbError = res.error;
+  } else {
+    // Insert a new row
+    const res = await supabase
+      .from("document_uploads")
+      .insert({
+        application_id: applicationId,
+        requirement_id: requirementId,
+        file_path: filePath,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+        verification_status: "pending",
+        uploaded_by: session.user.id,
+        uploaded_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    upload = res.data;
+    dbError = res.error;
+  }
 
   if (dbError) {
     return NextResponse.json({ error: dbError.message }, { status: 500 });
@@ -91,5 +128,10 @@ export async function POST(request: Request) {
 
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/admin/applications/${applicationId}`);
-  return NextResponse.json({ upload });
+  // Return both the legacy `upload` shape and the flat keys the client expects
+  return NextResponse.json({
+    upload,
+    uploadId: upload?.id,
+    filePath: upload?.file_path,
+  });
 }

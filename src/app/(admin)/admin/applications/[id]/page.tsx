@@ -12,6 +12,7 @@ import { WorkflowTracker } from "@/components/admin/WorkflowTracker";
 import { FlaggedDiscrepanciesCard } from "@/components/admin/FlaggedDiscrepanciesCard";
 import { ApplicationStatusPanel } from "@/components/shared/ApplicationStatusPanel";
 import { EditableApplicationDetails } from "@/components/admin/EditableApplicationDetails";
+import { AdminDocumentUploader } from "@/components/admin/AdminDocumentUploader";
 import {
   Card,
   CardContent,
@@ -152,10 +153,15 @@ export default async function ApplicationDetailPage({
           />
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-brand-navy text-base">
                 Documents
               </CardTitle>
+              <AdminDocumentUploader
+                applicationId={params.id}
+                requirements={(requirements ?? []) as DocumentRequirement[]}
+                existingUploads={typedUploads}
+              />
             </CardHeader>
             <CardContent>
               <ul className="divide-y">

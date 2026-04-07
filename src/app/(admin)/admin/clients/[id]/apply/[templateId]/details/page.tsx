@@ -74,10 +74,42 @@ export default function AdminWizardDetailsPage({
     setForm((prev) => ({ ...prev, [field]: value ?? "" }));
   }
 
+  function validateForm(): string | null {
+    if (!form.business_name.trim()) return "Business / Entity name is required";
+    if (!form.business_type.trim()) return "Business type is required";
+    if (!form.business_country.trim()) return "Country of incorporation is required";
+    if (!form.business_address.trim()) return "Registered address is required";
+    if (!form.contact_name.trim()) return "Primary contact full name is required";
+    if (!form.contact_email.trim()) return "Primary contact email is required";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact_email.trim())) {
+      return "Primary contact email is not valid";
+    }
+    if (ubos.length === 0) return "At least one Ultimate Beneficial Owner is required";
+    for (let i = 0; i < ubos.length; i++) {
+      const u = ubos[i];
+      const label = `UBO ${i + 1}`;
+      if (!u.full_name?.trim()) return `${label}: full name is required`;
+      if (!u.nationality?.trim()) return `${label}: nationality is required`;
+      if (!u.date_of_birth?.trim()) return `${label}: date of birth is required`;
+      if (!u.ownership_percentage || u.ownership_percentage < 25)
+        return `${label}: ownership percentage must be at least 25%`;
+      if (!u.passport_number?.trim()) return `${label}: passport number is required`;
+    }
+    return null;
+  }
+
   async function saveProgress(andContinue = false) {
-    if (ubos.length === 0 || ubos.some((u) => !u.full_name)) {
-      toast.error("At least one complete UBO is required");
-      return;
+    if (andContinue) {
+      const error = validateForm();
+      if (error) {
+        toast.error(error);
+        return;
+      }
+    } else {
+      if (!form.business_name.trim()) {
+        toast.error("Business / Entity name is required to save");
+        return;
+      }
     }
     setSaving(true);
     try {

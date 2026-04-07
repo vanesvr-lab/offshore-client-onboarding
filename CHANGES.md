@@ -126,6 +126,70 @@ These files affect the entire app. Coordinate before modifying.
 
 ## Change Log
 
+### 2026-04-07 — Claude Desktop — Bug fixes + Knowledge Base + AI verification context
+
+**6 fixes + 1 new feature. Build passes clean.**
+
+**Fix 1: KPI "Avg Days to Approval" missed admin-approved applications**
+- Root cause: query filtered out apps with `submitted_at IS NULL`. Admin-approved apps don't go through submit flow so `submitted_at` stays null and they were excluded from the metric.
+- `src/app/(admin)/admin/dashboard/page.tsx` — removed `.not("submitted_at","is",null)` filter; calculation now falls back to `created_at` when `submitted_at` is missing. Negative deltas filtered as a sanity check.
+
+**Fix 2: Document upload broken (multiple bugs)**
+- Bug A — API/client mismatch: `/api/documents/upload` returned `{ upload }` but `DocumentUploadStep.tsx` read `uploadJson.uploadId` and `.filePath`, getting `undefined`. Fix: API now also returns flat `uploadId` + `filePath` keys.
+- Bug B — `upsert` with `onConflict: "application_id,requirement_id"` failed because no unique constraint exists on those columns. Fix: refactored to explicit "look up existing → update OR insert" logic. No DB migration needed.
+- Bug C — Anthropic SDK threw "Could not resolve authentication method" because `process.env.ANTHROPIC_API_KEY` was empty. Root cause: the **shell** had `ANTHROPIC_API_KEY=""` exported (set by Claude Desktop), and Next.js merges shell env on top of `.env.local`. The empty string from the shell was overriding the real key.
+  - Workaround: dev server must be started with `unset ANTHROPIC_API_KEY` before `npm run dev` (added a note to CLAUDE.md tech debt).
+  - Code fix: `src/lib/ai/verifyDocument.ts` — Anthropic client now lazily-instantiated with explicit error if key is missing (better error message than the SDK default).
+
+**Fix 3: Admin can now upload documents on behalf of clients**
+- `src/components/admin/AdminDocumentUploader.tsx` — NEW client component; "Upload Document" button on admin application detail page → opens dialog with document-type Select + reuses `DocumentUploadStep` for the actual upload + AI verification flow. Admin can replace existing uploads (shows "(replace)" suffix in the dropdown).
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — Documents card header now shows the upload button.
+- The upload route already supported admin uploads (line 41-57 of `route.ts` skips the client_id ownership check for admins). `uploaded_by` correctly tracks the admin's profile id.
+
+**Fix 4: Wizard required field validations**
+- Both client wizard (`src/app/(client)/apply/[templateId]/details/page.tsx`) and admin wizard (`src/app/(admin)/admin/clients/[id]/apply/[templateId]/details/page.tsx`) only validated UBO presence — all other "required" fields relied on the HTML5 `required` attribute which doesn't fire because the buttons aren't inside a `<form>`.
+- Added `validateForm()` helper that checks: business name/type/country/address, contact name/email (with format check), 1+ UBOs each with full_name/nationality/date_of_birth/ownership_percentage≥25/passport_number.
+- "Save progress" allows partial drafts (only requires business name); "Next" runs full validation.
+
+**Fix 5: ApplicationStatusPanel font/color/size**
+- `src/components/shared/ApplicationStatusPanel.tsx` — header title color changed to `text-brand-navy text-base font-semibold` (matches Stage Management card title); collapsed summary line bumped from `text-[10px] text-gray-400` → `text-sm font-medium text-gray-700` (matches "Move to stage" label, much more visible). Document row text bumped from `text-xs/text-[10px]` → `text-sm/text-xs` for readability with many docs.
+
+**Feature: Compliance Knowledge Base + AI integration**
+- `supabase/schema.sql` — NEW `knowledge_base` table with categories (rule, document_requirement, regulatory_text, general), title, content, applies_to JSONB, source citation, is_active. Index on category for active entries.
+- `src/app/api/admin/knowledge-base/route.ts` — NEW: GET (list with optional category filter), POST (create)
+- `src/app/api/admin/knowledge-base/[id]/route.ts` — NEW: PATCH (update), DELETE
+- `src/app/(admin)/admin/settings/knowledge-base/page.tsx` — NEW: server component; gracefully handles "table doesn't exist yet" by showing the migration SQL
+- `src/components/admin/KnowledgeBaseManager.tsx` — NEW client component: grouped by category, create/edit dialog, delete with confirm
+- `src/components/shared/Sidebar.tsx` — added "Knowledge Base" link under Settings (BookOpen icon)
+- `src/lib/ai/verifyDocument.ts` — `verifyDocument()` now loads active KB entries (filtered by document_type via `applies_to` field) and includes them in the AI prompt under "Relevant compliance knowledge base". Fails open if the table doesn't exist.
+
+**DB migration required (run in Supabase SQL Editor):**
+```sql
+CREATE TABLE IF NOT EXISTS knowledge_base (
+  id uuid primary key default uuid_generate_v4(),
+  title text not null,
+  category text not null check (category in ('rule', 'document_requirement', 'regulatory_text', 'general')),
+  content text not null,
+  applies_to jsonb default '{}'::jsonb,
+  source text,
+  is_active boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  created_by uuid references profiles(id)
+);
+CREATE INDEX IF NOT EXISTS knowledge_base_category_idx
+  ON knowledge_base(category) WHERE is_active;
+```
+
+**⚠️ IMPORTANT — Dev server start command:**
+Because the shell exports an empty `ANTHROPIC_API_KEY`, the dev server MUST be started with the env explicitly unset:
+```bash
+pkill -f "next dev"; sleep 2; rm -rf .next; unset ANTHROPIC_API_KEY; npm run dev
+```
+Without `unset`, the AI verification will silently fail with "Could not resolve authentication method." This does NOT affect Vercel — only local dev.
+
+---
+
 ### 2026-04-07 — Claude Desktop
 
 **Add `uploaded_by` column to `document_uploads`**
@@ -264,9 +328,14 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 13 | **CLAUDE.md is partially outdated** | Low | Sections still reference Supabase Auth (replaced by Auth.js). Should be updated to reflect current architecture. |
 | 14 | **No tests** | Medium | Zero test coverage. Add Vitest + Playwright for critical flows (auth, registration, application submit, document upload, stage changes). |
 | 15 | **`supabase/README.md` has outdated SQL** | Low | Step 3 references `profiles.role` and `profiles.company_name` columns that don't exist. |
+| 16 | **Shell `ANTHROPIC_API_KEY=""` overrides `.env.local`** | Medium | Vanessa's shell exports an empty `ANTHROPIC_API_KEY` (set by Claude Desktop). Next.js merges shell env on top of `.env.local`, so the AI verification silently fails locally with "Could not resolve authentication method." Workaround: start dev with `unset ANTHROPIC_API_KEY; npm run dev`. Permanent fix options: (a) add `unset` to package.json `dev` script, (b) use a `.env.local.development` with explicit override, or (c) configure Claude Desktop to not export the empty var. **Does not affect Vercel** — only local dev. |
+| 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
+| 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
 
 ### Resolved
 
-_(Move items here as they get fixed, with a date and brief note.)_
+| # | Item | Resolved | Notes |
+|---|------|----------|-------|
+| 9 (partial) | AI assistant messages hardcoded | 2026-04-07 | Still hardcoded in `ApplicationStatusPanel`, but the new Knowledge Base feeds the real document verification AI prompts so the AI now has actual regulatory context. The status-panel chat is separately a UI placeholder. |
 
 ---

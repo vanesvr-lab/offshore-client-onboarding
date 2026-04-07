@@ -1,7 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { VerificationRules, VerificationResult } from "@/types";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+// Lazy-instantiate the Anthropic client to avoid module-load-time env issues
+let _anthropic: Anthropic | null = null;
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error("ANTHROPIC_API_KEY is not set in the environment");
+    }
+    _anthropic = new Anthropic({ apiKey });
+  }
+  return _anthropic;
+}
 
 interface VerifyParams {
   fileBuffer: Buffer;
@@ -12,6 +24,58 @@ interface VerifyParams {
     business_name: string | null;
     ubo_data: unknown;
   };
+  /** Optional document type used to filter relevant knowledge base entries */
+  documentType?: string | null;
+}
+
+/**
+ * Load active knowledge base entries relevant to this verification.
+ * Pulls all rules and document_requirements + any regulatory_text where
+ * applies_to.document_type matches (or is unset). Fails open — if the
+ * table doesn't exist yet or the query fails, returns an empty list so
+ * verification still proceeds.
+ */
+async function loadRelevantKnowledgeBase(
+  documentType: string | null
+): Promise<string> {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("knowledge_base")
+      .select("title, category, content, source, applies_to")
+      .eq("is_active", true);
+
+    if (error || !data || data.length === 0) return "";
+
+    type Entry = {
+      title: string;
+      category: string;
+      content: string;
+      source: string | null;
+      applies_to: Record<string, unknown> | null;
+    };
+
+    const entries = data as Entry[];
+
+    // Filter: include if applies_to.document_type matches OR is unset
+    const relevant = entries.filter((e) => {
+      const appliesDocType = (e.applies_to?.document_type as string) ?? null;
+      if (!appliesDocType) return true; // applies to everything
+      if (!documentType) return true; // no doc type to filter by
+      return appliesDocType.toLowerCase() === documentType.toLowerCase();
+    });
+
+    if (relevant.length === 0) return "";
+
+    return relevant
+      .map((e) => {
+        const src = e.source ? ` (Source: ${e.source})` : "";
+        return `[${e.category.toUpperCase()}] ${e.title}${src}\n${e.content}`;
+      })
+      .join("\n\n---\n\n");
+  } catch {
+    return "";
+  }
 }
 
 export async function verifyDocument({
@@ -19,9 +83,15 @@ export async function verifyDocument({
   mimeType,
   rules,
   applicationContext,
+  documentType,
 }: VerifyParams): Promise<VerificationResult> {
   const base64 = fileBuffer.toString("base64");
   const isImage = mimeType.startsWith("image/");
+
+  // Load applicable knowledge base entries (fails open if table missing)
+  const knowledgeBase = await loadRelevantKnowledgeBase(
+    documentType ?? rules.document_type_expected ?? null
+  );
 
   const systemPrompt = `You are a compliance document verification assistant for Mauritius Offshore Client Portal, a licensed management company in Mauritius. Your job is to analyze uploaded documents and verify they meet KYC/AML requirements.
 
@@ -31,6 +101,9 @@ You will receive:
 3. Fields to extract
 4. Matching rules to check
 5. Application context (applicant name, company name)
+6. Relevant compliance knowledge base entries (rules, document requirements, and regulatory text from the Mauritius FSC and related authorities)
+
+When evaluating the document, reference the knowledge base entries to determine whether the document satisfies the cited rules and regulatory requirements. Cite the entries by their TITLE in your reasoning when relevant.
 
 Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
 
@@ -46,7 +119,11 @@ Application context:
 
 Matching rules:
 ${JSON.stringify(rules.match_rules, null, 2)}
-
+${
+  knowledgeBase
+    ? `\nRelevant compliance knowledge base:\n${knowledgeBase}\n`
+    : ""
+}
 Respond with this exact JSON schema:
 {
   "can_read_document": boolean,
@@ -89,7 +166,7 @@ If all required rules pass, set overall_status: "verified".`;
         },
       } as Anthropic.DocumentBlockParam);
 
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: "claude-opus-4-6",
     max_tokens: 2000,
     system: systemPrompt,
