@@ -134,3 +134,60 @@ Supabase Auth was used for POC speed only. The production build should use self-
 - Do not add `console.log` in production code
 - Do not add features beyond what is asked
 - Do not commit `.env.local`
+
+## Git Workflow Rule (CRITICAL — applies to every batch)
+
+After completing any feature batch, bug fix, or significant set of changes, you
+MUST commit and push to GitHub. Vercel deploys from GitHub — local commits do
+not deploy, untracked files do not deploy. Skipping this step is the #1 cause
+of "the site is showing the old version" reports.
+
+**Required steps after any non-trivial work:**
+
+1. Run `git status` to see ALL modifications
+2. Pay attention to BOTH:
+   - Modified files (the `M` lines)
+   - **Untracked files** (the `??` lines) — new files you just created
+3. Stage everything that's part of your work:
+   - Stage specific files by name (NEVER use `git add .` or `git add -A`)
+   - NEVER stage `.env.local`, `.env`, `supabase/.temp/`, or any file that
+     might contain secrets
+4. Run `git commit` with a descriptive message. For multi-line messages, use
+   the HEREDOC pattern:
+   ```
+   git commit -m "$(cat <<'EOF'
+   feat: brief one-line title
+
+   - Bullet point describing what changed
+   - Another bullet
+   - Etc.
+
+   Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+   EOF
+   )"
+   ```
+5. Run `git push origin main`
+6. Verify with `git status` — should say "nothing to commit, working tree clean"
+   and "Your branch is up to date with 'origin/main'"
+
+**Before/after a deployment fails or shows old content:**
+- Run `git log --oneline -5` to see what's actually been committed
+- Run `git status -sb` to see if you're ahead of `origin/main`
+- If you see commits ahead of origin → push them
+- If you see uncommitted/untracked files → stage, commit, push
+
+**Update CHANGES.md as part of every commit** so the other Claude instance
+can see what was done.
+
+## Dev Server Restart Pattern
+
+When components or layouts change significantly, the .next cache can corrupt.
+Always include this in your handoff to the user:
+
+```
+pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev
+```
+
+Do NOT restart the dev server yourself while editing files — it can corrupt
+the webpack cache and cause "Cannot find module" errors. Let the user restart
+after you're done editing.
