@@ -27,9 +27,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { UBOForm } from "@/components/client/UBOForm";
+import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { BUSINESS_TYPES } from "@/lib/utils/constants";
-import type { UBO } from "@/types";
+import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 const COUNTRIES = [
   "Mauritius", "United Kingdom", "France", "United States", "India", "China",
@@ -37,7 +37,7 @@ const COUNTRIES = [
   "Netherlands", "Luxembourg", "Cayman Islands", "British Virgin Islands", "Other",
 ];
 
-type SectionKey = "business" | "contact" | "ubo" | "notes";
+type SectionKey = "business" | "contact" | "service" | "notes";
 
 export interface EditableAppData {
   id: string;
@@ -48,7 +48,7 @@ export interface EditableAppData {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
-  ubo_data: UBO[] | null;
+  service_details: Record<string, unknown> | null;
   admin_notes: string | null;
 }
 
@@ -104,7 +104,13 @@ function SectionActions({
   );
 }
 
-export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
+export function EditableApplicationDetails({
+  app,
+  serviceFields = [],
+}: {
+  app: EditableAppData;
+  serviceFields?: ServiceField[];
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState<SectionKey | null>(null);
   const [saving, setSaving] = useState(false);
@@ -120,7 +126,9 @@ export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
     contact_email: app.contact_email ?? "",
     contact_phone: app.contact_phone ?? "",
   });
-  const [ubos, setUbos] = useState<UBO[]>(app.ubo_data ?? []);
+  const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
+    app.service_details ?? {}
+  );
   const [notes, setNotes] = useState(app.admin_notes ?? "");
 
   const [noteDialog, setNoteDialog] = useState<NoteDialogState>({
@@ -130,7 +138,6 @@ export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
   });
 
   function startEdit(section: SectionKey) {
-    // Reset to current server values
     if (section === "business") {
       setBiz({
         business_name: app.business_name ?? "",
@@ -144,8 +151,8 @@ export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
         contact_email: app.contact_email ?? "",
         contact_phone: app.contact_phone ?? "",
       });
-    } else if (section === "ubo") {
-      setUbos(app.ubo_data ?? []);
+    } else if (section === "service") {
+      setServiceDetails(app.service_details ?? {});
     } else if (section === "notes") {
       setNotes(app.admin_notes ?? "");
     }
@@ -236,12 +243,12 @@ export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Business Information ─────────────────────────────────────────── */}
+      {/* ── Section A: Business Information ─────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-brand-navy text-base">
-              Business Information
+              Section A: Business Information
             </CardTitle>
             <SectionActions
               section="business"
@@ -334,12 +341,12 @@ export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
         </CardContent>
       </Card>
 
-      {/* ── Primary Contact ──────────────────────────────────────────────── */}
+      {/* ── Section B: Primary Contact ───────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-brand-navy text-base">
-              Primary Contact
+              Section B: Primary Contact
             </CardTitle>
             <SectionActions
               section="contact"
@@ -404,42 +411,32 @@ export function EditableApplicationDetails({ app }: { app: EditableAppData }) {
         </CardContent>
       </Card>
 
-      {/* ── UBO Data ─────────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-brand-navy text-base">
-              Ultimate Beneficial Owners
-            </CardTitle>
-            <SectionActions
-              section="ubo"
-              {...actions("ubo", { ubo_data: ubos })}
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {editing === "ubo" ? (
-            <UBOForm ubos={ubos} onChange={setUbos} />
-          ) : app.ubo_data && app.ubo_data.length > 0 ? (
-            <div className="space-y-3">
-              {app.ubo_data.map((ubo, idx) => (
-                <div
-                  key={idx}
-                  className="rounded border bg-gray-50 p-3 text-sm"
-                >
-                  <p className="font-medium">{ubo.full_name}</p>
-                  <p className="text-gray-500">
-                    {ubo.nationality} · {ubo.ownership_percentage}% · DOB:{" "}
-                    {ubo.date_of_birth} · Passport: {ubo.passport_number}
-                  </p>
-                </div>
-              ))}
+      {/* ── Section C: Service Details (dynamic) ─────────────────────────── */}
+      {serviceFields.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-brand-navy text-base">
+                Section C: Service Details
+              </CardTitle>
+              <SectionActions
+                section="service"
+                {...actions("service", { service_details: serviceDetails })}
+              />
             </div>
-          ) : (
-            <p className="text-sm text-gray-400">No UBOs recorded.</p>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <DynamicServiceForm
+              fields={serviceFields}
+              values={serviceDetails}
+              onChange={(key, value) =>
+                setServiceDetails((prev) => ({ ...prev, [key]: value }))
+              }
+              readOnly={editing !== "service"}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Internal Notes ───────────────────────────────────────────────── */}
       <Card>

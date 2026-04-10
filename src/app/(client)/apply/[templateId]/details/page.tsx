@@ -52,7 +52,6 @@ export default function BusinessDetailsPage({
   } = useWizardStore();
 
   const [saving, setSaving] = useState(false);
-  const [templateName, setTemplateName] = useState("");
   const [serviceFields, setServiceFields] = useState<ServiceField[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
 
@@ -79,7 +78,6 @@ export default function BusinessDetailsPage({
     fetch(`/api/templates/${params.templateId}`)
       .then((r) => r.json())
       .then(({ template }) => {
-        if (template?.name) setTemplateName(template.name);
         if (template?.service_fields && Array.isArray(template.service_fields)) {
           setServiceFields(template.service_fields as ServiceField[]);
         }

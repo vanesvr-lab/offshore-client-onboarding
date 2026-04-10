@@ -44,7 +44,7 @@ interface Person {
 
 interface PersonsManagerProps {
   applicationId: string;
-  clientId: string;
+  clientId?: string;
 }
 
 const ROLE_LABELS: Record<PersonRole, string> = {

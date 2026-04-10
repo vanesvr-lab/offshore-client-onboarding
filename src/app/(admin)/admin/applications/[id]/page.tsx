@@ -13,6 +13,7 @@ import { FlaggedDiscrepanciesCard } from "@/components/admin/FlaggedDiscrepancie
 import { ApplicationStatusPanel } from "@/components/shared/ApplicationStatusPanel";
 import { EditableApplicationDetails } from "@/components/admin/EditableApplicationDetails";
 import { AdminDocumentUploader } from "@/components/admin/AdminDocumentUploader";
+import { PersonsManager } from "@/components/client/PersonsManager";
 import {
   Card,
   CardContent,
@@ -30,6 +31,7 @@ import type {
   ClientAccountManager,
   VerificationResult,
 } from "@/types";
+import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export default async function ApplicationDetailPage({
   params,
@@ -47,7 +49,7 @@ export default async function ApplicationDetailPage({
   ] = await Promise.all([
     supabase
       .from("applications")
-      .select("*, clients(company_name), service_templates(name)")
+      .select("*, clients(company_name), service_templates(name, service_fields)")
       .eq("id", params.id)
       .single(),
     supabase
@@ -75,8 +77,11 @@ export default async function ApplicationDetailPage({
 
   const appTyped = application as Application & {
     clients?: { company_name: string | null };
-    service_templates?: { name: string };
+    service_templates?: { name: string; service_fields?: ServiceField[] };
+    service_details?: Record<string, unknown> | null;
   };
+
+  const serviceFields = (appTyped.service_templates?.service_fields ?? []) as ServiceField[];
 
   // Fetch requirements for task data and status panel
   const { data: requirements } = appTyped.template_id
@@ -147,10 +152,23 @@ export default async function ApplicationDetailPage({
               contact_name: app.contact_name ?? null,
               contact_email: app.contact_email ?? null,
               contact_phone: app.contact_phone ?? null,
-              ubo_data: app.ubo_data ?? null,
+              service_details: appTyped.service_details ?? null,
               admin_notes: app.admin_notes ?? null,
             }}
+            serviceFields={serviceFields}
           />
+
+          {/* Section D: Directors, Shareholders & UBOs */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-brand-navy text-base">
+                Section D: Directors, Shareholders &amp; UBOs
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PersonsManager applicationId={params.id} />
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
