@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CreateClientModal } from "@/components/admin/CreateClientModal";
 import { ClientsTable } from "@/components/admin/ClientsTable";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { PlusCircle } from "lucide-react";
 import type { ClientRow } from "@/components/admin/ClientsTable";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +66,12 @@ export default async function ClientsPage() {
           <h1 className="text-2xl font-bold text-brand-navy">Clients</h1>
           <p className="text-gray-500 mt-1">All registered client companies</p>
         </div>
-        <CreateClientModal />
+        <Link href="/admin/clients/new">
+          <Button className="bg-brand-navy hover:bg-brand-blue gap-1.5">
+            <PlusCircle className="h-4 w-4" />
+            New Client
+          </Button>
+        </Link>
       </div>
       <ClientsTable clients={clientRows} />
     </div>
