@@ -12,7 +12,7 @@ export async function GET(
   const supabase = createAdminClient();
   const { data: template } = await supabase
     .from("service_templates")
-    .select("id, name, description")
+    .select("id, name, description, service_fields")
     .eq("id", params.id)
     .single();
 
