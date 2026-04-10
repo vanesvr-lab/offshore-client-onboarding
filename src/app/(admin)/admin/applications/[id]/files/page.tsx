@@ -15,7 +15,7 @@ export default async function AdminFilesPage({
   const [{ data: application }, { data: uploads }] = await Promise.all([
     supabase
       .from("applications")
-      .select("id, business_name")
+      .select("id, business_name, reference_number")
       .eq("id", params.id)
       .single(),
     supabase
@@ -41,7 +41,7 @@ export default async function AdminFilesPage({
     };
   });
 
-  const appName = application.business_name || "Application";
+  const appName = application.reference_number || application.business_name || "Application";
 
   return (
     <div>

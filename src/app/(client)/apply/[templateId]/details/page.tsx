@@ -366,7 +366,7 @@ export default function BusinessDetailsPage({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Requires Mauritian bank account?</Label>
+                  <Label>Requires Mauritian bank account? {templateName.toUpperCase().includes("GBC") && <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded ml-1">Mandatory for GBC</span>}</Label>
                   <Select
                     value={gbcDetails.requires_mauritian_bank === true ? "yes" : gbcDetails.requires_mauritian_bank === false ? "no" : ""}
                     onValueChange={(v) => setGbcDetails((p) => ({ ...p, requires_mauritian_bank: v === "yes" }))}
@@ -379,42 +379,44 @@ export default function BusinessDetailsPage({
                   </Select>
                 </div>
                 {gbcDetails.requires_mauritian_bank && (
-                  <div className="space-y-1.5">
-                    <Label>Preferred bank</Label>
-                    <Input
-                      value={gbcDetails.preferred_bank ?? ""}
-                      onChange={(e) => setGbcDetails((p) => ({ ...p, preferred_bank: e.target.value }))}
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-1.5">
+                      <Label>Preferred bank</Label>
+                      <Input
+                        value={gbcDetails.preferred_bank ?? ""}
+                        onChange={(e) => setGbcDetails((p) => ({ ...p, preferred_bank: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Est. inward transaction value</Label>
+                      <Input
+                        value={gbcDetails.estimated_inward_value ?? ""}
+                        onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_inward_value: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Est. inward transaction count</Label>
+                      <Input
+                        value={gbcDetails.estimated_inward_count ?? ""}
+                        onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_inward_count: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Est. outward transaction value</Label>
+                      <Input
+                        value={gbcDetails.estimated_outward_value ?? ""}
+                        onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_outward_value: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Est. outward transaction count</Label>
+                      <Input
+                        value={gbcDetails.estimated_outward_count ?? ""}
+                        onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_outward_count: e.target.value }))}
+                      />
+                    </div>
+                  </>
                 )}
-                <div className="space-y-1.5">
-                  <Label>Est. inward transaction value</Label>
-                  <Input
-                    value={gbcDetails.estimated_inward_value ?? ""}
-                    onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_inward_value: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Est. inward transaction count</Label>
-                  <Input
-                    value={gbcDetails.estimated_inward_count ?? ""}
-                    onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_inward_count: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Est. outward transaction value</Label>
-                  <Input
-                    value={gbcDetails.estimated_outward_value ?? ""}
-                    onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_outward_value: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Est. outward transaction count</Label>
-                  <Input
-                    value={gbcDetails.estimated_outward_count ?? ""}
-                    onChange={(e) => setGbcDetails((p) => ({ ...p, estimated_outward_count: e.target.value }))}
-                  />
-                </div>
                 <div className="col-span-2 space-y-1.5">
                   <Label>Other companies in Mauritius (if any)</Label>
                   <Input

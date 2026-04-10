@@ -224,7 +224,7 @@ export default async function DashboardPage() {
                     >
                       <div>
                         <p className="font-medium text-brand-navy text-sm">
-                          {app.business_name || "Untitled Application"}
+                          {app.reference_number || app.business_name || "Draft"}
                         </p>
                         <p className="text-xs text-gray-500">
                           {app.service_templates?.name}

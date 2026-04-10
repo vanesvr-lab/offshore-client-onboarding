@@ -15,7 +15,7 @@ export default async function ClientFilesPage({
   const [{ data: application }, { data: uploads }] = await Promise.all([
     supabase
       .from("applications")
-      .select("id, business_name, template_id")
+      .select("id, business_name, reference_number, template_id")
       .eq("id", params.id)
       .single(),
     supabase
@@ -40,7 +40,7 @@ export default async function ClientFilesPage({
     };
   });
 
-  const appName = application.business_name || "Application";
+  const appName = application.reference_number || application.business_name || "Application";
   const uploadHref = application.template_id
     ? `/apply/${application.template_id}/documents?applicationId=${application.id}`
     : undefined;

@@ -9,12 +9,13 @@ export default async function ApplicationsPage() {
 
   const { data: applications } = await supabase
     .from("applications")
-    .select("id, business_name, status, admin_notes, created_at, updated_at, clients(company_name), service_templates(name)")
+    .select("id, business_name, reference_number, status, admin_notes, created_at, updated_at, clients(company_name), service_templates(name)")
     .order("updated_at", { ascending: false });
 
   const rows: ApplicationRow[] = (applications || []).map((a) => ({
     id: a.id,
     business_name: a.business_name,
+    reference_number: a.reference_number ?? null,
     status: a.status,
     admin_notes: a.admin_notes,
     created_at: a.created_at,

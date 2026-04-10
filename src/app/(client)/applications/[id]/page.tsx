@@ -87,7 +87,7 @@ export default async function ApplicationStatusPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">
-            {app.business_name || "Application"}
+            {app.reference_number || app.business_name || "Application"}
           </h1>
           <p className="text-gray-500 text-sm">{app.service_templates?.name}</p>
         </div>

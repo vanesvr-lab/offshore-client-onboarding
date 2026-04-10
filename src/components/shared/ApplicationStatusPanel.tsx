@@ -20,6 +20,7 @@ interface Upload {
 
 interface ApplicationData {
   business_name: string | null;
+  reference_number?: string | null;
   status: ApplicationStatus;
   admin_notes: string | null;
 }
@@ -134,7 +135,7 @@ export function ApplicationStatusPanel({
             Application Health
           </p>
           <p className="text-gray-600 text-xs mt-0.5 truncate">
-            {application.business_name || "Application"}
+            {application.reference_number || application.business_name || "Application"}
           </p>
           {!isOpen && (
             <p className="text-sm font-medium text-gray-700 mt-2">

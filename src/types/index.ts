@@ -109,6 +109,7 @@ export interface Application {
   client_id: string;
   template_id: string;
   status: ApplicationStatus;
+  reference_number: string | null;
   business_name: string | null;
   business_address: string | null;
   business_country: string | null;

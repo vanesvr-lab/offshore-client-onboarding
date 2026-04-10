@@ -11,6 +11,7 @@ import type { ApplicationStatus } from "@/types";
 export interface ApplicationRow {
   id: string;
   business_name: string | null;
+  reference_number: string | null;
   status: string;
   admin_notes: string | null;
   created_at: string;
@@ -85,7 +86,7 @@ export function ApplicationsTable({ applications }: ApplicationsTableProps) {
                   onClick={() => router.push(`/admin/applications/${app.id}`)}
                 >
                   <td className="px-4 py-3 font-medium text-brand-navy">
-                    {app.business_name || "—"}
+                    {app.reference_number || app.business_name || "—"}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {app.companyName || "—"}

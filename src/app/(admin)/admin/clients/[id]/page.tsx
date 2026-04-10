@@ -41,7 +41,7 @@ export default async function ClientDetailPage({
           profiles!client_users_user_id_fkey(id, full_name, email, phone)
         ),
         applications(
-          id, status, business_name, submitted_at, created_at,
+          id, status, business_name, reference_number, submitted_at, created_at,
           service_templates(name)
         ),
         client_account_managers(
@@ -91,6 +91,7 @@ export default async function ClientDetailPage({
     id: string;
     status: string;
     business_name: string | null;
+    reference_number: string | null;
     submitted_at: string | null;
     created_at: string;
     service_templates: { name: string } | null;
@@ -203,7 +204,7 @@ export default async function ClientDetailPage({
                     {applications.map((app) => (
                       <tr key={app.id}>
                         <td className="py-2 font-medium text-brand-navy">
-                          {app.business_name || "Untitled"}
+                          {app.reference_number || app.business_name || "Draft"}
                         </td>
                         <td className="py-2 text-gray-500">
                           {app.service_templates?.name || "—"}
