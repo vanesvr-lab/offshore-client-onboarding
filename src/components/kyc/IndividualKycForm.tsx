@@ -74,13 +74,33 @@ function SectionHeader({
   );
 }
 
-function FieldRow({ children, prefilled }: { children: React.ReactNode; prefilled?: boolean }) {
+function FieldRow({ children, prefilled, mandatory }: { children: React.ReactNode; prefilled?: boolean; mandatory?: boolean }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 relative">
       {children}
+      {mandatory && (
+        <div className="absolute top-0 right-0">
+          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Required</span>
+        </div>
+      )}
       {prefilled && (
         <p className="text-[11px] text-brand-blue/70">ℹ️ Pre-filled by GWMS</p>
       )}
+    </div>
+  );
+}
+
+function FieldLegend() {
+  return (
+    <div className="flex items-center gap-4 text-[11px] text-gray-500 px-1 pb-2 border-b border-gray-100 mb-3">
+      <span className="flex items-center gap-1">
+        <span className="text-amber-600 bg-amber-50 px-1 py-0.5 rounded text-[10px]">Required</span>
+        Mandatory for compliance
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="text-gray-400">No tag</span>
+        = Optional
+      </span>
     </div>
   );
 }
@@ -189,6 +209,9 @@ export function IndividualKycForm({
         <SaveIndicator saving={saving} lastSaved={lastSaved} />
       </div>
 
+      {/* Field legend */}
+      <FieldLegend />
+
       {/* Section 1: Personal Details */}
       <div>
         <SectionHeader
@@ -201,7 +224,7 @@ export function IndividualKycForm({
         {openSections.has(0) && (
           <div className="border border-t-0 rounded-b-lg px-4 py-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FieldRow prefilled={prefilled.has("full_name")}>
+              <FieldRow prefilled={prefilled.has("full_name")} mandatory>
                 <Label className="text-xs">Full legal name *</Label>
                 <Input
                   value={fields.full_name ?? ""}
@@ -217,7 +240,7 @@ export function IndividualKycForm({
                   placeholder="e.g. maiden name"
                 />
               </FieldRow>
-              <FieldRow prefilled={prefilled.has("date_of_birth")}>
+              <FieldRow prefilled={prefilled.has("date_of_birth")} mandatory>
                 <Label className="text-xs">Date of birth *</Label>
                 <Input
                   type="date"
@@ -225,7 +248,7 @@ export function IndividualKycForm({
                   onChange={(e) => set("date_of_birth", e.target.value)}
                 />
               </FieldRow>
-              <FieldRow prefilled={prefilled.has("nationality")}>
+              <FieldRow prefilled={prefilled.has("nationality")} mandatory>
                 <Label className="text-xs">Nationality *</Label>
                 <Select
                   value={fields.nationality ?? ""}
@@ -257,14 +280,14 @@ export function IndividualKycForm({
                   </SelectContent>
                 </Select>
               </FieldRow>
-              <FieldRow prefilled={prefilled.has("passport_number")}>
+              <FieldRow prefilled={prefilled.has("passport_number")} mandatory>
                 <Label className="text-xs">Passport number *</Label>
                 <Input
                   value={fields.passport_number ?? ""}
                   onChange={(e) => set("passport_number", e.target.value)}
                 />
               </FieldRow>
-              <FieldRow prefilled={prefilled.has("passport_expiry")}>
+              <FieldRow prefilled={prefilled.has("passport_expiry")} mandatory>
                 <Label className="text-xs">Passport expiry date *</Label>
                 <Input
                   type="date"
@@ -294,7 +317,7 @@ export function IndividualKycForm({
               />
             </div>
 
-            <FieldRow prefilled={prefilled.has("address")}>
+            <FieldRow prefilled={prefilled.has("address")} mandatory>
               <Label className="text-xs">Residential address *</Label>
               <Textarea
                 value={fields.address ?? ""}
@@ -326,7 +349,7 @@ export function IndividualKycForm({
                 <Label className="text-xs">Personal phone</Label>
                 <Input value={fields.phone ?? ""} onChange={(e) => set("phone", e.target.value)} placeholder="+230 …" />
               </FieldRow>
-              <FieldRow prefilled={prefilled.has("email")}>
+              <FieldRow prefilled={prefilled.has("email")} mandatory>
                 <Label className="text-xs">Personal email *</Label>
                 <Input type="email" value={fields.email ?? ""} onChange={(e) => set("email", e.target.value)} />
               </FieldRow>
@@ -342,7 +365,7 @@ export function IndividualKycForm({
                 <Label className="text-xs">Work email</Label>
                 <Input type="email" value={fields.work_email ?? ""} onChange={(e) => set("work_email", e.target.value)} />
               </FieldRow>
-              <FieldRow prefilled={prefilled.has("occupation")}>
+              <FieldRow prefilled={prefilled.has("occupation")} mandatory>
                 <Label className="text-xs">Occupation / Profession *</Label>
                 <Input value={fields.occupation ?? ""} onChange={(e) => set("occupation", e.target.value)} />
               </FieldRow>
@@ -388,7 +411,7 @@ export function IndividualKycForm({
         />
         {openSections.has(1) && (
           <div className="border border-t-0 rounded-b-lg px-4 py-4 space-y-4">
-            <FieldRow>
+            <FieldRow mandatory>
               <Label className="text-xs">Source of funds — description *</Label>
               <Textarea
                 value={fields.source_of_funds_description ?? ""}
@@ -490,7 +513,7 @@ export function IndividualKycForm({
           <div className="border border-t-0 rounded-b-lg px-4 py-4 space-y-4">
             {/* PEP */}
             <div className="space-y-2">
-              <Label className="text-xs">Are you, or have you ever been, a Politically Exposed Person (PEP)? *</Label>
+              <Label className="text-xs">Are you, or have you ever been, a Politically Exposed Person (PEP)? * <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded ml-2">Required</span></Label>
               <div className="flex gap-3">
                 <Button
                   type="button"

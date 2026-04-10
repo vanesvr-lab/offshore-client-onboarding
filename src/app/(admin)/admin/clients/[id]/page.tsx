@@ -14,6 +14,7 @@ import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
+import { AddBlankApplication } from "@/components/admin/AddBlankApplication";
 import type { ClientAccountManager, ApplicationStatus, KycRecord } from "@/types";
 
 export default async function ClientDetailPage({
@@ -69,6 +70,13 @@ export default async function ClientDetailPage({
       .eq("client_id", params.id)
       .order("started_at", { ascending: false }),
   ]);
+
+  // Fetch service templates for "Add Application" dropdown
+  const { data: serviceTemplates } = await supabase
+    .from("service_templates")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name");
 
   if (!client) notFound();
 
@@ -164,12 +172,18 @@ export default async function ClientDetailPage({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base text-brand-navy">Applications</CardTitle>
-              <Link href={`/admin/clients/${client.id}/apply`}>
-                <Button size="sm" className="bg-brand-navy hover:bg-brand-blue gap-1.5">
-                  <PlusCircle className="h-3.5 w-3.5" />
-                  Start application
-                </Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <AddBlankApplication
+                  clientId={client.id}
+                  templates={(serviceTemplates ?? []) as { id: string; name: string }[]}
+                />
+                <Link href={`/admin/clients/${client.id}/apply`}>
+                  <Button size="sm" className="bg-brand-navy hover:bg-brand-blue gap-1.5">
+                    <PlusCircle className="h-3.5 w-3.5" />
+                    Start application
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
               {applications.length === 0 ? (

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RiskAssessmentPanel } from "@/components/admin/RiskAssessmentPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, Building2 } from "lucide-react";
+import Link from "next/link";
 import type { KycRecord } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,9 @@ export default async function AdminClientRiskPage({
   return (
     <div>
       <div className="mb-6">
+        <Link href={`/admin/clients/${params.id}`} className="text-sm text-brand-blue hover:underline mb-2 block">
+          ← Back to {client.company_name}
+        </Link>
         <h1 className="text-2xl font-bold text-brand-navy">Risk Assessment</h1>
         <p className="text-gray-500 text-sm mt-1">{client.company_name}</p>
       </div>
