@@ -49,6 +49,7 @@ RLS policies added beyond initial schema.sql:
 ### Client portal (`/...`)
 | Route | File | Last touched by |
 |-------|------|----------------|
+| `/kyc` | `src/app/(client)/kyc/page.tsx` | Claude Code |
 | `/dashboard` | `src/app/(client)/dashboard/page.tsx` | Claude Code |
 | `/apply` | `src/app/(client)/apply/page.tsx` | Claude Code |
 | `/apply/[templateId]/details` | `...details/page.tsx` | Claude Code |
@@ -135,6 +136,32 @@ These files affect the entire app. Coordinate before modifying.
 ---
 
 ## Change Log
+
+### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 3 — KYC Forms
+
+**New API routes:**
+- `GET /api/kyc/[clientId]` — list all kyc_records + documents for a client
+- `POST /api/kyc/save` — partial-save fields onto a kyc_record (auto-calculates completion_status)
+- `POST /api/kyc/submit` — validates and marks KYC complete, sets `clients.kyc_completed_at`
+
+**New utility:**
+- `src/lib/utils/completionCalculator.ts` — calculates section-by-section completion for individual + organisation records; returns `canSubmit`, `overallPercentage`, `blockers`
+
+**New hook:**
+- `src/hooks/useAutoSave.ts` — debounced auto-save with "Saved" indicator; POSTs to /api/kyc/save on field change
+
+**New components:**
+- `src/components/kyc/IndividualKycForm.tsx` — 4-section accordion: Personal Details, Funding & Financial, Declarations, Additional Documents; inline uploads; PEP/legal conditional fields; passport expiry warning
+- `src/components/kyc/OrganisationKycForm.tsx` — 3-section accordion: Company Information, Corporate Documents, Financial Documents; inline uploads throughout
+
+**New client page:**
+- `src/app/(client)/kyc/page.tsx` + `KycPageClient.tsx` — KYC profile page with progress bar, submit button, both form types rendered based on `client_type`
+
+**Updated:**
+- `middleware.ts` — added `/kyc` to protected client routes
+- `src/components/shared/Sidebar.tsx` — added "KYC Profile" link (UserCheck icon) between Dashboard and New Application
+
+---
 
 ### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 2 — Document Library
 

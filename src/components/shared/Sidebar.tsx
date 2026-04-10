@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Files,
   BookOpen,
+  UserCheck,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -98,6 +99,7 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
 
   const clientNav = [
     { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
+    { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
     { label: "New Application", href: "/apply", icon: PlusCircle, exact: false },
     ...(hasApplications
       ? [{ label: "My Applications", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications"] }]
