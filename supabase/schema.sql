@@ -502,3 +502,205 @@ drop trigger if exists on_document_upload_insert on public.document_uploads;
 create trigger on_document_upload_insert
   after insert on public.document_uploads
   for each row execute procedure public.log_document_upload();
+
+
+-- ============================================================
+-- ONBOARDING REDESIGN v2
+-- ============================================================
+
+-- Alter clients table with new workflow milestone columns
+alter table public.clients
+  add column if not exists client_type text check (client_type in ('individual', 'organisation')),
+  add column if not exists loe_sent_at timestamptz,
+  add column if not exists invoice_sent_at timestamptz,
+  add column if not exists payment_received_at timestamptz,
+  add column if not exists portal_link_sent_at timestamptz,
+  add column if not exists kyc_completed_at timestamptz,
+  add column if not exists application_submitted_at timestamptz;
+
+-- Master list of document kinds
+create table if not exists public.document_types (
+  id               uuid primary key default gen_random_uuid(),
+  name             text not null unique,
+  category         text not null check (category in ('identity', 'corporate', 'financial', 'compliance', 'additional')),
+  applies_to       text not null default 'both' check (applies_to in ('individual', 'organisation', 'both')),
+  description      text,
+  validity_period_days int,
+  ai_verification_rules jsonb,
+  is_active        boolean not null default true,
+  sort_order       int not null default 0,
+  created_at       timestamptz not null default now()
+);
+
+-- Unified individual + organisation KYC records
+create table if not exists public.kyc_records (
+  id               uuid primary key default gen_random_uuid(),
+  client_id        uuid not null references public.clients(id) on delete cascade,
+  profile_id       uuid references public.profiles(id),
+  record_type      text not null check (record_type in ('individual', 'organisation')),
+  -- Common fields
+  full_name        text,
+  email            text,
+  phone            text,
+  address          text,
+  -- Individual-only
+  aliases          text,
+  work_address     text,
+  work_phone       text,
+  work_email       text,
+  date_of_birth    date,
+  nationality      text,
+  passport_country text,
+  passport_number  text,
+  passport_expiry  date,
+  occupation       text,
+  legal_issues_declared    boolean,
+  legal_issues_details     text,
+  tax_identification_number text,
+  source_of_funds_description  text,
+  source_of_wealth_description text,
+  is_pep           boolean,
+  pep_details      text,
+  -- Organisation-only
+  business_website              text,
+  jurisdiction_incorporated     text,
+  date_of_incorporation         date,
+  listed_or_unlisted            text check (listed_or_unlisted in ('listed', 'unlisted')),
+  jurisdiction_tax_residence    text,
+  description_activity          text,
+  company_registration_number   text,
+  industry_sector               text,
+  regulatory_licenses           text,
+  -- Admin risk assessment (admin-only, not visible to client)
+  sanctions_checked             boolean not null default false,
+  sanctions_checked_at          timestamptz,
+  sanctions_notes               text,
+  adverse_media_checked         boolean not null default false,
+  adverse_media_checked_at      timestamptz,
+  adverse_media_notes           text,
+  pep_verified                  boolean not null default false,
+  pep_verified_at               timestamptz,
+  pep_verified_notes            text,
+  risk_rating                   text check (risk_rating in ('low', 'medium', 'high', 'prohibited')),
+  risk_rating_justification     text,
+  risk_rated_by                 uuid references public.profiles(id),
+  risk_rated_at                 timestamptz,
+  geographic_risk_assessment    text,
+  relationship_history          text,
+  -- Tracking
+  completion_status  text not null default 'incomplete' check (completion_status in ('incomplete', 'complete')),
+  filled_by          uuid references public.profiles(id),
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+-- Links persons (KYC records) to applications with roles
+-- Replaces ubo_data JSONB column on applications
+create table if not exists public.application_persons (
+  id               uuid primary key default gen_random_uuid(),
+  application_id   uuid not null references public.applications(id) on delete cascade,
+  kyc_record_id    uuid not null references public.kyc_records(id),
+  role             text not null check (role in ('director', 'shareholder', 'ubo', 'contact')),
+  shareholding_percentage numeric(5,2),
+  created_at       timestamptz not null default now()
+);
+
+-- GBC/AC-specific application detail fields
+create table if not exists public.application_details_gbc_ac (
+  id               uuid primary key default gen_random_uuid(),
+  application_id   uuid not null unique references public.applications(id) on delete cascade,
+  proposed_names                text[],
+  proposed_business_activity    text,
+  geographical_area             text,
+  transaction_currency          text,
+  estimated_turnover_3yr        text,
+  requires_mauritian_bank       boolean,
+  preferred_bank                text,
+  estimated_inward_value        text,
+  estimated_inward_count        text,
+  estimated_outward_value       text,
+  estimated_outward_count       text,
+  other_mauritius_companies     text,
+  balance_sheet_date            date,
+  initial_stated_capital        text,
+  created_at                    timestamptz not null default now(),
+  updated_at                    timestamptz not null default now()
+);
+
+-- Document library: client-level, tagged by type, reusable across processes
+create table if not exists public.documents (
+  id               uuid primary key default gen_random_uuid(),
+  client_id        uuid not null references public.clients(id) on delete cascade,
+  kyc_record_id    uuid references public.kyc_records(id),
+  document_type_id uuid not null references public.document_types(id),
+  file_path        text not null,
+  file_name        text not null,
+  file_size        bigint,
+  mime_type        text,
+  verification_status text not null default 'pending' check (verification_status in ('pending', 'verified', 'flagged', 'manual_review')),
+  verification_result jsonb,
+  expiry_date      date,
+  notes            text,
+  is_active        boolean not null default true,
+  uploaded_by      uuid references public.profiles(id),
+  uploaded_at      timestamptz not null default now(),
+  verified_at      timestamptz
+);
+
+-- Junction: connects documents to applications / processes / KYC records
+create table if not exists public.document_links (
+  id               uuid primary key default gen_random_uuid(),
+  document_id      uuid not null references public.documents(id) on delete cascade,
+  linked_to_type   text not null check (linked_to_type in ('application', 'process', 'kyc')),
+  linked_to_id     uuid not null,
+  required_by      uuid references public.document_types(id),
+  linked_at        timestamptz not null default now(),
+  linked_by        uuid references public.profiles(id)
+);
+
+-- Templates defining what documents each process needs
+create table if not exists public.process_templates (
+  id               uuid primary key default gen_random_uuid(),
+  name             text not null unique,
+  description      text,
+  client_type      text check (client_type in ('individual', 'organisation', 'both')),
+  is_active        boolean not null default true,
+  sort_order       int not null default 0,
+  created_at       timestamptz not null default now()
+);
+
+-- Document requirements per process template
+create table if not exists public.process_requirements (
+  id                   uuid primary key default gen_random_uuid(),
+  process_template_id  uuid not null references public.process_templates(id) on delete cascade,
+  document_type_id     uuid not null references public.document_types(id),
+  is_required          boolean not null default true,
+  per_person           boolean not null default false,
+  applies_to_role      text[],
+  sort_order           int not null default 0
+);
+
+-- Active processes per client
+create table if not exists public.client_processes (
+  id                   uuid primary key default gen_random_uuid(),
+  client_id            uuid not null references public.clients(id) on delete cascade,
+  process_template_id  uuid not null references public.process_templates(id),
+  status               text not null default 'draft' check (status in ('draft', 'collecting', 'ready', 'submitted', 'complete')),
+  notes                text,
+  started_by           uuid references public.profiles(id),
+  started_at           timestamptz not null default now(),
+  completed_at         timestamptz
+);
+
+-- Documents collected for a specific process
+create table if not exists public.process_documents (
+  id               uuid primary key default gen_random_uuid(),
+  process_id       uuid not null references public.client_processes(id) on delete cascade,
+  requirement_id   uuid not null references public.process_requirements(id),
+  kyc_record_id    uuid references public.kyc_records(id),
+  source           text check (source in ('kyc_reused', 'uploaded', 'requested')),
+  document_id      uuid references public.documents(id),
+  status           text not null default 'missing' check (status in ('available', 'missing', 'requested', 'received')),
+  requested_at     timestamptz,
+  received_at      timestamptz
+);
