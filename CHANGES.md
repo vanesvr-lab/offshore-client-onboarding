@@ -35,6 +35,7 @@ RLS policies added beyond initial schema.sql:
 | `/admin/queue` | `src/app/(admin)/admin/queue/page.tsx` | Claude Code |
 | `/admin/clients` | `src/app/(admin)/admin/clients/page.tsx` | Claude Code |
 | `/admin/clients/[id]` | `src/app/(admin)/admin/clients/[id]/page.tsx` | Claude Code |
+| `/admin/clients/[id]/documents` | `src/app/(admin)/admin/clients/[id]/documents/page.tsx` | Claude Code |
 | `/admin/clients/[id]/apply` | `src/app/(admin)/admin/clients/[id]/apply/page.tsx` | Claude Code |
 | `/admin/clients/[id]/apply/[templateId]/details` | `...details/page.tsx` | Claude Code |
 | `/admin/clients/[id]/apply/[templateId]/documents` | `...documents/page.tsx` | Claude Code |
@@ -65,6 +66,12 @@ RLS policies added beyond initial schema.sql:
 | `PATCH /api/admin/applications/[id]` | `src/app/api/admin/applications/[id]/route.ts` | Claude Code |
 | `POST /api/send-email` | `src/app/api/send-email/route.ts` | Claude Code |
 | `POST /api/verify-document` | `src/app/api/verify-document/route.ts` | Claude Code |
+| `GET /api/document-types` | `src/app/api/document-types/route.ts` | Claude Code |
+| `GET/POST /api/documents/library` | `src/app/api/documents/library/route.ts` | Claude Code |
+| `PATCH/DELETE /api/documents/library/[id]` | `src/app/api/documents/library/[id]/route.ts` | Claude Code |
+| `POST /api/documents/[id]/link` | `src/app/api/documents/[id]/link/route.ts` | Claude Code |
+| `GET /api/documents/links` | `src/app/api/documents/links/route.ts` | Claude Code |
+| `DELETE /api/documents/links/[id]` | `src/app/api/documents/links/[id]/route.ts` | Claude Code |
 
 ---
 
@@ -84,13 +91,16 @@ RLS policies added beyond initial schema.sql:
 | `EmailComposer.tsx` | Compose and send emails to clients | Claude Code |
 | `SendInvitePanel.tsx` | Send/resend welcome email with status | Claude Code |
 | `StageSelector.tsx` | Application stage management | Claude Code |
+| `DocumentLibraryTable.tsx` | Filterable document library for admin client view | Claude Code |
 
 ### Shared components (`src/components/shared/`)
 | Component | Purpose | Last touched by |
 |-----------|---------|----------------|
 | `Navbar.tsx` | Top nav for both portals | Claude Code |
+| `Sidebar.tsx` | Contextual sidebar nav for both portals | Claude Code |
 | `StatusBadge.tsx` | Application status badge | Claude Code |
 | `LoadingSpinner.tsx` | Loading indicator | Claude Code |
+| `DocumentUploadWidget.tsx` | Reusable upload widget (compact + full modes) | Claude Code |
 
 ### Client components (`src/components/client/`)
 | Component | Purpose | Last touched by |
@@ -125,6 +135,31 @@ These files affect the entire app. Coordinate before modifying.
 ---
 
 ## Change Log
+
+### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 2 — Document Library
+
+**New API routes:**
+- `GET/POST /api/documents/library` — list + upload documents to client library; AI verification fires async on upload
+- `PATCH/DELETE /api/documents/library/[id]` — update notes/expiry or soft-delete a document
+- `POST /api/documents/[id]/link` — create a document_link to an application/process/KYC record
+- `GET /api/documents/links` — list links for a given entity (linkedToType + linkedToId)
+- `DELETE /api/documents/links/[id]` — remove a specific document link
+- `GET /api/document-types` — list all active document types, grouped by category
+
+**New components:**
+- `src/components/shared/DocumentUploadWidget.tsx` — reusable upload widget with compact (inline) + standalone (full dropzone) modes; react-dropzone; grouped category selector; preview/replace for existing docs
+- `src/components/admin/DocumentLibraryTable.tsx` — filterable/groupable document library table for admin client view; search, category filter, status filter; per-row delete + preview; upload dialog
+
+**New admin page:**
+- `src/app/(admin)/admin/clients/[id]/documents/page.tsx` — Document Library page for a client
+
+**Updated:**
+- `src/components/shared/Sidebar.tsx` — added contextual "Client" nav section (Overview + Documents links) when browsing `/admin/clients/[id]/...` routes
+
+**Active routes updated:**
+- Added `/admin/clients/[id]/documents` to admin routes table
+
+---
 
 ### 2026-04-10 — Claude Desktop — Onboarding Redesign: planning + DB migration + CLI batch briefs
 

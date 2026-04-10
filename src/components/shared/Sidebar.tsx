@@ -92,6 +92,10 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
   const contextAppId =
     role === "admin" ? adminAppMatch?.[1] : clientAppMatch?.[1];
 
+  // Detect if on a specific client page for contextual nav
+  const adminClientMatch = pathname.match(/^\/admin\/clients\/([^/]+)/);
+  const contextClientId = role === "admin" ? adminClientMatch?.[1] : undefined;
+
   const clientNav = [
     { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
     { label: "New Application", href: "/apply", icon: PlusCircle, exact: false },
@@ -138,6 +142,26 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
                 active={isActive(item.href, item.exact)}
               />
             ))}
+
+            {/* Contextual: on a client page */}
+            {contextClientId && (
+              <>
+                <div className="border-t border-white/10 my-3" />
+                <SectionHeader label="Client" />
+                <NavItem
+                  href={`/admin/clients/${contextClientId}`}
+                  label="Overview"
+                  icon={Users}
+                  active={pathname === `/admin/clients/${contextClientId}`}
+                />
+                <NavItem
+                  href={`/admin/clients/${contextClientId}/documents`}
+                  label="Documents"
+                  icon={Files}
+                  active={pathname.startsWith(`/admin/clients/${contextClientId}/documents`)}
+                />
+              </>
+            )}
 
             {/* Contextual: on an application page */}
             {contextAppId && (
