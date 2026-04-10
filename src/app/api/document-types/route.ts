@@ -20,5 +20,5 @@ export async function GET() {
     grouped[dt.category].push(dt);
   }
 
-  return NextResponse.json({ documentTypes: data ?? [], grouped });
+  return NextResponse.json({ documentTypes: data ?? [], types: data ?? [], grouped });
 }
