@@ -39,17 +39,18 @@ export default function BusinessDetailsPage({
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
+    // Admin-only fields — kept in state for the save payload but not shown to client
     business_name: businessDetails.business_name,
     business_type: businessDetails.business_type,
     business_country: businessDetails.business_country,
     business_address: businessDetails.business_address,
+    // Client-visible fields
     contact_name: businessDetails.contact_name,
     contact_email: businessDetails.contact_email,
     contact_phone: businessDetails.contact_phone,
     contact_title: businessDetails.contact_title,
   });
 
-  // Dynamic service-specific details
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>({});
 
   const currentAppId = applicationId || existingAppId || undefined;
@@ -57,6 +58,7 @@ export default function BusinessDetailsPage({
 
   useEffect(() => {
     setTemplateId(params.templateId);
+
     // Fetch template service_fields
     fetch(`/api/templates/${params.templateId}`)
       .then((r) => r.json())
@@ -68,6 +70,7 @@ export default function BusinessDetailsPage({
       .catch(() => {});
 
     if (existingAppId) {
+      // Resuming an existing application
       setApplicationId(existingAppId);
       fetch(`/api/applications/${existingAppId}`)
         .then((r) => r.json())
@@ -86,23 +89,32 @@ export default function BusinessDetailsPage({
             }
           }
         });
+    } else {
+      // New application — resolve clientId from the current user's profile
+      fetch("/api/me")
+        .then((r) => r.json())
+        .then(({ clientId: cid }) => {
+          if (cid) setClientId(cid as string);
+        })
+        .catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingAppId, params.templateId]);
 
-  // Pre-fill contact from KYC record when clientId is known and fields are empty
+  // Pre-fill contact fields from the individual KYC record when clientId resolves
   useEffect(() => {
     if (!clientId) return;
-    if (form.contact_name || form.contact_email) return; // already filled
+    if (form.contact_name || form.contact_email) return; // already filled from saved app
     fetch(`/api/kyc/${clientId}`)
       .then((r) => r.json())
-      .then(({ kyc }) => {
-        if (kyc) {
+      .then(({ records }: { records?: Array<{ record_type: string; full_name?: string; email?: string; phone?: string }> }) => {
+        const individual = (records ?? []).find((r) => r.record_type === "individual");
+        if (individual) {
           setForm((prev) => ({
             ...prev,
-            contact_name: kyc.full_name || prev.contact_name,
-            contact_email: kyc.email || prev.contact_email,
-            contact_phone: kyc.phone || prev.contact_phone,
+            contact_name: individual.full_name || prev.contact_name,
+            contact_email: individual.email || prev.contact_email,
+            contact_phone: individual.phone || prev.contact_phone,
           }));
         }
       })
@@ -134,6 +146,16 @@ export default function BusinessDetailsPage({
       const appId = data.applicationId!;
       setApplicationId(appId);
       setBusinessDetails({ ...form, ubo_data: [] });
+
+      // After first save we know the clientId from the application
+      if (!clientId) {
+        fetch(`/api/applications/${appId}`)
+          .then((r) => r.json())
+          .then(({ application: d }) => {
+            if (d?.client_id) setClientId(d.client_id as string);
+          })
+          .catch(() => {});
+      }
 
       if (andContinue) {
         router.push(`/apply/${params.templateId}/documents?applicationId=${appId}`);
