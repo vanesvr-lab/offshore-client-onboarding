@@ -13,6 +13,40 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## Recent Changes
+
+### 2026-04-10 — Form parity, KYC progress bars, review page cleanup (Claude Code)
+
+**PersonsManager** (`src/components/client/PersonsManager.tsx`):
+- Persons grouped by role with headers: "Directors (2)", "Shareholders (2)", etc.
+- Two progress bars per person: KYC (n/11 required fields) + Docs (n/6 documents)
+- 3 new KYC fields added to card form: address, source_of_funds_description, is_pep, legal_issues_declared
+- `onUpdate` now propagates KYC field changes optimistically for real-time bar updates
+
+**Persons API** (`src/app/api/applications/[id]/persons/route.ts`):
+- Added 4 missing KYC fields to select: address, source_of_funds_description, is_pep, legal_issues_declared
+- Added `doc_count` per person (queries `documents` by `kyc_record_id`)
+
+**Admin EditableApplicationDetails** section order corrected to:
+  Business Information → Primary Contact → Service Details → Internal Notes
+
+**Client wizard details page**: Removed "Section C/B" prefix from Persons heading.
+
+**Client review page** (`src/app/(client)/apply/[templateId]/review/page.tsx`):
+- Removed GBC/AC details section and `ApplicationDetailsGbcAc` type reference
+- Removed `/api/applications/[id]/details-gbc-ac` fetch
+- Added template fetch for `service_fields`; renders `DynamicServiceForm readOnly`
+- Persons section now shows grouped KYC + Docs progress bars (same as wizard)
+- Blockers: removed business_name/type/country checks (admin-only fields)
+
+**`/api/applications/[id]/details-gbc-ac`**: Marked `@deprecated` — superseded by `service_details` JSONB.
+
+**Section parity (admin vs client):**
+- Client: Primary Contact → Service Details → Directors/Shareholders/UBOs
+- Admin: Business Info → Primary Contact → Service Details → Directors/Shareholders/UBOs → [admin-only]
+
+---
+
 ## Current DB State
 
 Schema last updated by: **Claude Code (CLI)**

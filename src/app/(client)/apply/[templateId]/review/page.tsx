@@ -12,19 +12,32 @@ import {
 } from "@/components/ui/card";
 import { CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import type { Application, ApplicationDetailsGbcAc } from "@/types";
+import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
+import type { ServiceField } from "@/components/shared/DynamicServiceForm";
+import type { Application } from "@/types";
+
+interface PersonKyc {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  date_of_birth: string | null;
+  nationality: string | null;
+  passport_number: string | null;
+  passport_expiry: string | null;
+  occupation: string | null;
+  address: string | null;
+  source_of_funds_description: string | null;
+  is_pep: boolean | null;
+  legal_issues_declared: boolean | null;
+  completion_status: string;
+}
 
 interface PersonRecord {
   id: string;
   role: string;
   shareholding_percentage: number | null;
-  kyc_records: {
-    id: string;
-    full_name: string | null;
-    completion_status: string;
-    nationality: string | null;
-    passport_number: string | null;
-  } | null;
+  kyc_records: PersonKyc | null;
+  doc_count: number;
 }
 
 interface LinkedDoc {
@@ -32,6 +45,66 @@ interface LinkedDoc {
   file_name: string;
   verification_status: string;
   document_types?: { name: string };
+}
+
+const KYC_REQUIRED_FIELDS: (keyof PersonKyc)[] = [
+  "full_name", "email", "date_of_birth", "nationality",
+  "passport_number", "passport_expiry", "address", "occupation",
+  "source_of_funds_description", "is_pep", "legal_issues_declared",
+];
+const KYC_TOTAL = KYC_REQUIRED_FIELDS.length;
+const DOCS_TOTAL = 6;
+
+function kycFilled(kyc: PersonKyc | null): number {
+  if (!kyc) return 0;
+  return KYC_REQUIRED_FIELDS.filter((f) => {
+    const v = kyc[f];
+    return v !== null && v !== undefined && v !== "";
+  }).length;
+}
+
+function PersonProgressRow({ person }: { person: PersonRecord }) {
+  const kyc = person.kyc_records;
+  const kycCount = kycFilled(kyc);
+  const kycPct = Math.round((kycCount / KYC_TOTAL) * 100);
+  const docPct = Math.round((Math.min(person.doc_count, DOCS_TOTAL) / DOCS_TOTAL) * 100);
+
+  return (
+    <div className="rounded border px-3 py-2.5 bg-gray-50 space-y-2">
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <p className="font-medium text-brand-navy">{kyc?.full_name || `Unnamed ${person.role}`}</p>
+          <p className="text-xs text-gray-500 capitalize">
+            {person.role}
+            {person.role === "shareholder" && person.shareholding_percentage !== null
+              ? ` — ${person.shareholding_percentage}%`
+              : ""}
+            {kyc?.nationality ? ` · ${kyc.nationality}` : ""}
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+            <span>KYC fields</span>
+            <span>{kycCount}/{KYC_TOTAL}</span>
+          </div>
+          <div className="h-1 rounded-full bg-gray-200 overflow-hidden">
+            <div className="h-full rounded-full bg-brand-success transition-all" style={{ width: `${kycPct}%` }} />
+          </div>
+        </div>
+        <div>
+          <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+            <span>Documents</span>
+            <span>{person.doc_count}/{DOCS_TOTAL}</span>
+          </div>
+          <div className="h-1 rounded-full bg-gray-200 overflow-hidden">
+            <div className="h-full rounded-full bg-brand-success transition-all" style={{ width: `${docPct}%` }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BlockersList({ blockers }: { blockers: string[] }) {
@@ -59,7 +132,8 @@ export default function ReviewPage({
   const applicationId = searchParams.get("applicationId");
 
   const [application, setApplication] = useState<Application | null>(null);
-  const [gbcDetails, setGbcDetails] = useState<ApplicationDetailsGbcAc | null>(null);
+  const [serviceFields, setServiceFields] = useState<ServiceField[]>([]);
+  const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>({});
   const [persons, setPersons] = useState<PersonRecord[]>([]);
   const [linkedDocs, setLinkedDocs] = useState<LinkedDoc[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -71,9 +145,9 @@ export default function ReviewPage({
       fetch(`/api/applications/${applicationId}`)
         .then((r) => r.json())
         .then(({ application: app }) => app ?? null),
-      fetch(`/api/applications/${applicationId}/details-gbc-ac`)
+      fetch(`/api/templates/${params.templateId}`)
         .then((r) => r.json())
-        .then(({ details }) => details ?? null),
+        .then(({ template }) => template ?? null),
       fetch(`/api/applications/${applicationId}/persons`)
         .then((r) => r.json())
         .then(({ persons: p }) => p ?? []),
@@ -82,9 +156,14 @@ export default function ReviewPage({
         .then(({ links }: { links: Array<{ documents: LinkedDoc }> }) =>
           (links ?? []).map((l) => l.documents).filter(Boolean)
         ),
-    ]).then(([app, gbc, pList, docs]) => {
+    ]).then(([app, tpl, pList, docs]) => {
       setApplication(app as Application | null);
-      setGbcDetails(gbc as ApplicationDetailsGbcAc | null);
+      if (tpl?.service_fields && Array.isArray(tpl.service_fields)) {
+        setServiceFields(tpl.service_fields as ServiceField[]);
+      }
+      if ((app as Application & { service_details?: Record<string, unknown> })?.service_details) {
+        setServiceDetails((app as Application & { service_details?: Record<string, unknown> }).service_details ?? {});
+      }
       setPersons(pList as PersonRecord[]);
       setLinkedDocs(docs as LinkedDoc[]);
     });
@@ -94,9 +173,6 @@ export default function ReviewPage({
   // Compute blockers
   const blockers: string[] = [];
   if (application) {
-    if (!application.business_name) blockers.push("Business name is required");
-    if (!application.business_type) blockers.push("Business type is required");
-    if (!application.business_country) blockers.push("Country of incorporation is required");
     if (!application.contact_name) blockers.push("Primary contact name is required");
     if (!application.contact_email) blockers.push("Primary contact email is required");
   }
@@ -123,126 +199,64 @@ export default function ReviewPage({
       <div className="flex items-center justify-center py-24 text-gray-400">Loading…</div>
     );
 
+  // Group persons by role for display
+  const roles = ["director", "shareholder", "ubo"] as const;
+  const roleLabel: Record<string, string> = { director: "Directors", shareholder: "Shareholders", ubo: "UBOs" };
+
   return (
     <WizardLayout currentStep={3}>
       <div className="max-w-3xl space-y-6">
-        {/* Business Information */}
+        {/* Primary Contact */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-brand-navy">Business Information</CardTitle>
+            <CardTitle className="text-brand-navy">Primary Contact</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="font-medium text-gray-600">Business name</span>
-              <p>{application.business_name || "—"}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Type</span>
-              <p>{application.business_type || "—"}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Country</span>
-              <p>{application.business_country || "—"}</p>
-            </div>
-            <div className="col-span-2">
-              <span className="font-medium text-gray-600">Address</span>
-              <p>{application.business_address || "—"}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Primary contact</span>
+              <span className="font-medium text-gray-600">Name</span>
               <p>{application.contact_name || "—"}</p>
             </div>
             <div>
-              <span className="font-medium text-gray-600">Contact email</span>
+              <span className="font-medium text-gray-600">Email</span>
               <p>{application.contact_email || "—"}</p>
             </div>
+            {application.contact_phone && (
+              <div>
+                <span className="font-medium text-gray-600">Phone</span>
+                <p>{application.contact_phone}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* GBC/AC Details */}
-        {gbcDetails && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-brand-navy">GBC/AC Details</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4 text-sm">
-              {gbcDetails.proposed_names && gbcDetails.proposed_names.filter(Boolean).length > 0 && (
-                <div className="col-span-2">
-                  <span className="font-medium text-gray-600">Proposed company names</span>
-                  <ol className="list-decimal list-inside mt-1">
-                    {gbcDetails.proposed_names.filter(Boolean).map((n, i) => (
-                      <li key={i}>{n}</li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-              {gbcDetails.proposed_business_activity && (
-                <div className="col-span-2">
-                  <span className="font-medium text-gray-600">Business activity</span>
-                  <p>{gbcDetails.proposed_business_activity}</p>
-                </div>
-              )}
-              {gbcDetails.geographical_area && (
-                <div>
-                  <span className="font-medium text-gray-600">Geographical area</span>
-                  <p>{gbcDetails.geographical_area}</p>
-                </div>
-              )}
-              {gbcDetails.transaction_currency && (
-                <div>
-                  <span className="font-medium text-gray-600">Currency</span>
-                  <p>{gbcDetails.transaction_currency}</p>
-                </div>
-              )}
-              {gbcDetails.estimated_turnover_3yr && (
-                <div>
-                  <span className="font-medium text-gray-600">Turnover (3yr est.)</span>
-                  <p>{gbcDetails.estimated_turnover_3yr}</p>
-                </div>
-              )}
-              {gbcDetails.initial_stated_capital && (
-                <div>
-                  <span className="font-medium text-gray-600">Initial capital</span>
-                  <p>{gbcDetails.initial_stated_capital}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Service Details (readOnly DynamicServiceForm) */}
+        {serviceFields.length > 0 && (
+          <DynamicServiceForm
+            fields={serviceFields}
+            values={serviceDetails}
+            onChange={() => {}}
+            readOnly
+          />
         )}
 
-        {/* Persons */}
+        {/* Directors, Shareholders & UBOs */}
         {persons.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-brand-navy">Directors, Shareholders &amp; UBOs</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {persons.map((p) => {
-                const kyc = p.kyc_records;
-                const complete = kyc?.completion_status === "complete";
+            <CardContent className="space-y-4">
+              {roles.map((role) => {
+                const group = persons.filter((p) => p.role === role);
+                if (group.length === 0) return null;
                 return (
-                  <div key={p.id} className="flex items-center justify-between rounded border px-3 py-2.5 text-sm bg-gray-50">
-                    <div>
-                      <p className="font-medium">{kyc?.full_name || `Unnamed ${p.role}`}</p>
-                      <p className="text-xs text-gray-500 capitalize">
-                        {p.role}
-                        {p.role === "shareholder" && p.shareholding_percentage !== null
-                          ? ` — ${p.shareholding_percentage}%`
-                          : ""}
-                        {kyc?.nationality ? ` · ${kyc.nationality}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {complete ? (
-                        <span className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="h-3.5 w-3.5" /> KYC complete
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-xs text-amber-600">
-                          <AlertTriangle className="h-3.5 w-3.5" /> KYC incomplete
-                        </span>
-                      )}
-                    </div>
+                  <div key={role} className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      {roleLabel[role]} ({group.length})
+                    </p>
+                    {group.map((p) => (
+                      <PersonProgressRow key={p.id} person={p} />
+                    ))}
                   </div>
                 );
               })}

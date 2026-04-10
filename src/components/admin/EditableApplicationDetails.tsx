@@ -343,39 +343,12 @@ export function EditableApplicationDetails({
         </CardContent>
       </Card>
 
-      {/* ── Section B: Service Details (dynamic) ─────────────────────────── */}
-      {serviceFields.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-brand-navy text-base">
-                Section B: Service Details{templateName ? ` — ${templateName}` : ""}
-              </CardTitle>
-              <SectionActions
-                section="service"
-                {...actions("service", { service_details: serviceDetails })}
-              />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <DynamicServiceForm
-              fields={serviceFields}
-              values={serviceDetails}
-              onChange={(key, value) =>
-                setServiceDetails((prev) => ({ ...prev, [key]: value }))
-              }
-              readOnly={editing !== "service"}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Section C: Primary Contact ───────────────────────────────────── */}
+      {/* ── Section B: Primary Contact ───────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-brand-navy text-base">
-              {serviceFields.length > 0 ? "Section C" : "Section B"}: Primary Contact
+              Primary Contact
             </CardTitle>
             <SectionActions
               section="contact"
@@ -439,6 +412,33 @@ export function EditableApplicationDetails({
           )}
         </CardContent>
       </Card>
+
+      {/* ── Section C: Service Details (dynamic) ─────────────────────────── */}
+      {serviceFields.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-brand-navy text-base">
+                Service Details{templateName ? ` — ${templateName}` : ""}
+              </CardTitle>
+              <SectionActions
+                section="service"
+                {...actions("service", { service_details: serviceDetails })}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <DynamicServiceForm
+              fields={serviceFields}
+              values={serviceDetails}
+              onChange={(key, value) =>
+                setServiceDetails((prev) => ({ ...prev, [key]: value }))
+              }
+              readOnly={editing !== "service"}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Internal Notes ───────────────────────────────────────────────── */}
       <Card>

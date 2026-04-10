@@ -41,13 +41,41 @@ export async function GET(
       id, role, shareholding_percentage, created_at,
       kyc_records!kyc_record_id(
         id, full_name, email, date_of_birth, nationality,
-        passport_number, passport_expiry, occupation, completion_status
+        passport_number, passport_expiry, occupation, completion_status,
+        address, source_of_funds_description, is_pep, legal_issues_declared
       )
     `)
     .eq("application_id", params.id)
     .order("created_at");
 
-  return NextResponse.json({ persons: persons ?? [] });
+  // Fetch document counts per kyc_record_id
+  const kycIds = (persons ?? [])
+    .map((p) => (p.kyc_records as unknown as { id: string } | null)?.id)
+    .filter(Boolean) as string[];
+
+  const docCounts: Record<string, number> = {};
+  if (kycIds.length > 0) {
+    const { data: docs } = await supabase
+      .from("documents")
+      .select("kyc_record_id")
+      .in("kyc_record_id", kycIds)
+      .eq("is_active", true);
+    if (docs) {
+      for (const d of docs) {
+        if (d.kyc_record_id) {
+          docCounts[d.kyc_record_id] = (docCounts[d.kyc_record_id] ?? 0) + 1;
+        }
+      }
+    }
+  }
+
+  // Attach doc_count to each person
+  const personsWithDocs = (persons ?? []).map((p) => {
+    const kycId = (p.kyc_records as unknown as { id: string } | null)?.id;
+    return { ...p, doc_count: kycId ? (docCounts[kycId] ?? 0) : 0 };
+  });
+
+  return NextResponse.json({ persons: personsWithDocs });
 }
 
 export async function POST(
@@ -101,5 +129,5 @@ export async function POST(
     return NextResponse.json({ error: "Failed to create person record" }, { status: 500 });
   }
 
-  return NextResponse.json({ person: { ...person, kyc_records: kycRecord } });
+  return NextResponse.json({ person: { ...person, kyc_records: kycRecord, doc_count: 0 } });
 }

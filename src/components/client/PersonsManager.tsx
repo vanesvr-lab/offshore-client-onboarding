@@ -31,6 +31,10 @@ interface PersonKyc {
   passport_number: string | null;
   passport_expiry: string | null;
   occupation: string | null;
+  address: string | null;
+  source_of_funds_description: string | null;
+  is_pep: boolean | null;
+  legal_issues_declared: boolean | null;
   completion_status: string;
 }
 
@@ -40,6 +44,7 @@ interface Person {
   shareholding_percentage: number | null;
   created_at: string;
   kyc_records: PersonKyc | null;
+  doc_count: number;
 }
 
 interface PersonsManagerProps {
@@ -54,10 +59,67 @@ const ROLE_LABELS: Record<PersonRole, string> = {
   contact: "Contact",
 };
 
+const ROLE_ORDER: PersonRole[] = ["director", "shareholder", "ubo", "contact"];
+
 const NATIONALITIES = [
   "Mauritian", "British", "French", "American", "South African", "Indian",
   "Chinese", "Australian", "Canadian", "German", "Other",
 ];
+
+// 11 required KYC fields for progress tracking
+const KYC_REQUIRED_FIELDS: (keyof PersonKyc)[] = [
+  "full_name", "email", "date_of_birth", "nationality",
+  "passport_number", "passport_expiry", "address", "occupation",
+  "source_of_funds_description", "is_pep", "legal_issues_declared",
+];
+const KYC_TOTAL = KYC_REQUIRED_FIELDS.length;
+const DOCS_TOTAL = 6; // per-person identity document types
+
+function kycFilled(kyc: PersonKyc | null): number {
+  if (!kyc) return 0;
+  return KYC_REQUIRED_FIELDS.filter((f) => {
+    const v = kyc[f];
+    return v !== null && v !== undefined && v !== "";
+  }).length;
+}
+
+/** Thin dual progress bars shown on each person card header */
+function PersonProgress({ kyc, docCount }: { kyc: PersonKyc | null; docCount: number }) {
+  const kycCount = kycFilled(kyc);
+  const kycPct = Math.round((kycCount / KYC_TOTAL) * 100);
+  const docPct = Math.round((Math.min(docCount, DOCS_TOTAL) / DOCS_TOTAL) * 100);
+
+  return (
+    <div className="space-y-1 min-w-[120px]">
+      {/* KYC bar */}
+      <div>
+        <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+          <span>KYC</span>
+          <span>{kycCount}/{KYC_TOTAL}</span>
+        </div>
+        <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-brand-success transition-all"
+            style={{ width: `${kycPct}%` }}
+          />
+        </div>
+      </div>
+      {/* Docs bar */}
+      <div>
+        <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+          <span>Docs</span>
+          <span>{docCount}/{DOCS_TOTAL}</span>
+        </div>
+        <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-brand-success transition-all"
+            style={{ width: `${docPct}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PersonCard({
   person,
@@ -91,6 +153,8 @@ function PersonCard({
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Save failed");
+      // Optimistically update local kyc for progress recalculation
+      onUpdate(person.id, { kyc_records: { ...kyc, ...fields } as PersonKyc });
       toast.success("Saved");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Save failed");
@@ -124,34 +188,31 @@ function PersonCard({
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50"
         onClick={() => setOpen(!open)}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           {open ? (
             <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
           ) : (
             <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
           )}
-          <div>
-            <p className="text-sm font-medium text-brand-navy">{displayName}</p>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-brand-navy truncate">{displayName}</p>
             <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="capitalize px-1.5 py-0.5 rounded bg-gray-100">
-                {ROLE_LABELS[person.role]}
-              </span>
               {person.role === "shareholder" && person.shareholding_percentage !== null && (
                 <span>{person.shareholding_percentage}% shareholding</span>
-              )}
-              {kyc?.completion_status === "complete" && (
-                <span className="text-green-600">KYC complete</span>
               )}
             </div>
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-          className="text-gray-300 hover:text-red-400 p-1"
-          title="Remove"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <PersonProgress kyc={person.kyc_records} docCount={person.doc_count} />
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            className="text-gray-300 hover:text-red-400 p-1"
+            title="Remove"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Expanded KYC fields */}
@@ -224,6 +285,52 @@ function PersonCard({
                 onChange={(e) => setFields((p) => ({ ...p, occupation: e.target.value }))}
                 className="h-8 text-sm"
               />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs">Address</Label>
+              <Input
+                value={fields.address ?? ""}
+                onChange={(e) => setFields((p) => ({ ...p, address: e.target.value }))}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs">Source of funds description</Label>
+              <Input
+                value={fields.source_of_funds_description ?? ""}
+                onChange={(e) => setFields((p) => ({ ...p, source_of_funds_description: e.target.value }))}
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Politically exposed person (PEP)?</Label>
+              <Select
+                value={fields.is_pep === true ? "yes" : fields.is_pep === false ? "no" : ""}
+                onValueChange={(v) => setFields((p) => ({ ...p, is_pep: v === "yes" }))}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Legal issues declared?</Label>
+              <Select
+                value={fields.legal_issues_declared === true ? "yes" : fields.legal_issues_declared === false ? "no" : ""}
+                onValueChange={(v) => setFields((p) => ({ ...p, legal_issues_declared: v === "yes" }))}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {person.role === "shareholder" && (
               <div className="space-y-1">
@@ -314,6 +421,17 @@ export function PersonsManager({ applicationId }: PersonsManagerProps) {
 
   if (loading) return <p className="text-sm text-gray-400">Loading…</p>;
 
+  // Group persons by role
+  const grouped = ROLE_ORDER.reduce<Record<PersonRole, Person[]>>(
+    (acc, role) => {
+      acc[role] = persons.filter((p) => p.role === role);
+      return acc;
+    },
+    { director: [], shareholder: [], ubo: [], contact: [] }
+  );
+
+  const roleGroups = ROLE_ORDER.filter((role) => grouped[role].length > 0 || role !== "contact");
+
   return (
     <div className="space-y-4">
       {/* Action buttons */}
@@ -346,29 +464,39 @@ export function PersonsManager({ applicationId }: PersonsManagerProps) {
         </div>
       )}
 
-      {/* Person cards */}
+      {/* Persons grouped by role */}
       {persons.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-lg border border-dashed p-6 text-center">
-          <Users className="h-8 w-8 text-gray-200 mx-auto" />
+        <div className="space-y-3">
+          <div className="flex items-center justify-center rounded-lg border border-dashed p-6">
+            <Users className="h-8 w-8 text-gray-200" />
+          </div>
+          <p className="text-xs text-gray-400 text-center">
+            Add at least one director, shareholder, or UBO.
+          </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {persons.map((p) => (
-            <PersonCard
-              key={p.id}
-              person={p}
-              applicationId={applicationId}
-              onDelete={handleDelete}
-              onUpdate={handleUpdate}
-            />
-          ))}
+        <div className="space-y-5">
+          {roleGroups.map((role) => {
+            const group = grouped[role];
+            if (group.length === 0) return null;
+            return (
+              <div key={role} className="space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  {ROLE_LABELS[role]}s ({group.length})
+                </p>
+                {group.map((p) => (
+                  <PersonCard
+                    key={p.id}
+                    person={p}
+                    applicationId={applicationId}
+                    onDelete={handleDelete}
+                    onUpdate={handleUpdate}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </div>
-      )}
-
-      {persons.length === 0 && (
-        <p className="text-xs text-gray-400 text-center">
-          Add at least one director, shareholder, or UBO.
-        </p>
       )}
     </div>
   );

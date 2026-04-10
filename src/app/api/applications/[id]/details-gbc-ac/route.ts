@@ -1,3 +1,7 @@
+/**
+ * @deprecated Superseded by service_details JSONB on applications + DynamicServiceForm.
+ * Kept for backwards compatibility until legacy application_details_gbc_ac data is migrated.
+ */
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";

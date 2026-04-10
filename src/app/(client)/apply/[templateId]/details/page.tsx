@@ -228,7 +228,7 @@ export default function BusinessDetailsPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-brand-navy">
-              {hasServiceFields ? "Section C" : "Section B"}: Directors, Shareholders &amp; UBOs
+              Directors, Shareholders &amp; UBOs
             </CardTitle>
           </CardHeader>
           <CardContent>
