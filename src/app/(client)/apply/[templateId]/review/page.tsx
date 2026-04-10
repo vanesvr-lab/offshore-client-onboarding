@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { WizardLayout } from "@/components/client/WizardLayout";
-import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,8 +10,44 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import type { Application, DocumentRequirement, DocumentUpload } from "@/types";
+import type { Application, ApplicationDetailsGbcAc } from "@/types";
+
+interface PersonRecord {
+  id: string;
+  role: string;
+  shareholding_percentage: number | null;
+  kyc_records: {
+    id: string;
+    full_name: string | null;
+    completion_status: string;
+    nationality: string | null;
+    passport_number: string | null;
+  } | null;
+}
+
+interface LinkedDoc {
+  id: string;
+  file_name: string;
+  verification_status: string;
+  document_types?: { name: string };
+}
+
+function BlockersList({ blockers }: { blockers: string[] }) {
+  if (!blockers.length) return null;
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-1">
+      <p className="text-sm font-semibold text-amber-700">Required before submitting:</p>
+      {blockers.map((b, i) => (
+        <p key={i} className="text-sm text-amber-600 flex items-center gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {b}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 export default function ReviewPage({
   params,
@@ -24,42 +59,55 @@ export default function ReviewPage({
   const applicationId = searchParams.get("applicationId");
 
   const [application, setApplication] = useState<Application | null>(null);
-  const [requirements, setRequirements] = useState<DocumentRequirement[]>([]);
-  const [uploads, setUploads] = useState<DocumentUpload[]>([]);
+  const [gbcDetails, setGbcDetails] = useState<ApplicationDetailsGbcAc | null>(null);
+  const [persons, setPersons] = useState<PersonRecord[]>([]);
+  const [linkedDocs, setLinkedDocs] = useState<LinkedDoc[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!applicationId) return;
-    fetch(`/api/applications/${applicationId}`)
-      .then((r) => r.json())
-      .then(({ application: app, requirements: reqs, uploads: docs }) => {
-        setApplication(app ?? null);
-        setRequirements(reqs ?? []);
-        setUploads(docs ?? []);
-      });
+
+    Promise.all([
+      fetch(`/api/applications/${applicationId}`)
+        .then((r) => r.json())
+        .then(({ application: app }) => app ?? null),
+      fetch(`/api/applications/${applicationId}/details-gbc-ac`)
+        .then((r) => r.json())
+        .then(({ details }) => details ?? null),
+      fetch(`/api/applications/${applicationId}/persons`)
+        .then((r) => r.json())
+        .then(({ persons: p }) => p ?? []),
+      fetch(`/api/documents/links?linkedToType=application&linkedToId=${applicationId}`)
+        .then((r) => r.json())
+        .then(({ links }: { links: Array<{ documents: LinkedDoc }> }) =>
+          (links ?? []).map((l) => l.documents).filter(Boolean)
+        ),
+    ]).then(([app, gbc, pList, docs]) => {
+      setApplication(app as Application | null);
+      setGbcDetails(gbc as ApplicationDetailsGbcAc | null);
+      setPersons(pList as PersonRecord[]);
+      setLinkedDocs(docs as LinkedDoc[]);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
-  function canSubmit() {
-    return requirements.every((r) => {
-      if (!r.is_required) return true;
-      const u = uploads.find((u) => u.requirement_id === r.id);
-      return (
-        u &&
-        (u.verification_status === "verified" ||
-          u.verification_status === "manual_review")
-      );
-    });
+  // Compute blockers
+  const blockers: string[] = [];
+  if (application) {
+    if (!application.business_name) blockers.push("Business name is required");
+    if (!application.business_type) blockers.push("Business type is required");
+    if (!application.business_country) blockers.push("Country of incorporation is required");
+    if (!application.contact_name) blockers.push("Primary contact name is required");
+    if (!application.contact_email) blockers.push("Primary contact email is required");
   }
+  if (persons.length === 0) blockers.push("At least one director, shareholder, or UBO is required");
 
   async function handleSubmit() {
-    if (!applicationId) return;
+    if (!applicationId || blockers.length > 0) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/applications/${applicationId}/submit`, {
-        method: "POST",
-      });
-      const data = await res.json();
+      const res = await fetch(`/api/applications/${applicationId}/submit`, { method: "POST" });
+      const data = await res.json() as { error?: string };
       if (!res.ok || data.error) throw new Error(data.error || "Submission failed");
       toast.success("Application submitted successfully!");
       router.push(`/applications/${applicationId}`);
@@ -72,19 +120,16 @@ export default function ReviewPage({
 
   if (!application)
     return (
-      <div className="flex items-center justify-center py-24 text-gray-400">
-        Loading…
-      </div>
+      <div className="flex items-center justify-center py-24 text-gray-400">Loading…</div>
     );
 
   return (
     <WizardLayout currentStep={3}>
       <div className="max-w-3xl space-y-6">
+        {/* Business Information */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-brand-navy">
-              Business Information
-            </CardTitle>
+            <CardTitle className="text-brand-navy">Business Information</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4 text-sm">
             <div>
@@ -103,98 +148,146 @@ export default function ReviewPage({
               <span className="font-medium text-gray-600">Address</span>
               <p>{application.business_address || "—"}</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-brand-navy">Primary Contact</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="font-medium text-gray-600">Name</span>
+              <span className="font-medium text-gray-600">Primary contact</span>
               <p>{application.contact_name || "—"}</p>
             </div>
             <div>
-              <span className="font-medium text-gray-600">Email</span>
+              <span className="font-medium text-gray-600">Contact email</span>
               <p>{application.contact_email || "—"}</p>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Phone</span>
-              <p>{application.contact_phone || "—"}</p>
             </div>
           </CardContent>
         </Card>
 
-        {application.ubo_data && application.ubo_data.length > 0 && (
+        {/* GBC/AC Details */}
+        {gbcDetails && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-brand-navy">
-                Ultimate Beneficial Owners
-              </CardTitle>
+              <CardTitle className="text-brand-navy">GBC/AC Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {application.ubo_data.map((ubo, idx) => (
-                <div
-                  key={idx}
-                  className="text-sm border rounded p-3 bg-gray-50"
-                >
-                  <p className="font-medium">{ubo.full_name}</p>
-                  <p className="text-gray-500">
-                    {ubo.nationality} · {ubo.ownership_percentage}% ownership ·
-                    DOB: {ubo.date_of_birth}
-                  </p>
+            <CardContent className="grid grid-cols-2 gap-4 text-sm">
+              {gbcDetails.proposed_names && gbcDetails.proposed_names.filter(Boolean).length > 0 && (
+                <div className="col-span-2">
+                  <span className="font-medium text-gray-600">Proposed company names</span>
+                  <ol className="list-decimal list-inside mt-1">
+                    {gbcDetails.proposed_names.filter(Boolean).map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ol>
                 </div>
-              ))}
+              )}
+              {gbcDetails.proposed_business_activity && (
+                <div className="col-span-2">
+                  <span className="font-medium text-gray-600">Business activity</span>
+                  <p>{gbcDetails.proposed_business_activity}</p>
+                </div>
+              )}
+              {gbcDetails.geographical_area && (
+                <div>
+                  <span className="font-medium text-gray-600">Geographical area</span>
+                  <p>{gbcDetails.geographical_area}</p>
+                </div>
+              )}
+              {gbcDetails.transaction_currency && (
+                <div>
+                  <span className="font-medium text-gray-600">Currency</span>
+                  <p>{gbcDetails.transaction_currency}</p>
+                </div>
+              )}
+              {gbcDetails.estimated_turnover_3yr && (
+                <div>
+                  <span className="font-medium text-gray-600">Turnover (3yr est.)</span>
+                  <p>{gbcDetails.estimated_turnover_3yr}</p>
+                </div>
+              )}
+              {gbcDetails.initial_stated_capital && (
+                <div>
+                  <span className="font-medium text-gray-600">Initial capital</span>
+                  <p>{gbcDetails.initial_stated_capital}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-brand-navy">Documents</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y">
-              {requirements.map((req) => {
-                const upload = uploads.find((u) => u.requirement_id === req.id);
+        {/* Persons */}
+        {persons.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-brand-navy">Directors, Shareholders &amp; UBOs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {persons.map((p) => {
+                const kyc = p.kyc_records;
+                const complete = kyc?.completion_status === "complete";
                 return (
-                  <li
-                    key={req.id}
-                    className="flex items-center justify-between py-2 text-sm"
-                  >
-                    <span className={req.is_required ? "" : "text-gray-500"}>
-                      {req.name}
-                      {!req.is_required && " (optional)"}
-                    </span>
-                    {upload ? (
-                      <VerificationBadge status={upload.verification_status} />
-                    ) : (
-                      <span className="text-xs text-gray-400">
-                        Not uploaded
-                      </span>
-                    )}
-                  </li>
+                  <div key={p.id} className="flex items-center justify-between rounded border px-3 py-2.5 text-sm bg-gray-50">
+                    <div>
+                      <p className="font-medium">{kyc?.full_name || `Unnamed ${p.role}`}</p>
+                      <p className="text-xs text-gray-500 capitalize">
+                        {p.role}
+                        {p.role === "shareholder" && p.shareholding_percentage !== null
+                          ? ` — ${p.shareholding_percentage}%`
+                          : ""}
+                        {kyc?.nationality ? ` · ${kyc.nationality}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {complete ? (
+                        <span className="flex items-center gap-1 text-xs text-green-600">
+                          <CheckCircle className="h-3.5 w-3.5" /> KYC complete
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs text-amber-600">
+                          <AlertTriangle className="h-3.5 w-3.5" /> KYC incomplete
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
-            </ul>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Documents */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-brand-navy">Documents ({linkedDocs.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {linkedDocs.length === 0 ? (
+              <p className="text-sm text-gray-400">No documents uploaded yet.</p>
+            ) : (
+              <ul className="divide-y">
+                {linkedDocs.map((doc) => (
+                  <li key={doc.id} className="flex items-center justify-between py-2 text-sm">
+                    <span>{doc.document_types?.name ?? doc.file_name}</span>
+                    <span className={`flex items-center gap-1 text-xs ${
+                      doc.verification_status === "verified" ? "text-green-600" : "text-amber-600"
+                    }`}>
+                      {doc.verification_status === "verified" ? (
+                        <CheckCircle className="h-3.5 w-3.5" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5" />
+                      )}
+                      {doc.verification_status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
 
-        {!canSubmit() && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-            All required documents must be uploaded and verified (or queued for
-            manual review) before you can submit.
-          </div>
-        )}
+        {/* Blockers */}
+        <BlockersList blockers={blockers} />
 
         <div className="flex justify-between">
           <Button
             variant="outline"
             onClick={() =>
-              router.push(
-                `/apply/${params.templateId}/documents?applicationId=${applicationId}`
-              )
+              router.push(`/apply/${params.templateId}/documents?applicationId=${applicationId}`)
             }
           >
             Back to Documents
@@ -202,7 +295,8 @@ export default function ReviewPage({
           <Button
             className="bg-brand-navy hover:bg-brand-blue"
             onClick={handleSubmit}
-            disabled={!canSubmit() || submitting}
+            disabled={blockers.length > 0 || submitting}
+            title={blockers.length > 0 ? "Resolve all blockers before submitting" : ""}
           >
             {submitting ? "Submitting…" : "Submit Application"}
           </Button>

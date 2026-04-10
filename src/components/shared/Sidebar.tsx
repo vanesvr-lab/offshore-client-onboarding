@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -82,6 +82,7 @@ function SectionHeader({ label }: { label: string }) {
 
 export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   function isActive(href: string, exact = false): boolean {
     if (exact) return pathname === href;
@@ -93,6 +94,11 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
   const clientAppMatch = pathname.match(/^\/applications\/([^/]+)/);
   const contextAppId =
     role === "admin" ? adminAppMatch?.[1] : clientAppMatch?.[1];
+
+  // Detect if on a wizard page (/apply/[templateId]/...)
+  const wizardMatch = pathname.match(/^\/apply\/([^/]+)\/(details|documents|review)/);
+  const wizardTemplateId = role === "client" ? wizardMatch?.[1] : undefined;
+  const wizardApplicationId = wizardTemplateId ? searchParams.get("applicationId") : null;
 
   // Detect if on a specific client page for contextual nav
   const adminClientMatch = pathname.match(/^\/admin\/clients\/([^/]+)/);
@@ -257,11 +263,30 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
                   icon={FileText}
                   active={pathname === `/applications/${contextAppId}`}
                 />
+              </>
+            )}
+
+            {wizardTemplateId && wizardApplicationId && (
+              <>
+                <div className="border-t border-white/10 my-3" />
+                <SectionHeader label="Application" />
                 <NavItem
-                  href={`/applications/${contextAppId}/files`}
-                  label="Files"
+                  href={`/apply/${wizardTemplateId}/details?applicationId=${wizardApplicationId}`}
+                  label="Details"
+                  icon={FileText}
+                  active={pathname === `/apply/${wizardTemplateId}/details`}
+                />
+                <NavItem
+                  href={`/apply/${wizardTemplateId}/documents?applicationId=${wizardApplicationId}`}
+                  label="Documents"
                   icon={Files}
-                  active={pathname === `/applications/${contextAppId}/files`}
+                  active={pathname === `/apply/${wizardTemplateId}/documents`}
+                />
+                <NavItem
+                  href={`/apply/${wizardTemplateId}/review?applicationId=${wizardApplicationId}`}
+                  label="Review"
+                  icon={ClipboardList}
+                  active={pathname === `/apply/${wizardTemplateId}/review`}
                 />
               </>
             )}

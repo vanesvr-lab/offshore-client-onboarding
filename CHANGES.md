@@ -137,6 +137,27 @@ These files affect the entire app. Coordinate before modifying.
 
 ## Change Log
 
+### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 6 (FINAL) — Client Dashboard + Wizard Rework
+
+**New API routes:**
+- `GET /api/templates/[id]` — fetch a single service template by ID (name/description)
+- `GET/POST /api/applications/[id]/persons` — list persons for an application; create new person (creates kyc_record + application_persons row)
+- `PATCH/DELETE /api/applications/[id]/persons/[personId]` — update role/shareholding; delete person (and orphaned kyc_record)
+- `GET/POST /api/applications/[id]/details-gbc-ac` — fetch/upsert GBC/AC-specific application details
+
+**New components:**
+- `src/components/client/OnboardingBanner.tsx` — smart contextual banner adapting to onboarding stage (no_kyc / kyc_incomplete / kyc_complete_no_app / app_draft / app_submitted / app_approved / app_rejected)
+- `src/components/client/CompletionChecklist.tsx` — sticky progress checklist card with section-by-section KYC/application completion
+- `src/components/client/PersonsManager.tsx` — manage directors/shareholders/UBOs per application; expandable inline KYC fields, auto-save, shareholding running total
+
+**Updated pages:**
+- `src/app/(client)/dashboard/page.tsx` — full rework: onboarding progress bar, smart banner, completion checklist sidebar, applications list
+- `src/app/(client)/apply/[templateId]/details/page.tsx` — GBC/AC-specific fields section (conditional on template name); PersonsManager replacing UBO form
+- `src/app/(client)/apply/[templateId]/documents/page.tsx` — reworked to show document library links + DocumentUploadWidget that creates document_links
+- `src/app/(client)/apply/[templateId]/review/page.tsx` — full review rework: business info, GBC/AC details, persons with KYC status, linked documents, blockers list
+- `src/app/(client)/applications/[id]/page.tsx` — added persons list with KYC completion, linked document library (from document_links)
+- `src/components/shared/Sidebar.tsx` — added wizard contextual nav (Details/Documents/Review) when on /apply/[templateId] pages, using useSearchParams for applicationId
+
 ### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 5 — Process Launcher
 
 **New API routes:**
