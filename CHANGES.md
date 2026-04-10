@@ -137,6 +137,29 @@ These files affect the entire app. Coordinate before modifying.
 
 ## Change Log
 
+### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 5 — Process Launcher
+
+**New API routes:**
+- `GET /api/admin/processes/templates` — list active process templates with requirements, filterable by client_type
+- `POST /api/admin/processes/start` — create client_process, auto-link existing library documents, create process_documents rows
+- `GET /api/admin/processes/[id]` — full process detail with process_documents + documents
+- `PATCH /api/admin/processes/[id]` — update status/notes
+- `POST /api/admin/processes/[id]/request-documents` — mark process_documents as requested, send email via Resend
+- `POST /api/admin/processes/[id]/upload` — admin upload a document and link it to the process
+
+**New components:**
+- `src/components/admin/ProcessReadinessDashboard.tsx` — grouped document readiness view with Available/Missing/Requested states, request + upload actions per row, bulk request all missing
+- `src/components/admin/ProcessLauncher.tsx` — dialog to pick a process template and start a process; auto-navigates to process detail after creation
+
+**New page:**
+- `src/app/(admin)/admin/clients/[id]/processes/[processId]/page.tsx` — process detail page with breadcrumb + ProcessReadinessDashboard
+
+**Updated:**
+- `src/app/(admin)/admin/clients/[id]/page.tsx` — added Active Processes card + ProcessLauncher button in header; fetches client_processes
+- `src/components/shared/Sidebar.tsx` — added contextual "Process" section when on process detail pages
+
+---
+
 ### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 4 — Admin Client Creation + Risk Assessment
 
 **Updated API routes:**

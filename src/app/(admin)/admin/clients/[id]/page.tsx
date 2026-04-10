@@ -9,6 +9,7 @@ import { ClientEditForm } from "@/components/admin/ClientEditForm";
 import { SendInvitePanel } from "@/components/admin/SendInvitePanel";
 import { WorkflowMilestonesCard } from "@/components/admin/WorkflowMilestonesCard";
 import { KycSummaryCard } from "@/components/admin/KycSummaryCard";
+import { ProcessLauncher } from "@/components/admin/ProcessLauncher";
 import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export default async function ClientDetailPage({
     { data: client },
     { data: allAdmins },
     { data: kycRecords },
+    { data: processes },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -57,6 +59,15 @@ export default async function ClientDetailPage({
       .select("*")
       .eq("client_id", params.id)
       .order("created_at"),
+    supabase
+      .from("client_processes")
+      .select(`
+        id, status, started_at, notes,
+        process_templates(name),
+        process_documents(id, status)
+      `)
+      .eq("client_id", params.id)
+      .order("started_at", { ascending: false }),
   ]);
 
   if (!client) notFound();
@@ -89,7 +100,13 @@ export default async function ClientDetailPage({
         <Link href="/admin/clients" className="text-sm text-brand-blue hover:underline mb-2 block">
           ← Back to Clients
         </Link>
-        <h1 className="text-2xl font-bold text-brand-navy">{client.company_name}</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold text-brand-navy">{client.company_name}</h1>
+          <ProcessLauncher
+            clientId={client.id}
+            clientType={(client as unknown as { client_type: "individual" | "organisation" | null }).client_type}
+          />
+        </div>
         <p className="text-gray-500 text-sm mt-1">Client since {formatDate(client.created_at)}</p>
       </div>
 
@@ -190,6 +207,56 @@ export default async function ClientDetailPage({
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Active Processes */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base text-brand-navy">Active Processes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(processes ?? []).length === 0 ? (
+                <p className="text-sm text-gray-400">No active processes.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 text-gray-500 font-medium">Process</th>
+                      <th className="text-left py-2 text-gray-500 font-medium">Status</th>
+                      <th className="text-left py-2 text-gray-500 font-medium">Documents</th>
+                      <th className="text-left py-2 text-gray-500 font-medium">Started</th>
+                      <th className="py-2" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {(processes ?? []).map((proc) => {
+                      const pt = proc.process_templates as unknown as { name?: string } | null;
+                      const docs = proc.process_documents as unknown as { id: string; status: string }[];
+                      const available = docs.filter((d) => d.status === "available" || d.status === "received").length;
+                      return (
+                        <tr key={proc.id}>
+                          <td className="py-2 font-medium text-brand-navy">{pt?.name ?? "Unnamed"}</td>
+                          <td className="py-2">
+                            <span className={`text-xs px-2 py-0.5 rounded capitalize ${
+                              proc.status === "complete" ? "bg-green-100 text-green-800"
+                              : proc.status === "ready" ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-600"
+                            }`}>{proc.status}</span>
+                          </td>
+                          <td className="py-2 text-gray-500">{available}/{docs.length}</td>
+                          <td className="py-2 text-gray-400">{formatDate(proc.started_at)}</td>
+                          <td className="py-2">
+                            <Link href={`/admin/clients/${client.id}/processes/${proc.id}`}>
+                              <Button variant="outline" size="sm">View</Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

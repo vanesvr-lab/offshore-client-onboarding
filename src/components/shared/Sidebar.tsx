@@ -98,6 +98,11 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
   const adminClientMatch = pathname.match(/^\/admin\/clients\/([^/]+)/);
   const contextClientId = role === "admin" ? adminClientMatch?.[1] : undefined;
 
+  // Detect if on a process detail page
+  const adminProcessMatch = pathname.match(/^\/admin\/clients\/([^/]+)\/processes\/([^/]+)/);
+  const contextProcessClientId = role === "admin" ? adminProcessMatch?.[1] : undefined;
+  const contextProcessId = role === "admin" ? adminProcessMatch?.[2] : undefined;
+
   const clientNav = [
     { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
     { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
@@ -174,6 +179,26 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
                   label="Documents"
                   icon={Files}
                   active={pathname.startsWith(`/admin/clients/${contextClientId}/documents`)}
+                />
+              </>
+            )}
+
+            {/* Contextual: on a process detail page */}
+            {contextProcessClientId && contextProcessId && (
+              <>
+                <div className="border-t border-white/10 my-3" />
+                <SectionHeader label="Process" />
+                <NavItem
+                  href={`/admin/clients/${contextProcessClientId}`}
+                  label="Back to Client"
+                  icon={Users}
+                  active={false}
+                />
+                <NavItem
+                  href={`/admin/clients/${contextProcessClientId}/processes/${contextProcessId}`}
+                  label="Readiness"
+                  icon={Files}
+                  active={pathname === `/admin/clients/${contextProcessClientId}/processes/${contextProcessId}`}
                 />
               </>
             )}
