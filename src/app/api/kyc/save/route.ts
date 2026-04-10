@@ -27,7 +27,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: fetchError?.message ?? "Record not found" }, { status: 404 });
   }
 
-  const merged = { ...current, ...fields };
+  // Convert empty strings to null for date and boolean fields
+  // PostgreSQL rejects "" for date columns and boolean columns
+  const DATE_FIELDS = ["date_of_birth", "passport_expiry", "date_of_incorporation",
+    "sanctions_checked_at", "adverse_media_checked_at", "pep_verified_at", "risk_rated_at"];
+  const BOOLEAN_FIELDS = ["legal_issues_declared", "is_pep", "sanctions_checked",
+    "adverse_media_checked", "pep_verified"];
+
+  const cleanedFields: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (DATE_FIELDS.includes(key) && (value === "" || value === null)) {
+      cleanedFields[key] = null;
+    } else if (BOOLEAN_FIELDS.includes(key) && value === "") {
+      cleanedFields[key] = null;
+    } else {
+      cleanedFields[key] = value;
+    }
+  }
+
+  const merged = { ...current, ...cleanedFields };
 
   // Derive completion_status
   const isIndividual = (merged.record_type ?? current.record_type) === "individual";
@@ -49,7 +67,7 @@ export async function POST(request: Request) {
   const { data: updated, error: updateError } = await supabase
     .from("kyc_records")
     .update({
-      ...fields,
+      ...cleanedFields,
       completion_status,
       filled_by: session.user.id,
       updated_at: new Date().toISOString(),
