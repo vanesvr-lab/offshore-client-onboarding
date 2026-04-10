@@ -270,6 +270,7 @@ export default async function ApplicationDetailPage({
             <CardContent>
               <StageSelector
                 applicationId={params.id}
+                clientId={appTyped.client_id}
                 currentStatus={app.status as ApplicationStatus}
               />
             </CardContent>

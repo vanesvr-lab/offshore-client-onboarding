@@ -15,6 +15,7 @@ import {
   Files,
   BookOpen,
   UserCheck,
+  Shield,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -155,6 +156,18 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
                   label="Overview"
                   icon={Users}
                   active={pathname === `/admin/clients/${contextClientId}`}
+                />
+                <NavItem
+                  href={`/admin/clients/${contextClientId}/kyc`}
+                  label="KYC"
+                  icon={UserCheck}
+                  active={pathname.startsWith(`/admin/clients/${contextClientId}/kyc`)}
+                />
+                <NavItem
+                  href={`/admin/clients/${contextClientId}/risk`}
+                  label="Risk"
+                  icon={Shield}
+                  active={pathname.startsWith(`/admin/clients/${contextClientId}/risk`)}
                 />
                 <NavItem
                   href={`/admin/clients/${contextClientId}/documents`}

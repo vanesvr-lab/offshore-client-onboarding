@@ -137,6 +137,31 @@ These files affect the entire app. Coordinate before modifying.
 
 ## Change Log
 
+### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 4 — Admin Client Creation + Risk Assessment
+
+**Updated API routes:**
+- `POST /api/admin/create-client` — reworked: accepts clientType, kycPreFill, orgKycPreFill, workflowDates; creates profile + client + client_users + skeleton kyc_records in one call
+- `PATCH /api/admin/clients/[id]` — extended: now accepts all workflow milestone timestamp fields in addition to company_name
+
+**New pages:**
+- `src/app/(admin)/admin/clients/new/page.tsx` + `NewClientForm.tsx` — full-page new client creation with 3 sections: Basic Info, KYC pre-fill (individual or org), Workflow Milestones
+- `src/app/(admin)/admin/clients/[id]/kyc/page.tsx` — admin KYC review page with IndividualKycForm + OrganisationKycForm + RiskAssessmentPanel side-by-side
+- `src/app/(admin)/admin/clients/[id]/risk/page.tsx` — standalone risk assessment page per KYC record
+
+**New components:**
+- `src/components/admin/RiskAssessmentPanel.tsx` — full risk assessment: sanctions, adverse media, PEP verification, risk rating with auto flags + blockers summary
+- `src/components/admin/WorkflowMilestonesCard.tsx` — 6 click-to-toggle milestone checkboxes with dates, calls PATCH /api/admin/clients/[id]
+- `src/components/admin/KycSummaryCard.tsx` — shows per-record completion bar + risk indicators on client detail page
+- `src/components/ui/checkbox.tsx` — simple native checkbox UI component
+
+**Updated:**
+- `src/app/(admin)/admin/clients/[id]/page.tsx` — added WorkflowMilestonesCard (right column), KycSummaryCard (main column above Applications); fetches kyc_records + new client fields
+- `src/components/admin/StageSelector.tsx` — added clientId prop; blocks approval if risk_rating/sanctions/adverse_media/pep_verified are incomplete on any kyc_record
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — passes clientId to StageSelector
+- `src/components/shared/Sidebar.tsx` — added KYC + Risk links to client contextual section
+
+---
+
 ### 2026-04-07 — Claude Code (CLI) — Onboarding Redesign: Batch 3 — KYC Forms
 
 **New API routes:**

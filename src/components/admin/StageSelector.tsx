@@ -34,16 +34,19 @@ const MOVABLE_STAGES: ApplicationStatus[] = [
 
 interface StageSelectorProps {
   applicationId: string;
+  clientId: string;
   currentStatus: ApplicationStatus;
 }
 
-export function StageSelector({ applicationId, currentStatus }: StageSelectorProps) {
+export function StageSelector({ applicationId, clientId, currentStatus }: StageSelectorProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const [selected, setSelected] = useState<ApplicationStatus>(currentStatus);
   const [note, setNote] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [riskBlockers, setRiskBlockers] = useState<string[]>([]);
+  const [riskChecking, setRiskChecking] = useState(false);
 
   const hasChanged = selected !== currentStatus;
   const requiresConfirm = selected === "approved" || selected === "rejected";
@@ -91,7 +94,35 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
 
   if (!session) return null;
 
-  function handleUpdateClick() {
+  async function handleUpdateClick() {
+    if (selected === "approved") {
+      // Check risk assessment completeness before allowing approval
+      setRiskChecking(true);
+      try {
+        const res = await fetch(`/api/kyc/${clientId}`);
+        const data = await res.json() as { records?: Array<{
+          risk_rating: string | null;
+          sanctions_checked: boolean;
+          adverse_media_checked: boolean;
+          pep_verified: boolean;
+        }> };
+        const records = data.records ?? [];
+        const blockers: string[] = [];
+        for (const r of records) {
+          if (!r.risk_rating) blockers.push("Risk rating not set");
+          if (!r.sanctions_checked) blockers.push("Sanctions screening not completed");
+          if (!r.adverse_media_checked) blockers.push("Adverse media check not completed");
+          if (!r.pep_verified) blockers.push("PEP verification not completed");
+        }
+        const unique = blockers.filter((v, i, a) => a.indexOf(v) === i);
+        setRiskBlockers(unique);
+        if (unique.length > 0) return;
+      } finally {
+        setRiskChecking(false);
+      }
+    } else {
+      setRiskBlockers([]);
+    }
     if (requiresConfirm) {
       setConfirmOpen(true);
     } else {
@@ -113,12 +144,21 @@ export function StageSelector({ applicationId, currentStatus }: StageSelectorPro
         </Select>
         <Button
           onClick={handleUpdateClick}
-          disabled={!hasChanged || saving || !note.trim()}
+          disabled={!hasChanged || saving || !note.trim() || riskChecking}
           className="bg-brand-navy hover:bg-brand-blue"
         >
-          Update
+          {riskChecking ? "Checking…" : "Update"}
         </Button>
       </div>
+
+      {riskBlockers.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 space-y-1">
+          <p className="text-xs font-medium text-red-700">Cannot approve — risk assessment incomplete:</p>
+          <ul className="list-disc list-inside text-xs text-red-600 space-y-0.5">
+            {riskBlockers.map((b, i) => <li key={i}>{b}</li>)}
+          </ul>
+        </div>
+      )}
 
       {hasChanged && (
         <div className="space-y-1">

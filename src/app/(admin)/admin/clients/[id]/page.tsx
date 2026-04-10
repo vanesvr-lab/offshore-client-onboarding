@@ -7,11 +7,13 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { AccountManagerPanel } from "@/components/admin/AccountManagerPanel";
 import { ClientEditForm } from "@/components/admin/ClientEditForm";
 import { SendInvitePanel } from "@/components/admin/SendInvitePanel";
+import { WorkflowMilestonesCard } from "@/components/admin/WorkflowMilestonesCard";
+import { KycSummaryCard } from "@/components/admin/KycSummaryCard";
 import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
-import type { ClientAccountManager, ApplicationStatus } from "@/types";
+import type { ClientAccountManager, ApplicationStatus, KycRecord } from "@/types";
 
 export default async function ClientDetailPage({
   params,
@@ -23,11 +25,14 @@ export default async function ClientDetailPage({
   const [
     { data: client },
     { data: allAdmins },
+    { data: kycRecords },
   ] = await Promise.all([
     supabase
       .from("clients")
       .select(`
         id, company_name, created_at, updated_at, invite_sent_at,
+        client_type, loe_sent_at, invoice_sent_at, payment_received_at,
+        portal_link_sent_at, kyc_completed_at, application_submitted_at,
         client_users(
           id, role, created_at,
           profiles!client_users_user_id_fkey(id, full_name, email, phone)
@@ -46,6 +51,11 @@ export default async function ClientDetailPage({
     supabase
       .from("admin_users")
       .select("user_id, profiles(full_name, email)")
+      .order("created_at"),
+    supabase
+      .from("kyc_records")
+      .select("*")
+      .eq("client_id", params.id)
       .order("created_at"),
   ]);
 
@@ -127,6 +137,12 @@ export default async function ClientDetailPage({
             </CardContent>
           </Card>
 
+          {/* KYC Summary */}
+          <KycSummaryCard
+            clientId={client.id}
+            records={(kycRecords ?? []) as KycRecord[]}
+          />
+
           {/* Applications */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -181,8 +197,19 @@ export default async function ClientDetailPage({
           </Card>
         </div>
 
-        {/* Right: account manager + invite */}
+        {/* Right: workflow + account manager + invite */}
         <div className="space-y-4">
+          <WorkflowMilestonesCard
+            clientId={client.id}
+            milestones={{
+              loe_sent_at: (client as unknown as Record<string, string | null>).loe_sent_at ?? null,
+              invoice_sent_at: (client as unknown as Record<string, string | null>).invoice_sent_at ?? null,
+              payment_received_at: (client as unknown as Record<string, string | null>).payment_received_at ?? null,
+              portal_link_sent_at: (client as unknown as Record<string, string | null>).portal_link_sent_at ?? null,
+              kyc_completed_at: (client as unknown as Record<string, string | null>).kyc_completed_at ?? null,
+              application_submitted_at: (client as unknown as Record<string, string | null>).application_submitted_at ?? null,
+            }}
+          />
           <AccountManagerPanel
             clientId={client.id}
             current={currentManager as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null }) | null}
