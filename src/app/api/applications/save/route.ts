@@ -8,36 +8,47 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { applicationId, templateId, ...fields } = body;
+  const { applicationId, templateId, clientId: bodyClientId, ...fields } = body;
 
   const supabase = createAdminClient();
 
-  // Resolve clientId from session user
-  const { data: clientUser } = await supabase
-    .from("client_users")
-    .select("client_id")
-    .eq("user_id", session.user.id)
-    .maybeSingle();
+  // Resolve clientId — admin can pass it explicitly, client resolves from their account
+  let resolvedClientId: string | null = null;
 
-  if (!clientUser) return NextResponse.json({ error: "No client account found" }, { status: 403 });
+  if (session.user.role === "admin" && bodyClientId) {
+    // Admin is creating on behalf of a client
+    resolvedClientId = bodyClientId;
+  } else {
+    // Client user — resolve from client_users
+    const { data: clientUser } = await supabase
+      .from("client_users")
+      .select("client_id")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (!clientUser) return NextResponse.json({ error: "No client account found" }, { status: 403 });
+    resolvedClientId = clientUser.client_id;
+  }
 
   const payload = {
     ...fields,
     template_id: templateId,
-    client_id: clientUser.client_id,
+    client_id: resolvedClientId,
     status: "draft",
     updated_at: new Date().toISOString(),
   };
 
   if (applicationId) {
-    // Verify ownership before update
-    const { data: existing } = await supabase
-      .from("applications")
-      .select("client_id")
-      .eq("id", applicationId)
-      .single();
-    if (!existing || existing.client_id !== clientUser.client_id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // Verify ownership before update (admins can edit any application)
+    if (session.user.role !== "admin") {
+      const { data: existing } = await supabase
+        .from("applications")
+        .select("client_id")
+        .eq("id", applicationId)
+        .single();
+      if (!existing || existing.client_id !== resolvedClientId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
     await supabase.from("applications").update(payload).eq("id", applicationId);
     revalidatePath("/dashboard");
