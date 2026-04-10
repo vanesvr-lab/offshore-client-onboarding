@@ -109,7 +109,9 @@ export function DynamicServiceForm({
           </div>
         );
 
-      case "select":
+      case "select": {
+        const isOther = (val as string) === "Other";
+        const otherKey = `${field.key}_other`;
         return (
           <div key={field.key} className="space-y-1.5">
             <Label className="text-sm">
@@ -130,8 +132,20 @@ export function DynamicServiceForm({
                 ))}
               </SelectContent>
             </Select>
+            {isOther && !readOnly && (
+              <Input
+                placeholder="Please specify…"
+                value={(values[otherKey] as string) ?? ""}
+                onChange={(e) => onChange(otherKey, e.target.value)}
+                className="mt-1"
+              />
+            )}
+            {isOther && readOnly && (values[otherKey] as string) && (
+              <p className="text-sm text-gray-700 mt-1">{values[otherKey] as string}</p>
+            )}
           </div>
         );
+      }
 
       case "boolean":
         return (

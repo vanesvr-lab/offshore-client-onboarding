@@ -156,6 +156,7 @@ export default async function ApplicationDetailPage({
               admin_notes: app.admin_notes ?? null,
             }}
             serviceFields={serviceFields}
+            templateName={appTyped.service_templates?.name}
           />
 
           {/* Section D: Directors, Shareholders & UBOs */}

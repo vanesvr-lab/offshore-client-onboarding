@@ -7,14 +7,6 @@ import { PersonsManager } from "@/components/client/PersonsManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -22,18 +14,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useWizardStore } from "@/stores/wizardStore";
-import { BUSINESS_TYPES } from "@/lib/utils/constants";
 import { toast } from "sonner";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
-
-const COUNTRIES = [
-  "Mauritius", "United Kingdom", "France", "United States", "India",
-  "China", "Singapore", "South Africa", "United Arab Emirates", "Switzerland",
-  "Germany", "Netherlands", "Luxembourg", "Cayman Islands", "British Virgin Islands", "Other",
-];
-
-
 
 export default function BusinessDetailsPage({
   params,
@@ -66,7 +49,7 @@ export default function BusinessDetailsPage({
     contact_title: businessDetails.contact_title,
   });
 
-  // Dynamic service-specific details (replaces hardcoded GBC/AC fields)
+  // Dynamic service-specific details
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>({});
 
   const currentAppId = applicationId || existingAppId || undefined;
@@ -74,7 +57,7 @@ export default function BusinessDetailsPage({
 
   useEffect(() => {
     setTemplateId(params.templateId);
-    // Fetch template name + service_fields
+    // Fetch template service_fields
     fetch(`/api/templates/${params.templateId}`)
       .then((r) => r.json())
       .then(({ template }) => {
@@ -90,18 +73,14 @@ export default function BusinessDetailsPage({
         .then((r) => r.json())
         .then(({ application: data }) => {
           if (data) {
-            setForm({
-              business_name: data.business_name || "",
-              business_type: data.business_type || "",
-              business_country: data.business_country || "",
-              business_address: data.business_address || "",
+            setForm((prev) => ({
+              ...prev,
               contact_name: data.contact_name || "",
               contact_email: data.contact_email || "",
               contact_phone: data.contact_phone || "",
               contact_title: "",
-            });
+            }));
             setClientId(data.client_id ?? null);
-            // Load service_details (new JSONB approach)
             if (data.service_details && typeof data.service_details === "object") {
               setServiceDetails(data.service_details as Record<string, unknown>);
             }
@@ -111,19 +90,31 @@ export default function BusinessDetailsPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingAppId, params.templateId]);
 
+  // Pre-fill contact from KYC record when clientId is known and fields are empty
+  useEffect(() => {
+    if (!clientId) return;
+    if (form.contact_name || form.contact_email) return; // already filled
+    fetch(`/api/kyc/${clientId}`)
+      .then((r) => r.json())
+      .then(({ kyc }) => {
+        if (kyc) {
+          setForm((prev) => ({
+            ...prev,
+            contact_name: kyc.full_name || prev.contact_name,
+            contact_email: kyc.email || prev.contact_email,
+            contact_phone: kyc.phone || prev.contact_phone,
+          }));
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
   function updateField(field: string, value: string | null) {
     setForm((prev) => ({ ...prev, [field]: value ?? "" }));
   }
 
   async function saveProgress(andContinue = false) {
-    if (andContinue && !form.business_name.trim()) {
-      toast.error("Business / Entity name is required");
-      return;
-    }
-    if (!form.business_name.trim()) {
-      toast.error("Business / Entity name is required to save");
-      return;
-    }
     setSaving(true);
     try {
       const res = await fetch("/api/applications/save", {
@@ -134,7 +125,6 @@ export default function BusinessDetailsPage({
           templateId: params.templateId,
           ...form,
           ubo_data: [],
-          // Service-specific details stored as JSONB
           service_details: serviceDetails,
         }),
       });
@@ -160,64 +150,10 @@ export default function BusinessDetailsPage({
   return (
     <WizardLayout currentStep={1}>
       <div className="space-y-6 max-w-3xl">
-        {/* Company Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-brand-navy">Section A: Company Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1.5">
-                <Label>Business / Entity name *</Label>
-                <Input
-                  value={form.business_name}
-                  onChange={(e) => updateField("business_name", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Business type *</Label>
-                <Select
-                  value={form.business_type ?? ""}
-                  onValueChange={(v) => updateField("business_type", v)}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                  <SelectContent>
-                    {BUSINESS_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Country of incorporation *</Label>
-                <Select
-                  value={form.business_country ?? ""}
-                  onValueChange={(v) => updateField("business_country", v)}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2 space-y-1.5">
-                <Label>Registered address *</Label>
-                <Textarea
-                  value={form.business_address}
-                  onChange={(e) => updateField("business_address", e.target.value)}
-                  rows={3}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Primary Contact */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-brand-navy">Section B: Primary Contact</CardTitle>
+            <CardTitle className="text-brand-navy">Primary Contact</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -270,14 +206,14 @@ export default function BusinessDetailsPage({
         <Card>
           <CardHeader>
             <CardTitle className="text-brand-navy">
-              {hasServiceFields ? "Section D" : "Section C"}: Directors, Shareholders &amp; UBOs
+              {hasServiceFields ? "Section C" : "Section B"}: Directors, Shareholders &amp; UBOs
             </CardTitle>
           </CardHeader>
           <CardContent>
             {currentAppId && clientId ? (
               <PersonsManager applicationId={currentAppId} clientId={clientId} />
             ) : (
-              <p className="text-sm text-gray-400">Save your business details first to add persons.</p>
+              <p className="text-sm text-gray-400">Save your details first to add persons.</p>
             )}
           </CardContent>
         </Card>
