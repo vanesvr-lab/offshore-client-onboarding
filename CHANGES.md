@@ -126,6 +126,54 @@ These files affect the entire app. Coordinate before modifying.
 
 ## Change Log
 
+### 2026-04-10 — Claude Desktop — Onboarding Redesign: planning + DB migration + CLI batch briefs
+
+**Major architectural redesign planned and staged for CLI execution.**
+
+**Planning completed:**
+- Analyzed GWMS workflow spreadsheet (TAB 1-3: onboarding steps, individual/org KYC fields, document requirements)
+- Researched EDD (Enhanced Due Diligence) standards and compared against spreadsheet — identified 25 gaps
+- Generated gap analysis PDF: `GWMS_Gap_Analysis.pdf` (dark mode, 5 pages)
+- Designed document-centric model: documents uploaded once, tagged with type, linked to any application/process/KYC
+- Designed 5-section KYC flow: Personal Details, Funding & Financial, Due Diligence, Directors/Shareholders, Organisation Details
+- Designed admin risk assessment panel (sanctions, adverse media, PEP, risk rating) — admin-only, blocks approval until complete
+- Designed process launcher (bank account opening, FSC applications) with auto-linking from existing document library
+
+**DB migration run in Supabase (10 new tables + 7 ALTER columns):**
+- `document_types` — master list of 32 document kinds with categories, validity periods, AI rules
+- `kyc_records` — unified individual + organisation KYC (40+ fields including risk assessment)
+- `application_persons` — replaces ubo_data JSONB, links persons to applications with roles
+- `application_details_gbc_ac` — 17 GBC/AC-specific fields
+- `documents` — new document library (tagged, per-client, reusable across processes)
+- `document_links` — junction connecting documents to applications/processes/KYC
+- `process_templates` + `process_requirements` — define what documents each process needs
+- `client_processes` + `process_documents` — track active processes per client
+- `clients` table altered: added `client_type`, `loe_sent_at`, `invoice_sent_at`, `payment_received_at`, `portal_link_sent_at`, `kyc_completed_at`, `application_submitted_at`
+
+**Seed data inserted:**
+- 32 document types (identity: 6, corporate: 9, financial: 7, compliance: 6, additional: 4)
+- 2 process templates: Open Bank Account (Corporate) with 16 requirements, Open Bank Account (Individual) with 9 requirements
+
+**CLI batch briefs prepared (6 batches in `docs/batches/`):**
+1. `batch-1-schema-types.md` — TypeScript types, schema.sql, seed SQL files
+2. `batch-2-document-library.md` — Document library API, upload widget, admin documents page
+3. `batch-3-kyc-forms.md` — KYC forms (individual + org), auto-save, inline uploads, completion calculator
+4. `batch-4-admin-client-risk.md` — New client creation page, workflow checkboxes, risk assessment panel
+5. `batch-5-process-launcher.md` — Process launcher, readiness dashboard, auto-linking
+6. `batch-6-client-dashboard.md` — Client dashboard rework, onboarding banner, wizard rework, persons manager
+7. `RUN-ALL-BATCHES.md` — Master orchestrator for sequential CLI execution
+
+**Key design decisions documented in plan:**
+- Single `kyc_records` table with `record_type` flag (individual vs organisation) — not two separate tables
+- Documents are client-level library, tagged by type, linked to whatever needs them — upload once, use everywhere
+- Admin risk assessment (sanctions, adverse media, PEP, risk rating) is admin-only, not visible to client
+- Risk rating required before application approval (StageSelector blocks it)
+- Admin creates clients via full page `/admin/clients/new` (not modal) with KYC pre-fill capability
+- 6-step workflow milestones tracked as admin checkboxes with auto-filled dates
+- Process launcher auto-links existing documents and shows readiness dashboard
+
+---
+
 ### 2026-04-07 — Claude Desktop — Bug fixes + Knowledge Base + AI verification context
 
 **6 fixes + 1 new feature. Build passes clean.**
