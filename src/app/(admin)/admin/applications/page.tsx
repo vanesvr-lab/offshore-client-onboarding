@@ -26,7 +26,7 @@ export default async function ApplicationsPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-brand-navy">Applications</h1>
+        <h1 className="text-2xl font-bold text-brand-navy">Solutions & Services</h1>
         <p className="text-gray-500 mt-1">All applications across all clients</p>
       </div>
       <ApplicationsTable applications={rows} />

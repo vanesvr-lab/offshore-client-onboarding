@@ -68,7 +68,7 @@ export function AddBlankApplication({ clientId, templates }: AddBlankApplication
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create application");
 
-      toast.success("Blank application created");
+      toast.success("Blank solution created");
       setOpen(false);
       setTemplateId("");
       router.refresh();
@@ -88,16 +88,16 @@ export function AddBlankApplication({ clientId, templates }: AddBlankApplication
         className="gap-1.5"
       >
         <FilePlus className="h-3.5 w-3.5" />
-        Add application
+        Add Solution
       </Button>
 
       <Dialog open={open} onOpenChange={(o) => { if (o) setOpen(true); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add blank application</DialogTitle>
+            <DialogTitle>Add blank solution</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-gray-500">
-            Create a blank application for the client to fill out later.
+            Create a blank solution for the client to fill out later.
             Just select the service type — no other details needed now.
           </p>
           <div className="space-y-1.5">

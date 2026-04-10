@@ -64,7 +64,7 @@ export default async function ClientsPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Clients</h1>
-          <p className="text-gray-500 mt-1">All registered client companies</p>
+          <p className="text-gray-500 mt-1">All registered clients</p>
         </div>
         <Link href="/admin/clients/new">
           <Button className="bg-brand-navy hover:bg-brand-blue gap-1.5">

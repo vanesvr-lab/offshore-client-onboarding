@@ -50,10 +50,10 @@ export function ClientsTable({ clients }: ClientsTableProps) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">Company</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">Client Name</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">Primary Contact</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">Account Manager</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">Applications</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">Solutions & Services</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">Created</th>
             </tr>
           </thead>

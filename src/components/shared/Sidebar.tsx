@@ -27,7 +27,7 @@ interface SidebarProps {
 const ADMIN_NAV = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
   { label: "Clients", href: "/admin/clients", icon: Users, exact: false },
-  { label: "Applications", href: "/admin/applications", icon: FileText, exact: true },
+  { label: "Solutions & Services", href: "/admin/applications", icon: FileText, exact: true },
   { label: "Review Queue", href: "/admin/queue", icon: ClipboardList, exact: false },
 ];
 
@@ -112,9 +112,9 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
   const clientNav = [
     { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
     { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
-    { label: "New Application", href: "/apply", icon: PlusCircle, exact: false },
+    { label: "New Solution", href: "/apply", icon: PlusCircle, exact: false },
     ...(hasApplications
-      ? [{ label: "My Applications", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications"] }]
+      ? [{ label: "My Solutions", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications"] }]
       : []),
   ];
 
@@ -213,7 +213,7 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
             {contextAppId && (
               <>
                 <div className="border-t border-white/10 my-3" />
-                <SectionHeader label="Application" />
+                <SectionHeader label="Solution" />
                 <NavItem
                   href={`/admin/applications/${contextAppId}`}
                   label="Details"
@@ -256,7 +256,7 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
             {contextAppId && (
               <>
                 <div className="border-t border-white/10 my-3" />
-                <SectionHeader label="Application" />
+                <SectionHeader label="Solution" />
                 <NavItem
                   href={`/applications/${contextAppId}`}
                   label="Status"
@@ -269,7 +269,7 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
             {wizardTemplateId && wizardApplicationId && (
               <>
                 <div className="border-t border-white/10 my-3" />
-                <SectionHeader label="Application" />
+                <SectionHeader label="Solution" />
                 <NavItem
                   href={`/apply/${wizardTemplateId}/details?applicationId=${wizardApplicationId}`}
                   label="Details"

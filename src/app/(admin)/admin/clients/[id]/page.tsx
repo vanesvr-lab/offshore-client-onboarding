@@ -171,7 +171,7 @@ export default async function ClientDetailPage({
           {/* Applications */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base text-brand-navy">Applications</CardTitle>
+              <CardTitle className="text-base text-brand-navy">Solutions & Services</CardTitle>
               <div className="flex items-center gap-2">
                 <AddBlankApplication
                   clientId={client.id}
@@ -180,14 +180,14 @@ export default async function ClientDetailPage({
                 <Link href={`/admin/clients/${client.id}/apply`}>
                   <Button size="sm" className="bg-brand-navy hover:bg-brand-blue gap-1.5">
                     <PlusCircle className="h-3.5 w-3.5" />
-                    Start application
+                    Start Solution
                   </Button>
                 </Link>
               </div>
             </CardHeader>
             <CardContent>
               {applications.length === 0 ? (
-                <p className="text-sm text-gray-400">No applications yet.</p>
+                <p className="text-sm text-gray-400">No solutions yet.</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
