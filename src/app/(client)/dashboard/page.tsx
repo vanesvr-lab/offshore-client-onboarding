@@ -6,12 +6,11 @@ export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { OnboardingBanner } from "@/components/client/OnboardingBanner";
 import { CompletionChecklist } from "@/components/client/CompletionChecklist";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { formatDate } from "@/lib/utils/formatters";
-import type { ActivityEntry } from "@/components/shared/ActivityFeed";
+import { CheckCircle2, Circle, AlertTriangle, ArrowRight } from "lucide-react";
 import type { Application, KycRecord, DocumentRecord } from "@/types";
 import type { OnboardingStage } from "@/components/client/OnboardingBanner";
 import type { ChecklistSection } from "@/components/client/CompletionChecklist";
@@ -113,33 +112,97 @@ export default async function DashboardPage() {
     },
   ];
 
-  // Activity feed: audit_log entries for this client's apps
-  const appIds = apps.map((a) => a.id);
-  const { data: rawActivity } = appIds.length > 0
-    ? await supabase
-        .from("audit_log")
-        .select("id, action, actor_name, actor_role, created_at, application_id, detail, applications(business_name)")
-        .in("application_id", appIds)
-        .order("created_at", { ascending: false })
-        .limit(8)
-    : { data: [] };
+  // Build pending tasks list
+  interface PendingTask {
+    id: string;
+    label: string;
+    description: string;
+    href: string;
+    status: "pending" | "in_progress" | "done";
+    priority: number; // lower = higher priority
+  }
 
-  const activityEntries: ActivityEntry[] = (rawActivity || []).map((entry) => {
-    const app = entry.applications as { business_name?: string | null } | null;
-    return {
-      id: entry.id,
-      action: entry.action,
-      actor_name: entry.actor_name,
-      actor_role: entry.actor_role,
-      created_at: entry.created_at,
-      application_id: entry.application_id,
-      detail: entry.detail as Record<string, unknown> | null,
-      applicationName: app?.business_name ?? null,
-      applicationHref: entry.application_id
-        ? `/applications/${entry.application_id}`
-        : null,
-    };
-  });
+  const pendingTasks: PendingTask[] = [];
+
+  // KYC tasks
+  for (const { record, recFilled, recTotal } of recordCompletions) {
+    const label = record.record_type === "individual" ? "Complete Personal KYC" : "Complete Organisation KYC";
+    if (recFilled < recTotal) {
+      pendingTasks.push({
+        id: `kyc-${record.id}`,
+        label,
+        description: `${recTotal - recFilled} fields remaining`,
+        href: "/kyc",
+        status: recFilled > 0 ? "in_progress" : "pending",
+        priority: 1,
+      });
+    } else {
+      pendingTasks.push({
+        id: `kyc-${record.id}`,
+        label,
+        description: "All fields complete",
+        href: "/kyc",
+        status: "done",
+        priority: 10,
+      });
+    }
+  }
+
+  // Application tasks
+  for (const app of apps) {
+    const templateName = app.service_templates?.name ?? "Application";
+    const ref = app.reference_number ?? templateName;
+
+    if (app.status === "draft") {
+      // Check what sections are incomplete
+      const missingSections: string[] = [];
+      if (!app.business_name?.trim()) missingSections.push("Company Information");
+      if (!app.contact_name?.trim()) missingSections.push("Primary Contact");
+      const serviceDetails = (app as unknown as { service_details?: Record<string, unknown> }).service_details;
+      if (!serviceDetails || Object.keys(serviceDetails).length === 0) missingSections.push("Service Details");
+
+      pendingTasks.push({
+        id: `app-details-${app.id}`,
+        label: `Fill details for ${ref}`,
+        description: missingSections.length > 0
+          ? `Pending: ${missingSections.join(", ")}`
+          : "Details filled — upload documents next",
+        href: `/apply/${app.template_id}/details?applicationId=${app.id}`,
+        status: missingSections.length > 0 ? "pending" : "in_progress",
+        priority: 2,
+      });
+    } else if (app.status === "pending_action") {
+      pendingTasks.push({
+        id: `app-action-${app.id}`,
+        label: `Action required for ${ref}`,
+        description: app.admin_notes ?? "Admin has requested additional information",
+        href: `/applications/${app.id}`,
+        status: "pending",
+        priority: 0,
+      });
+    } else if (app.status === "submitted" || app.status === "in_review" || app.status === "verification") {
+      pendingTasks.push({
+        id: `app-review-${app.id}`,
+        label: `${ref} — Under review`,
+        description: `Status: ${app.status.replace(/_/g, " ")}`,
+        href: `/applications/${app.id}`,
+        status: "done",
+        priority: 8,
+      });
+    } else if (app.status === "approved") {
+      pendingTasks.push({
+        id: `app-approved-${app.id}`,
+        label: `${ref} — Approved`,
+        description: "Application has been approved",
+        href: `/applications/${app.id}`,
+        status: "done",
+        priority: 9,
+      });
+    }
+  }
+
+  // Sort: pending first, then in_progress, then done
+  pendingTasks.sort((a, b) => a.priority - b.priority);
 
   const nextAction = (() => {
     if (stage === "no_kyc") return { label: "Complete your KYC profile", href: "/kyc" };
@@ -202,19 +265,60 @@ export default async function DashboardPage() {
             templateId={latestApp?.template_id ?? undefined}
           />
 
-          {/* Applications list */}
+          {/* Pending Tasks & Next Steps */}
+          <Card>
+            <CardHeader className="py-4">
+              <CardTitle className="text-base text-brand-navy">Your Next Steps</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {pendingTasks.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">No pending tasks. You&apos;re all caught up!</p>
+              ) : (
+                <div className="space-y-1">
+                  {pendingTasks.map((task) => (
+                    <Link
+                      key={task.id}
+                      href={task.href}
+                      className="flex items-center gap-3 rounded-lg px-3 py-3 hover:bg-gray-50 transition-colors group"
+                    >
+                      <div className="shrink-0">
+                        {task.status === "done" ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        ) : task.status === "in_progress" ? (
+                          <AlertTriangle className="h-5 w-5 text-amber-500" />
+                        ) : (
+                          <Circle className="h-5 w-5 text-gray-300" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-brand-navy"}`}>
+                          {task.label}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{task.description}</p>
+                      </div>
+                      {task.status !== "done" && (
+                        <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-brand-blue shrink-0" />
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Solutions & Services list */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between py-4">
-              <CardTitle className="text-base text-brand-navy">Applications</CardTitle>
+              <CardTitle className="text-base text-brand-navy">Solutions & Services</CardTitle>
               <Link href="/apply">
                 <Button size="sm" className="bg-brand-navy hover:bg-brand-blue">
-                  New application
+                  New Solution
                 </Button>
               </Link>
             </CardHeader>
             <CardContent className="pt-0">
               {apps.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">No applications yet.</p>
+                <p className="text-sm text-gray-400 py-4 text-center">No solutions yet.</p>
               ) : (
                 <div className="space-y-2">
                   {apps.map((app) => (
@@ -251,18 +355,6 @@ export default async function DashboardPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* Activity feed */}
-          {activityEntries.length > 0 && (
-            <Card>
-              <CardHeader className="py-4">
-                <CardTitle className="text-base text-brand-navy">Activity</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ActivityFeed entries={activityEntries} />
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Right: Completion checklist (sticky) */}
