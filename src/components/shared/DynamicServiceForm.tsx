@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldTooltip } from "@/components/shared/FieldTooltip";
 
 /** Field definition from service_templates.service_fields */
 export interface ServiceField {
@@ -24,6 +25,7 @@ export interface ServiceField {
   options?: string[];
   max?: number; // for text_array
   show_if?: Record<string, unknown>; // conditional visibility
+  tooltip?: string; // help text shown in clickable tooltip
 }
 
 interface DynamicServiceFormProps {
@@ -73,7 +75,7 @@ export function DynamicServiceForm({
       case "number":
         return (
           <div key={field.key} className="space-y-1.5">
-            <Label className="text-sm">
+            <Label className="text-sm flex items-center gap-1">
               {field.label}
               {field.required && " *"}
               {field.note && (
@@ -81,6 +83,7 @@ export function DynamicServiceForm({
                   {field.note}
                 </span>
               )}
+              {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
             <Input
               type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
@@ -95,9 +98,10 @@ export function DynamicServiceForm({
       case "textarea":
         return (
           <div key={field.key} className="col-span-2 space-y-1.5">
-            <Label className="text-sm">
+            <Label className="text-sm flex items-center gap-1">
               {field.label}
               {field.required && " *"}
+              {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
             <Textarea
               value={(val as string) ?? ""}
@@ -114,9 +118,10 @@ export function DynamicServiceForm({
         const otherKey = `${field.key}_other`;
         return (
           <div key={field.key} className="space-y-1.5">
-            <Label className="text-sm">
+            <Label className="text-sm flex items-center gap-1">
               {field.label}
               {field.required && " *"}
+              {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
             <Select
               value={(val as string) ?? ""}
@@ -150,7 +155,7 @@ export function DynamicServiceForm({
       case "boolean":
         return (
           <div key={field.key} className="space-y-1.5">
-            <Label className="text-sm">
+            <Label className="text-sm flex items-center gap-1">
               {field.label}
               {field.required && " *"}
               {field.note && (
@@ -158,6 +163,7 @@ export function DynamicServiceForm({
                   {field.note}
                 </span>
               )}
+              {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
             <Select
               value={val === true ? "yes" : val === false ? "no" : ""}

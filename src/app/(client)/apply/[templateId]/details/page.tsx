@@ -104,7 +104,7 @@ export default function BusinessDetailsPage({
   // Pre-fill contact fields from the individual KYC record when clientId resolves
   useEffect(() => {
     if (!clientId) return;
-    if (form.contact_name || form.contact_email) return; // already filled from saved app
+    if (form.contact_name?.trim() || form.contact_email?.trim()) return; // already filled from saved app
     fetch(`/api/kyc/${clientId}`)
       .then((r) => r.json())
       .then(({ records }: { records?: Array<{ record_type: string; full_name?: string; email?: string; phone?: string }> }) => {

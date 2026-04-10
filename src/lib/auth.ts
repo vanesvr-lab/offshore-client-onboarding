@@ -23,6 +23,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           .maybeSingle();
 
         if (!profile?.password_hash) return null;
+        // Soft-deleted accounts cannot log in (no hint given to user)
+        if ((profile as unknown as { is_deleted?: boolean }).is_deleted) return null;
 
         const valid = await bcrypt.compare(
           credentials.password as string,

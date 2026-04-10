@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { OnboardingBanner } from "@/components/client/OnboardingBanner";
 import { CompletionChecklist } from "@/components/client/CompletionChecklist";
+import { KycTaskGroup, type KycChildTask } from "@/components/client/KycTaskGroup";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { formatDate } from "@/lib/utils/formatters";
 import { CheckCircle2, Circle, AlertTriangle, ArrowRight } from "lucide-react";
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
     { data: applications },
     { data: kycRecords },
     { data: documents },
+    { data: appPersons },
   ] = await Promise.all([
     clientId
       ? supabase
@@ -50,12 +52,41 @@ export default async function DashboardPage() {
           .select("*, document_types(name)")
           .eq("client_id", clientId)
       : Promise.resolve({ data: [] }),
+    // Fetch application_persons to get roles for KYC records
+    clientId
+      ? supabase
+          .from("application_persons")
+          .select("kyc_record_id, role")
+          .in(
+            "application_id",
+            // We'll cross-join after fetch; pass all app IDs
+            ([] as string[]) // placeholder — resolved below after apps fetch
+          )
+      : Promise.resolve({ data: [] }),
   ]);
 
-  type AppWithTemplate = Application & { service_templates?: { name: string } };
+  type AppWithTemplate = Application & {
+    service_templates?: { name: string };
+    service_details?: Record<string, unknown>;
+  };
   const apps = (applications || []) as AppWithTemplate[];
   const typedKyc = (kycRecords ?? []) as KycRecord[];
   const typedDocs = (documents ?? []) as DocumentRecord[];
+
+  // Fetch application_persons for all apps to resolve roles for KYC records
+  const allAppIds = apps.map((a) => a.id);
+  const kycRoleMap: Record<string, string> = {}; // kyc_record_id → role
+  if (allAppIds.length > 0) {
+    const { data: persons } = await supabase
+      .from("application_persons")
+      .select("kyc_record_id, role")
+      .in("application_id", allAppIds);
+    for (const p of persons ?? []) {
+      if (p.kyc_record_id) kycRoleMap[p.kyc_record_id] = p.role;
+    }
+  }
+  // suppress unused warning from placeholder fetch
+  void appPersons;
 
   // Compute KYC completion across all records
   let totalFilled = 0;
@@ -112,54 +143,43 @@ export default async function DashboardPage() {
     },
   ];
 
-  // Build pending tasks list
+  // Build KYC child tasks (for grouped KYC item in Next Steps)
+  const kycChildren: KycChildTask[] = recordCompletions.map(({ record, recFilled, recTotal }) => {
+    const role = kycRoleMap[record.id];
+    const roleFallback = role
+      ? role.charAt(0).toUpperCase() + role.slice(1)
+      : record.record_type === "individual" ? "Individual" : "Organisation";
+    const name = (record as unknown as { full_name?: string }).full_name || roleFallback;
+    return {
+      id: `kyc-${record.id}`,
+      name,
+      description: recFilled < recTotal
+        ? `${recTotal - recFilled} fields remaining`
+        : "All fields complete",
+      status: recFilled >= recTotal ? "done" : recFilled > 0 ? "in_progress" : "pending",
+    };
+  });
+
+  // Build non-KYC pending tasks
   interface PendingTask {
     id: string;
     label: string;
     description: string;
     href: string;
     status: "pending" | "in_progress" | "done";
-    priority: number; // lower = higher priority
+    priority: number;
   }
 
   const pendingTasks: PendingTask[] = [];
 
-  // KYC tasks
-  for (const { record, recFilled, recTotal } of recordCompletions) {
-    const label = record.record_type === "individual" ? "Complete Personal KYC" : "Complete Organisation KYC";
-    if (recFilled < recTotal) {
-      pendingTasks.push({
-        id: `kyc-${record.id}`,
-        label,
-        description: `${recTotal - recFilled} fields remaining`,
-        href: "/kyc",
-        status: recFilled > 0 ? "in_progress" : "pending",
-        priority: 1,
-      });
-    } else {
-      pendingTasks.push({
-        id: `kyc-${record.id}`,
-        label,
-        description: "All fields complete",
-        href: "/kyc",
-        status: "done",
-        priority: 10,
-      });
-    }
-  }
-
-  // Application tasks
   for (const app of apps) {
     const templateName = app.service_templates?.name ?? "Application";
     const ref = app.reference_number ?? templateName;
 
     if (app.status === "draft") {
-      // Check what sections are incomplete
       const missingSections: string[] = [];
-      if (!app.business_name?.trim()) missingSections.push("Company Information");
       if (!app.contact_name?.trim()) missingSections.push("Primary Contact");
-      const serviceDetails = (app as unknown as { service_details?: Record<string, unknown> }).service_details;
-      if (!serviceDetails || Object.keys(serviceDetails).length === 0) missingSections.push("Service Details");
+      if (!app.service_details || Object.keys(app.service_details).length === 0) missingSections.push("Service Details");
 
       pendingTasks.push({
         id: `app-details-${app.id}`,
@@ -201,7 +221,6 @@ export default async function DashboardPage() {
     }
   }
 
-  // Sort: pending first, then in_progress, then done
   pendingTasks.sort((a, b) => a.priority - b.priority);
 
   const nextAction = (() => {
@@ -215,6 +234,21 @@ export default async function DashboardPage() {
       };
     return null;
   })();
+
+  // A4: derive per-app button label/message
+  function appActionLabel(app: AppWithTemplate): { message: string; buttonLabel: string; buttonHref: string; urgent?: boolean } {
+    const detailsHref = `/apply/${app.template_id}/details?applicationId=${app.id}`;
+    const viewHref = `/applications/${app.id}`;
+    const hasDetails = app.service_details && Object.keys(app.service_details).length > 0;
+
+    if (app.status === "draft") {
+      if (!hasDetails) return { message: "Fill in solution details to continue", buttonLabel: "Start →", buttonHref: detailsHref };
+      return { message: "Complete and submit to proceed", buttonLabel: "Continue →", buttonHref: detailsHref };
+    }
+    if (app.status === "pending_action") return { message: "Action required", buttonLabel: "Action Required", buttonHref: viewHref, urgent: true };
+    if (app.status === "approved") return { message: "Application approved", buttonLabel: "View", buttonHref: viewHref };
+    return { message: `Status: ${app.status.replace(/_/g, " ")}`, buttonLabel: "Track", buttonHref: viewHref };
+  }
 
   return (
     <div className="space-y-6">
@@ -254,9 +288,8 @@ export default async function DashboardPage() {
 
       {/* Main layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Banner + Applications + Activity */}
+        {/* Left: Banner + Tasks + Solutions */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Smart banner */}
           <OnboardingBanner
             stage={stage}
             kycPercentage={kycPct}
@@ -271,10 +304,15 @@ export default async function DashboardPage() {
               <CardTitle className="text-base text-brand-navy">Your Next Steps</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              {pendingTasks.length === 0 ? (
+              {kycChildren.length === 0 && pendingTasks.length === 0 ? (
                 <p className="text-sm text-gray-400 py-4 text-center">No pending tasks. You&apos;re all caught up!</p>
               ) : (
                 <div className="space-y-1">
+                  {/* Grouped KYC tasks */}
+                  {kycChildren.length > 0 && (
+                    <KycTaskGroup tasks={kycChildren} />
+                  )}
+                  {/* Non-KYC tasks */}
                   {pendingTasks.map((task) => (
                     <Link
                       key={task.id}
@@ -306,7 +344,7 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Solutions & Services list */}
+          {/* Solutions & Services */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between py-4">
               <CardTitle className="text-base text-brand-navy">Solutions & Services</CardTitle>
@@ -321,43 +359,47 @@ export default async function DashboardPage() {
                 <p className="text-sm text-gray-400 py-4 text-center">No solutions yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {apps.map((app) => (
-                    <div
-                      key={app.id}
-                      className="flex items-center justify-between rounded-lg border px-4 py-3"
-                    >
-                      <div>
-                        <p className="font-medium text-brand-navy text-sm">
-                          {app.reference_number || app.business_name || "Draft"}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {app.service_templates?.name}
-                          {app.submitted_at && ` · Submitted ${formatDate(app.submitted_at)}`}
-                        </p>
+                  {apps.map((app) => {
+                    const { message, buttonLabel, buttonHref, urgent } = appActionLabel(app);
+                    return (
+                      <div
+                        key={app.id}
+                        className="flex items-center justify-between rounded-lg border px-4 py-3"
+                      >
+                        <div>
+                          <p className="font-medium text-brand-navy text-sm">
+                            {app.reference_number || app.business_name || "Draft"}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {app.service_templates?.name}
+                            {app.submitted_at && ` · Submitted ${formatDate(app.submitted_at)}`}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${urgent ? "text-amber-600 font-medium" : "text-gray-400"}`}>
+                            {message}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <StatusBadge status={app.status} />
+                          <Link href={buttonHref}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={urgent ? "border-amber-400 text-amber-600 hover:bg-amber-50" : ""}
+                            >
+                              {buttonLabel}
+                            </Button>
+                          </Link>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <StatusBadge status={app.status} />
-                        <Link
-                          href={
-                            app.status === "draft"
-                              ? `/apply/${app.template_id}/details?applicationId=${app.id}`
-                              : `/applications/${app.id}`
-                          }
-                        >
-                          <Button variant="outline" size="sm">
-                            {app.status === "draft" ? "Continue" : "View"}
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Right: Completion checklist (sticky) */}
+        {/* Right: Completion checklist */}
         <div className="lg:sticky lg:top-4 lg:self-start">
           <CompletionChecklist sections={checklistSections} />
         </div>

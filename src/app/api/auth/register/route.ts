@@ -22,11 +22,12 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Check email not already taken
+  // Check email not already taken (ignore soft-deleted accounts)
   const { data: existing } = await supabase
     .from("profiles")
     .select("id")
     .eq("email", email)
+    .eq("is_deleted", false)
     .maybeSingle();
   if (existing) {
     return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });

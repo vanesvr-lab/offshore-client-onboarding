@@ -11,7 +11,9 @@ create table if not exists profiles (
   full_name text,
   email text,
   phone text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  -- Soft delete (set when linked client is deleted)
+  is_deleted boolean not null default false
 );
 
 -- CLIENTS: the company entity — independent of who logged in
@@ -19,7 +21,11 @@ create table if not exists clients (
   id uuid primary key default uuid_generate_v4(),
   company_name text not null,
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  -- Soft delete
+  is_deleted boolean not null default false,
+  deleted_at timestamptz,
+  deleted_by uuid references profiles(id)
 );
 
 -- CLIENT_USERS: who belongs to which company, and in what capacity

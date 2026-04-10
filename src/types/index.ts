@@ -20,6 +20,7 @@ export interface Profile {
   email: string | null;
   phone: string | null;
   created_at: string;
+  is_deleted?: boolean;
 }
 
 export interface Client {
@@ -35,6 +36,10 @@ export interface Client {
   application_submitted_at: string | null;
   created_at: string;
   updated_at: string;
+  // Soft delete
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
 }
 
 export interface ClientUser {

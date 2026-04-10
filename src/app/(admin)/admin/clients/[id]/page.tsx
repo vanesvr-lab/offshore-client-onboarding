@@ -15,6 +15,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { AddBlankApplication } from "@/components/admin/AddBlankApplication";
+import { DeleteClientButton } from "@/components/admin/DeleteClientButton";
 import type { ClientAccountManager, ApplicationStatus, KycRecord } from "@/types";
 
 export default async function ClientDetailPage({
@@ -302,6 +303,22 @@ export default async function ClientDetailPage({
             clientId={client.id}
             inviteSentAt={(client as unknown as { invite_sent_at: string | null }).invite_sent_at}
           />
+
+          {/* Danger zone */}
+          <div className="rounded-lg border border-red-100 p-4">
+            <p className="text-sm font-medium text-red-700 mb-2">Danger Zone</p>
+            <p className="text-xs text-gray-500 mb-3">
+              Permanently hides this client and disables their login. Cannot be undone.
+            </p>
+            <DeleteClientButton
+              clientId={client.id}
+              clientName={client.company_name}
+              contactName={users[0]?.profiles?.full_name ?? null}
+              contactEmail={users[0]?.profiles?.email ?? null}
+              applicationCount={applications.length}
+              documentCount={0}
+            />
+          </div>
         </div>
       </div>
     </div>

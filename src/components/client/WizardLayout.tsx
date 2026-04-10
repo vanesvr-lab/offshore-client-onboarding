@@ -6,7 +6,7 @@ interface WizardLayoutProps {
 }
 
 const steps = [
-  { num: 1, label: "Business Details" },
+  { num: 1, label: "Solution Details" },
   { num: 2, label: "Documents" },
   { num: 3, label: "Review & Submit" },
 ];

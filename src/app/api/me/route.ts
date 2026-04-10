@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-/** GET /api/me — returns the current user's clientId (if they are a client) */
+/** GET /api/me — returns the current user's userId, clientId, and role */
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,5 +14,9 @@ export async function GET() {
     .eq("user_id", session.user.id)
     .maybeSingle();
 
-  return NextResponse.json({ clientId: data?.client_id ?? null });
+  return NextResponse.json({
+    userId: session.user.id,
+    clientId: data?.client_id ?? null,
+    role: session.user.role,
+  });
 }

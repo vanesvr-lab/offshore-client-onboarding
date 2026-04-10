@@ -26,6 +26,7 @@ export default async function ClientsPage() {
           profiles!admin_id(full_name)
         )
       `)
+      .eq("is_deleted", false)
       .order("created_at", { ascending: false }),
     supabase.from("applications").select("client_id"),
   ]);

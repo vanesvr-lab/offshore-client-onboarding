@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-10 — Feature sets A, B, C: dashboard fixes, validation UI, soft-delete (Claude Code)
+
+**Feature Set A — Client dashboard + wizard fixes:**
+- A1: WizardLayout step 1 label: "Business Details" → "Solution Details"
+- A2: Pre-fill fix: `form.contact_name?.trim()` check (empty string was blocking pre-fill); `/api/me` now returns `{ userId, clientId, role }`
+- A3: KYC tasks grouped under `KycTaskGroup` client component — collapses multiple profiles into one expandable row; single profile renders flat; uses `application_persons` lookup to show person roles
+- A4: Solutions & Services card now shows contextual message per-app: "Fill in solution details" / "Complete and submit" / "Action Required" (amber) / "Track" / "View"
+
+**Feature Set B — Validation UI + tooltips:**
+- `src/hooks/useFieldValidation.ts`: `markTouched`, `markAllTouched`, `getFieldState` returning "normal"|"error"|"filled"
+- `src/components/shared/ValidatedLabel.tsx`: label with asterisk color + green CheckCircle when filled; `FieldWrapper` adds "This field is required" helper text on error
+- `src/components/shared/FieldTooltip.tsx`: HelpCircle icon → click opens w-64 popup with close button, outside-click dismissal
+- `DynamicServiceForm`: added `tooltip?: string` to `ServiceField` interface; renders `FieldTooltip` next to labels when present
+
+**Feature Set C — Soft-delete clients:**
+- C1: `POST /api/admin/clients/[id]/delete` — requires `{ confirmationText: "DELETE" }`, sets `is_deleted/deleted_at/deleted_by` on client, `is_deleted` on linked profiles, writes audit_log `client_deleted` entry
+- C2: `.eq("is_deleted", false)` filter on clients query in `/admin/clients`; email uniqueness checks in register + create-client now skip deleted accounts
+- C3: `DeleteClientDialog` + `DeleteClientButton` client components; wired to client detail page right column "Danger Zone" section
+- C4: `auth.ts` blocks login for `is_deleted` profiles (shows generic "Invalid email or password")
+- C5: `Client` + `Profile` types updated; `supabase/schema.sql` updated with soft-delete columns
+
+---
+
 ### 2026-04-10 — Form parity, KYC progress bars, review page cleanup (Claude Code)
 
 **PersonsManager** (`src/components/client/PersonsManager.tsx`):
