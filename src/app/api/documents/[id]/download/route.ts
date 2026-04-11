@@ -13,19 +13,33 @@ export async function GET(
 
   const supabase = createAdminClient();
 
-  const { data: upload } = await supabase
-    .from("document_uploads")
+  // Try documents table first (new model), then document_uploads (old model)
+  let filePath: string | null = null;
+
+  const { data: docRecord } = await supabase
+    .from("documents")
     .select("file_path")
     .eq("id", params.id)
-    .single();
+    .maybeSingle();
 
-  if (!upload?.file_path) {
+  if (docRecord?.file_path) {
+    filePath = docRecord.file_path;
+  } else {
+    const { data: upload } = await supabase
+      .from("document_uploads")
+      .select("file_path")
+      .eq("id", params.id)
+      .maybeSingle();
+    filePath = upload?.file_path ?? null;
+  }
+
+  if (!filePath) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 
   const { data: signedUrl } = await supabase.storage
     .from("documents")
-    .createSignedUrl(upload.file_path, 3600);
+    .createSignedUrl(filePath, 3600);
 
   if (!signedUrl?.signedUrl) {
     return NextResponse.json({ error: "Could not generate download URL" }, { status: 500 });

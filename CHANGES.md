@@ -15,6 +15,31 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-11 — B-005: Document handling in admin view (Claude Code)
+
+**Feature 1 — Extracted fields panel:**
+- `src/components/admin/ExtractedFieldsPanel.tsx` (NEW): collapsible panel showing `verification_result.extracted_fields` as key-value table, confidence score, and flags. ChevronDown toggle. Renders nothing if no extracted data.
+
+**Feature 2 — Document preview dialog:**
+- `src/components/admin/DocumentPreviewDialog.tsx` (NEW): modal preview (max-w-4xl, 80vh). Fetches signed URL from `GET /api/documents/[id]/download`. PDF → iframe, image → img, other → download link. Header shows file name + verification badge + upload date. Footer has Download + Close.
+- `src/app/api/documents/[id]/download/route.ts`: updated to check `documents` table first, then `document_uploads` (previously only checked `document_uploads`).
+- `src/components/admin/DocumentLibraryTable.tsx`: Eye button now opens `DocumentPreviewDialog` instead of new tab; `ExtractedFieldsPanel` rendered as an extra table row below each document that has AI extracted data; added `ScanSearch` icon for extracted data indicator.
+
+**Feature 3 — DocumentStatusRow component:**
+- `src/components/admin/DocumentStatusRow.tsx` (NEW): full 3-line layout per document:
+  - Line 1: file icon + document type name + category badge
+  - Line 2: "AI:" + VerificationBadge + confidence % + flags count + [Preview] + [Full Review] buttons
+  - Line 3: admin status (approve/reject inline, or result with date)
+  - Expandable: ExtractedFieldsPanel
+- `src/app/(admin)/admin/applications/[id]/page.tsx`: fetches `document_links` for this application, then fetches linked `documents` with `document_types`. Replaces the simple ul/li document list with `DocumentStatusRow` for each linked document. Legacy `document_uploads` still shown as simple rows.
+
+**Feature 4 — Admin manual verification status:**
+- `src/app/api/admin/documents/library/[id]/review/route.ts` (NEW): PATCH endpoint. Admin only. Body: `{ status: "approved"|"rejected", note?: string }`. Updates `admin_status`, `admin_status_note`, `admin_status_by`, `admin_status_at`. Writes `audit_log` entry `action="document_reviewed"`. Revalidates client documents page.
+- `src/types/index.ts`: `DocumentRecord` extended with `admin_status`, `admin_status_note`, `admin_status_by`, `admin_status_at`.
+- `supabase/schema.sql`: `documents` table updated with 4 new columns (`admin_status`, `admin_status_note`, `admin_status_by`, `admin_status_at`). **DB migration already run** — schema.sql updated for documentation only.
+
+---
+
 ### 2026-04-10 — Feature sets A, B, C: dashboard fixes, validation UI, soft-delete (Claude Code)
 
 **Feature Set A — Client dashboard + wizard fixes:**

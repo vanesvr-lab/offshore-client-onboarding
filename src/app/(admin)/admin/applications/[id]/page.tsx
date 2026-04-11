@@ -3,8 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { StageSelector } from "@/components/admin/StageSelector";
+import { DocumentStatusRow } from "@/components/admin/DocumentStatusRow";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { EmailComposer } from "@/components/admin/EmailComposer";
 import { AccountManagerPanel } from "@/components/admin/AccountManagerPanel";
@@ -25,6 +25,8 @@ import type {
   Application,
   DocumentUpload,
   DocumentRequirement,
+  DocumentRecord,
+  DocumentType,
   AuditLogEntry,
   EmailLogEntry,
   ApplicationStatus,
@@ -92,8 +94,26 @@ export default async function ApplicationDetailPage({
         .order("sort_order")
     : { data: [] };
 
-  // Fetch account manager history
+  // Fetch documents (new model) linked to this application
   const clientId = (application as { client_id: string }).client_id;
+  const { data: linkedDocRows } = await supabase
+    .from("document_links")
+    .select("document_id")
+    .eq("linked_to_type", "application")
+    .eq("linked_to_id", params.id);
+
+  const linkedDocIds = (linkedDocRows ?? []).map((r) => (r as { document_id: string }).document_id);
+  const { data: linkedDocRecords } = linkedDocIds.length > 0
+    ? await supabase
+        .from("documents")
+        .select("*, document_types(*)")
+        .in("id", linkedDocIds)
+        .eq("is_active", true)
+        .order("uploaded_at")
+    : { data: [] };
+  const linkedDocs = linkedDocRecords ?? [];
+
+  // Fetch account manager history
   const { data: managerHistory } = await supabase
     .from("client_account_managers")
     .select("*, profiles!admin_id(full_name, email)")
@@ -182,31 +202,33 @@ export default async function ApplicationDetailPage({
                 existingUploads={typedUploads}
               />
             </CardHeader>
-            <CardContent>
-              <ul className="divide-y">
-                {typedUploads.map((u) => (
-                  <li
-                    key={u.id}
-                    className="flex items-center justify-between py-2 text-sm"
-                  >
-                    <span>{u.document_requirements?.name}</span>
-                    <div className="flex items-center gap-3">
-                      <VerificationBadge status={u.verification_status} />
-                      <Link
-                        href={`/admin/applications/${params.id}/documents/${u.id}`}
-                        className="text-brand-blue text-xs hover:underline"
-                      >
-                        View
-                      </Link>
+            <CardContent className="pt-0">
+              {linkedDocs.length === 0 && typedUploads.length === 0 ? (
+                <p className="py-4 text-sm text-gray-400 text-center">No documents uploaded yet</p>
+              ) : (
+                <div>
+                  {linkedDocs.map((doc) => (
+                    <DocumentStatusRow
+                      key={doc.id}
+                      document={doc as unknown as DocumentRecord & { document_types?: DocumentType | null }}
+                      applicationId={params.id}
+                    />
+                  ))}
+                  {typedUploads.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between py-2 text-sm border-b last:border-0">
+                      <span className="text-brand-navy">{u.document_requirements?.name}</span>
+                      <div className="flex items-center gap-3">
+                        <Link
+                          href={`/admin/applications/${params.id}/documents/${u.id}`}
+                          className="text-brand-blue text-xs hover:underline"
+                        >
+                          View
+                        </Link>
+                      </div>
                     </div>
-                  </li>
-                ))}
-                {typedUploads.length === 0 && (
-                  <li className="py-4 text-sm text-gray-400 text-center">
-                    No documents uploaded yet
-                  </li>
-                )}
-              </ul>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

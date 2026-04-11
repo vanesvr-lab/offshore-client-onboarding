@@ -650,7 +650,12 @@ create table if not exists public.documents (
   is_active        boolean not null default true,
   uploaded_by      uuid references public.profiles(id),
   uploaded_at      timestamptz not null default now(),
-  verified_at      timestamptz
+  verified_at      timestamptz,
+  -- Admin manual review
+  admin_status     text check (admin_status in ('pending', 'approved', 'rejected')),
+  admin_status_note text,
+  admin_status_by  uuid references public.profiles(id),
+  admin_status_at  timestamptz
 );
 
 -- Junction: connects documents to applications / processes / KYC records

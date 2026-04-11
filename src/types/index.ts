@@ -320,6 +320,11 @@ export type DocumentRecord = {
   uploaded_by: string | null;
   uploaded_at: string;
   verified_at: string | null;
+  // Admin manual review
+  admin_status: 'pending' | 'approved' | 'rejected' | null;
+  admin_status_note: string | null;
+  admin_status_by: string | null;
+  admin_status_at: string | null;
 }
 
 export interface DocumentLink {
