@@ -4,9 +4,11 @@ import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
+import type { VerificationResult } from "@/types";
 import {
   Select,
   SelectContent,
@@ -118,22 +120,106 @@ export function DocumentUploadWidget({
     noKeyboard: true,
   });
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [showExtracted, setShowExtracted] = useState(false);
+
   // ── Compact (inline) mode ─────────────────────────────────────────────────
   if (compact) {
     if (current && !replacing) {
+      const vr = current.verification_result as VerificationResult | null;
+      const hasExtracted = vr?.extracted_fields && Object.keys(vr.extracted_fields).length > 0;
+      const hasRules = vr?.rule_results && vr.rule_results.length > 0;
+
       return (
-        <div className="flex items-center gap-2 text-xs text-gray-600">
-          <VerificationIcon status={current.verification_status} />
-          <Paperclip className="h-3 w-3 text-gray-400" />
-          <span className="truncate max-w-[140px]">{current.file_name}</span>
-          <span className="text-gray-400">{formatBytes(current.file_size)}</span>
-          <button
-            onClick={() => setReplacing(true)}
-            className="text-brand-blue hover:underline"
-            title="Replace"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </button>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-gray-600">
+            <VerificationIcon status={current.verification_status} />
+            <Paperclip className="h-3 w-3 text-gray-400" />
+            <span className="truncate max-w-[140px]">{current.file_name}</span>
+            <span className="text-gray-400">{formatBytes(current.file_size)}</span>
+            <button
+              onClick={() => setPreviewOpen(true)}
+              className="text-brand-blue hover:underline"
+              title="Preview document"
+            >
+              <Eye className="h-3 w-3" />
+            </button>
+            <button
+              onClick={() => setReplacing(true)}
+              className="text-brand-blue hover:underline"
+              title="Replace"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+            {(hasExtracted || hasRules) && (
+              <button
+                onClick={() => setShowExtracted(!showExtracted)}
+                className="text-gray-400 hover:text-brand-blue"
+                title={showExtracted ? "Hide AI results" : "Show AI results"}
+              >
+                {showExtracted ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </button>
+            )}
+          </div>
+
+          {/* Inline extracted fields + rule results */}
+          {showExtracted && vr && (
+            <div className="ml-5 mt-1 rounded border border-gray-100 bg-gray-50 p-2 text-xs space-y-2">
+              {hasExtracted && (
+                <div>
+                  <p className="font-medium text-gray-700 mb-1">AI Extracted Fields</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    {Object.entries(vr.extracted_fields).map(([k, v]) => (
+                      <div key={k} className="flex gap-1">
+                        <span className="text-gray-500">{k.replace(/_/g, " ")}:</span>
+                        <span className="text-gray-800 font-medium">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {vr.confidence_score > 0 && (
+                    <p className="text-gray-400 mt-1">Confidence: {vr.confidence_score}%</p>
+                  )}
+                </div>
+              )}
+              {hasRules && (
+                <div>
+                  <p className="font-medium text-gray-700 mb-1">Rule Results</p>
+                  {vr.rule_results!.map((r) => (
+                    <div key={r.rule_number} className="flex items-start gap-1.5 py-0.5">
+                      {r.passed ? (
+                        <CheckCircle className="h-3 w-3 text-green-500 mt-0.5 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-3 w-3 text-red-500 mt-0.5 shrink-0" />
+                      )}
+                      <div>
+                        <span className={r.passed ? "text-gray-700" : "text-red-700"}>
+                          {r.rule_number}. {r.rule_text}
+                        </span>
+                        <p className="text-gray-400 italic">{r.explanation}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {vr.flags && vr.flags.length > 0 && (
+                <div>
+                  <p className="font-medium text-amber-700">Flags:</p>
+                  {vr.flags.map((f, i) => (
+                    <p key={i} className="text-amber-600">• {f}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Preview dialog */}
+          <DocumentPreviewDialog
+            documentId={current.id}
+            fileName={current.file_name}
+            mimeType={current.mime_type ?? "application/pdf"}
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
+          />
         </div>
       );
     }
