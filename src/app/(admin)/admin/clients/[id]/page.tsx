@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { AddBlankApplication } from "@/components/admin/AddBlankApplication";
 import { DeleteClientButton } from "@/components/admin/DeleteClientButton";
+import { ClientAuditTrailButton } from "@/components/admin/ClientAuditTrailButton";
 import type { ClientAccountManager, ApplicationStatus, KycRecord } from "@/types";
 
 export default async function ClientDetailPage({
@@ -116,6 +117,7 @@ export default async function ClientDetailPage({
             clientId={client.id}
             clientType={(client as unknown as { client_type: "individual" | "organisation" | null }).client_type}
           />
+          <ClientAuditTrailButton clientId={client.id} clientName={client.company_name} />
         </div>
         <p className="text-gray-500 text-sm mt-1">Client since {formatDate(client.created_at)}</p>
       </div>

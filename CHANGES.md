@@ -15,6 +15,15 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-11 — B-007: Client audit trail dialog (Claude Code)
+
+- `src/app/api/admin/clients/[id]/audit-trail/route.ts` (NEW): GET endpoint, admin only. Returns all audit_log entries across a client's full account (all app IDs + linked user IDs + entity_id matches). Supports `search`, `limit`, `offset` query params. Enriches entries with application context (business_name, reference_number). Returns `{ entries, total }`.
+- `src/components/admin/ClientAuditTrailDialog.tsx` (NEW): large dialog (max-w-4xl, 85vh), debounced search, paginated table with alternating row backgrounds. Each row shows date/time with hover tooltip, avatar initials + role badge, human-readable action label, details summary. Rows are clickable to expand before/after values, notes, application reference.
+- `src/components/admin/ClientAuditTrailButton.tsx` (NEW): thin "use client" wrapper managing open state; renders History icon + "Audit Trail" outline button + dialog.
+- `src/app/(admin)/admin/clients/[id]/page.tsx`: imports `ClientAuditTrailButton`, added next to company name + ProcessLauncher in page header.
+
+---
+
 ### 2026-04-11 — B-006: Plain-English verification rules + per-rule AI results (Claude Code)
 
 **Feature 1 — Admin UI for verification rules:**
