@@ -202,8 +202,14 @@ Notes:
     ],
   });
 
-  const text =
+  let text =
     response.content[0].type === "text" ? response.content[0].text : "";
+
+  // Strip markdown code fences if the AI wrapped the JSON in ```json ... ```
+  text = text.trim();
+  if (text.startsWith("```")) {
+    text = text.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+  }
 
   try {
     return JSON.parse(text) as VerificationResult;
