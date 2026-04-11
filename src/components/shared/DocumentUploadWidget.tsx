@@ -181,10 +181,23 @@ export function DocumentUploadWidget({
             {(hasExtracted || hasRules) && (
               <button
                 onClick={() => setShowExtracted(!showExtracted)}
-                className="text-gray-400 hover:text-brand-blue"
-                title={showExtracted ? "Hide AI results" : "Show AI results"}
+                className={cn(
+                  "flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors",
+                  current.verification_status === "verified"
+                    ? "bg-green-50 text-green-700 hover:bg-green-100"
+                    : current.verification_status === "flagged"
+                    ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                )}
+                title={showExtracted ? "Hide AI results" : "View AI verification results"}
               >
-                {showExtracted ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                {current.verification_status === "verified" ? (
+                  <><CheckCircle className="h-3 w-3" /> AI ✓</>
+                ) : current.verification_status === "flagged" ? (
+                  <><AlertCircle className="h-3 w-3" /> AI !</>
+                ) : (
+                  <><Clock className="h-3 w-3" /> AI</>
+                )}
               </button>
             )}
           </div>
