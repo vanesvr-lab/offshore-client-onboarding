@@ -104,7 +104,9 @@ export function AddBlankApplication({ clientId, templates }: AddBlankApplication
             <Label className="text-sm">Service type *</Label>
             <Select value={templateId} onValueChange={(v) => setTemplateId(v ?? "")}>
               <SelectTrigger>
-                <SelectValue placeholder="Select service type…" />
+                <SelectValue placeholder="Select service type…">
+                  {templateId ? templates.find((t) => t.id === templateId)?.name ?? templateId : undefined}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {templates.map((t) => (
