@@ -156,6 +156,7 @@ export function DocumentUploadWidget({
       const vr = current.verification_result as VerificationResult | null;
       const hasExtracted = vr?.extracted_fields && Object.keys(vr.extracted_fields).length > 0;
       const hasRules = vr?.rule_results && vr.rule_results.length > 0;
+      const hasAnyResult = current.verification_status !== "pending";
 
       return (
         <div className="space-y-1">
@@ -178,7 +179,7 @@ export function DocumentUploadWidget({
             >
               <RefreshCw className="h-3 w-3" />
             </button>
-            {(hasExtracted || hasRules) && (
+            {hasAnyResult && (
               <button
                 onClick={() => setShowExtracted(!showExtracted)}
                 className={cn(
@@ -203,7 +204,7 @@ export function DocumentUploadWidget({
           </div>
 
           {/* Inline extracted fields + rule results */}
-          {showExtracted && vr && (
+          {showExtracted && hasAnyResult && (
             <div className="ml-5 mt-1 rounded border border-gray-100 bg-gray-50 p-2 text-xs space-y-2 relative">
               <button
                 onClick={() => setShowExtracted(false)}
@@ -212,6 +213,9 @@ export function DocumentUploadWidget({
               >
                 <X className="h-3.5 w-3.5" />
               </button>
+              <p className="text-gray-500 font-medium">
+                AI Verification: <span className={current.verification_status === "verified" ? "text-green-600" : current.verification_status === "flagged" ? "text-amber-600" : "text-blue-600"}>{current.verification_status}</span>
+              </p>
               {hasExtracted && (
                 <div>
                   <p className="font-medium text-gray-700 mb-1">AI Extracted Fields</p>
