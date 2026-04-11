@@ -72,6 +72,24 @@ export function DocumentUploadWidget({
   const [selectedPersonId, setSelectedPersonId] = useState<string>(kycRecordId ?? "");
   const [replacing, setReplacing] = useState(false);
 
+  async function pollForVerification(docId: string, maxAttempts = 15): Promise<DocumentRecord | null> {
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 2000)); // wait 2 seconds between polls
+      try {
+        const res = await fetch(`/api/documents/library/${docId}`);
+        if (!res.ok) continue;
+        const data = await res.json() as { document?: DocumentRecord };
+        const doc = data.document;
+        if (doc && doc.verification_status !== "pending") {
+          return doc;
+        }
+      } catch {
+        // ignore poll errors
+      }
+    }
+    return null;
+  }
+
   async function upload(file: File) {
     const typeId = selectedTypeId || initialTypeId;
     if (!typeId) {
@@ -93,9 +111,18 @@ export function DocumentUploadWidget({
       const doc = data.document!;
       setCurrent(doc);
       setReplacing(false);
-      toast.success("Document uploaded — AI verification running");
+      toast.success("Document uploaded — AI verification running…");
       onUploadComplete?.(doc);
-      router.refresh();
+
+      // Poll for verification result (runs in background, don't block)
+      pollForVerification(doc.id).then((verified) => {
+        if (verified) {
+          setCurrent(verified);
+          onUploadComplete?.(verified);
+          toast.success("AI verification complete");
+          router.refresh();
+        }
+      });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {

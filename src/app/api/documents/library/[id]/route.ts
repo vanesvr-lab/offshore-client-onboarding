@@ -3,6 +3,25 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+// GET single document by ID (used by upload widget to poll for verification result)
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*, document_types(*)")
+    .eq("id", params.id)
+    .single();
+
+  if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({ document: data });
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
