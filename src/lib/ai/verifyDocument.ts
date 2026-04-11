@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { VerificationRules, VerificationResult } from "@/types";
+import type { VerificationRules, VerificationResult, RuleResult } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Lazy-instantiate the Anthropic client to avoid module-load-time env issues
@@ -26,6 +26,8 @@ interface VerifyParams {
   };
   /** Optional document type used to filter relevant knowledge base entries */
   documentType?: string | null;
+  /** Plain English rules typed by admin in Settings > Verification Rules */
+  plainTextRules?: string | null;
 }
 
 /**
@@ -84,6 +86,7 @@ export async function verifyDocument({
   rules,
   applicationContext,
   documentType,
+  plainTextRules,
 }: VerifyParams): Promise<VerificationResult> {
   const base64 = fileBuffer.toString("base64");
   const isImage = mimeType.startsWith("image/");
@@ -99,13 +102,21 @@ You will receive:
 1. A document image or PDF
 2. The expected document type
 3. Fields to extract
-4. Matching rules to check
-5. Application context (applicant name, company name)
+4. Application context (applicant name, company name)
+5. Verification rules written in plain English by the compliance team (when provided)
 6. Relevant compliance knowledge base entries (rules, document requirements, and regulatory text from the Mauritius FSC and related authorities)
+
+When plain English verification rules are provided, apply EACH numbered rule to the document. For each rule, determine whether it PASSES or FAILS with a brief explanation and specific evidence from the document. If no numbered rules are provided, fall back to basic document verification (readability, document type match, field extraction).
 
 When evaluating the document, reference the knowledge base entries to determine whether the document satisfies the cited rules and regulatory requirements. Cite the entries by their TITLE in your reasoning when relevant.
 
 Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
+
+  const rulesSection = plainTextRules
+    ? `Verification rules (apply each one):\n${plainTextRules}`
+    : rules.match_rules.length > 0
+      ? `Matching rules (structured):\n${JSON.stringify(rules.match_rules, null, 2)}`
+      : "No specific rules — perform basic verification (readability, document type match, field extraction)";
 
   const userPrompt = `Verify this document.
 
@@ -117,8 +128,7 @@ Application context:
 - Company name: ${applicationContext.business_name || "not provided"}
 - UBOs: ${JSON.stringify(applicationContext.ubo_data)}
 
-Matching rules:
-${JSON.stringify(rules.match_rules, null, 2)}
+${rulesSection}
 ${
   knowledgeBase
     ? `\nRelevant compliance knowledge base:\n${knowledgeBase}\n`
@@ -138,15 +148,26 @@ Respond with this exact JSON schema:
       "note": string
     }
   ],
+  "rule_results": [
+    {
+      "rule_number": number,
+      "rule_text": string,
+      "passed": boolean,
+      "explanation": string,
+      "evidence": string
+    }
+  ],
   "overall_status": "verified" | "flagged" | "manual_review",
   "confidence_score": number (0-100),
   "flags": [string],
   "reasoning": string
 }
 
-If you cannot read the document clearly, set can_read_document: false and overall_status: "manual_review".
-If any required match_rule fails, set overall_status: "flagged".
-If all required rules pass, set overall_status: "verified".`;
+Notes:
+- rule_results: populate only when numbered plain English rules were provided; one entry per rule
+- overall_status: "verified" if ALL rules pass, "flagged" if ANY rule fails, "manual_review" if document cannot be read
+- If you cannot read the document clearly, set can_read_document: false and overall_status: "manual_review"
+- If using structured match_rules (not plain text), keep rule_results as an empty array`;
 
   const contentBlock = isImage
     ? ({
@@ -192,6 +213,7 @@ If all required rules pass, set overall_status: "verified".`;
       document_type_detected: "unknown",
       extracted_fields: {},
       match_results: [],
+      rule_results: [] as RuleResult[],
       overall_status: "manual_review",
       confidence_score: 0,
       flags: ["Failed to parse AI response — queued for manual review"],

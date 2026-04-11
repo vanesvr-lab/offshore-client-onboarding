@@ -152,6 +152,14 @@ export interface DocumentUpload {
   document_requirements?: DocumentRequirement;
 }
 
+export interface RuleResult {
+  rule_number: number;
+  rule_text: string;
+  passed: boolean;
+  explanation: string;
+  evidence: string;
+}
+
 export interface VerificationResult {
   can_read_document: boolean;
   document_type_detected: string;
@@ -167,6 +175,7 @@ export interface VerificationResult {
   confidence_score: number;
   flags: string[];
   reasoning: string;
+  rule_results?: RuleResult[];
 }
 
 export interface AuditLogEntry {

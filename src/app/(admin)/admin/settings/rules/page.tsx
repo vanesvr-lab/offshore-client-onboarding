@@ -1,71 +1,57 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ChevronDown, ChevronRight, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import type { DocumentRequirement } from "@/types";
 
-export default function VerificationRulesPage() {
-  const [requirements, setRequirements] = useState<
-    (DocumentRequirement & { service_templates?: { name: string } })[]
-  >([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [jsonValue, setJsonValue] = useState("");
+interface DocumentTypeWithRules {
+  id: string;
+  name: string;
+  category: string;
+  is_active: boolean;
+  sort_order: number;
+  verification_rules_text: string | null;
+}
+
+const CATEGORY_ORDER = ["identity", "corporate", "financial", "compliance", "additional"] as const;
+const CATEGORY_LABELS: Record<string, string> = {
+  identity: "Identity",
+  corporate: "Corporate",
+  financial: "Financial",
+  compliance: "Compliance",
+  additional: "Additional",
+};
+
+function DocumentTypeCard({
+  docType,
+}: {
+  docType: DocumentTypeWithRules;
+}) {
+  const [text, setText] = useState(docType.verification_rules_text ?? "");
   const [saving, setSaving] = useState(false);
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/admin/settings/templates")
-      .then((r) => r.json())
-      .then(({ templates }) => {
-        const reqs: (DocumentRequirement & { service_templates?: { name: string } })[] = [];
-        for (const t of templates ?? []) {
-          for (const req of t.document_requirements ?? []) {
-            reqs.push({ ...req, service_templates: { name: t.name } });
-          }
-        }
-        setRequirements(reqs);
-      });
-  }, []);
-
-  function selectRequirement(
-    req: DocumentRequirement & { service_templates?: { name: string } }
-  ) {
-    setSelected(req.id);
-    setJsonValue(JSON.stringify(req.verification_rules || {}, null, 2));
-    setJsonError(null);
+  function handleChange(val: string) {
+    setText(val);
+    setDirty(true);
   }
 
-  function handleJsonChange(value: string) {
-    setJsonValue(value);
-    try {
-      JSON.parse(value);
-      setJsonError(null);
-    } catch (e) {
-      setJsonError((e as Error).message);
-    }
-  }
-
-  async function saveRules() {
-    if (!selected || jsonError) return;
+  async function handleSave() {
     setSaving(true);
     try {
-      const parsed = JSON.parse(jsonValue);
-      const res = await fetch(`/api/admin/settings/requirements/${selected}`, {
+      const res = await fetch(`/api/admin/document-types/${docType.id}/rules`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verification_rules: parsed }),
+        body: JSON.stringify({ verificationRulesText: text }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "Save failed");
-      toast.success("Verification rules saved");
+      if (!res.ok) {
+        const d = await res.json() as { error?: string };
+        throw new Error(d.error ?? "Save failed");
+      }
+      setDirty(false);
+      toast.success(`Rules saved for "${docType.name}"`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -73,98 +59,126 @@ export default function VerificationRulesPage() {
     }
   }
 
-  const selectedReq = requirements.find((r) => r.id === selected);
+  return (
+    <div className="rounded-lg border bg-white p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-brand-navy">{docType.name}</h3>
+      <Textarea
+        value={text}
+        onChange={(e) => handleChange(e.target.value)}
+        rows={5}
+        placeholder={`e.g.\n1. Document must not be expired\n2. Name on document must match client name\n3. Document must be a certified copy`}
+        className="text-sm resize-y"
+        spellCheck={false}
+      />
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-400">
+          Number each rule on its own line. The AI will evaluate each one against the document.
+        </p>
+        <Button
+          size="sm"
+          className="bg-brand-navy hover:bg-brand-blue gap-1.5"
+          onClick={handleSave}
+          disabled={saving || !dirty}
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
-  // Group by template
-  const byTemplate = requirements.reduce<
-    Record<string, (DocumentRequirement & { service_templates?: { name: string } })[]>
-  >((acc, req) => {
-    const templateName = req.service_templates?.name || "Unknown";
-    if (!acc[templateName]) acc[templateName] = [];
-    acc[templateName].push(req);
-    return acc;
-  }, {});
+function CategorySection({
+  category,
+  docTypes,
+}: {
+  category: string;
+  docTypes: DocumentTypeWithRules[];
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 w-full text-left mb-3 group"
+      >
+        {open ? (
+          <ChevronDown className="h-4 w-4 text-gray-400" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-gray-400" />
+        )}
+        <span className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+          {CATEGORY_LABELS[category] ?? category}
+        </span>
+        <span className="text-xs text-gray-400">({docTypes.length})</span>
+      </button>
+
+      {open && (
+        <div className="space-y-4">
+          {docTypes.map((dt) => (
+            <DocumentTypeCard key={dt.id} docType={dt} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function VerificationRulesPage() {
+  const [docTypes, setDocTypes] = useState<DocumentTypeWithRules[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/document-types")
+      .then((r) => r.json())
+      .then((d: { documentTypes?: DocumentTypeWithRules[] }) => {
+        setDocTypes((d.documentTypes ?? []).filter((dt) => dt.is_active));
+      })
+      .catch(() => toast.error("Failed to load document types"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const grouped: Record<string, DocumentTypeWithRules[]> = {};
+  for (const dt of docTypes) {
+    if (!grouped[dt.category]) grouped[dt.category] = [];
+    grouped[dt.category].push(dt);
+  }
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-brand-navy">
-          Verification Rules
-        </h1>
+        <h1 className="text-2xl font-bold text-brand-navy">Verification Rules</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Edit AI verification rules per document type (JSON editor)
+          Write plain English rules for each document type. The AI will evaluate each numbered rule against the uploaded document.
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-6">
-        {/* Document list */}
-        <div className="space-y-4 overflow-y-auto max-h-[70vh]">
-          {Object.entries(byTemplate).map(([templateName, reqs]) => (
-            <div key={templateName}>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-1">
-                {templateName}
-              </p>
-              <div className="space-y-1">
-                {reqs.map((req) => (
-                  <button
-                    key={req.id}
-                    onClick={() => selectRequirement(req)}
-                    className={`w-full text-left rounded-lg border p-2.5 text-sm transition-colors ${
-                      selected === req.id
-                        ? "border-brand-navy bg-brand-navy/5"
-                        : "hover:bg-gray-50 bg-white"
-                    }`}
-                  >
-                    <p className="font-medium text-brand-navy truncate">
-                      {req.name}
-                    </p>
-                    <p className="text-xs text-gray-400 capitalize">
-                      {req.category}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
 
-        {/* JSON editor */}
-        <div className="col-span-2">
-          {selectedReq ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-brand-navy text-base">
-                  {selectedReq.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Textarea
-                  value={jsonValue}
-                  onChange={(e) => handleJsonChange(e.target.value)}
-                  rows={24}
-                  className="font-mono text-xs"
-                  spellCheck={false}
-                />
-                {jsonError && (
-                  <p className="text-xs text-red-500">
-                    JSON error: {jsonError}
-                  </p>
-                )}
-                <Button
-                  onClick={saveRules}
-                  disabled={saving || !!jsonError}
-                  className="bg-brand-navy hover:bg-brand-blue"
-                >
-                  {saving ? "Saving…" : "Save Rules"}
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="flex items-center justify-center h-48 text-gray-400 text-sm border-2 border-dashed rounded-lg">
-              Select a document to edit its verification rules
-            </div>
-          )}
+      {loading ? (
+        <p className="text-sm text-gray-400 py-8 text-center">Loading document types…</p>
+      ) : docTypes.length === 0 ? (
+        <p className="text-sm text-gray-400 py-8 text-center">No active document types found.</p>
+      ) : (
+        <div className="space-y-8">
+          {CATEGORY_ORDER.filter((c) => grouped[c]?.length).map((category) => (
+            <CategorySection
+              key={category}
+              category={category}
+              docTypes={grouped[category]}
+            />
+          ))}
+          {/* Any categories not in the fixed order */}
+          {Object.keys(grouped)
+            .filter((c) => !(CATEGORY_ORDER as readonly string[]).includes(c))
+            .map((category) => (
+              <CategorySection
+                key={category}
+                category={category}
+                docTypes={grouped[category]}
+              />
+            ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

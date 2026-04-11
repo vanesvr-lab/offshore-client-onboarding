@@ -24,9 +24,20 @@ export async function POST(request: NextRequest) {
     }
 
     const [{ data: requirement }, { data: application }] = await Promise.all([
-      supabase.from("document_requirements").select("verification_rules").eq("id", requirementId).single(),
+      supabase.from("document_requirements").select("verification_rules, name").eq("id", requirementId).single(),
       supabase.from("applications").select("contact_name, business_name, ubo_data").eq("id", applicationId).single(),
     ]);
+
+    // Look up plain-text rules from document_types by matching name
+    let plainTextRules: string | null = null;
+    if (requirement?.name) {
+      const { data: docType } = await supabase
+        .from("document_types")
+        .select("verification_rules_text")
+        .ilike("name", requirement.name)
+        .maybeSingle();
+      plainTextRules = (docType as { verification_rules_text?: string | null } | null)?.verification_rules_text ?? null;
+    }
 
     const { data: fileData, error: storageError } = await supabase.storage
       .from("documents")
@@ -48,6 +59,7 @@ export async function POST(request: NextRequest) {
         business_name: application?.business_name || null,
         ubo_data: application?.ubo_data || null,
       },
+      plainTextRules,
     });
 
     const verificationStatus =

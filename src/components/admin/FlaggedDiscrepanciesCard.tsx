@@ -37,6 +37,9 @@ function DocRow({
   const failedChecks = (doc.verification_result?.match_results ?? []).filter(
     (r) => !r.passed
   );
+  const failedRules = (doc.verification_result?.rule_results ?? []).filter(
+    (r) => !r.passed
+  );
 
   async function handleOverrideToPass() {
     setOverriding(true);
@@ -110,6 +113,20 @@ function DocRow({
               {check.note && (
                 <p className="col-span-2 text-gray-500 text-[10px] mt-1">{check.note}</p>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Failed rules */}
+      {failedRules.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-gray-600">Failed rules:</p>
+          {failedRules.map((rr) => (
+            <div key={rr.rule_number} className="rounded bg-red-50 border border-red-100 px-2 py-1.5 text-xs space-y-0.5">
+              <p className="font-medium text-red-700">{rr.rule_number}. {rr.rule_text}</p>
+              <p className="text-gray-600">{rr.explanation}</p>
+              {rr.evidence && <p className="italic text-gray-400">{rr.evidence}</p>}
             </div>
           ))}
         </div>

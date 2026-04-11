@@ -218,11 +218,21 @@ export function DocumentStatusRow({
       <div className="flex items-center gap-2 ml-6 flex-wrap">
         <span className="text-xs text-gray-400 font-medium">AI:</span>
         <VerificationBadge status={document.verification_status} />
-        {confidence !== undefined && (
-          <span className="text-xs text-gray-400">{Math.round(confidence * 100)}%</span>
-        )}
-        {flags.length > 0 && (
-          <span className="text-xs text-amber-600">{flags.length} flag{flags.length > 1 ? "s" : ""}</span>
+        {verificationResult?.rule_results && verificationResult.rule_results.length > 0 ? (
+          <span className={`text-xs font-medium ${
+            verificationResult.rule_results.every((r) => r.passed) ? "text-green-600" : "text-red-600"
+          }`}>
+            {verificationResult.rule_results.filter((r) => r.passed).length}/{verificationResult.rule_results.length} rules passed
+          </span>
+        ) : (
+          <>
+            {confidence !== undefined && (
+              <span className="text-xs text-gray-400">{Math.round(confidence * 100)}%</span>
+            )}
+            {flags.length > 0 && (
+              <span className="text-xs text-amber-600">{flags.length} flag{flags.length > 1 ? "s" : ""}</span>
+            )}
+          </>
         )}
         <div className="ml-auto flex items-center gap-1.5">
           <Button

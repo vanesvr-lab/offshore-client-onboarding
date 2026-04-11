@@ -15,6 +15,37 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-11 — B-006: Plain-English verification rules + per-rule AI results (Claude Code)
+
+**Feature 1 — Admin UI for verification rules:**
+- `src/app/(admin)/admin/settings/rules/page.tsx`: completely rewritten. Loads `document_types` from `/api/document-types`, groups by category (Identity/Corporate/Financial/Compliance/Additional) with collapsible sections. Each active document type shows a textarea for plain English rules + Save button. No JSON required.
+- `src/app/api/admin/document-types/[id]/rules/route.ts` (NEW): PATCH endpoint, admin only. Updates `document_types.verification_rules_text`. Revalidates `/admin/settings/rules`.
+
+**Feature 2 — AI verification prompt update:**
+- `src/lib/ai/verifyDocument.ts`: added `plainTextRules?: string | null` to `VerifyParams`. System prompt updated to instruct AI to apply each numbered rule and produce per-rule pass/fail results. User prompt now uses plain text rules when available, falls back to structured `match_rules`. Response schema includes `rule_results` array.
+
+**Feature 3 — Types update:**
+- `src/types/index.ts`: added `RuleResult` interface (`rule_number`, `rule_text`, `passed`, `explanation`, `evidence`). Added `rule_results?: RuleResult[]` to `VerificationResult`.
+
+**Feature 4 — Pass rules to verification:**
+- `src/app/api/verify-document/route.ts`: looks up `document_types.verification_rules_text` by name match against the document requirement name. Passes as `plainTextRules` to `verifyDocument`.
+
+**Feature 5 — Per-rule results in admin views:**
+- `src/components/admin/ExtractedFieldsPanel.tsx`: new "Rule Results" section showing pass/fail icon + rule number/text + explanation + italic evidence per rule.
+- `src/components/admin/DocumentStatusRow.tsx`: AI status line shows "X/Y rules passed" when `rule_results` present.
+- `src/components/admin/FlaggedDiscrepanciesCard.tsx`: shows "Failed rules" section with rule text, explanation, evidence.
+
+**Feature 6 — Seed default rules:**
+- `supabase/seed-verification-rules.sql` (NEW): UPDATE statements for 10 document types.
+- `src/app/api/admin/migrations/seed-verification-rules/route.ts` (NEW): POST endpoint (admin only) to apply the seed. Call once: `POST /api/admin/migrations/seed-verification-rules`.
+
+Seeded rules for: Certified Passport Copy, Proof of Residential Address, Certificate of Incorporation, Bank Reference Letter, Certificate of Good Standing, Curriculum Vitae / Resume, Declaration of Source of Funds, PEP Declaration Form, Register of Directors, Register of Shareholders/Members.
+
+**Feature 7 — Select UUID display check:**
+- `ProcessLauncher` and `AddBlankApplication`: both already correctly display template names via `SelectItem` children. No changes needed.
+
+---
+
 ### 2026-04-11 — B-005: Document handling in admin view (Claude Code)
 
 **Feature 1 — Extracted fields panel:**

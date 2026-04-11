@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import type { VerificationResult } from "@/types";
 
 interface ExtractedFieldsPanelProps {
@@ -13,10 +13,11 @@ export function ExtractedFieldsPanel({ verificationResult }: ExtractedFieldsPane
 
   if (!verificationResult) return null;
 
-  const { extracted_fields, confidence_score, flags } = verificationResult;
+  const { extracted_fields, confidence_score, flags, rule_results } = verificationResult;
   const hasFields = extracted_fields && Object.keys(extracted_fields).length > 0;
+  const hasRules = rule_results && rule_results.length > 0;
 
-  if (!hasFields && !flags?.length) return null;
+  if (!hasFields && !flags?.length && !hasRules) return null;
 
   return (
     <div className="mt-1">
@@ -60,6 +61,34 @@ export function ExtractedFieldsPanel({ verificationResult }: ExtractedFieldsPane
                   <li key={i} className="text-amber-600">• {flag}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {hasRules && (
+            <div>
+              <p className="text-gray-600 font-medium mb-1.5">Rule Results</p>
+              <div className="space-y-2">
+                {rule_results!.map((rr) => (
+                  <div key={rr.rule_number} className="flex gap-2">
+                    <div className="shrink-0 mt-0.5">
+                      {rr.passed ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 text-red-500" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`font-medium ${rr.passed ? "text-gray-700" : "text-red-700"}`}>
+                        {rr.rule_number}. {rr.rule_text}
+                      </p>
+                      <p className="text-gray-500 mt-0.5">{rr.explanation}</p>
+                      {rr.evidence && (
+                        <p className="italic text-gray-400 mt-0.5">{rr.evidence}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
