@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip, ChevronDown, ChevronRight } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
