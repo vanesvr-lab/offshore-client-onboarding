@@ -204,7 +204,14 @@ export function DocumentUploadWidget({
 
           {/* Inline extracted fields + rule results */}
           {showExtracted && vr && (
-            <div className="ml-5 mt-1 rounded border border-gray-100 bg-gray-50 p-2 text-xs space-y-2">
+            <div className="ml-5 mt-1 rounded border border-gray-100 bg-gray-50 p-2 text-xs space-y-2 relative">
+              <button
+                onClick={() => setShowExtracted(false)}
+                className="absolute top-1.5 right-1.5 text-gray-400 hover:text-gray-600"
+                title="Close"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
               {hasExtracted && (
                 <div>
                   <p className="font-medium text-gray-700 mb-1">AI Extracted Fields</p>
