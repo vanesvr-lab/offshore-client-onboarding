@@ -184,7 +184,13 @@ export function IndividualKycForm({
   function docsForType(name: string): DocumentRecord | null {
     const dt = findDocType(name);
     if (!dt) return null;
-    return docs.find((d) => d.document_type_id === dt.id) ?? null;
+    // Return the LATEST document of this type (last in array if sorted ascending, or sort here)
+    const matching = docs.filter((d) => d.document_type_id === dt.id);
+    if (matching.length === 0) return null;
+    // Sort by uploaded_at descending, return the newest
+    return matching.sort((a, b) =>
+      new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()
+    )[0];
   }
 
   const onDocUploaded = useCallback((doc: DocumentRecord) => {

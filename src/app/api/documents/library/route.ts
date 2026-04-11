@@ -91,7 +91,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: storageError.message }, { status: 500 });
   }
 
-  // Insert document record with pending status
+  // Deactivate any existing active documents of the same type for this client/KYC record
+  // This prevents duplicate rows when re-uploading
+  const deactivateQuery = supabase
+    .from("documents")
+    .update({ is_active: false })
+    .eq("client_id", clientId)
+    .eq("document_type_id", documentTypeId)
+    .eq("is_active", true);
+  if (kycRecordId) {
+    deactivateQuery.eq("kyc_record_id", kycRecordId);
+  }
+  await deactivateQuery;
+
+  // Insert new document record with pending status
   const { data: doc, error: dbError } = await supabase
     .from("documents")
     .insert({
