@@ -252,7 +252,7 @@ export function DocumentUploadWidget({
                   ))}
                 </div>
               )}
-              {vr.flags && vr.flags.length > 0 && (
+              {vr?.flags && vr.flags.length > 0 && (
                 <div>
                   <p className="font-medium text-amber-700">Flags:</p>
                   {vr.flags.map((f, i) => (
