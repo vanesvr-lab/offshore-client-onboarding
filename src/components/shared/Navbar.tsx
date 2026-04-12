@@ -25,7 +25,7 @@ export function Navbar({ role, userName }: NavbarProps) {
           <Link href={role === "admin" ? "/admin/dashboard" : "/dashboard"}>
             <div className="text-white">
               <div className="text-lg font-semibold">Mauritius Offshore Client Portal</div>
-              <div className="text-xs text-brand-light">Beyond Entities, Building Legacies</div>
+              <div className="text-xs text-brand-light">The intelligent portal for client due diligence and compliance</div>
             </div>
           </Link>
           {role === "admin" && (

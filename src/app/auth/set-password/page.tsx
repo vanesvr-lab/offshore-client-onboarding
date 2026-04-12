@@ -68,7 +68,7 @@ function SetPasswordForm() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
-        <p className="text-sm text-gray-500 mt-1">Beyond Entities, Building Legacies</p>
+        <p className="text-sm text-gray-500 mt-1">The intelligent portal for client due diligence and compliance</p>
       </div>
       <Card className="w-full max-w-md">
         <CardHeader>

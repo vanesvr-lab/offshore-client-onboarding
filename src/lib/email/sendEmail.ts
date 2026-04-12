@@ -28,7 +28,7 @@ export async function sendClientEmail({
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 20px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 20px;">Mauritius Offshore Client Portal</h1>
-          <p style="color: #90cdf4; margin: 4px 0 0; font-size: 12px;">Beyond Entities, Building Legacies</p>
+          <p style="color: #90cdf4; margin: 4px 0 0; font-size: 12px;">The intelligent portal for client due diligence and compliance</p>
         </div>
         <div style="padding: 30px; background: #ffffff;">
           ${body.replace(/\n/g, "<br>")}

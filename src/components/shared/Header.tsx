@@ -22,7 +22,7 @@ export function Header({ userName }: HeaderProps) {
           Mauritius Offshore Client Portal
         </p>
         <p className="text-brand-muted text-xs mt-0.5">
-          Beyond Entities, Building Legacies
+          The intelligent portal for client due diligence and compliance
         </p>
       </div>
       <div className="flex items-center gap-4">

@@ -31,7 +31,12 @@ export function KycPageClient({
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(!!kycCompletedAt);
 
-  const individualRecord = records.find((r) => r.record_type === "individual") ?? null;
+  // Find the PRIMARY individual record (has profile_id set = the client's owner account)
+  // Fall back to first individual record if none has profile_id
+  const individualRecord =
+    records.find((r) => r.record_type === "individual" && r.profile_id) ??
+    records.find((r) => r.record_type === "individual") ??
+    null;
   const orgRecord = records.find((r) => r.record_type === "organisation") ?? null;
 
   // Compute overall completion across all records

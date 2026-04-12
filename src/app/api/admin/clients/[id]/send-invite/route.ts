@@ -56,7 +56,7 @@ export async function POST(
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 22px;">Mauritius Offshore Client Portal</h1>
-          <p style="color: #90cdf4; margin: 6px 0 0; font-size: 13px;">Beyond Entities, Building Legacies</p>
+          <p style="color: #90cdf4; margin: 6px 0 0; font-size: 13px;">The intelligent portal for client due diligence and compliance</p>
         </div>
         <div style="padding: 36px; background: #ffffff;">
           <p style="color: #1a365d; font-size: 16px; margin: 0 0 12px;">Dear ${full_name || ""},</p>

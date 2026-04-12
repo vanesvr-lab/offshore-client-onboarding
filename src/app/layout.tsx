@@ -5,7 +5,7 @@ import { SessionProvider } from "next-auth/react";
 
 export const metadata: Metadata = {
   title: "Mauritius Offshore Client Portal",
-  description: "Mauritius Offshore Client Portal — Beyond Entities, Building Legacies",
+  description: "Mauritius Offshore Client Portal — The intelligent portal for client due diligence and compliance",
 };
 
 export default function RootLayout({
