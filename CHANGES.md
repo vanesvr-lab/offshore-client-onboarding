@@ -53,6 +53,31 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 - `src/app/api/auth/set-password/route.ts`: handles both "invite" and "profile_invite" JWT purposes
 - `src/app/auth/set-password/page.tsx`: redirects to /kyc for profile invites, /apply for primary
 
+### 2026-04-13 — B-012: Admin client page UX + wizard improvements (Claude Code)
+
+**Change 1 — Compliance Scorecard to right column:**
+- `src/app/(admin)/admin/clients/[id]/page.tsx`: removed from left (col-span-2); added at top of right sidebar above WorkflowMilestonesCard
+
+**Change 2 — Application names clickable:**
+- Solutions & Services table: name now links to `/admin/applications/[id]` with `text-brand-blue hover:underline`; removed separate View button column
+
+**Change 3 — Pre-fill primary contact from KYC:**
+- `src/app/(client)/apply/[templateId]/details/page.tsx`: pre-fill logic now prefers `is_primary=true` individual record; also pre-fills `contact_title` from `occupation`; guard prevents overwriting existing values
+
+**Change 4 — Business Information to bottom of client wizard:**
+- Added info banner: "The following business details will be completed by the admin team after your submission."
+- Business fields (name, type, country, address) shown at bottom in muted card (`opacity-80 bg-gray-50`)
+
+**Change 5 — Remove section letters from admin wizard:**
+- `src/app/(admin)/admin/clients/[id]/apply/[templateId]/details/page.tsx`: removed "Section A:", "Section B:", "Section C:" prefixes
+
+**Change 6 — Turnover field split migration:**
+- `POST /api/admin/migrations/update-turnover-fields`: replaces `estimated_turnover_3yr` with three separate year fields on GBC + AC templates
+
+**Note:** Run `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev` after deployment to clear stale cache.
+
+---
+
 ### 2026-04-13 — B-011: Unified KYC wizard, profile pre-fill, multi-select country (Claude Code)
 
 **Feature 1 — Unified KYC experience across all persons:**
