@@ -1,5 +1,50 @@
 export type UserRole = "client" | "admin";
 export type ClientUserRole = "owner" | "member";
+export type DueDiligenceLevel = "sdd" | "cdd" | "edd";
+
+export interface DueDiligenceRequirement {
+  id: string;
+  level: "basic" | "sdd" | "cdd" | "edd";
+  requirement_type: "field" | "document" | "admin_check";
+  requirement_key: string;
+  label: string;
+  description: string | null;
+  document_type_id: string | null;
+  sort_order: number;
+  document_types?: { id: string; name: string } | null;
+}
+
+export interface DueDiligenceSettings {
+  level: DueDiligenceLevel;
+  auto_approve: boolean;
+  requires_senior_approval: boolean;
+  label: string;
+  description: string | null;
+}
+
+export interface SectionScore {
+  name: string;
+  filled: number;
+  total: number;
+  items: { key: string; label: string; met: boolean }[];
+}
+
+export interface ComplianceScore {
+  overallPercentage: number;
+  sections: SectionScore[];
+  canApprove: boolean;
+  blockers: string[];
+}
+
+export interface RiskFlag {
+  type: string;
+  message: string;
+  severity: "info" | "warning" | "critical";
+  suggestedAction: string | null;
+  detectedAt: string;
+  dismissed: boolean;
+  dismissedReason: string | null;
+}
 
 export type ApplicationStatus =
   | "draft"
@@ -26,6 +71,7 @@ export interface Profile {
 export interface Client {
   id: string;
   company_name: string;
+  due_diligence_level: DueDiligenceLevel | null;
   // Onboarding redesign v2 fields
   client_type: 'individual' | 'organisation' | null;
   loe_sent_at: string | null;
@@ -275,6 +321,13 @@ export interface KycRecord {
   risk_rated_at: string | null;
   geographic_risk_assessment: string | null;
   relationship_history: string | null;
+  // EDD / B-008 additions
+  risk_flags: RiskFlag[] | null;
+  senior_management_approval: boolean | null;
+  senior_management_approved_by: string | null;
+  senior_management_approved_at: string | null;
+  ongoing_monitoring_plan: string | null;
+  kyc_journey_completed: boolean;
   // Tracking
   completion_status: 'incomplete' | 'complete';
   filled_by: string | null;

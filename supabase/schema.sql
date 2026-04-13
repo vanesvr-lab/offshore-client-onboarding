@@ -715,3 +715,43 @@ create table if not exists public.process_documents (
   requested_at     timestamptz,
   received_at      timestamptz
 );
+
+-- ============================================================
+-- B-008: Due Diligence Levels (migration already run in prod)
+-- ============================================================
+
+-- Add due_diligence_level to clients
+alter table public.clients
+  add column if not exists due_diligence_level text default 'cdd'
+    check (due_diligence_level in ('sdd', 'cdd', 'edd'));
+
+-- Add EDD / B-008 fields to kyc_records
+alter table public.kyc_records
+  add column if not exists risk_flags jsonb default '[]',
+  add column if not exists senior_management_approval boolean default false,
+  add column if not exists senior_management_approved_by uuid references public.profiles(id),
+  add column if not exists senior_management_approved_at timestamptz,
+  add column if not exists ongoing_monitoring_plan text,
+  add column if not exists kyc_journey_completed boolean default false;
+
+-- Due diligence requirements table (seeded by migration)
+create table if not exists public.due_diligence_requirements (
+  id               uuid primary key default gen_random_uuid(),
+  level            text not null check (level in ('basic', 'sdd', 'cdd', 'edd')),
+  requirement_type text not null check (requirement_type in ('field', 'document', 'admin_check')),
+  requirement_key  text not null,
+  label            text not null,
+  description      text,
+  document_type_id uuid references public.document_types(id),
+  sort_order       int default 0,
+  unique (level, requirement_type, requirement_key)
+);
+
+-- Due diligence settings table (one row per level, seeded by migration)
+create table if not exists public.due_diligence_settings (
+  level                     text primary key check (level in ('sdd', 'cdd', 'edd')),
+  auto_approve              boolean not null default false,
+  requires_senior_approval  boolean not null default false,
+  label                     text not null,
+  description               text
+);
