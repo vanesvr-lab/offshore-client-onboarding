@@ -755,3 +755,36 @@ create table if not exists public.due_diligence_settings (
   label                     text not null,
   description               text
 );
+
+-- -------------------------------------------------------
+-- B-009: Account Profiles Roles
+-- -------------------------------------------------------
+
+-- kyc_records additions (added by migration, reflected here)
+-- ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS is_primary boolean DEFAULT false;
+-- ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS invite_sent_at timestamptz;
+-- ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS invite_sent_by uuid REFERENCES profiles(id);
+-- ALTER TABLE kyc_records ADD COLUMN IF NOT EXISTS due_diligence_level text CHECK (due_diligence_level IN ('sdd','cdd','edd'));
+
+-- Profile roles: each kyc_record (profile) can have multiple roles
+CREATE TABLE IF NOT EXISTS public.profile_roles (
+  id                    uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  kyc_record_id         uuid REFERENCES public.kyc_records(id) ON DELETE CASCADE NOT NULL,
+  application_id        uuid REFERENCES public.applications(id) ON DELETE CASCADE,
+  role                  text NOT NULL CHECK (role IN ('primary_client', 'director', 'shareholder', 'ubo')),
+  shareholding_percentage numeric,
+  created_at            timestamptz DEFAULT now(),
+  UNIQUE(kyc_record_id, application_id, role)
+);
+CREATE INDEX IF NOT EXISTS profile_roles_kyc_idx ON public.profile_roles(kyc_record_id);
+CREATE INDEX IF NOT EXISTS profile_roles_app_idx ON public.profile_roles(application_id);
+
+-- Role document requirements: what docs each role needs
+CREATE TABLE IF NOT EXISTS public.role_document_requirements (
+  id               uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  role             text NOT NULL CHECK (role IN ('primary_client', 'director', 'shareholder', 'ubo')),
+  document_type_id uuid REFERENCES public.document_types(id) NOT NULL,
+  is_required      boolean DEFAULT true,
+  sort_order       int DEFAULT 0,
+  UNIQUE(role, document_type_id)
+);

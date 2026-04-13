@@ -328,11 +328,36 @@ export interface KycRecord {
   senior_management_approved_at: string | null;
   ongoing_monitoring_plan: string | null;
   kyc_journey_completed: boolean;
+  // B-009 — Account Profiles Roles
+  is_primary: boolean;
+  invite_sent_at: string | null;
+  invite_sent_by: string | null;
+  due_diligence_level: DueDiligenceLevel | null;
   // Tracking
   completion_status: 'incomplete' | 'complete';
   filled_by: string | null;
   created_at: string;
   updated_at: string;
+  // Joined relations (optional)
+  profile_roles?: ProfileRole[];
+}
+
+export interface ProfileRole {
+  id: string;
+  kyc_record_id: string;
+  application_id: string | null;
+  role: 'primary_client' | 'director' | 'shareholder' | 'ubo';
+  shareholding_percentage: number | null;
+  created_at: string;
+}
+
+export interface RoleDocumentRequirement {
+  id: string;
+  role: 'primary_client' | 'director' | 'shareholder' | 'ubo';
+  document_type_id: string;
+  is_required: boolean;
+  sort_order: number;
+  document_types?: { id: string; name: string } | null;
 }
 
 export interface ApplicationPerson {
