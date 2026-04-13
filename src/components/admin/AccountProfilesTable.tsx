@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { CheckCircle, PlusCircle, Send } from "lucide-react";
+import { CheckCircle, Pencil, PlusCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -213,9 +213,11 @@ function ProfileRow({
         ) : email ? (
           <button
             onClick={() => setEditingEmail(true)}
-            className="text-xs text-gray-600 hover:text-brand-navy hover:underline"
+            className="text-xs text-gray-600 hover:text-brand-blue flex items-center gap-1 group"
+            title="Click to edit email"
           >
-            {email}
+            <span className="group-hover:underline">{email}</span>
+            <Pencil className="h-2.5 w-2.5 text-gray-400 group-hover:text-brand-blue opacity-0 group-hover:opacity-100 transition-opacity" />
           </button>
         ) : (
           <button
