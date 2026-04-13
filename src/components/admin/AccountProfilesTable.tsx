@@ -213,11 +213,11 @@ function ProfileRow({
         ) : email ? (
           <button
             onClick={() => setEditingEmail(true)}
-            className="text-xs text-gray-600 hover:text-brand-blue flex items-center gap-1 group"
+            className="text-xs text-gray-600 hover:text-brand-blue flex items-center gap-1.5"
             title="Click to edit email"
           >
-            <span className="group-hover:underline">{email}</span>
-            <Pencil className="h-2.5 w-2.5 text-gray-400 group-hover:text-brand-blue opacity-0 group-hover:opacity-100 transition-opacity" />
+            <span className="hover:underline">{email}</span>
+            <Pencil className="h-3 w-3 text-gray-400 hover:text-brand-blue shrink-0" />
           </button>
         ) : (
           <button
