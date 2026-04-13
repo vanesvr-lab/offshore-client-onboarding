@@ -53,6 +53,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 - `src/app/api/auth/set-password/route.ts`: handles both "invite" and "profile_invite" JWT purposes
 - `src/app/auth/set-password/page.tsx`: redirects to /kyc for profile invites, /apply for primary
 
+### 2026-04-13 — B-011: Unified KYC wizard, profile pre-fill, multi-select country (Claude Code)
+
+**Feature 1 — Unified KYC experience across all persons:**
+- `src/components/kyc/KycStepWizard.tsx`: added `compact?: boolean` prop — skips page scroll, removes sticky/negative-margin nav, reduces min-height
+- `src/components/client/PersonsManager.tsx`: removed inline form from PersonCard; expanded body always renders `KycStepWizard compact` regardless of `kyc_journey_completed`; person-level DD override (`kyc_records.due_diligence_level ?? account-level`)
+- Removed `PersonKyc` narrow interface — `Person.kyc_records` is now typed as full `KycRecord`
+
+**Feature 2 — Profile pre-fill:**
+- `GET /api/applications/[id]/persons`: changed `kyc_records!kyc_record_id(id, full_name, ...)` to `kyc_records!kyc_record_id(*)` so all fields (DOB, nationality, passport, address, etc.) pre-populate the wizard when an existing profile is selected
+
+**Feature 3 — MultiSelectCountry component:**
+- `src/components/shared/MultiSelectCountry.tsx`: tag-based multi-select for countries; 195+ countries list; search filter; chip display with X; disabled read-only mode
+- `src/components/shared/DynamicServiceForm.tsx`: added `multi_select_country` to ServiceField type union; renders MultiSelectCountry for matching fields
+
+**Feature 4 — geographical_area field update:**
+- `supabase/seed-update-geographical-field.sql`: SQL UPDATE for reference (changes geographical_area in GBC + AC templates to multi_select_country)
+- `POST /api/admin/migrations/update-geographical-field`: one-time admin route to apply the template update via Supabase SDK
+
+---
+
 ### 2026-04-13 — B-010: ProfileSelector dialog fix + edit-mode visual boundaries (Claude Code)
 
 **Fix 1 — ProfileSelector dialog never appeared when adding director/shareholder/UBO:**
