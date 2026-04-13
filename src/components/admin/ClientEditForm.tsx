@@ -42,12 +42,12 @@ export function ClientEditForm({ clientId, companyName }: ClientEditFormProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base text-brand-navy">Company Details</CardTitle>
+        <CardTitle className="text-base text-brand-navy">Account Details</CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSave} className="flex items-end gap-3">
           <div className="flex-1 space-y-1.5">
-            <Label htmlFor="company_name">Company name</Label>
+            <Label htmlFor="company_name">Account name</Label>
             <Input
               id="company_name"
               value={name}

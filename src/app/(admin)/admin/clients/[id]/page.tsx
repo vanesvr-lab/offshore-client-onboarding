@@ -10,6 +10,7 @@ import { SendInvitePanel } from "@/components/admin/SendInvitePanel";
 import { WorkflowMilestonesCard } from "@/components/admin/WorkflowMilestonesCard";
 import { ComplianceScorecard } from "@/components/admin/ComplianceScorecard";
 import { RiskFlagSection } from "@/components/admin/RiskFlagSection";
+import { AccountProfilesTable } from "@/components/admin/AccountProfilesTable";
 import { ProcessLauncher } from "@/components/admin/ProcessLauncher";
 import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
@@ -18,7 +19,7 @@ import { PlusCircle } from "lucide-react";
 import { AddBlankApplication } from "@/components/admin/AddBlankApplication";
 import { DeleteClientButton } from "@/components/admin/DeleteClientButton";
 import { ClientAuditTrailButton } from "@/components/admin/ClientAuditTrailButton";
-import type { ClientAccountManager, ApplicationStatus, KycRecord, DocumentRecord, DueDiligenceLevel, DueDiligenceRequirement, RiskFlag } from "@/types";
+import type { ClientAccountManager, ApplicationStatus, KycRecord, DocumentRecord, DueDiligenceLevel, DueDiligenceRequirement, RiskFlag, RoleDocumentRequirement } from "@/types";
 
 export default async function ClientDetailPage({
   params,
@@ -34,6 +35,7 @@ export default async function ClientDetailPage({
     { data: processes },
     { data: documents },
     { data: allRequirements },
+    { data: roleDocReqs },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -63,7 +65,7 @@ export default async function ClientDetailPage({
       .order("created_at"),
     supabase
       .from("kyc_records")
-      .select("*")
+      .select("*, profile_roles(*)")
       .eq("client_id", params.id)
       .order("created_at"),
     supabase
@@ -82,6 +84,10 @@ export default async function ClientDetailPage({
       .eq("is_active", true),
     supabase
       .from("due_diligence_requirements")
+      .select("*, document_types(id, name)")
+      .order("sort_order"),
+    supabase
+      .from("role_document_requirements")
       .select("*, document_types(id, name)")
       .order("sort_order"),
   ]);
@@ -142,42 +148,15 @@ export default async function ClientDetailPage({
           {/* Editable company details */}
           <ClientEditForm clientId={client.id} companyName={client.company_name} />
 
-          {/* Users on this account */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base text-brand-navy">Account Users</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-2 text-gray-500 font-medium">Name</th>
-                    <th className="text-left py-2 text-gray-500 font-medium">Email</th>
-                    <th className="text-left py-2 text-gray-500 font-medium">Role</th>
-                    <th className="text-left py-2 text-gray-500 font-medium">Since</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td className="py-2 text-gray-700">{u.profiles?.full_name || "—"}</td>
-                      <td className="py-2 text-gray-500">{u.profiles?.email || "—"}</td>
-                      <td className="py-2">
-                        <span className={`text-xs px-2 py-0.5 rounded capitalize ${
-                          u.role === "owner"
-                            ? "bg-brand-navy/10 text-brand-navy"
-                            : "bg-gray-100 text-gray-500"
-                        }`}>
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="py-2 text-gray-400">{formatDate(u.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
+          {/* Account Profiles */}
+          <AccountProfilesTable
+            clientId={client.id}
+            profiles={(kycRecords ?? []) as unknown as KycRecord[]}
+            accountDdLevel={(((client as unknown as Record<string, unknown>).due_diligence_level as DueDiligenceLevel) ?? "cdd")}
+            roleDocRequirements={(roleDocReqs ?? []) as unknown as RoleDocumentRequirement[]}
+            ddRequirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
+            documents={(documents ?? []) as unknown as DocumentRecord[]}
+          />
 
           {/* Risk Flags */}
           {(() => {
