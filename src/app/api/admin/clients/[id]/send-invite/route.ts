@@ -48,7 +48,7 @@ export async function POST(
 
   const inviteUrl = `${appUrl}/auth/set-password?token=${encodeURIComponent(token)}`;
 
-  await resend.emails.send({
+  const { data: emailResult, error: emailError } = await resend.emails.send({
     from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
     to: email!,
     subject: "Welcome to Mauritius Offshore Client Portal — Set up your account",
@@ -82,11 +82,18 @@ export async function POST(
     `,
   });
 
+  if (emailError) {
+    return NextResponse.json(
+      { error: `Failed to send email: ${emailError.message}` },
+      { status: 500 }
+    );
+  }
+
   await supabase
     .from("clients")
     .update({ invite_sent_at: new Date().toISOString() })
     .eq("id", params.id);
 
   revalidatePath(`/admin/clients/${params.id}`);
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, emailId: emailResult?.id });
 }
