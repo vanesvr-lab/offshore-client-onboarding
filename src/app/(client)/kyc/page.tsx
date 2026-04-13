@@ -12,7 +12,11 @@ const CUMULATIVE: Record<string, string[]> = {
   edd: ["basic", "sdd", "cdd", "edd"],
 };
 
-export default async function KycPage() {
+export default async function KycPage({
+  searchParams,
+}: {
+  searchParams: { profileId?: string };
+}) {
   const session = await auth();
   if (!session) redirect("/login");
 
@@ -100,6 +104,8 @@ export default async function KycPage() {
       documents={(documents ?? []) as unknown as DocumentRecord[]}
       documentTypes={(documentTypes ?? []) as DocumentType[]}
       requirements={(requirements ?? []) as unknown as DueDiligenceRequirement[]}
+      selectedProfileId={searchParams.profileId ?? null}
+      isPrimary={isPrimary}
     />
   );
 }

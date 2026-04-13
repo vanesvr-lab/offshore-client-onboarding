@@ -5,11 +5,47 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { IndividualKycForm } from "@/components/kyc/IndividualKycForm";
 import { OrganisationKycForm } from "@/components/kyc/OrganisationKycForm";
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
+
+function ProfileSwitcher({
+  records,
+  currentId,
+  onSwitch,
+}: {
+  records: KycRecord[];
+  currentId: string | null;
+  onSwitch: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border bg-white px-4 py-2.5">
+      <span className="text-sm text-gray-500 shrink-0">Viewing profile:</span>
+      <Select value={currentId ?? ""} onValueChange={(v) => { if (v) onSwitch(v); }}>
+        <SelectTrigger className="h-8 text-sm border-0 shadow-none px-0 focus:ring-0 flex-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {records.map((r) => (
+            <SelectItem key={r.id} value={r.id} className="text-sm">
+              {r.full_name ?? "Unnamed"}
+              {r.is_primary && <span className="ml-1.5 text-xs text-gray-400">(Primary)</span>}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 interface KycPageClientProps {
   clientId: string;
@@ -20,6 +56,8 @@ interface KycPageClientProps {
   documents: DocumentRecord[];
   documentTypes: DocumentType[];
   requirements: DueDiligenceRequirement[];
+  selectedProfileId?: string | null;
+  isPrimary?: boolean;
 }
 
 export function KycPageClient({
@@ -31,25 +69,37 @@ export function KycPageClient({
   documents,
   documentTypes,
   requirements,
+  selectedProfileId,
+  isPrimary = true,
 }: KycPageClientProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(!!kycCompletedAt);
 
-  // Find the PRIMARY individual record (has profile_id set = the client's owner account)
-  // Fall back to first individual record if none has profile_id
-  const individualRecord =
-    records.find((r) => r.record_type === "individual" && r.profile_id) ??
-    records.find((r) => r.record_type === "individual") ??
-    null;
+  // Find the active record: either the one selected via profileId param, or the primary
+  const activeRecord = selectedProfileId
+    ? (records.find((r) => r.id === selectedProfileId) ?? null)
+    : (records.find((r) => r.is_primary) ??
+       records.find((r) => r.record_type === "individual" && r.profile_id) ??
+       records.find((r) => r.record_type === "individual") ??
+       null);
+
+  const individualRecord = activeRecord?.record_type === "individual" ? activeRecord : null;
   const orgRecord = records.find((r) => r.record_type === "organisation") ?? null;
+
+  // Non-primary profiles: all records are individual, use the single record
+  const nonPrimaryRecord = !isPrimary && records.length === 1 ? records[0] : null;
+  const effectiveIndividualRecord = nonPrimaryRecord ?? individualRecord;
 
   // Use step wizard for first-time onboarding (individual only, journey not yet completed)
   const useWizard =
-    clientType === "individual" &&
-    individualRecord !== null &&
-    !individualRecord.kyc_journey_completed &&
+    effectiveIndividualRecord !== null &&
+    !effectiveIndividualRecord.kyc_journey_completed &&
     !completed;
+
+  // Multiple profiles: show switcher
+  const hasMultipleProfiles = isPrimary && records.filter((r) => r.record_type === "individual").length > 1;
+  const currentProfileId = activeRecord?.id ?? records[0]?.id ?? null;
 
   // Compute overall completion across all records (used in accordion view)
   const allCompletions = records.map((r) =>
@@ -102,19 +152,30 @@ export function KycPageClient({
   }
 
   // Step wizard for first-time individual onboarding
-  if (useWizard && individualRecord) {
+  if (useWizard && effectiveIndividualRecord) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-brand-navy">KYC / AML Profile</h1>
+          <h1 className="text-2xl font-bold text-brand-navy">
+            {!isPrimary || effectiveIndividualRecord.is_primary === false
+              ? `KYC Profile — ${effectiveIndividualRecord.full_name ?? "Profile"}`
+              : "KYC / AML Profile"}
+          </h1>
           <p className="text-gray-500 text-sm mt-1">
             Complete your Know Your Customer profile. All information is stored securely.
           </p>
         </div>
+        {hasMultipleProfiles && (
+          <ProfileSwitcher
+            records={records.filter((r) => r.record_type === "individual")}
+            currentId={currentProfileId}
+            onSwitch={(id) => router.push(`/kyc?profileId=${id}`)}
+          />
+        )}
         <KycStepWizard
           clientId={clientId}
-          kycRecord={individualRecord}
-          documents={documents.filter((d) => d.kyc_record_id === individualRecord.id || !d.kyc_record_id)}
+          kycRecord={effectiveIndividualRecord}
+          documents={documents.filter((d) => d.kyc_record_id === effectiveIndividualRecord.id || !d.kyc_record_id)}
           documentTypes={documentTypes}
           dueDiligenceLevel={dueDiligenceLevel}
           requirements={requirements}
@@ -137,6 +198,15 @@ export function KycPageClient({
           Complete your Know Your Customer profile. All information is stored securely.
         </p>
       </div>
+
+      {/* Profile switcher for primary users with multiple profiles */}
+      {hasMultipleProfiles && (
+        <ProfileSwitcher
+          records={records.filter((r) => r.record_type === "individual")}
+          currentId={currentProfileId}
+          onSwitch={(id) => router.push(`/kyc?profileId=${id}`)}
+        />
+      )}
 
       {/* Progress banner */}
       {completed ? (
@@ -167,14 +237,14 @@ export function KycPageClient({
       )}
 
       {/* Individual KYC */}
-      {individualRecord && (
+      {effectiveIndividualRecord && (
         <div>
-          {clientType === "organisation" && (
+          {(clientType === "organisation" || (hasMultipleProfiles && effectiveIndividualRecord.is_primary)) && (
             <h2 className="text-base font-semibold text-brand-navy mb-3">Primary Contact — Individual KYC</h2>
           )}
           <IndividualKycForm
-            record={individualRecord}
-            documents={documents.filter((d) => d.kyc_record_id === individualRecord.id || !d.kyc_record_id)}
+            record={effectiveIndividualRecord}
+            documents={documents.filter((d) => d.kyc_record_id === effectiveIndividualRecord.id || !d.kyc_record_id)}
             documentTypes={documentTypes}
           />
         </div>

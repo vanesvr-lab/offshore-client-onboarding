@@ -11,10 +11,24 @@ import { CompletionChecklist } from "@/components/client/CompletionChecklist";
 import { KycTaskGroup, type KycChildTask } from "@/components/client/KycTaskGroup";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { formatDate } from "@/lib/utils/formatters";
-import { CheckCircle2, Circle, AlertTriangle, ArrowRight } from "lucide-react";
+import { CheckCircle2, Circle, AlertTriangle, ArrowRight, Users } from "lucide-react";
 import type { Application, KycRecord, DocumentRecord } from "@/types";
 import type { OnboardingStage } from "@/components/client/OnboardingBanner";
 import type { ChecklistSection } from "@/components/client/CompletionChecklist";
+
+function ProfileKycBar({ pct }: { pct: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full ${pct === 100 ? "bg-green-500" : "bg-brand-accent"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`text-xs font-medium ${pct === 100 ? "text-green-600" : "text-gray-600"}`}>{pct}%</span>
+    </div>
+  );
+}
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -44,7 +58,7 @@ export default async function DashboardPage() {
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
     clientId
-      ? supabase.from("kyc_records").select("*").eq("client_id", clientId)
+      ? supabase.from("kyc_records").select("*, profile_roles(role, shareholding_percentage)").eq("client_id", clientId)
       : Promise.resolve({ data: [] }),
     clientId
       ? supabase
@@ -397,6 +411,57 @@ export default async function DashboardPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Account Profiles — shown if multiple profiles exist */}
+          {typedKyc.length > 1 && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between py-4">
+                <CardTitle className="text-base text-brand-navy flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Account Profiles
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="divide-y">
+                  {typedKyc.filter((r) => r.record_type === "individual").map((rec) => {
+                    const completion = calculateKycCompletion(rec, typedDocs.filter((d) => d.kyc_record_id === rec.id));
+                    const pct = completion.overallPercentage;
+                    const roles = ((rec as unknown as { profile_roles?: { role: string; shareholding_percentage: number | null }[] }).profile_roles ?? []);
+                    const roleLabels = roles.map((r) => {
+                      let label = r.role.replace(/_/g, " ");
+                      if (r.role === "shareholder" && r.shareholding_percentage !== null) {
+                        label += ` (${r.shareholding_percentage}%)`;
+                      }
+                      return label.charAt(0).toUpperCase() + label.slice(1);
+                    });
+                    return (
+                      <div key={rec.id} className="flex items-center justify-between py-3">
+                        <div>
+                          <p className="text-sm font-medium text-brand-navy">
+                            {(rec as unknown as { full_name?: string }).full_name ?? "Unnamed"}
+                            {(rec as unknown as { is_primary?: boolean }).is_primary && (
+                              <span className="ml-2 text-[10px] bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded">Primary</span>
+                            )}
+                          </p>
+                          {roleLabels.length > 0 && (
+                            <p className="text-xs text-gray-500 mt-0.5">{roleLabels.join(", ")}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <ProfileKycBar pct={pct} />
+                          <Link href={`/kyc?profileId=${rec.id}`}>
+                            <Button variant="outline" size="sm" className="text-xs h-7">
+                              {pct === 100 ? "View" : "Fill KYC"}
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right: Completion checklist */}
