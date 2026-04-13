@@ -8,7 +8,7 @@ import { AccountManagerPanel } from "@/components/admin/AccountManagerPanel";
 import { ClientEditForm } from "@/components/admin/ClientEditForm";
 import { SendInvitePanel } from "@/components/admin/SendInvitePanel";
 import { WorkflowMilestonesCard } from "@/components/admin/WorkflowMilestonesCard";
-import { KycSummaryCard } from "@/components/admin/KycSummaryCard";
+import { ComplianceScorecard } from "@/components/admin/ComplianceScorecard";
 import { ProcessLauncher } from "@/components/admin/ProcessLauncher";
 import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
@@ -17,7 +17,7 @@ import { PlusCircle } from "lucide-react";
 import { AddBlankApplication } from "@/components/admin/AddBlankApplication";
 import { DeleteClientButton } from "@/components/admin/DeleteClientButton";
 import { ClientAuditTrailButton } from "@/components/admin/ClientAuditTrailButton";
-import type { ClientAccountManager, ApplicationStatus, KycRecord } from "@/types";
+import type { ClientAccountManager, ApplicationStatus, KycRecord, DocumentRecord, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
 export default async function ClientDetailPage({
   params,
@@ -31,6 +31,8 @@ export default async function ClientDetailPage({
     { data: allAdmins },
     { data: kycRecords },
     { data: processes },
+    { data: documents },
+    { data: allRequirements },
   ] = await Promise.all([
     supabase
       .from("clients")
@@ -38,6 +40,7 @@ export default async function ClientDetailPage({
         id, company_name, created_at, updated_at, invite_sent_at,
         client_type, loe_sent_at, invoice_sent_at, payment_received_at,
         portal_link_sent_at, kyc_completed_at, application_submitted_at,
+        due_diligence_level,
         client_users(
           id, role, created_at,
           profiles!client_users_user_id_fkey(id, full_name, email, phone)
@@ -71,6 +74,15 @@ export default async function ClientDetailPage({
       `)
       .eq("client_id", params.id)
       .order("started_at", { ascending: false }),
+    supabase
+      .from("documents")
+      .select("*")
+      .eq("client_id", params.id)
+      .eq("is_active", true),
+    supabase
+      .from("due_diligence_requirements")
+      .select("*, document_types(id, name)")
+      .order("sort_order"),
   ]);
 
   // Fetch service templates for "Add Application" dropdown
@@ -166,10 +178,13 @@ export default async function ClientDetailPage({
             </CardContent>
           </Card>
 
-          {/* KYC Summary */}
-          <KycSummaryCard
+          {/* Compliance Scorecard */}
+          <ComplianceScorecard
             clientId={client.id}
-            records={(kycRecords ?? []) as KycRecord[]}
+            kycRecords={(kycRecords ?? []) as KycRecord[]}
+            documents={(documents ?? []) as unknown as DocumentRecord[]}
+            dueDiligenceLevel={((client as unknown as Record<string, unknown>).due_diligence_level as DueDiligenceLevel) ?? "cdd"}
+            requirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
           />
 
           {/* Applications */}
