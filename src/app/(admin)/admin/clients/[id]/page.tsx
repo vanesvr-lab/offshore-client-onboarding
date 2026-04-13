@@ -9,6 +9,7 @@ import { ClientEditForm } from "@/components/admin/ClientEditForm";
 import { SendInvitePanel } from "@/components/admin/SendInvitePanel";
 import { WorkflowMilestonesCard } from "@/components/admin/WorkflowMilestonesCard";
 import { ComplianceScorecard } from "@/components/admin/ComplianceScorecard";
+import { RiskFlagSection } from "@/components/admin/RiskFlagSection";
 import { ProcessLauncher } from "@/components/admin/ProcessLauncher";
 import { formatDate } from "@/lib/utils/formatters";
 import Link from "next/link";
@@ -17,7 +18,7 @@ import { PlusCircle } from "lucide-react";
 import { AddBlankApplication } from "@/components/admin/AddBlankApplication";
 import { DeleteClientButton } from "@/components/admin/DeleteClientButton";
 import { ClientAuditTrailButton } from "@/components/admin/ClientAuditTrailButton";
-import type { ClientAccountManager, ApplicationStatus, KycRecord, DocumentRecord, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
+import type { ClientAccountManager, ApplicationStatus, KycRecord, DocumentRecord, DueDiligenceLevel, DueDiligenceRequirement, RiskFlag } from "@/types";
 
 export default async function ClientDetailPage({
   params,
@@ -177,6 +178,14 @@ export default async function ClientDetailPage({
               </table>
             </CardContent>
           </Card>
+
+          {/* Risk Flags */}
+          {(() => {
+            const primaryRecord = (kycRecords ?? []).find((r: KycRecord) => r.record_type === "individual") ?? (kycRecords ?? [])[0] ?? null;
+            const flags = (primaryRecord?.risk_flags ?? []) as RiskFlag[];
+            if (!primaryRecord || flags.filter((f) => !f.dismissed).length === 0) return null;
+            return <RiskFlagSection clientId={client.id} kycRecordId={primaryRecord.id} flags={flags} />;
+          })()}
 
           {/* Compliance Scorecard */}
           <ComplianceScorecard

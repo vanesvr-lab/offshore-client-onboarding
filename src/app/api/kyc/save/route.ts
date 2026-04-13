@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { detectRiskFlags, mergeRiskFlags } from "@/lib/utils/riskFlagDetection";
+import type { KycRecord, RiskFlag } from "@/types";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -64,11 +66,23 @@ export async function POST(request: Request) {
   );
   const completion_status = allFilled ? "complete" : "incomplete";
 
+  // Detect risk flags on the merged record
+  const { data: clientRow } = await supabase
+    .from("clients")
+    .select("due_diligence_level")
+    .eq("id", (merged as unknown as Record<string, unknown>).client_id as string)
+    .maybeSingle();
+  const ddLevel = (clientRow as { due_diligence_level?: string } | null)?.due_diligence_level ?? "cdd";
+  const newFlags = detectRiskFlags(merged as unknown as KycRecord, ddLevel as "sdd" | "cdd" | "edd");
+  const existingFlags = ((merged as unknown as Record<string, unknown>).risk_flags ?? []) as RiskFlag[];
+  const mergedFlags = mergeRiskFlags(existingFlags, newFlags);
+
   const { data: updated, error: updateError } = await supabase
     .from("kyc_records")
     .update({
       ...cleanedFields,
       completion_status,
+      risk_flags: mergedFlags,
       filled_by: session.user.id,
       updated_at: new Date().toISOString(),
     })
