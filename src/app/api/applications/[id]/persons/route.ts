@@ -89,28 +89,46 @@ export async function POST(
   const access = await verifyAccess(supabase, session.user.id, session.user.role, params.id);
   if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { role, kycFields, shareholdingPercentage } = await request.json() as {
+  const { role, kycFields, shareholdingPercentage, existingKycRecordId } = await request.json() as {
     role: "director" | "shareholder" | "ubo" | "contact";
     kycFields?: Record<string, unknown>;
     shareholdingPercentage?: number;
+    existingKycRecordId?: string;
   };
 
   if (!role) return NextResponse.json({ error: "role is required" }, { status: 400 });
 
-  // Create a new kyc_record for this person
-  const { data: kycRecord, error: kycError } = await supabase
-    .from("kyc_records")
-    .insert({
-      client_id: access.clientId,
-      record_type: "individual",
-      completion_status: "incomplete",
-      ...(kycFields ?? {}),
-    })
-    .select()
-    .single();
+  let kycRecord: Record<string, unknown>;
 
-  if (kycError || !kycRecord) {
-    return NextResponse.json({ error: "Failed to create KYC record" }, { status: 500 });
+  if (existingKycRecordId) {
+    // Reuse existing kyc_record — verify it belongs to this client
+    const { data: existing, error: fetchErr } = await supabase
+      .from("kyc_records")
+      .select("*")
+      .eq("id", existingKycRecordId)
+      .eq("client_id", access.clientId)
+      .single();
+    if (fetchErr || !existing) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    }
+    kycRecord = existing as Record<string, unknown>;
+  } else {
+    // Create a new kyc_record for this person
+    const { data: created, error: kycError } = await supabase
+      .from("kyc_records")
+      .insert({
+        client_id: access.clientId,
+        record_type: "individual",
+        completion_status: "incomplete",
+        kyc_journey_completed: false,
+        ...(kycFields ?? {}),
+      })
+      .select()
+      .single();
+    if (kycError || !created) {
+      return NextResponse.json({ error: "Failed to create KYC record" }, { status: 500 });
+    }
+    kycRecord = created as Record<string, unknown>;
   }
 
   // Create application_persons row
@@ -118,7 +136,7 @@ export async function POST(
     .from("application_persons")
     .insert({
       application_id: params.id,
-      kyc_record_id: kycRecord.id,
+      kyc_record_id: kycRecord.id as string,
       role,
       shareholding_percentage: shareholdingPercentage ?? null,
     })
@@ -128,6 +146,16 @@ export async function POST(
   if (personError || !person) {
     return NextResponse.json({ error: "Failed to create person record" }, { status: 500 });
   }
+
+  // Also create profile_roles entry for the new data model
+  await supabase
+    .from("profile_roles")
+    .upsert({
+      kyc_record_id: kycRecord.id as string,
+      application_id: params.id,
+      role,
+      shareholding_percentage: shareholdingPercentage ?? null,
+    }, { onConflict: "kyc_record_id,application_id,role" });
 
   return NextResponse.json({ person: { ...person, kyc_records: kycRecord, doc_count: 0 } });
 }

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
+import { ProfileSelector } from "@/components/shared/ProfileSelector";
 import { calculateComplianceScore } from "@/lib/utils/complianceScoring";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
@@ -455,6 +456,7 @@ export function PersonsManager({
   const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [selectorRole, setSelectorRole] = useState<PersonRole | null>(null);
 
   useEffect(() => {
     fetch(`/api/applications/${applicationId}/persons`)
@@ -466,13 +468,20 @@ export function PersonsManager({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
-  async function addPerson(role: PersonRole) {
+  async function addPerson(role: PersonRole, existingKycRecordId?: string, newName?: string) {
     setAdding(true);
+    setSelectorRole(null);
     try {
+      const body: Record<string, unknown> = { role };
+      if (existingKycRecordId) {
+        body.existingKycRecordId = existingKycRecordId;
+      } else if (newName) {
+        body.kycFields = { full_name: newName };
+      }
       const res = await fetch(`/api/applications/${applicationId}/persons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
+        body: JSON.stringify(body),
       });
       const data = await res.json() as { person?: Person; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to add person");
@@ -531,7 +540,7 @@ export function PersonsManager({
             key={role}
             variant="outline"
             size="sm"
-            onClick={() => addPerson(role)}
+            onClick={() => clientId ? setSelectorRole(role) : void addPerson(role)}
             disabled={adding}
             className="gap-1.5"
           >
@@ -540,6 +549,15 @@ export function PersonsManager({
           </Button>
         ))}
       </div>
+
+      {selectorRole && clientId && (
+        <ProfileSelector
+          clientId={clientId}
+          role={selectorRole as "director" | "shareholder" | "ubo"}
+          onSelect={(kycRecordId, newName) => void addPerson(selectorRole, kycRecordId ?? undefined, newName)}
+          onClose={() => setSelectorRole(null)}
+        />
+      )}
 
       {/* Shareholding progress */}
       {hasShareholders && (
