@@ -15,16 +15,15 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 
         const supabase = createAdminClient();
 
-        // Fetch profile — never expose password_hash beyond this function
+        // Fetch profile — only active (non-deleted) accounts can log in
         const { data: profile } = await supabase
           .from("profiles")
-          .select("id, full_name, email, password_hash")
+          .select("id, full_name, email, password_hash, is_deleted")
           .eq("email", credentials.email as string)
+          .eq("is_deleted", false)
           .maybeSingle();
 
         if (!profile?.password_hash) return null;
-        // Soft-deleted accounts cannot log in (no hint given to user)
-        if ((profile as unknown as { is_deleted?: boolean }).is_deleted) return null;
 
         const valid = await bcrypt.compare(
           credentials.password as string,
