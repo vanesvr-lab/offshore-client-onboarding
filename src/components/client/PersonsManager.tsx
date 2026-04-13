@@ -160,6 +160,7 @@ function PersonCard({
 
   const fetchPersonDocuments = useCallback(async (kycRecordId: string) => {
     if (personDocuments !== null) return;
+    if (!clientId) { setPersonDocuments([]); return; }
     setLoadingDocs(true);
     try {
       const res = await fetch(`/api/documents/library?clientId=${clientId}&kycRecordId=${kycRecordId}`);
