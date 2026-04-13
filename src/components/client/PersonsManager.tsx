@@ -142,7 +142,7 @@ function PersonCard({
 }: {
   person: Person;
   applicationId: string;
-  clientId: string;
+  clientId?: string;
   dueDiligenceLevel: DueDiligenceLevel;
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
@@ -284,7 +284,7 @@ function PersonCard({
           ) : (
             <div className="px-4 py-4">
               <KycStepWizard
-                clientId={clientId}
+                clientId={clientId ?? ""}
                 kycRecord={kyc as unknown as KycRecord}
                 documents={personDocuments ?? []}
                 documentTypes={documentTypes}
@@ -449,7 +449,7 @@ function PersonCard({
 
 export function PersonsManager({
   applicationId,
-  clientId = "",
+  clientId,
   dueDiligenceLevel = "cdd",
   requirements = [],
   documentTypes = [],
@@ -542,7 +542,7 @@ export function PersonsManager({
             variant="outline"
             size="sm"
             onClick={() => {
-              if (clientId) {
+              if (clientId && clientId.length > 0) {
                 setSelectorRole(role);
               } else {
                 void addPerson(role);
@@ -557,7 +557,7 @@ export function PersonsManager({
         ))}
       </div>
 
-      {selectorRole !== null && clientId && (
+      {selectorRole !== null && clientId && clientId.length > 0 && (
         <ProfileSelector
           clientId={clientId}
           role={selectorRole as "director" | "shareholder" | "ubo"}

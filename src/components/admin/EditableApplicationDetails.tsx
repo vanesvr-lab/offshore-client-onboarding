@@ -246,7 +246,7 @@ export function EditableApplicationDetails({
       </Dialog>
 
       {/* ── Section A: Business Information ─────────────────────────────── */}
-      <Card>
+      <Card className={editing === "business" ? "border-blue-200 bg-blue-50/30" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-brand-navy text-base">
@@ -344,7 +344,7 @@ export function EditableApplicationDetails({
       </Card>
 
       {/* ── Section B: Primary Contact ───────────────────────────────────── */}
-      <Card>
+      <Card className={editing === "contact" ? "border-blue-200 bg-blue-50/30" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-brand-navy text-base">
@@ -415,7 +415,7 @@ export function EditableApplicationDetails({
 
       {/* ── Section C: Service Details (dynamic) ─────────────────────────── */}
       {serviceFields.length > 0 && (
-        <Card>
+        <Card className={editing === "service" ? "border-blue-200 bg-blue-50/30" : ""}>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-brand-navy text-base">
@@ -441,7 +441,7 @@ export function EditableApplicationDetails({
       )}
 
       {/* ── Internal Notes ───────────────────────────────────────────────── */}
-      <Card>
+      <Card className={editing === "notes" ? "border-blue-200 bg-blue-50/30" : ""}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-brand-navy text-base">
