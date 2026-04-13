@@ -53,6 +53,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 - `src/app/api/auth/set-password/route.ts`: handles both "invite" and "profile_invite" JWT purposes
 - `src/app/auth/set-password/page.tsx`: redirects to /kyc for profile invites, /apply for primary
 
+### 2026-04-13 — B-010: ProfileSelector dialog fix + edit-mode visual boundaries (Claude Code)
+
+**Fix 1 — ProfileSelector dialog never appeared when adding director/shareholder/UBO:**
+- `src/components/client/PersonsManager.tsx`: removed `clientId = ""` default — empty string was falsy, so `if (clientId)` never fired
+- Changed `PersonCard.clientId: string` → `clientId?: string`; KycStepWizard receives `clientId ?? ""`
+- Also guards `fetchPersonDocuments` against undefined clientId (no-op, returns [])
+
+**Fix 2 — Admin editable sections now highlight when in edit mode:**
+- `src/components/admin/EditableApplicationDetails.tsx`: each Card gets `border-blue-200 bg-blue-50/30` when its section is active
+
 ---
 
 ### 2026-04-11 — B-008: Major KYC refactor — all 6 phases (Claude Code)
