@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import {
   ChevronDown,
@@ -19,6 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { KycStepWizard } from "@/components/kyc/KycStepWizard";
+import { calculateComplianceScore } from "@/lib/utils/complianceScoring";
+import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
 type PersonRole = "director" | "shareholder" | "ubo" | "contact";
 
@@ -36,6 +39,8 @@ interface PersonKyc {
   is_pep: boolean | null;
   legal_issues_declared: boolean | null;
   completion_status: string;
+  kyc_journey_completed: boolean;
+  client_id: string;
 }
 
 interface Person {
@@ -50,6 +55,9 @@ interface Person {
 interface PersonsManagerProps {
   applicationId: string;
   clientId?: string;
+  dueDiligenceLevel?: DueDiligenceLevel;
+  requirements?: DueDiligenceRequirement[];
+  documentTypes?: DocumentType[];
 }
 
 const ROLE_LABELS: Record<PersonRole, string> = {
@@ -124,11 +132,19 @@ function PersonProgress({ kyc, docCount }: { kyc: PersonKyc | null; docCount: nu
 function PersonCard({
   person,
   applicationId,
+  clientId,
+  dueDiligenceLevel,
+  requirements,
+  documentTypes,
   onDelete,
   onUpdate,
 }: {
   person: Person;
   applicationId: string;
+  clientId: string;
+  dueDiligenceLevel: DueDiligenceLevel;
+  requirements: DueDiligenceRequirement[];
+  documentTypes: DocumentType[];
   onDelete: (id: string) => void;
   onUpdate: (id: string, updated: Partial<Person>) => void;
 }) {
@@ -138,9 +154,43 @@ function PersonCard({
   const [shareholding, setShareholding] = useState<string>(
     person.shareholding_percentage !== null ? String(person.shareholding_percentage) : ""
   );
+  const [personDocuments, setPersonDocuments] = useState<DocumentRecord[] | null>(null);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+
+  const fetchPersonDocuments = useCallback(async (kycRecordId: string) => {
+    if (personDocuments !== null) return;
+    setLoadingDocs(true);
+    try {
+      const res = await fetch(`/api/documents/library?clientId=${clientId}&kycRecordId=${kycRecordId}`);
+      const data = await res.json() as { documents?: DocumentRecord[] };
+      setPersonDocuments(data.documents ?? []);
+    } catch {
+      setPersonDocuments([]);
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, [clientId, personDocuments]);
 
   const kyc = person.kyc_records;
   const displayName = kyc?.full_name || `New ${ROLE_LABELS[person.role]}`;
+  const showWizard = kyc && !kyc.kyc_journey_completed;
+
+  // Compute per-person compliance score (using doc_count as proxy before docs are fetched)
+  const complianceScore = kyc && requirements.length > 0
+    ? calculateComplianceScore(
+        kyc as unknown as KycRecord,
+        personDocuments ?? [],
+        dueDiligenceLevel,
+        requirements
+      )
+    : null;
+
+  function handleToggle() {
+    if (!open && kyc) {
+      void fetchPersonDocuments(kyc.id);
+    }
+    setOpen(!open);
+  }
 
   async function saveKyc() {
     if (!kyc) return;
@@ -186,7 +236,7 @@ function PersonCard({
       {/* Card header */}
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50"
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
       >
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {open ? (
@@ -204,7 +254,16 @@ function PersonCard({
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <PersonProgress kyc={person.kyc_records} docCount={person.doc_count} />
+          {complianceScore ? (
+            <div className="text-right">
+              <p className={`text-xs font-semibold ${complianceScore.overallPercentage === 100 ? "text-green-600" : "text-brand-navy"}`}>
+                {complianceScore.overallPercentage}%
+              </p>
+              <p className="text-[10px] text-gray-400">compliance</p>
+            </div>
+          ) : (
+            <PersonProgress kyc={person.kyc_records} docCount={person.doc_count} />
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); handleDelete(); }}
             className="text-gray-300 hover:text-red-400 p-1"
@@ -215,8 +274,33 @@ function PersonCard({
         </div>
       </div>
 
-      {/* Expanded KYC fields */}
-      {open && kyc && (
+      {/* Expanded: wizard for first-time, accordion for returning */}
+      {open && kyc && showWizard && (
+        <div className="border-t bg-gray-50">
+          {loadingDocs ? (
+            <div className="px-4 py-8 text-center text-sm text-gray-400">Loading…</div>
+          ) : (
+            <div className="px-4 py-4">
+              <KycStepWizard
+                clientId={clientId}
+                kycRecord={kyc as unknown as KycRecord}
+                documents={personDocuments ?? []}
+                documentTypes={documentTypes}
+                dueDiligenceLevel={dueDiligenceLevel}
+                requirements={requirements}
+                onComplete={() => {
+                  onUpdate(person.id, {
+                    kyc_records: { ...kyc, kyc_journey_completed: true },
+                  });
+                  setOpen(false);
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {open && kyc && !showWizard && (
         <div className="border-t px-4 py-4 space-y-4 bg-gray-50">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2 space-y-1">
@@ -361,7 +445,13 @@ function PersonCard({
   );
 }
 
-export function PersonsManager({ applicationId }: PersonsManagerProps) {
+export function PersonsManager({
+  applicationId,
+  clientId = "",
+  dueDiligenceLevel = "cdd",
+  requirements = [],
+  documentTypes = [],
+}: PersonsManagerProps) {
   const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -489,6 +579,10 @@ export function PersonsManager({ applicationId }: PersonsManagerProps) {
                     key={p.id}
                     person={p}
                     applicationId={applicationId}
+                    clientId={clientId}
+                    dueDiligenceLevel={dueDiligenceLevel}
+                    requirements={requirements}
+                    documentTypes={documentTypes}
                     onDelete={handleDelete}
                     onUpdate={handleUpdate}
                   />
