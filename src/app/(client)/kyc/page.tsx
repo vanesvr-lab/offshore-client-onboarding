@@ -2,9 +2,15 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KycPageClient } from "./KycPageClient";
-import type { DocumentType, KycRecord, DocumentRecord } from "@/types";
+import type { DocumentType, KycRecord, DocumentRecord, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
 export const dynamic = "force-dynamic";
+
+const CUMULATIVE: Record<string, string[]> = {
+  sdd: ["basic", "sdd"],
+  cdd: ["basic", "sdd", "cdd"],
+  edd: ["basic", "sdd", "cdd", "edd"],
+};
 
 export default async function KycPage() {
   const session = await auth();
@@ -15,7 +21,7 @@ export default async function KycPage() {
   // Get client record for this user
   const { data: clientUser } = await supabase
     .from("client_users")
-    .select("client_id, clients(id, company_name, client_type, kyc_completed_at)")
+    .select("client_id, clients(id, company_name, client_type, kyc_completed_at, due_diligence_level)")
     .eq("user_id", session.user.id)
     .maybeSingle();
 
@@ -26,11 +32,14 @@ export default async function KycPage() {
     company_name: string;
     client_type: "individual" | "organisation" | null;
     kyc_completed_at: string | null;
+    due_diligence_level: DueDiligenceLevel | null;
   } | null;
 
   const clientId = clientUser.client_id;
+  const dueDiligenceLevel: DueDiligenceLevel = client?.due_diligence_level ?? "cdd";
+  const levels = CUMULATIVE[dueDiligenceLevel] ?? CUMULATIVE.cdd;
 
-  const [{ data: records }, { data: documents }, { data: documentTypes }] =
+  const [{ data: records }, { data: documents }, { data: documentTypes }, { data: requirements }] =
     await Promise.all([
       supabase
         .from("kyc_records")
@@ -47,6 +56,11 @@ export default async function KycPage() {
         .select("*")
         .eq("is_active", true)
         .order("sort_order"),
+      supabase
+        .from("due_diligence_requirements")
+        .select("*, document_types(id, name)")
+        .in("level", levels)
+        .order("sort_order"),
     ]);
 
   return (
@@ -54,9 +68,11 @@ export default async function KycPage() {
       clientId={clientId}
       clientType={client?.client_type ?? null}
       kycCompletedAt={client?.kyc_completed_at ?? null}
+      dueDiligenceLevel={dueDiligenceLevel}
       records={(records ?? []) as KycRecord[]}
       documents={(documents ?? []) as unknown as DocumentRecord[]}
       documentTypes={(documentTypes ?? []) as DocumentType[]}
+      requirements={(requirements ?? []) as unknown as DueDiligenceRequirement[]}
     />
   );
 }

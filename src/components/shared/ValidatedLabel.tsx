@@ -6,11 +6,11 @@ import type { FieldState } from "@/hooks/useFieldValidation";
 
 interface ValidatedLabelProps {
   htmlFor?: string;
-  label: string;
+  label?: string;
   required?: boolean;
   state: FieldState;
   className?: string;
-  children?: React.ReactNode; // optional tooltip slot
+  children?: React.ReactNode;
 }
 
 export function ValidatedLabel({ htmlFor, label, required, state, className = "", children }: ValidatedLabelProps) {
@@ -22,14 +22,13 @@ export function ValidatedLabel({ htmlFor, label, required, state, className = ""
       htmlFor={htmlFor}
       className={`flex items-center gap-1 ${labelColor} ${className}`}
     >
-      <span>{label}</span>
+      <span>{label ?? children}</span>
       {required && (
         <span className={state === "error" ? "text-red-400" : "text-gray-400"}>*</span>
       )}
       {state === "filled" && (
         <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
       )}
-      {children}
     </Label>
   );
 }

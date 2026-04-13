@@ -7,25 +7,30 @@ import { CheckCircle, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IndividualKycForm } from "@/components/kyc/IndividualKycForm";
 import { OrganisationKycForm } from "@/components/kyc/OrganisationKycForm";
+import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
-import type { KycRecord, DocumentRecord, DocumentType } from "@/types";
+import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
 interface KycPageClientProps {
   clientId: string;
   clientType: "individual" | "organisation" | null;
   kycCompletedAt: string | null;
+  dueDiligenceLevel: DueDiligenceLevel;
   records: KycRecord[];
   documents: DocumentRecord[];
   documentTypes: DocumentType[];
+  requirements: DueDiligenceRequirement[];
 }
 
 export function KycPageClient({
   clientId,
   clientType,
   kycCompletedAt,
+  dueDiligenceLevel,
   records,
   documents,
   documentTypes,
+  requirements,
 }: KycPageClientProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -39,7 +44,14 @@ export function KycPageClient({
     null;
   const orgRecord = records.find((r) => r.record_type === "organisation") ?? null;
 
-  // Compute overall completion across all records
+  // Use step wizard for first-time onboarding (individual only, journey not yet completed)
+  const useWizard =
+    clientType === "individual" &&
+    individualRecord !== null &&
+    !individualRecord.kyc_journey_completed &&
+    !completed;
+
+  // Compute overall completion across all records (used in accordion view)
   const allCompletions = records.map((r) =>
     calculateKycCompletion(r, documents.filter((d) => d.kyc_record_id === r.id || !d.kyc_record_id))
   );
@@ -49,7 +61,6 @@ export function KycPageClient({
       ? Math.round(allCompletions.reduce((sum, c) => sum + c.overallPercentage, 0) / allCompletions.length)
       : 0;
 
-  // Rough time estimate: 2 mins per 10% remaining
   const remaining = 100 - overallPct;
   const estimatedMins = Math.max(1, Math.round((remaining / 10) * 2));
 
@@ -90,6 +101,33 @@ export function KycPageClient({
     );
   }
 
+  // Step wizard for first-time individual onboarding
+  if (useWizard && individualRecord) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-brand-navy">KYC / AML Profile</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Complete your Know Your Customer profile. All information is stored securely.
+          </p>
+        </div>
+        <KycStepWizard
+          clientId={clientId}
+          kycRecord={individualRecord}
+          documents={documents.filter((d) => d.kyc_record_id === individualRecord.id || !d.kyc_record_id)}
+          documentTypes={documentTypes}
+          dueDiligenceLevel={dueDiligenceLevel}
+          requirements={requirements}
+          onComplete={() => {
+            setCompleted(true);
+            router.refresh();
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Accordion view for returning / post-submission users
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
