@@ -449,7 +449,7 @@ function PersonCard({
 
 export function PersonsManager({
   applicationId,
-  clientId,
+  clientId: propClientId,
   dueDiligenceLevel = "cdd",
   requirements = [],
   documentTypes = [],
@@ -458,6 +458,24 @@ export function PersonsManager({
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [selectorRole, setSelectorRole] = useState<PersonRole | null>(null);
+  const [resolvedClientId, setResolvedClientId] = useState<string | null>(propClientId || null);
+
+  // Resolve clientId: use prop if available, otherwise fetch from application
+  useEffect(() => {
+    if (propClientId && propClientId.length > 0) {
+      setResolvedClientId(propClientId);
+    } else {
+      // Fetch application to get client_id
+      fetch(`/api/applications/${applicationId}`)
+        .then((r) => r.json())
+        .then(({ application }) => {
+          if (application?.client_id) {
+            setResolvedClientId(application.client_id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [propClientId, applicationId]);
 
   useEffect(() => {
     fetch(`/api/applications/${applicationId}/persons`)
@@ -542,7 +560,7 @@ export function PersonsManager({
             variant="outline"
             size="sm"
             onClick={() => {
-              if (clientId && clientId.length > 0) {
+              if (resolvedClientId && resolvedClientId.length > 0) {
                 setSelectorRole(role);
               } else {
                 void addPerson(role);
@@ -557,9 +575,9 @@ export function PersonsManager({
         ))}
       </div>
 
-      {selectorRole !== null && clientId && clientId.length > 0 && (
+      {selectorRole !== null && resolvedClientId && resolvedClientId.length > 0 && (
         <ProfileSelector
-          clientId={clientId}
+          clientId={resolvedClientId}
           role={selectorRole as "director" | "shareholder" | "ubo"}
           onSelect={(kycRecordId, newName) => void addPerson(selectorRole, kycRecordId ?? undefined, newName)}
           onClose={() => setSelectorRole(null)}
@@ -604,7 +622,7 @@ export function PersonsManager({
                     key={p.id}
                     person={p}
                     applicationId={applicationId}
-                    clientId={clientId}
+                    clientId={resolvedClientId ?? undefined}
                     dueDiligenceLevel={dueDiligenceLevel}
                     requirements={requirements}
                     documentTypes={documentTypes}
