@@ -15,6 +15,46 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-12 — B-009: Account → Profiles → Roles refactor — all 6 phases (Claude Code)
+
+**Phase 1 — Types + Smart Delta Utility:**
+- `src/types/index.ts`: added `ProfileRole`, `RoleDocumentRequirement` interfaces; extended `KycRecord` with `is_primary`, `invite_sent_at`, `invite_sent_by`, `due_diligence_level`, `profile_roles`
+- `src/lib/utils/profileDocumentRequirements.ts`: `getRequiredDocumentsForProfile()` smart delta, `getEffectiveDdLevel()` inheritance helper
+- API routes: `GET/POST /api/admin/profiles/roles`, `DELETE /api/admin/profiles/roles/[id]`, `GET /api/role-document-requirements`, `PATCH /api/admin/profiles/[id]`, `POST /api/admin/create-profile`
+
+**Phase 2 — Admin Account Profiles Table:**
+- `src/components/admin/AccountProfilesTable.tsx`: inline DD level dropdown, inline email editing, send/resend invite, KYC % bar
+- `src/components/admin/AddProfileDialog.tsx`: create kyc_record + profile_role dialog
+- `src/components/admin/ClientEditForm.tsx`: "Company Details"→"Account Details", "Company name"→"Account name"
+- `src/app/(admin)/admin/clients/[id]/page.tsx`: replaced "Account Users" card with AccountProfilesTable; added role_document_requirements parallel fetch
+
+**Phase 3 — Profile Selector for Adding Directors/Shareholders/UBOs:**
+- `src/components/shared/ProfileSelector.tsx`: pick existing profile or create new when adding a role
+- `src/components/client/PersonsManager.tsx`: "Add Director/Shareholder/UBO" opens ProfileSelector; passes existingKycRecordId or newName to POST
+- `GET /api/clients/[clientId]/profiles`: returns kyc_records for client (with access check)
+- `POST /api/applications/[id]/persons`: accepts optional existingKycRecordId; also creates profile_roles entry
+
+**Phase 4 — Non-Primary Portal Experience:**
+- `src/lib/auth.ts`: at login, looks up kyc_records.profile_id to set is_primary + kycRecordId on JWT
+- `src/types/next-auth.d.ts`: added is_primary + kycRecordId to session.user
+- `middleware.ts`: non-primary clients redirected to /kyc if they hit any other client route
+- `src/components/shared/Sidebar.tsx`: isPrimary prop — non-primary sees minimal nav ("My KYC" only)
+- `src/app/(client)/layout.tsx`: resolves display name from kyc_records for non-primary
+- `src/app/(client)/kyc/page.tsx`: non-primary fetches via kyc_records.profile_id, filters to own record
+
+**Phase 5 — Primary Manages All Profiles:**
+- `src/app/(client)/kyc/page.tsx`: supports `?profileId=X` query param
+- `src/app/(client)/kyc/KycPageClient.tsx`: ProfileSwitcher dropdown when multiple profiles; wizard title shows profile name
+- `src/app/(client)/dashboard/page.tsx`: Account Profiles card (shown when >1 profile) with KYC % + Fill KYC links
+- `POST /api/profiles/create`: primary client creates new non-primary kyc_record
+
+**Phase 6 — Per-Profile Invite Flow:**
+- `POST /api/admin/profiles/[id]/send-invite`: creates profiles row, links kyc_records.profile_id, JWT with kycRecordId, sends invite email, updates invite_sent_at
+- `src/app/api/auth/set-password/route.ts`: handles both "invite" and "profile_invite" JWT purposes
+- `src/app/auth/set-password/page.tsx`: redirects to /kyc for profile invites, /apply for primary
+
+---
+
 ### 2026-04-11 — B-008: Major KYC refactor — all 6 phases (Claude Code)
 
 **Phase 1 — DB + Types + Scoring:**
