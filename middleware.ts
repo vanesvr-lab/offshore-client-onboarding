@@ -39,6 +39,19 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/admin/dashboard", req.url));
   }
 
+  // Non-primary client: restrict to /kyc and /documents only
+  if (
+    session &&
+    session.user.role === "client" &&
+    session.user.is_primary === false
+  ) {
+    const allowedPaths = ["/kyc", "/documents"];
+    const isAllowed = allowedPaths.some((p) => path.startsWith(p));
+    if (!isAllowed && isClientRoute) {
+      return NextResponse.redirect(new URL("/kyc", req.url));
+    }
+  }
+
   return NextResponse.next();
 });
 

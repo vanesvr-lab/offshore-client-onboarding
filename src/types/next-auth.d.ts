@@ -5,6 +5,10 @@ declare module "next-auth" {
     user: {
       id: string;
       role: string;
+      /** true = full portal access; false = restricted non-primary view */
+      is_primary: boolean;
+      /** kyc_records.id linked to this login (non-null for invite-based logins) */
+      kycRecordId: string | null;
     } & DefaultSession["user"];
   }
 }

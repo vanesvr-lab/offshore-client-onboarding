@@ -9,6 +9,8 @@ export default async function ClientLayout({ children }: { children: React.React
   if (!session) redirect("/login");
   if (session.user.role === "admin") redirect("/admin/dashboard");
 
+  const isPrimary = session.user.is_primary !== false; // true by default for legacy logins
+
   const supabase = createAdminClient();
 
   const { data: clientUser } = await supabase
@@ -17,12 +19,23 @@ export default async function ClientLayout({ children }: { children: React.React
     .eq("user_id", session.user.id)
     .maybeSingle();
 
-  const companyName =
-    (clientUser?.clients as { company_name?: string } | null)?.company_name ??
-    session.user.name;
+  // Non-primary: use their own name from kyc_records if available
+  let displayName = session.user.name;
+  if (!isPrimary && session.user.kycRecordId) {
+    const { data: kycRecord } = await supabase
+      .from("kyc_records")
+      .select("full_name")
+      .eq("id", session.user.kycRecordId)
+      .maybeSingle();
+    if (kycRecord?.full_name) displayName = kycRecord.full_name;
+  }
 
-  // Check if client has any applications (for "My Applications" sidebar item)
-  const { count: appCount } = clientUser?.client_id
+  const companyName = isPrimary
+    ? ((clientUser?.clients as { company_name?: string } | null)?.company_name ?? displayName)
+    : displayName;
+
+  // Check if client has any applications (for "My Applications" sidebar item) — primary only
+  const { count: appCount } = isPrimary && clientUser?.client_id
     ? await supabase
         .from("applications")
         .select("id", { count: "exact", head: true })
@@ -37,6 +50,7 @@ export default async function ClientLayout({ children }: { children: React.React
           role="client"
           userName={companyName}
           hasApplications={(appCount ?? 0) > 0}
+          isPrimary={isPrimary}
         />
         <main className="flex-1 min-w-0 overflow-auto">
           <div className="p-8">

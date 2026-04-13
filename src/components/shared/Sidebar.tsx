@@ -22,6 +22,7 @@ interface SidebarProps {
   role: "admin" | "client";
   userName?: string | null;
   hasApplications?: boolean;
+  isPrimary?: boolean;
 }
 
 const ADMIN_NAV = [
@@ -81,7 +82,7 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
-export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
+export function Sidebar({ role, userName, hasApplications, isPrimary = true }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -110,14 +111,19 @@ export function Sidebar({ role, userName, hasApplications }: SidebarProps) {
   const contextProcessClientId = role === "admin" ? adminProcessMatch?.[1] : undefined;
   const contextProcessId = role === "admin" ? adminProcessMatch?.[2] : undefined;
 
-  const clientNav = [
-    { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
-    { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
-    { label: "New Solution", href: "/apply", icon: PlusCircle, exact: false },
-    ...(hasApplications
-      ? [{ label: "My Solutions", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications"] }]
-      : []),
-  ];
+  // Non-primary users only see their own KYC — no account or solutions nav
+  const clientNav = isPrimary
+    ? [
+        { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
+        { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
+        { label: "New Solution", href: "/apply", icon: PlusCircle, exact: false },
+        ...(hasApplications
+          ? [{ label: "My Solutions", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications"] }]
+          : []),
+      ]
+    : [
+        { label: "My KYC", href: "/kyc", icon: UserCheck, exact: false },
+      ];
 
   return (
     <aside className="w-[260px] shrink-0 flex flex-col bg-brand-dark min-h-screen sticky top-0 h-screen overflow-y-auto">

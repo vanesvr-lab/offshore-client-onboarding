@@ -17,35 +17,62 @@ export default async function KycPage() {
   if (!session) redirect("/login");
 
   const supabase = createAdminClient();
+  const isPrimary = session.user.is_primary !== false;
 
-  // Get client record for this user
-  const { data: clientUser } = await supabase
-    .from("client_users")
-    .select("client_id, clients(id, company_name, client_type, kyc_completed_at, due_diligence_level)")
-    .eq("user_id", session.user.id)
-    .maybeSingle();
+  let clientId: string;
+  let dueDiligenceLevel: DueDiligenceLevel;
+  let kycRecordFilter: string | null = null; // if set, only return this one record
 
-  if (!clientUser?.client_id) redirect("/dashboard");
+  if (!isPrimary && session.user.kycRecordId) {
+    // Non-primary: get client via kyc_records row
+    const { data: kycRow } = await supabase
+      .from("kyc_records")
+      .select("id, client_id, due_diligence_level, clients(due_diligence_level)")
+      .eq("id", session.user.kycRecordId)
+      .single();
+    if (!kycRow?.client_id) redirect("/kyc");
+    clientId = kycRow.client_id;
+    kycRecordFilter = kycRow.id;
+    const accountDdLevel = (kycRow.clients as unknown as { due_diligence_level?: DueDiligenceLevel } | null)?.due_diligence_level ?? "cdd";
+    dueDiligenceLevel = (kycRow.due_diligence_level as DueDiligenceLevel | null) ?? accountDdLevel;
+  } else {
+    // Primary: get client via client_users
+    const { data: clientUser } = await supabase
+      .from("client_users")
+      .select("client_id, clients(id, company_name, client_type, kyc_completed_at, due_diligence_level)")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
 
-  const client = clientUser.clients as unknown as {
-    id: string;
-    company_name: string;
-    client_type: "individual" | "organisation" | null;
-    kyc_completed_at: string | null;
-    due_diligence_level: DueDiligenceLevel | null;
-  } | null;
+    if (!clientUser?.client_id) redirect("/dashboard");
 
-  const clientId = clientUser.client_id;
-  const dueDiligenceLevel: DueDiligenceLevel = client?.due_diligence_level ?? "cdd";
+    const client = clientUser.clients as unknown as {
+      id: string;
+      company_name: string;
+      client_type: "individual" | "organisation" | null;
+      kyc_completed_at: string | null;
+      due_diligence_level: DueDiligenceLevel | null;
+    } | null;
+
+    clientId = clientUser.client_id;
+    dueDiligenceLevel = client?.due_diligence_level ?? "cdd";
+  }
+
+  // For primary users, also get client metadata for clientType + kyc_completed_at
+  const { data: clientMeta } = isPrimary
+    ? await supabase.from("clients").select("client_type, kyc_completed_at").eq("id", clientId).single()
+    : { data: null };
   const levels = CUMULATIVE[dueDiligenceLevel] ?? CUMULATIVE.cdd;
+
+  const recordsQuery = supabase
+    .from("kyc_records")
+    .select("*")
+    .eq("client_id", clientId)
+    .order("created_at", { ascending: true });
+  if (kycRecordFilter) recordsQuery.eq("id", kycRecordFilter);
 
   const [{ data: records }, { data: documents }, { data: documentTypes }, { data: requirements }] =
     await Promise.all([
-      supabase
-        .from("kyc_records")
-        .select("*")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: true }),
+      recordsQuery,
       supabase
         .from("documents")
         .select("*, document_types(*)")
@@ -66,8 +93,8 @@ export default async function KycPage() {
   return (
     <KycPageClient
       clientId={clientId}
-      clientType={client?.client_type ?? null}
-      kycCompletedAt={client?.kyc_completed_at ?? null}
+      clientType={(clientMeta as { client_type?: string } | null)?.client_type as "individual" | "organisation" | null ?? null}
+      kycCompletedAt={(clientMeta as { kyc_completed_at?: string } | null)?.kyc_completed_at ?? null}
       dueDiligenceLevel={dueDiligenceLevel}
       records={(records ?? []) as KycRecord[]}
       documents={(documents ?? []) as unknown as DocumentRecord[]}

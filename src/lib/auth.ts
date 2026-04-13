@@ -39,11 +39,28 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           .eq("user_id", profile.id)
           .maybeSingle();
 
+        // For client logins, check if linked to a non-primary kyc_record
+        let is_primary = true;
+        let kycRecordId: string | null = null;
+        if (!adminRecord) {
+          const { data: kycRecord } = await supabase
+            .from("kyc_records")
+            .select("id, is_primary")
+            .eq("profile_id", profile.id)
+            .maybeSingle();
+          if (kycRecord) {
+            kycRecordId = kycRecord.id;
+            is_primary = kycRecord.is_primary ?? true;
+          }
+        }
+
         return {
           id: profile.id,
           email: profile.email,
           name: profile.full_name,
           role: adminRecord ? "admin" : "client",
+          is_primary,
+          kycRecordId,
         };
       },
     }),
@@ -53,12 +70,16 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user as { role: string }).role;
+        token.is_primary = (user as { is_primary: boolean }).is_primary ?? true;
+        token.kycRecordId = (user as { kycRecordId: string | null }).kycRecordId ?? null;
       }
       return token;
     },
     session({ session, token }) {
       session.user.id = token.id as string;
       session.user.role = token.role as string;
+      session.user.is_primary = (token.is_primary as boolean) ?? true;
+      session.user.kycRecordId = (token.kycRecordId as string | null) ?? null;
       return session;
     },
   },
