@@ -15,6 +15,45 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-11 — B-008: Major KYC refactor — all 6 phases (Claude Code)
+
+**Phase 1 — DB + Types + Scoring:**
+- New types: `DueDiligenceLevel`, `DueDiligenceRequirement`, `DueDiligenceSettings`, `SectionScore`, `ComplianceScore`, `RiskFlag`
+- Updated `Client` (due_diligence_level), `KycRecord` (risk_flags, senior_management_approval, ongoing_monitoring_plan, kyc_journey_completed)
+- `src/lib/utils/complianceScoring.ts`: `calculateComplianceScore()` with section grouping (Identity/Financial/Declarations/Admin Checks)
+- `src/lib/utils/riskFlagDetection.ts`: `detectRiskFlags()` + `mergeRiskFlags()`
+- API routes: GET `/api/admin/due-diligence/requirements`, GET `/api/admin/due-diligence/settings`, PATCH `/api/admin/clients/[id]/due-diligence`
+- DB migration already run; schema.sql updated
+
+**Phase 2 — Client step wizard:**
+- `src/components/kyc/steps/IdentityStep.tsx`, `FinancialStep.tsx`, `DeclarationsStep.tsx`, `ReviewStep.tsx` (DD-level-filtered)
+- `src/components/kyc/KycStepWizard.tsx`: 4-step progress indicator, save-on-advance, SDD skips declarations
+- `src/app/(client)/kyc/page.tsx`: loads DD level + requirements from DB
+- `src/app/(client)/kyc/KycPageClient.tsx`: shows wizard when `kyc_journey_completed=false`, accordion after
+- Fixed `ValidatedLabel` to accept label as children (label prop now optional)
+
+**Phase 3 — Admin compliance scorecard:**
+- `src/components/admin/ComplianceScorecard.tsx`: replaces `KycSummaryCard` on client detail page. DD level dropdown (calls PATCH /due-diligence), per-section progress bars, blockers list, can-approve banner
+- `src/app/(admin)/admin/clients/[id]/page.tsx`: loads documents + all requirements, renders `ComplianceScorecard`
+
+**Phase 4 — Risk flag system:**
+- `src/components/admin/RiskFlagBanner.tsx`: severity-colored flag cards, dismiss-with-reason flow, audit log
+- `src/components/admin/RiskFlagSection.tsx`: thin server-compatible wrapper
+- `src/app/api/kyc/[clientId]/dismiss-flag/route.ts`: admin-only, updates risk_flags JSONB + audit_log
+- `src/app/api/kyc/save/route.ts`: auto-detects and merges risk flags on every save
+
+**Phase 5 — Persons journey parity:**
+- `src/components/client/PersonsManager.tsx`: PersonCard shows `KycStepWizard` when `!kyc_journey_completed`. Fetches per-person documents lazily. Shows compliance % in header. New props: `dueDiligenceLevel`, `requirements`, `documentTypes`
+
+**Phase 6 — Admin DD configuration + auto-approve:**
+- `src/app/(admin)/admin/settings/due-diligence/page.tsx`: new settings page
+- `src/components/admin/DueDiligenceSettingsManager.tsx`: per-level cards with auto_approve + requires_senior_approval toggles, collapsible requirements list
+- `src/app/api/admin/due-diligence/settings/[level]/route.ts`: PATCH for updating settings
+- `src/app/api/kyc/submit/route.ts`: auto-approve logic — if `auto_approve=true` and compliance score = 100%, marks KYC approved + audit log
+- `src/components/shared/Sidebar.tsx`: added "Due Diligence" settings nav item
+
+---
+
 ### 2026-04-11 — B-007: Client audit trail dialog (Claude Code)
 
 - `src/app/api/admin/clients/[id]/audit-trail/route.ts` (NEW): GET endpoint, admin only. Returns all audit_log entries across a client's full account (all app IDs + linked user IDs + entity_id matches). Supports `search`, `limit`, `offset` query params. Enriches entries with application context (business_name, reference_number). Returns `{ entries, total }`.

@@ -34,6 +34,7 @@ const ADMIN_NAV = [
 const ADMIN_SETTINGS_NAV = [
   { label: "Templates", href: "/admin/settings/templates", icon: FileText, exact: false },
   { label: "Verification Rules", href: "/admin/settings/rules", icon: ShieldCheck, exact: false },
+  { label: "Due Diligence", href: "/admin/settings/due-diligence", icon: Shield, exact: false },
   { label: "Knowledge Base", href: "/admin/settings/knowledge-base", icon: BookOpen, exact: false },
   { label: "Workflow", href: "/admin/settings/workflow", icon: GitBranch, exact: false },
 ];
