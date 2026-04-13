@@ -22,6 +22,7 @@ interface ProfileOption {
 interface ProfileSelectorProps {
   clientId: string;
   role: "director" | "shareholder" | "ubo";
+  existingPersonKycIds?: string[];
   onSelect: (kycRecordId: string | null, newName?: string) => void;
   onClose: () => void;
 }
@@ -32,7 +33,7 @@ const ROLE_LABELS: Record<string, string> = {
   ubo: "UBO",
 };
 
-export function ProfileSelector({ clientId, role, onSelect, onClose }: ProfileSelectorProps) {
+export function ProfileSelector({ clientId, role, existingPersonKycIds = [], onSelect, onClose }: ProfileSelectorProps) {
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<"new" | string>("new");
@@ -73,30 +74,39 @@ export function ProfileSelector({ clientId, role, onSelect, onClose }: ProfileSe
               {profiles.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-xs text-gray-500 font-medium mb-2">Select an existing profile</p>
-                  {profiles.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelected(p.id)}
-                      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
-                        selected === p.id
-                          ? "border-brand-navy bg-brand-navy/5"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-brand-navy">
-                            {p.full_name ?? "Unnamed"}
-                            {p.is_primary && (
-                              <span className="ml-1.5 text-[10px] bg-brand-navy/10 text-brand-navy px-1 py-0.5 rounded">Primary</span>
-                            )}
-                          </p>
-                          {p.email && <p className="text-xs text-gray-400">{p.email}</p>}
+                  {profiles.map((p) => {
+                    const alreadyAdded = existingPersonKycIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => !alreadyAdded && setSelected(p.id)}
+                        disabled={alreadyAdded}
+                        className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                          alreadyAdded
+                            ? "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
+                            : selected === p.id
+                            ? "border-brand-navy bg-brand-navy/5"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-brand-navy">
+                              {p.full_name ?? "Unnamed"}
+                              {p.is_primary && (
+                                <span className="ml-1.5 text-[10px] bg-brand-navy/10 text-brand-navy px-1 py-0.5 rounded">Primary</span>
+                              )}
+                              {alreadyAdded && (
+                                <span className="ml-1.5 text-[10px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded">Already {ROLE_LABELS[role]}</span>
+                              )}
+                            </p>
+                            {p.email && <p className="text-xs text-gray-400">{p.email}</p>}
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                   <div className="relative my-3">
                     <div className="absolute inset-0 flex items-center">
                       <div className="w-full border-t border-gray-200" />

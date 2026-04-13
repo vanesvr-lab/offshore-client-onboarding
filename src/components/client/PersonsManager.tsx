@@ -579,6 +579,10 @@ export function PersonsManager({
         <ProfileSelector
           clientId={resolvedClientId}
           role={selectorRole as "director" | "shareholder" | "ubo"}
+          existingPersonKycIds={persons
+            .filter((p) => p.role === selectorRole)
+            .map((p) => p.kyc_record_id)
+            .filter(Boolean) as string[]}
           onSelect={(kycRecordId, newName) => void addPerson(selectorRole, kycRecordId ?? undefined, newName)}
           onClose={() => setSelectorRole(null)}
         />
