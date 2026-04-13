@@ -12,13 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import { ProfileSelector } from "@/components/shared/ProfileSelector";
 import { calculateComplianceScore } from "@/lib/utils/complianceScoring";
@@ -26,30 +19,12 @@ import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDil
 
 type PersonRole = "director" | "shareholder" | "ubo" | "contact";
 
-interface PersonKyc {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  date_of_birth: string | null;
-  nationality: string | null;
-  passport_number: string | null;
-  passport_expiry: string | null;
-  occupation: string | null;
-  address: string | null;
-  source_of_funds_description: string | null;
-  is_pep: boolean | null;
-  legal_issues_declared: boolean | null;
-  completion_status: string;
-  kyc_journey_completed: boolean;
-  client_id: string;
-}
-
 interface Person {
   id: string;
   role: PersonRole;
   shareholding_percentage: number | null;
   created_at: string;
-  kyc_records: PersonKyc | null;
+  kyc_records: KycRecord | null;
   doc_count: number;
 }
 
@@ -70,21 +45,16 @@ const ROLE_LABELS: Record<PersonRole, string> = {
 
 const ROLE_ORDER: PersonRole[] = ["director", "shareholder", "ubo", "contact"];
 
-const NATIONALITIES = [
-  "Mauritian", "British", "French", "American", "South African", "Indian",
-  "Chinese", "Australian", "Canadian", "German", "Other",
-];
-
-// 11 required KYC fields for progress tracking
-const KYC_REQUIRED_FIELDS: (keyof PersonKyc)[] = [
+// KYC fields tracked for per-person progress bars (fallback when no compliance score)
+const KYC_REQUIRED_FIELDS: (keyof KycRecord)[] = [
   "full_name", "email", "date_of_birth", "nationality",
   "passport_number", "passport_expiry", "address", "occupation",
   "source_of_funds_description", "is_pep", "legal_issues_declared",
 ];
 const KYC_TOTAL = KYC_REQUIRED_FIELDS.length;
-const DOCS_TOTAL = 6; // per-person identity document types
+const DOCS_TOTAL = 6;
 
-function kycFilled(kyc: PersonKyc | null): number {
+function kycFilled(kyc: KycRecord | null): number {
   if (!kyc) return 0;
   return KYC_REQUIRED_FIELDS.filter((f) => {
     const v = kyc[f];
@@ -93,14 +63,13 @@ function kycFilled(kyc: PersonKyc | null): number {
 }
 
 /** Thin dual progress bars shown on each person card header */
-function PersonProgress({ kyc, docCount }: { kyc: PersonKyc | null; docCount: number }) {
+function PersonProgress({ kyc, docCount }: { kyc: KycRecord | null; docCount: number }) {
   const kycCount = kycFilled(kyc);
   const kycPct = Math.round((kycCount / KYC_TOTAL) * 100);
   const docPct = Math.round((Math.min(docCount, DOCS_TOTAL) / DOCS_TOTAL) * 100);
 
   return (
     <div className="space-y-1 min-w-[120px]">
-      {/* KYC bar */}
       <div>
         <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
           <span>KYC</span>
@@ -113,7 +82,6 @@ function PersonProgress({ kyc, docCount }: { kyc: PersonKyc | null; docCount: nu
           />
         </div>
       </div>
-      {/* Docs bar */}
       <div>
         <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
           <span>Docs</span>
@@ -150,8 +118,6 @@ function PersonCard({
   onUpdate: (id: string, updated: Partial<Person>) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [fields, setFields] = useState<Partial<PersonKyc>>(person.kyc_records ?? {});
   const [shareholding, setShareholding] = useState<string>(
     person.shareholding_percentage !== null ? String(person.shareholding_percentage) : ""
   );
@@ -175,16 +141,11 @@ function PersonCard({
 
   const kyc = person.kyc_records;
   const displayName = kyc?.full_name || `New ${ROLE_LABELS[person.role]}`;
-  const showWizard = kyc && !kyc.kyc_journey_completed;
+  // Person-level DD override or account-level fallback
+  const effectiveDdLevel: DueDiligenceLevel = kyc?.due_diligence_level ?? dueDiligenceLevel;
 
-  // Compute per-person compliance score (using doc_count as proxy before docs are fetched)
   const complianceScore = kyc && requirements.length > 0
-    ? calculateComplianceScore(
-        kyc as unknown as KycRecord,
-        personDocuments ?? [],
-        dueDiligenceLevel,
-        requirements
-      )
+    ? calculateComplianceScore(kyc, personDocuments ?? [], effectiveDdLevel, requirements)
     : null;
 
   function handleToggle() {
@@ -192,27 +153,6 @@ function PersonCard({
       void fetchPersonDocuments(kyc.id);
     }
     setOpen(!open);
-  }
-
-  async function saveKyc() {
-    if (!kyc) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/kyc/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kycRecordId: kyc.id, fields }),
-      });
-      const data = await res.json() as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Save failed");
-      // Optimistically update local kyc for progress recalculation
-      onUpdate(person.id, { kyc_records: { ...kyc, ...fields } as PersonKyc });
-      toast.success("Saved");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function saveShareholding(val: string) {
@@ -267,7 +207,7 @@ function PersonCard({
             <PersonProgress kyc={person.kyc_records} docCount={person.doc_count} />
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            onClick={(e) => { e.stopPropagation(); void handleDelete(); }}
             className="text-gray-300 hover:text-red-400 p-1"
             title="Remove"
           >
@@ -276,171 +216,46 @@ function PersonCard({
         </div>
       </div>
 
-      {/* Expanded: wizard for first-time, accordion for returning */}
-      {open && kyc && showWizard && (
+      {/* Expanded body — KycStepWizard in compact mode for unified experience */}
+      {open && (
         <div className="border-t bg-gray-50">
-          {loadingDocs ? (
-            <div className="px-4 py-8 text-center text-sm text-gray-400">Loading…</div>
-          ) : (
-            <div className="px-4 py-4">
-              <KycStepWizard
-                clientId={clientId ?? ""}
-                kycRecord={kyc as unknown as KycRecord}
-                documents={personDocuments ?? []}
-                documentTypes={documentTypes}
-                dueDiligenceLevel={dueDiligenceLevel}
-                requirements={requirements}
-                onComplete={() => {
-                  onUpdate(person.id, {
-                    kyc_records: { ...kyc, kyc_journey_completed: true },
-                  });
-                  setOpen(false);
-                }}
+          {person.role === "shareholder" && (
+            <div className="px-4 pt-3 flex items-center gap-3">
+              <Label className="text-xs whitespace-nowrap">Shareholding %</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={shareholding}
+                onChange={(e) => setShareholding(e.target.value)}
+                onBlur={() => void saveShareholding(shareholding)}
+                className="h-8 text-sm w-28"
               />
             </div>
           )}
-        </div>
-      )}
-
-      {open && kyc && !showWizard && (
-        <div className="border-t px-4 py-4 space-y-4 bg-gray-50">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Full name</Label>
-              <Input
-                value={fields.full_name ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, full_name: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Date of birth</Label>
-              <Input
-                type="date"
-                value={fields.date_of_birth ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, date_of_birth: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Nationality</Label>
-              <Select
-                value={fields.nationality ?? ""}
-                onValueChange={(v) => setFields((p) => ({ ...p, nationality: v ?? "" }))}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {NATIONALITIES.map((n) => (
-                    <SelectItem key={n} value={n}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Passport number</Label>
-              <Input
-                value={fields.passport_number ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, passport_number: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Passport expiry</Label>
-              <Input
-                type="date"
-                value={fields.passport_expiry ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, passport_expiry: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Email</Label>
-              <Input
-                type="email"
-                value={fields.email ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, email: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Occupation</Label>
-              <Input
-                value={fields.occupation ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, occupation: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Address</Label>
-              <Input
-                value={fields.address ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, address: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Source of funds description</Label>
-              <Input
-                value={fields.source_of_funds_description ?? ""}
-                onChange={(e) => setFields((p) => ({ ...p, source_of_funds_description: e.target.value }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Politically exposed person (PEP)?</Label>
-              <Select
-                value={fields.is_pep === true ? "yes" : fields.is_pep === false ? "no" : ""}
-                onValueChange={(v) => setFields((p) => ({ ...p, is_pep: v === "yes" }))}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Legal issues declared?</Label>
-              <Select
-                value={fields.legal_issues_declared === true ? "yes" : fields.legal_issues_declared === false ? "no" : ""}
-                onValueChange={(v) => setFields((p) => ({ ...p, legal_issues_declared: v === "yes" }))}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {person.role === "shareholder" && (
-              <div className="space-y-1">
-                <Label className="text-xs">Shareholding %</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={shareholding}
-                  onChange={(e) => setShareholding(e.target.value)}
-                  onBlur={() => saveShareholding(shareholding)}
-                  className="h-8 text-sm"
+          {kyc && (
+            loadingDocs ? (
+              <div className="px-4 py-8 text-center text-sm text-gray-400">Loading…</div>
+            ) : (
+              <div className="px-4 py-4">
+                <KycStepWizard
+                  compact
+                  clientId={clientId ?? ""}
+                  kycRecord={kyc}
+                  documents={personDocuments ?? []}
+                  documentTypes={documentTypes}
+                  dueDiligenceLevel={effectiveDdLevel}
+                  requirements={requirements}
+                  onComplete={() => {
+                    onUpdate(person.id, {
+                      kyc_records: { ...kyc, kyc_journey_completed: true },
+                    });
+                    setOpen(false);
+                  }}
                 />
               </div>
-            )}
-          </div>
-          <Button
-            size="sm"
-            className="bg-brand-navy hover:bg-brand-blue"
-            onClick={saveKyc}
-            disabled={saving}
-          >
-            {saving ? "Saving…" : "Save"}
-          </Button>
+            )
+          )}
         </div>
       )}
     </div>
@@ -465,7 +280,6 @@ export function PersonsManager({
     if (propClientId && propClientId.length > 0) {
       setResolvedClientId(propClientId);
     } else {
-      // Fetch application to get client_id
       fetch(`/api/applications/${applicationId}`)
         .then((r) => r.json())
         .then(({ application }) => {
@@ -531,7 +345,6 @@ export function PersonsManager({
     );
   }
 
-  // Running shareholding total
   const totalShareholding = persons
     .filter((p) => p.role === "shareholder")
     .reduce((sum, p) => sum + (p.shareholding_percentage ?? 0), 0);
@@ -539,7 +352,6 @@ export function PersonsManager({
 
   if (loading) return <p className="text-sm text-gray-400">Loading…</p>;
 
-  // Group persons by role
   const grouped = ROLE_ORDER.reduce<Record<PersonRole, Person[]>>(
     (acc, role) => {
       acc[role] = persons.filter((p) => p.role === role);

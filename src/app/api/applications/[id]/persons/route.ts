@@ -39,11 +39,7 @@ export async function GET(
     .from("application_persons")
     .select(`
       id, role, shareholding_percentage, created_at,
-      kyc_records!kyc_record_id(
-        id, full_name, email, date_of_birth, nationality,
-        passport_number, passport_expiry, occupation, completion_status,
-        address, source_of_funds_description, is_pep, legal_issues_declared
-      )
+      kyc_records!kyc_record_id(*)
     `)
     .eq("application_id", params.id)
     .order("created_at");

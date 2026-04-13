@@ -12,12 +12,13 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldTooltip } from "@/components/shared/FieldTooltip";
+import { MultiSelectCountry } from "@/components/shared/MultiSelectCountry";
 
 /** Field definition from service_templates.service_fields */
 export interface ServiceField {
   key: string;
   label: string;
-  type: "text" | "textarea" | "select" | "boolean" | "text_array" | "date" | "number";
+  type: "text" | "textarea" | "select" | "boolean" | "text_array" | "date" | "number" | "multi_select_country";
   section?: string;
   required?: boolean;
   placeholder?: string;
@@ -207,6 +208,25 @@ export function DynamicServiceForm({
                 />
               ))}
             </div>
+          </div>
+        );
+      }
+
+      case "multi_select_country": {
+        const arr = (Array.isArray(val) ? val : []) as string[];
+        return (
+          <div key={field.key} className="col-span-2 space-y-1.5">
+            <Label className="text-sm flex items-center gap-1">
+              {field.label}
+              {field.required && " *"}
+              {field.tooltip && <FieldTooltip content={field.tooltip} />}
+            </Label>
+            <MultiSelectCountry
+              value={arr}
+              onChange={(countries) => onChange(field.key, countries)}
+              disabled={readOnly}
+              placeholder={field.placeholder ?? "Search countries…"}
+            />
           </div>
         );
       }

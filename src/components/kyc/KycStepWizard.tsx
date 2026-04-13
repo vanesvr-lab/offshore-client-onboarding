@@ -18,6 +18,8 @@ interface KycStepWizardProps {
   dueDiligenceLevel: DueDiligenceLevel;
   requirements: DueDiligenceRequirement[];
   onComplete: () => void;
+  /** compact=true: removes sticky nav padding, skips page scroll, reduces min-height */
+  compact?: boolean;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -51,6 +53,7 @@ export function KycStepWizard({
   dueDiligenceLevel,
   requirements,
   onComplete,
+  compact = false,
 }: KycStepWizardProps) {
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
   // SDD skips declarations (step index 2)
@@ -102,14 +105,14 @@ export function KycStepWizard({
     const ok = await saveCurrentStep();
     if (!ok) return;
     setCurrentStep((s) => s + 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (!compact) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleBack() {
     // Save without blocking on error
     await saveCurrentStep();
     setCurrentStep((s) => s - 1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (!compact) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit() {
@@ -168,7 +171,7 @@ export function KycStepWizard({
     <div className="space-y-6">
       <StepIndicator current={currentStep} total={totalSteps} labels={stepLabels} />
 
-      <div className="min-h-[400px]">
+      <div className={compact ? "min-h-[200px]" : "min-h-[400px]"}>
         {logicalStep === "identity" && (
           <IdentityStep
             clientId={clientId}
@@ -220,7 +223,10 @@ export function KycStepWizard({
       </div>
 
       {/* Navigation */}
-      <div className="sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between">
+      <div className={compact
+        ? "flex items-center justify-between pt-4 border-t mt-6"
+        : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between"
+      }>
         <Button
           variant="outline"
           onClick={handleBack}
