@@ -11,8 +11,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminClientKycPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { profileId?: string };
 }) {
   const supabase = createAdminClient();
 
@@ -30,7 +32,14 @@ export default async function AdminClientKycPage({
   const typedDocs = (documents ?? []) as unknown as DocumentRecord[];
   const typedTypes = (documentTypes ?? []) as DocumentType[];
 
-  const individualRecord = typedRecords.find((r) => r.record_type === "individual") ?? null;
+  // If profileId is specified in the URL, show that specific profile
+  // Otherwise show the primary individual record
+  const selectedProfileId = searchParams?.profileId;
+  const individualRecord = selectedProfileId
+    ? (typedRecords.find((r) => r.id === selectedProfileId) ?? null)
+    : (typedRecords.find((r) => r.record_type === "individual" && r.is_primary) ??
+       typedRecords.find((r) => r.record_type === "individual") ??
+       null);
   const orgRecord = typedRecords.find((r) => r.record_type === "organisation") ?? null;
 
   function docsForRecord(record: KycRecord) {
