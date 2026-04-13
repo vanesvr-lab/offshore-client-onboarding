@@ -27,6 +27,7 @@ export interface ServiceField {
   max?: number; // for text_array
   show_if?: Record<string, unknown>; // conditional visibility
   tooltip?: string; // help text shown in clickable tooltip
+  full_width?: boolean; // span both columns in the grid
 }
 
 interface DynamicServiceFormProps {
@@ -75,7 +76,7 @@ export function DynamicServiceForm({
       case "date":
       case "number":
         return (
-          <div key={field.key} className="space-y-1.5">
+          <div key={field.key} className={`space-y-1.5 ${field.full_width ? "col-span-2" : ""}`}>
             <Label className="text-sm flex items-center gap-1">
               {field.label}
               {field.required && " *"}

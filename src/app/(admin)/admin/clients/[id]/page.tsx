@@ -275,15 +275,8 @@ export default async function ClientDetailPage({
           </Card>
         </div>
 
-        {/* Right: compliance + workflow + account manager + invite */}
+        {/* Right: workflow + account manager + invite + compliance */}
         <div className="space-y-4">
-          <ComplianceScorecard
-            clientId={client.id}
-            kycRecords={(kycRecords ?? []) as KycRecord[]}
-            documents={(documents ?? []) as unknown as DocumentRecord[]}
-            dueDiligenceLevel={((client as unknown as Record<string, unknown>).due_diligence_level as DueDiligenceLevel) ?? "cdd"}
-            requirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
-          />
           <WorkflowMilestonesCard
             clientId={client.id}
             milestones={{
@@ -304,6 +297,13 @@ export default async function ClientDetailPage({
           <SendInvitePanel
             clientId={client.id}
             inviteSentAt={(client as unknown as { invite_sent_at: string | null }).invite_sent_at}
+          />
+          <ComplianceScorecard
+            clientId={client.id}
+            kycRecords={(kycRecords ?? []) as KycRecord[]}
+            documents={(documents ?? []) as unknown as DocumentRecord[]}
+            dueDiligenceLevel={((client as unknown as Record<string, unknown>).due_diligence_level as DueDiligenceLevel) ?? "cdd"}
+            requirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
           />
 
           {/* Danger zone */}

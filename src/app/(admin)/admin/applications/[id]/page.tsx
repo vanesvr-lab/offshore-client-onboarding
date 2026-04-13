@@ -141,10 +141,10 @@ export default async function ApplicationDetailPage({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <Link
-            href="/admin/queue"
+            href={`/admin/clients/${clientId}`}
             className="text-sm text-brand-blue hover:underline mb-1 block"
           >
-            ← Back to queue
+            ← Back to client
           </Link>
           <h1 className="text-2xl font-bold text-brand-navy">
             {app.reference_number || app.business_name || "Application"}
