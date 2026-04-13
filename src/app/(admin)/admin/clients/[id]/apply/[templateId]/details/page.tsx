@@ -147,7 +147,7 @@ export default function AdminWizardDetailsPage({
       <div className="space-y-6 max-w-3xl">
         <Card>
           <CardHeader>
-            <CardTitle className="text-brand-navy">Section A: Company Information</CardTitle>
+            <CardTitle className="text-brand-navy">Company Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -183,7 +183,7 @@ export default function AdminWizardDetailsPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-brand-navy">Section B: Primary Contact</CardTitle>
+            <CardTitle className="text-brand-navy">Primary Contact</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -209,7 +209,7 @@ export default function AdminWizardDetailsPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-brand-navy">Section C: Ultimate Beneficial Owners (UBOs)</CardTitle>
+            <CardTitle className="text-brand-navy">Ultimate Beneficial Owners (UBOs)</CardTitle>
           </CardHeader>
           <CardContent>
             <UBOForm ubos={ubos} onChange={setUbos} />

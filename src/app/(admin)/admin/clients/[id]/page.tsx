@@ -166,15 +166,6 @@ export default async function ClientDetailPage({
             return <RiskFlagSection clientId={client.id} kycRecordId={primaryRecord.id} flags={flags} />;
           })()}
 
-          {/* Compliance Scorecard */}
-          <ComplianceScorecard
-            clientId={client.id}
-            kycRecords={(kycRecords ?? []) as KycRecord[]}
-            documents={(documents ?? []) as unknown as DocumentRecord[]}
-            dueDiligenceLevel={((client as unknown as Record<string, unknown>).due_diligence_level as DueDiligenceLevel) ?? "cdd"}
-            requirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
-          />
-
           {/* Applications */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -203,14 +194,18 @@ export default async function ClientDetailPage({
                       <th className="text-left py-2 text-gray-500 font-medium">Service</th>
                       <th className="text-left py-2 text-gray-500 font-medium">Status</th>
                       <th className="text-left py-2 text-gray-500 font-medium">Submitted</th>
-                      <th className="py-2" />
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {applications.map((app) => (
                       <tr key={app.id}>
-                        <td className="py-2 font-medium text-brand-navy">
-                          {app.reference_number || app.business_name || "Draft"}
+                        <td className="py-2 font-medium">
+                          <Link
+                            href={`/admin/applications/${app.id}`}
+                            className="text-brand-blue hover:underline cursor-pointer"
+                          >
+                            {app.reference_number || app.business_name || "Draft"}
+                          </Link>
                         </td>
                         <td className="py-2 text-gray-500">
                           {app.service_templates?.name || "—"}
@@ -220,11 +215,6 @@ export default async function ClientDetailPage({
                         </td>
                         <td className="py-2 text-gray-400">
                           {app.submitted_at ? formatDate(app.submitted_at) : "Draft"}
-                        </td>
-                        <td className="py-2">
-                          <Link href={`/admin/applications/${app.id}`}>
-                            <Button variant="outline" size="sm">View</Button>
-                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -285,8 +275,15 @@ export default async function ClientDetailPage({
           </Card>
         </div>
 
-        {/* Right: workflow + account manager + invite */}
+        {/* Right: compliance + workflow + account manager + invite */}
         <div className="space-y-4">
+          <ComplianceScorecard
+            clientId={client.id}
+            kycRecords={(kycRecords ?? []) as KycRecord[]}
+            documents={(documents ?? []) as unknown as DocumentRecord[]}
+            dueDiligenceLevel={((client as unknown as Record<string, unknown>).due_diligence_level as DueDiligenceLevel) ?? "cdd"}
+            requirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
+          />
           <WorkflowMilestonesCard
             clientId={client.id}
             milestones={{

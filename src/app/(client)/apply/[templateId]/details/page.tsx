@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Info } from "lucide-react";
 import { WizardLayout } from "@/components/client/WizardLayout";
 import { PersonsManager } from "@/components/client/PersonsManager";
 import { Button } from "@/components/ui/button";
@@ -39,12 +40,10 @@ export default function BusinessDetailsPage({
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    // Admin-only fields — kept in state for the save payload but not shown to client
     business_name: businessDetails.business_name,
     business_type: businessDetails.business_type,
     business_country: businessDetails.business_country,
     business_address: businessDetails.business_address,
-    // Client-visible fields
     contact_name: businessDetails.contact_name,
     contact_email: businessDetails.contact_email,
     contact_phone: businessDetails.contact_phone,
@@ -78,6 +77,10 @@ export default function BusinessDetailsPage({
           if (data) {
             setForm((prev) => ({
               ...prev,
+              business_name: data.business_name || "",
+              business_type: data.business_type || "",
+              business_country: data.business_country || "",
+              business_address: data.business_address || "",
               contact_name: data.contact_name || "",
               contact_email: data.contact_email || "",
               contact_phone: data.contact_phone || "",
@@ -101,20 +104,32 @@ export default function BusinessDetailsPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingAppId, params.templateId]);
 
-  // Pre-fill contact fields from the individual KYC record when clientId resolves
+  // Pre-fill contact fields from the primary individual KYC record when clientId resolves
   useEffect(() => {
     if (!clientId) return;
-    if (form.contact_name?.trim() || form.contact_email?.trim()) return; // already filled from saved app
+    if (form.contact_name?.trim() || form.contact_email?.trim()) return; // don't overwrite user edits
     fetch(`/api/kyc/${clientId}`)
       .then((r) => r.json())
-      .then(({ records }: { records?: Array<{ record_type: string; full_name?: string; email?: string; phone?: string }> }) => {
-        const individual = (records ?? []).find((r) => r.record_type === "individual");
+      .then(({ records }: {
+        records?: Array<{
+          record_type: string;
+          full_name?: string;
+          email?: string;
+          phone?: string;
+          occupation?: string;
+          is_primary?: boolean;
+        }>;
+      }) => {
+        const individuals = (records ?? []).filter((r) => r.record_type === "individual");
+        // Prefer the primary record, fall back to first individual
+        const individual = individuals.find((r) => r.is_primary) ?? individuals[0];
         if (individual) {
           setForm((prev) => ({
             ...prev,
             contact_name: individual.full_name || prev.contact_name,
             contact_email: individual.email || prev.contact_email,
             contact_phone: individual.phone || prev.contact_phone,
+            contact_title: individual.occupation || prev.contact_title,
           }));
         }
       })
@@ -237,6 +252,56 @@ export default function BusinessDetailsPage({
             ) : (
               <p className="text-sm text-gray-400">Save your details first to add persons.</p>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Admin-completed section — shown at bottom, muted */}
+        <div className="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <Info className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-gray-500">
+            The following business details will be completed by the admin team after your submission.
+          </p>
+        </div>
+
+        <Card className="opacity-80 bg-gray-50 border-gray-200">
+          <CardHeader>
+            <CardTitle className="text-brand-navy text-base">Business Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-sm">Business / Entity name</Label>
+                <Input
+                  value={form.business_name}
+                  onChange={(e) => updateField("business_name", e.target.value)}
+                  placeholder="Proposed entity name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Business type</Label>
+                <Input
+                  value={form.business_type}
+                  onChange={(e) => updateField("business_type", e.target.value)}
+                  placeholder="e.g. GBC, AC"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Country of incorporation</Label>
+                <Input
+                  value={form.business_country}
+                  onChange={(e) => updateField("business_country", e.target.value)}
+                  placeholder="e.g. Mauritius"
+                />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-sm">Registered address</Label>
+                <Input
+                  value={form.business_address}
+                  onChange={(e) => updateField("business_address", e.target.value)}
+                  placeholder="Registered business address"
+                />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
