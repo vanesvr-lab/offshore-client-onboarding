@@ -19,17 +19,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 400 });
   }
 
-  if (payload.purpose !== "invite" || !payload.sub || !payload.email) {
+  const validPurposes = ["invite", "profile_invite"];
+  if (!validPurposes.includes(payload.purpose ?? "") || !payload.sub || !payload.email) {
     return NextResponse.json({ error: "Invalid token" }, { status: 400 });
   }
 
+  const supabase = createAdminClient();
   const passwordHash = await bcrypt.hash(password, 12);
-  const { error } = await createAdminClient()
+  const { error } = await supabase
     .from("profiles")
     .update({ password_hash: passwordHash })
     .eq("id", payload.sub);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ email: payload.email });
+  return NextResponse.json({
+    email: payload.email,
+    isProfileInvite: payload.purpose === "profile_invite",
+  });
 }

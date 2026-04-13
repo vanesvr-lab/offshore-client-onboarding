@@ -56,7 +56,8 @@ function SetPasswordForm() {
       if (result?.error) throw new Error("Password set but sign-in failed — please log in manually");
 
       toast.success("Password set — welcome to Mauritius Offshore Client Portal");
-      router.push("/apply");
+      // Profile invites → go straight to KYC; primary invites → apply wizard
+      router.push(data.isProfileInvite ? "/kyc" : "/apply");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to set password");
     } finally {
