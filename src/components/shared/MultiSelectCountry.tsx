@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { X, ChevronDown } from "lucide-react";
 
 export const COUNTRIES = [
@@ -66,10 +67,27 @@ export function MultiSelectCountry({
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+
+  const updateDropdownPosition = useCallback(() => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current && !containerRef.current.contains(e.target as Node) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
         setSearch("");
       }
@@ -77,6 +95,10 @@ export function MultiSelectCountry({
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (open) updateDropdownPosition();
+  }, [open, updateDropdownPosition]);
 
   const filtered = COUNTRIES.filter(
     (c) =>
@@ -135,11 +157,15 @@ export function MultiSelectCountry({
         </div>
       )}
 
-      {/* Search input */}
-      <div className="relative">
+      {/* Search input — click anywhere to toggle dropdown */}
+      <div
+        className="relative cursor-pointer"
+        onClick={() => { if (!open) setOpen(true); }}
+      >
         <input
+          ref={inputRef}
           type="text"
-          className="w-full border border-gray-200 rounded-md px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy"
+          className="w-full border border-gray-200 rounded-md px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-brand-navy/20 focus:border-brand-navy cursor-pointer"
           placeholder={placeholder}
           value={search}
           onChange={(e) => {
@@ -148,33 +174,49 @@ export function MultiSelectCountry({
           }}
           onFocus={() => setOpen(true)}
         />
-        <ChevronDown className="absolute right-2.5 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+        <button
+          type="button"
+          className="absolute right-2 top-2 p-0.5 text-gray-400 hover:text-gray-600"
+          onClick={(e) => { e.stopPropagation(); setOpen(!open); setSearch(""); }}
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
       </div>
 
-      {/* Dropdown */}
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {filtered.map((country) => (
-            <button
-              key={country}
-              type="button"
-              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
-              onMouseDown={(e) => {
-                // Prevent blur before onClick fires
-                e.preventDefault();
-                addCountry(country);
-              }}
-            >
-              {country}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {open && search.length > 0 && filtered.length === 0 && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-sm px-3 py-2 text-sm text-gray-400">
-          No matching countries
-        </div>
+      {/* Dropdown rendered via portal to escape overflow:hidden parents */}
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={dropdownRef}
+          className="bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto"
+          style={{
+            position: "fixed",
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+            zIndex: 9999,
+          }}
+        >
+          {filtered.length > 0 ? (
+            filtered.map((country) => (
+              <button
+                key={country}
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-brand-navy/5 hover:text-brand-navy transition-colors"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  addCountry(country);
+                }}
+              >
+                {country}
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-3 text-sm text-gray-400 text-center">
+              No matching countries
+            </div>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );
