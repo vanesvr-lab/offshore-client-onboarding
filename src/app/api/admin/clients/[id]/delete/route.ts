@@ -38,6 +38,12 @@ export async function POST(
     .eq("id", params.id);
   if (clientErr) return NextResponse.json({ error: clientErr.message }, { status: 500 });
 
+  // Soft-delete all applications for this client
+  await supabase
+    .from("applications")
+    .update({ is_deleted: true })
+    .eq("client_id", params.id);
+
   // Soft-delete all profiles linked via client_users
   const { data: linked } = await supabase
     .from("client_users")

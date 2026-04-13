@@ -10,6 +10,7 @@ export default async function QueuePage() {
   const { data: applications } = await supabase
     .from("applications")
     .select("*, clients(company_name), service_templates(name)")
+    .eq("is_deleted", false)
     .neq("status", "draft")
     .order("submitted_at", { ascending: false });
 

@@ -788,3 +788,6 @@ CREATE TABLE IF NOT EXISTS public.role_document_requirements (
   sort_order       int DEFAULT 0,
   UNIQUE(role, document_type_id)
 );
+
+-- is_deleted on applications (set when client is soft-deleted)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false;

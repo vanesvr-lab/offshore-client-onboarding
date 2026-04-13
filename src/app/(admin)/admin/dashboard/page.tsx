@@ -97,14 +97,16 @@ export default async function AdminDashboardPage() {
     { data: completedApps },
     { data: allStatusApps },
   ] = await Promise.all([
-    supabase.from("applications").select("*", { count: "exact", head: true }),
+    supabase.from("applications").select("*", { count: "exact", head: true }).eq("is_deleted", false),
     supabase
       .from("applications")
       .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false)
       .eq("status", "submitted"),
     supabase
       .from("applications")
       .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false)
       .eq("status", "pending_action"),
     supabase
       .from("audit_log")
@@ -118,6 +120,7 @@ export default async function AdminDashboardPage() {
     supabase
       .from("applications")
       .select("approved_at, submitted_at, created_at")
+      .eq("is_deleted", false)
       .eq("status", "approved")
       .gte("approved_at", sixMonthsAgo.toISOString())
       .not("approved_at", "is", null),
@@ -132,10 +135,11 @@ export default async function AdminDashboardPage() {
     supabase
       .from("applications")
       .select("status, updated_at")
+      .eq("is_deleted", false)
       .in("status", ["approved", "rejected"])
       .gte("updated_at", fourMonthsAgo.toISOString()),
     // Card 4: all apps for status count
-    supabase.from("applications").select("status"),
+    supabase.from("applications").select("status").eq("is_deleted", false),
   ]);
 
   const startOfMonth = new Date();
@@ -144,6 +148,7 @@ export default async function AdminDashboardPage() {
   const { count: approvedThisMonth } = await supabase
     .from("applications")
     .select("*", { count: "exact", head: true })
+    .eq("is_deleted", false)
     .eq("status", "approved")
     .gte("updated_at", startOfMonth.toISOString());
 
