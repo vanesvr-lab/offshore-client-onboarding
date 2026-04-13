@@ -15,6 +15,37 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-13 — B-014: Non-Primary Profile Passwordless KYC Flow
+
+**New table:** `verification_codes` — stores access tokens + 6-digit codes for external KYC access (migration done manually in Supabase)
+
+**New files:**
+- `src/app/api/kyc/verify-code/route.ts` — verifies 6-digit code, returns KYC data + doc requirements
+- `src/app/api/kyc/save-external/route.ts` — saves KYC data via access token (whitelisted fields only)
+- `src/app/api/documents/upload-external/route.ts` — uploads documents via access token
+- `src/app/kyc/fill/[token]/page.tsx` + `KycFillClient.tsx` — standalone KYC form (no auth required)
+
+**Updated files:**
+- `src/app/api/admin/profiles/[id]/send-invite/route.ts` — **completely replaced**. No longer creates profiles/client_users rows or JWT tokens. Now generates verification code entry + sends email with code and access link.
+- `middleware.ts` — `/kyc/fill` excluded from auth protection (early return before auth checks)
+- `src/types/index.ts` — added `VerificationCode` interface
+
+**Flow:**
+1. Admin clicks "Send invite" on a non-primary profile row
+2. System creates `verification_codes` row (token + 6-digit code, 72h expiry)
+3. Email sent with code displayed prominently + "Complete my KYC profile" link
+4. Person clicks link → `/kyc/fill/[token]` → enters 6-digit code
+5. Code verified (max 5 attempts) → form loads with pre-filled KYC data
+6. Person fills fields, uploads documents, clicks Submit → done. No account needed.
+
+**Security:**
+- Token is 32-byte random hex
+- Code is 6-digit numeric, max 5 attempts before lockout
+- Save-external route whitelists allowed fields (prevents injection of admin-only fields like risk_rating)
+- All routes verify token is verified + not expired before any data access
+
+---
+
 ### 2026-04-13 — B-013: Primary Contact pre-fill fix (Claude Code)
 
 **Fix: Consolidated two-useEffect KYC pre-fill into single async init()**

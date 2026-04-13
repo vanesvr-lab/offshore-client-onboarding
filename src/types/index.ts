@@ -466,3 +466,15 @@ export interface ProcessDocument {
   requested_at: string | null;
   received_at: string | null;
 }
+
+export interface VerificationCode {
+  id: string;
+  kyc_record_id: string;
+  access_token: string;
+  code: string;
+  email: string;
+  verified_at: string | null;
+  expires_at: string;
+  attempts: number;
+  created_at: string;
+}

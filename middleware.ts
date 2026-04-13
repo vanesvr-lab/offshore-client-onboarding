@@ -5,6 +5,11 @@ export default auth((req) => {
   const session = req.auth;
   const path = req.nextUrl.pathname;
 
+  // Standalone KYC fill page — no auth required (uses verification code)
+  if (path.startsWith("/kyc/fill")) {
+    return NextResponse.next();
+  }
+
   const isClientRoute =
     path.startsWith("/dashboard") ||
     path.startsWith("/apply") ||
