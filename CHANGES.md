@@ -15,6 +15,13 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-13 — B-013: Primary Contact pre-fill fix (Claude Code)
+
+**Fix: Consolidated two-useEffect KYC pre-fill into single async init()**
+- `src/app/(client)/apply/[templateId]/details/page.tsx`: replaced two separate useEffects (one for app load, one for KYC pre-fill on clientId change) with a single `async function init()` inside one useEffect. Uses local `resolvedClientId` variable instead of React state to avoid stale closure / batching timing issue. Sets `skipKyc = true` when existing contact data is already loaded from the application, preventing overwrites.
+
+---
+
 ### 2026-04-12 — B-009: Account → Profiles → Roles refactor — all 6 phases (Claude Code)
 
 **Phase 1 — Types + Smart Delta Utility:**

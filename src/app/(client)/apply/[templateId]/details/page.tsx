@@ -68,74 +68,75 @@ export default function BusinessDetailsPage({
       })
       .catch(() => {});
 
-    if (existingAppId) {
-      // Resuming an existing application
-      setApplicationId(existingAppId);
-      fetch(`/api/applications/${existingAppId}`)
-        .then((r) => r.json())
-        .then(({ application: data }) => {
+    async function init() {
+      let resolvedClientId: string | null = null;
+      let skipKyc = false;
+
+      if (existingAppId) {
+        setApplicationId(existingAppId);
+        try {
+          const r = await fetch(`/api/applications/${existingAppId}`);
+          const { application: data } = await r.json() as { application?: Record<string, unknown> };
           if (data) {
+            const contactName = (data.contact_name as string) || "";
+            const contactEmail = (data.contact_email as string) || "";
             setForm((prev) => ({
               ...prev,
-              business_name: data.business_name || "",
-              business_type: data.business_type || "",
-              business_country: data.business_country || "",
-              business_address: data.business_address || "",
-              contact_name: data.contact_name || "",
-              contact_email: data.contact_email || "",
-              contact_phone: data.contact_phone || "",
+              business_name: (data.business_name as string) || "",
+              business_type: (data.business_type as string) || "",
+              business_country: (data.business_country as string) || "",
+              business_address: (data.business_address as string) || "",
+              contact_name: contactName,
+              contact_email: contactEmail,
+              contact_phone: (data.contact_phone as string) || "",
               contact_title: "",
             }));
-            setClientId(data.client_id ?? null);
+            resolvedClientId = (data.client_id as string) ?? null;
+            if (resolvedClientId) setClientId(resolvedClientId);
             if (data.service_details && typeof data.service_details === "object") {
               setServiceDetails(data.service_details as Record<string, unknown>);
             }
+            if (contactName.trim() || contactEmail.trim()) skipKyc = true;
           }
-        });
-    } else {
-      // New application — resolve clientId from the current user's profile
-      fetch("/api/me")
-        .then((r) => r.json())
-        .then(({ clientId: cid }) => {
-          if (cid) setClientId(cid as string);
-        })
-        .catch(() => {});
+        } catch {}
+      } else {
+        try {
+          const r = await fetch("/api/me");
+          const { clientId: cid } = await r.json() as { clientId?: string };
+          if (cid) { resolvedClientId = cid; setClientId(cid); }
+        } catch {}
+      }
+
+      if (resolvedClientId && !skipKyc) {
+        try {
+          const r = await fetch(`/api/kyc/${resolvedClientId}`);
+          const { records } = await r.json() as {
+            records?: Array<{
+              record_type: string;
+              full_name?: string;
+              email?: string;
+              phone?: string;
+              occupation?: string;
+              is_primary?: boolean;
+            }>;
+          };
+          const individuals = (records ?? []).filter((rec) => rec.record_type === "individual");
+          const individual = individuals.find((rec) => rec.is_primary) ?? individuals[0];
+          if (individual) {
+            setForm((prev) => ({
+              ...prev,
+              contact_name: individual.full_name || prev.contact_name,
+              contact_email: individual.email || prev.contact_email,
+              contact_phone: individual.phone || prev.contact_phone,
+              contact_title: individual.occupation || prev.contact_title,
+            }));
+          }
+        } catch {}
+      }
     }
+    void init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingAppId, params.templateId]);
-
-  // Pre-fill contact fields from the primary individual KYC record when clientId resolves
-  useEffect(() => {
-    if (!clientId) return;
-    if (form.contact_name?.trim() || form.contact_email?.trim()) return; // don't overwrite user edits
-    fetch(`/api/kyc/${clientId}`)
-      .then((r) => r.json())
-      .then(({ records }: {
-        records?: Array<{
-          record_type: string;
-          full_name?: string;
-          email?: string;
-          phone?: string;
-          occupation?: string;
-          is_primary?: boolean;
-        }>;
-      }) => {
-        const individuals = (records ?? []).filter((r) => r.record_type === "individual");
-        // Prefer the primary record, fall back to first individual
-        const individual = individuals.find((r) => r.is_primary) ?? individuals[0];
-        if (individual) {
-          setForm((prev) => ({
-            ...prev,
-            contact_name: individual.full_name || prev.contact_name,
-            contact_email: individual.email || prev.contact_email,
-            contact_phone: individual.phone || prev.contact_phone,
-            contact_title: individual.occupation || prev.contact_title,
-          }));
-        }
-      })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
 
   function updateField(field: string, value: string | null) {
     setForm((prev) => ({ ...prev, [field]: value ?? "" }));
