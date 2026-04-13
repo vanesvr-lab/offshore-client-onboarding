@@ -540,7 +540,13 @@ export function PersonsManager({
             key={role}
             variant="outline"
             size="sm"
-            onClick={() => clientId ? setSelectorRole(role) : void addPerson(role)}
+            onClick={() => {
+              if (clientId) {
+                setSelectorRole(role);
+              } else {
+                void addPerson(role);
+              }
+            }}
             disabled={adding}
             className="gap-1.5"
           >
@@ -550,7 +556,7 @@ export function PersonsManager({
         ))}
       </div>
 
-      {selectorRole && clientId && (
+      {selectorRole !== null && clientId && (
         <ProfileSelector
           clientId={clientId}
           role={selectorRole as "director" | "shareholder" | "ubo"}

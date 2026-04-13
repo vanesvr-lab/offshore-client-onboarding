@@ -59,8 +59,8 @@ export function ProfileSelector({ clientId, role, onSelect, onClose }: ProfileSe
   const canConfirm = selected !== "new" || newName.trim().length > 0;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm">
+    <Dialog open={true} onOpenChange={(newOpen) => { if (!newOpen) onClose(); }}>
+      <DialogContent className="max-w-sm z-[100]">
         <DialogHeader>
           <DialogTitle className="text-brand-navy">Add {ROLE_LABELS[role]}</DialogTitle>
         </DialogHeader>
