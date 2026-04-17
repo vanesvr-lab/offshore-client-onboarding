@@ -134,7 +134,7 @@ export function DynamicServiceForm({
         const isOther = (val as string) === "Other";
         const otherKey = `${field.key}_other`;
         return (
-          <div key={field.key} className="space-y-1.5">
+          <div key={field.key} className={`space-y-1.5 ${field.full_width ? "col-span-2" : ""}`}>
             <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
               {field.label}
               {field.required && " *"}
