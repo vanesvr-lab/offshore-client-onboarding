@@ -83,15 +83,35 @@ export default async function ServicesPage() {
     }>;
   }>;
 
-  // Batch-fetch documents for all services
   const serviceIds = services.map((s) => s.id);
-  const { data: allDocs } = serviceIds.length > 0
-    ? await supabase
-        .from("documents")
-        .select("id, service_id, verification_status")
-        .in("service_id", serviceIds)
-        .eq("is_active", true)
-    : { data: [] };
+
+  // Batch-fetch documents + audit_log "last updated by" in parallel
+  const [{ data: allDocs }, { data: lastAuditRows }] = await Promise.all([
+    serviceIds.length > 0
+      ? supabase
+          .from("documents")
+          .select("id, service_id, verification_status")
+          .in("service_id", serviceIds)
+          .eq("is_active", true)
+      : Promise.resolve({ data: [] as { id: string; service_id: string; verification_status: string }[] }),
+
+    serviceIds.length > 0
+      ? supabase
+          .from("audit_log")
+          .select("entity_id, created_at, actor_name")
+          .eq("entity_type", "service")
+          .in("entity_id", serviceIds)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as { entity_id: string; created_at: string; actor_name: string | null }[] }),
+  ]);
+
+  // Build map: serviceId → first (most recent) audit entry per service
+  const auditByService = new Map<string, { by: string | null; at: string }>();
+  for (const row of (lastAuditRows ?? []) as { entity_id: string; created_at: string; actor_name: string | null }[]) {
+    if (!auditByService.has(row.entity_id)) {
+      auditByService.set(row.entity_id, { by: row.actor_name, at: row.created_at });
+    }
+  }
 
   const docsByService = new Map<string, { verification_status: string }[]>();
   for (const doc of allDocs ?? []) {
@@ -145,8 +165,8 @@ export default async function ServicesPage() {
         peopleKyc: peopleKycPct,
         documents: documentsPct,
       },
-      lastUpdatedAt: svc.updated_at,
-      lastUpdatedBy: null, // TODO: pull from audit_log when it tracks service changes
+      lastUpdatedAt: auditByService.get(svc.id)?.at ?? svc.updated_at,
+      lastUpdatedBy: auditByService.get(svc.id)?.by ?? null,
     };
   });
 

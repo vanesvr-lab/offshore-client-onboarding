@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-021: Admin Service Detail Rework (Claude Code)
+
+**Part 1 — Services List "by name":**
+- `services/page.tsx`: Added parallel `audit_log` query filtered by `entity_type = 'service'`. Builds map of most-recent audit entry per service. Passes `lastUpdatedAt` and `lastUpdatedBy` (actor_name). ServicesPageClient's `LastUpdatedCell` already supported the two-line display.
+
+**Part 2 — Service Detail 9 sections:**
+
+**Created:**
+- `src/components/admin/ServiceCollapsibleSection.tsx` — reusable collapsible card with inline progress bar, RAG dot, percentage, and "Admin" badge
+
+**Expanded server page** (`services/[id]/page.tsx`):
+- Adds queries for `admin_users`, `audit_log` (service entries, 100 rows), `due_diligence_requirements`, `document_types`
+- New exported types: `AdminUser`, `ServiceAuditEntry`
+
+**Rewrote** `ServiceDetailClient.tsx` — full 9-section layout:
+- Header: service number + name, status badge + dropdown, account manager dropdown (stored in `service_details._assigned_admin_id`), Save/Cancel buttons (appear when changes pending)
+- Section 1–3: Company Setup / Financial / Banking — each filtered by SECTION_MATCHERS, editable `DynamicServiceForm`, section progress bar
+- Section 4: People & KYC — unique roles by profile ID, per-person KYC progress bar, can_manage toggle, invite button, add/remove, shareholding tracker
+- Section 5: Documents — list with verification status badges
+- Section 6: Internal Notes (admin) — textarea, saves to `service_details._admin_notes`
+- Section 7: Risk Assessment (admin) — DD level selector (`_dd_level`), completion summary with per-section bars, required docs checklist
+- Section 8: Milestones (admin) — toggle + date picker per milestone (LOE/Invoice/Payment)
+- Section 9: Audit Trail (admin) — reuses `AuditTrail` component, by-user and by-action filters
+
+---
+
 ### 2026-04-17 — B-020 Batch 3: AI verification on upload + submit validation dialog (Claude Code)
 
 **Item 7 (AI verification on upload):** Wired `verifyDocument` into `services/[id]/documents/upload/route.ts` as a fire-and-forget call after upload. Fetches `document_types.ai_verification_rules`, runs AI, updates `documents.verification_status` + `verified_at` in background. Upload response is not blocked.
