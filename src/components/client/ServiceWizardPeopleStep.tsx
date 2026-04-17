@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ArrowLeft, Mail, X } from "lucide-react";
+import { UserPlus, User, ArrowLeft, Mail, X, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import type { KycRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
@@ -315,6 +316,102 @@ function AddPersonModal({
   );
 }
 
+// ─── InviteDialog ─────────────────────────────────────────────────────────────
+
+function InviteDialog({
+  person,
+  serviceId,
+  combinedRoleLabels,
+  onClose,
+  onSent,
+}: {
+  person: ServicePerson;
+  serviceId: string;
+  combinedRoleLabels: string;
+  onClose: () => void;
+  onSent: (sentAt: string) => void;
+}) {
+  const [email, setEmail] = useState(person.client_profiles?.email ?? "");
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+
+  async function handleSend() {
+    if (!email.trim()) {
+      toast.error("Email is required", { position: "top-right" });
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`/api/services/${serviceId}/persons/${person.id}/send-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), note: note.trim() || undefined }),
+      });
+      const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to send");
+      onSent(data.invite_sent_at ?? new Date().toISOString());
+      toast.success("Request sent!", { position: "top-right" });
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send", { position: "top-right" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const personName = person.client_profiles?.full_name ?? "this person";
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-sm z-[100]">
+        <DialogHeader>
+          <DialogTitle className="text-brand-navy">Request KYC from {personName}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <p className="text-xs text-gray-500">
+            An email will be sent asking {personName} ({combinedRoleLabels}) to complete their KYC information.
+          </p>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">Email address <span className="text-red-400">*</span></Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="person@email.com"
+              className="text-sm"
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-sm">Additional note <span className="text-gray-400 font-normal">(optional)</span></Label>
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Add a personal message..."
+              className="text-sm resize-none"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="outline" onClick={onClose} disabled={sending}>Cancel</Button>
+            <Button
+              onClick={handleSend}
+              disabled={sending || !email.trim()}
+              className="bg-brand-navy hover:bg-brand-blue gap-1.5"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {sending ? "Sending…" : "Send Request"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── PersonCard ───────────────────────────────────────────────────────────────
 
 function PersonCard({
@@ -332,31 +429,11 @@ function PersonCard({
   onRemove: () => void;
   combinedRoles?: ServicePersonRole[];
 }) {
-  const [inviteSending, setInviteSending] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
 
-  async function handleSendInvite() {
-    if (!person.client_profiles?.email) {
-      toast.error("This person has no email address — edit their profile first");
-      return;
-    }
-    setInviteSending(true);
-    try {
-      const res = await fetch(`/api/services/${serviceId}/persons/${person.id}/send-invite`, {
-        method: "POST",
-      });
-      const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to send invite");
-      setInviteSentAt(data.invite_sent_at ?? new Date().toISOString());
-      toast.success("Invite sent!");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to send invite");
-    } finally {
-      setInviteSending(false);
-    }
-  }
-
   const roles = combinedRoles ?? [person.role as ServicePersonRole];
+  const combinedRoleLabels = roles.map((r) => ROLE_LABELS[r] ?? r).join(", ");
 
   const kycColor =
     kycPct === 100
@@ -390,7 +467,10 @@ function PersonCard({
             </p>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               {roles.map((r) => (
-                <span key={r} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}>
+                <span
+                  key={r}
+                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}
+                >
                   {ROLE_LABELS[r] ?? r}
                 </span>
               ))}
@@ -440,21 +520,30 @@ function PersonCard({
         {inviteSentAt ? (
           <span className="text-[11px] text-green-600 flex items-center gap-1">
             <Mail className="h-3 w-3" />
-            Invite sent {sentDate}
+            Request sent {sentDate}
           </span>
         ) : (
           <Button
             size="sm"
             variant="ghost"
-            onClick={handleSendInvite}
-            disabled={inviteSending}
+            onClick={() => setShowInviteDialog(true)}
             className="h-7 px-3 text-xs gap-1.5 text-gray-500 hover:text-brand-navy"
           >
             <Mail className="h-3 w-3" />
-            {inviteSending ? "Sending…" : "Send Invite"}
+            Request to fill and review KYC
           </Button>
         )}
       </div>
+
+      {showInviteDialog && (
+        <InviteDialog
+          person={person}
+          serviceId={serviceId}
+          combinedRoleLabels={combinedRoleLabels}
+          onClose={() => setShowInviteDialog(false)}
+          onSent={(sentAt) => setInviteSentAt(sentAt)}
+        />
+      )}
     </div>
   );
 }
