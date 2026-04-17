@@ -96,7 +96,7 @@ export function ServiceWizard({
   async function saveServiceDetails(): Promise<boolean> {
     setSaving(true);
     try {
-      const res = await fetch(`/api/admin/services/${serviceId}`, {
+      const res = await fetch(`/api/services/${serviceId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ service_details: serviceDetails }),
