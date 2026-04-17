@@ -133,7 +133,6 @@ export default async function ClientServiceDetailPage({
       requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
       myRole={roleCheck.role}
-      clientProfileId={clientProfileId}
     />
   );
 }

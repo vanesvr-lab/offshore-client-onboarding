@@ -15,6 +15,47 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-017: Client Service Wizard Rework (Claude Code)
+
+**Landing page (ClientServiceDetailClient.tsx — REWRITE):**
+- Default view is now a section checklist with 5 rows (Company Setup, Financial, Banking, People & KYC, Documents)
+- Each row shows Complete/Incomplete + individual "Review" button that opens wizard at that step
+- Greeting banner: amber "please complete" or green "all complete"
+- "Review and Complete" CTA opens wizard at step 0
+- Live state sync: wizard close propagates updated serviceDetails, persons, docs back to landing page
+
+**Wizard infrastructure:**
+- `ServiceWizardStepIndicator.tsx` — clickable step dots with complete/current/future states
+- `ServiceWizardNav.tsx` — sticky bottom bar: Save & Close, Back, Next, Submit (green, only on last step, gated by canSubmit)
+- `ServiceWizardStep.tsx` — thin wrapper: renders DynamicServiceForm for field-based steps
+- `ServiceWizard.tsx` — main container: manages step state, serviceDetails, persons, docs; saves on every Next via PATCH /api/admin/services/[id]
+
+**Field section routing:**
+- Step 0 (Company Setup): fields with section "Company Setup", "Details", or no section
+- Step 1 (Financial): fields where section matches /financial|finance/i
+- Step 2 (Banking): fields where section matches /bank/i
+- Missing section → auto-complete (0 required fields)
+
+**Step 4 — People & KYC (ServiceWizardPeopleStep.tsx):**
+- Roster view: add Director/Shareholder/UBO, list existing, remove (same API as B-016)
+- "Continue to KYC" gated on at least 1 director being present
+- Linear per-person KYC walkthrough using KycStepWizard compact+inline mode
+- "Skip for now" button per person; auto-advances after onComplete
+- Mini progress dots for the person sequence
+
+**Step 5 — Documents (ServiceWizardDocumentsStep.tsx):**
+- Shows required doc types (from DD requirements) + any already-uploaded docs
+- Per-row upload button → calls new POST /api/services/[id]/documents/upload
+- Auto-updates checklist on successful upload
+
+**New API route:**
+- `src/app/api/services/[id]/documents/upload/route.ts` — POST: verifies can_manage, validates MIME/size, uploads to Supabase Storage at services/[id]/[typeId]/..., upserts documents row
+
+**Files modified:**
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx` — full rewrite (landing + wizard toggle)
+- `src/app/(client)/services/[id]/page.tsx` — removed clientProfileId prop (no longer needed)
+- `src/components/kyc/KycStepWizard.tsx` — saveUrl+inlineMode props added (B-016, referenced here)
+
 ### 2026-04-17 — B-016: Client Portal Rework — All 5 Phases (Claude Code)
 
 **Phase 1 — Utilities + Tailwind tokens:**
