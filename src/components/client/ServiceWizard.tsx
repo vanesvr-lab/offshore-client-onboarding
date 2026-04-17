@@ -7,9 +7,11 @@ import { ServiceWizardNav } from "./ServiceWizardNav";
 import { ServiceWizardStep } from "./ServiceWizardStep";
 import { ServiceWizardPeopleStep } from "./ServiceWizardPeopleStep";
 import { ServiceWizardDocumentsStep } from "./ServiceWizardDocumentsStep";
+import { SubmitValidationDialog } from "./SubmitValidationDialog";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { DueDiligenceRequirement, DocumentType } from "@/types";
 import type { ClientServiceRecord, ClientServiceDoc, ServicePerson } from "@/app/(client)/services/[id]/page";
+import type { ValidationResult } from "@/app/api/services/[id]/validate/route";
 
 interface Props {
   serviceId: string;
@@ -68,6 +70,8 @@ export function ServiceWizard({
   const [documents, setDocuments] = useState<ClientServiceDoc[]>(initialDocuments);
   const [saving, setSaving] = useState(false);
   const [hideWizardNav, setHideWizardNav] = useState(false);
+  const [validationPhase, setValidationPhase] = useState<"loading" | "valid" | "invalid" | null>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
@@ -143,9 +147,39 @@ export function ServiceWizard({
   async function handleSubmit() {
     const ok = await saveServiceDetails();
     if (!ok) return;
-    // TODO: hit submit endpoint when available
-    toast.success("Application submitted for review!");
-    onClose(serviceDetails, persons, documents);
+
+    // Show validation dialog
+    setValidationPhase("loading");
+    setValidationResult(null);
+
+    try {
+      const res = await fetch(`/api/services/${serviceId}/validate`, { method: "POST" });
+      const data = (await res.json()) as ValidationResult & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Validation failed");
+      setValidationResult(data);
+      setValidationPhase(data.valid ? "valid" : "invalid");
+    } catch (err: unknown) {
+      setValidationPhase(null);
+      toast.error(err instanceof Error ? err.message : "Validation failed", { position: "top-right" });
+    }
+  }
+
+  async function handleConfirmSubmit() {
+    setValidationPhase(null);
+    // PATCH status to submitted
+    try {
+      const res = await fetch(`/api/services/${serviceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "submitted" }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to submit");
+      toast.success("Application submitted for review!", { position: "top-right" });
+      onClose(serviceDetails, persons, documents);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit", { position: "top-right" });
+    }
   }
 
   const handleFieldChange = useCallback((key: string, value: unknown) => {
@@ -154,6 +188,15 @@ export function ServiceWizard({
 
   return (
     <div className="min-h-[600px] flex flex-col">
+      {/* Submit validation overlay */}
+      {validationPhase && (
+        <SubmitValidationDialog
+          phase={validationPhase}
+          result={validationResult}
+          onConfirmSubmit={handleConfirmSubmit}
+          onGoBack={() => setValidationPhase(null)}
+        />
+      )}
       {/* Step indicator */}
       <ServiceWizardStepIndicator
         currentStep={currentStep}

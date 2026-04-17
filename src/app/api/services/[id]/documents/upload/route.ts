@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { verifyDocument } from "@/lib/ai/verifyDocument";
+import type { VerificationRules } from "@/types";
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -110,6 +112,45 @@ export async function POST(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
   }
+
+  // Fire AI verification asynchronously (fire-and-forget — response goes back immediately)
+  const docId = doc.id as string;
+  void (async () => {
+    try {
+      // Fetch document type's AI verification rules + name
+      const { data: docTypeRow } = await supabase
+        .from("document_types")
+        .select("name, ai_verification_rules")
+        .eq("id", documentTypeId)
+        .maybeSingle();
+
+      const rules: VerificationRules = (docTypeRow?.ai_verification_rules as VerificationRules | null) ?? {
+        extract_fields: [],
+        match_rules: [],
+      };
+
+      const result = await verifyDocument({
+        fileBuffer,
+        mimeType: file.type,
+        rules,
+        applicationContext: { contact_name: null, business_name: null, ubo_data: null },
+        documentType: docTypeRow?.name ?? null,
+      });
+
+      const verificationStatus =
+        result.can_read_document === false ? "manual_review" : result.overall_status;
+
+      await supabase
+        .from("documents")
+        .update({
+          verification_status: verificationStatus,
+          verified_at: new Date().toISOString(),
+        })
+        .eq("id", docId);
+    } catch {
+      // Verification failure is non-fatal — doc stays as "pending"
+    }
+  })();
 
   return NextResponse.json({ document: doc });
 }

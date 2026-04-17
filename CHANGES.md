@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-020 Batch 3: AI verification on upload + submit validation dialog (Claude Code)
+
+**Item 7 (AI verification on upload):** Wired `verifyDocument` into `services/[id]/documents/upload/route.ts` as a fire-and-forget call after upload. Fetches `document_types.ai_verification_rules`, runs AI, updates `documents.verification_status` + `verified_at` in background. Upload response is not blocked.
+
+**Item 8 (Submit validation):**
+- Created `src/app/api/services/[id]/validate/route.ts` — POST, verifies can_manage, checks: required fields for all 3 field sections, at least 1 director, shareholding ~100% if shareholders exist, all persons KYC completed, required docs uploaded, no flagged/rejected docs. Returns `{ valid, issues[] }`.
+- Created `src/components/client/SubmitValidationDialog.tsx` — 3-phase modal: loading spinner, all-checks-passed, issues list. "Submit Application" only enabled if valid.
+- Updated `src/components/client/ServiceWizard.tsx` — `handleSubmit` calls validate first, shows dialog; new `handleConfirmSubmit` PATCHes status to "submitted" and closes wizard.
+
+**Files created:**
+- `src/app/api/services/[id]/validate/route.ts`
+- `src/components/client/SubmitValidationDialog.tsx`
+
+**Files modified:**
+- `src/app/api/services/[id]/documents/upload/route.ts` — added fire-and-forget AI verification
+- `src/components/client/ServiceWizard.tsx` — validation dialog integration, `handleConfirmSubmit`
+
+---
+
 ### 2026-04-17 — B-020 Batch 2: KYC invite dialog + updated email body (Claude Code)
 
 **#4 KYC Invite Popup:** PersonCard now shows "Request to fill and review KYC" button that opens an `InviteDialog` modal (email pre-filled, optional note textarea). Status shows "Request sent" after sending.
