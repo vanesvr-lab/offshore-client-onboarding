@@ -16,13 +16,43 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 
         const supabase = createAdminClient();
 
-        // Fetch from new users table — only active accounts
-        const { data: user } = await supabase
+        // Try new users table first, fall back to old profiles table
+        // (profiles still works until SQL migration is run)
+        let user: { id: string; full_name: string; email: string; password_hash: string; role?: string; is_active?: boolean; tenant_id?: string } | null = null;
+
+        const { data: newUser } = await supabase
           .from("users")
           .select("id, full_name, email, password_hash, role, is_active, tenant_id")
           .eq("email", credentials.email as string)
           .eq("is_active", true)
           .maybeSingle();
+
+        if (newUser) {
+          user = newUser;
+        } else {
+          // Fallback: old profiles table (pre-migration)
+          const { data: oldProfile } = await supabase
+            .from("profiles")
+            .select("id, full_name, email, password_hash, is_deleted")
+            .eq("email", credentials.email as string)
+            .eq("is_deleted", false)
+            .maybeSingle();
+          if (oldProfile) {
+            // Derive role from admin_users
+            const { data: adminRec } = await supabase
+              .from("admin_users")
+              .select("id")
+              .eq("user_id", oldProfile.id)
+              .maybeSingle();
+            user = {
+              ...oldProfile,
+              full_name: oldProfile.full_name ?? "",
+              role: adminRec ? "admin" : "user",
+              is_active: true,
+              tenant_id: undefined,
+            };
+          }
+        }
 
         if (!user?.password_hash) return null;
 
