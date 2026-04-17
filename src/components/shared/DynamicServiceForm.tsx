@@ -28,6 +28,7 @@ export interface ServiceField {
   show_if?: Record<string, unknown>; // conditional visibility
   tooltip?: string; // help text shown in clickable tooltip
   full_width?: boolean; // span both columns in the grid
+  default_value?: unknown; // default value when field is empty
 }
 
 interface DynamicServiceFormProps {
@@ -82,7 +83,8 @@ export function DynamicServiceForm({
   function renderField(field: ServiceField) {
     if (!isVisible(field)) return null;
 
-    const val = values[field.key];
+    const rawVal = values[field.key];
+    const val = rawVal !== undefined && rawVal !== null ? rawVal : (field.default_value ?? rawVal);
 
     switch (field.type) {
       case "text":
@@ -272,15 +274,11 @@ export function DynamicServiceForm({
               <div className={otherFields.length > 0 ? "mt-4" : ""}>
                 <p className="text-sm font-medium text-brand-navy mb-2">Estimated Turnover</p>
                 <div className="grid grid-cols-3 gap-4">
-                  {turnoverFields.map(f => (
-                    <div key={f.key}>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        {f.label.replace(/Estimated annual turnover —\s*/i, "")}
-                        {f.required && <span className={anyFilled && isEmptyRequired(f) ? " text-red-500" : " text-red-400"}> *</span>}
-                      </label>
-                      {renderField(f)}
-                    </div>
-                  ))}
+                  {turnoverFields.map(f => {
+                    // Override label to short form (Year 1, Year 2, Year 3)
+                    const shortField = { ...f, label: f.label.replace(/Estimated annual turnover —\s*/i, "") };
+                    return renderField(shortField);
+                  })}
                 </div>
               </div>
             )}
