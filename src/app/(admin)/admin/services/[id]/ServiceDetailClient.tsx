@@ -257,6 +257,162 @@ function AddProfileDialog({
   );
 }
 
+// KYC section fields for the collapsible long-form
+const KYC_SECTIONS = [
+  {
+    title: "Identity",
+    fields: [
+      { key: "full_name", label: "Full legal name", type: "text" },
+      { key: "aliases", label: "Aliases / other names", type: "text" },
+      { key: "date_of_birth", label: "Date of birth", type: "date" },
+      { key: "nationality", label: "Nationality", type: "text" },
+      { key: "passport_country", label: "Passport country", type: "text" },
+      { key: "passport_number", label: "Passport number", type: "text" },
+      { key: "passport_expiry", label: "Passport expiry date", type: "date" },
+      { key: "address", label: "Residential address", type: "textarea" },
+      { key: "occupation", label: "Occupation", type: "text" },
+    ],
+  },
+  {
+    title: "Financial",
+    fields: [
+      { key: "source_of_funds_description", label: "Source of funds", type: "textarea" },
+      { key: "source_of_wealth_description", label: "Source of wealth", type: "textarea" },
+      { key: "tax_identification_number", label: "Tax identification number", type: "text" },
+    ],
+  },
+  {
+    title: "Declarations",
+    fields: [
+      { key: "is_pep", label: "Politically Exposed Person (PEP)", type: "boolean" },
+      { key: "pep_details", label: "PEP details", type: "textarea" },
+      { key: "legal_issues_declared", label: "Legal issues declared", type: "boolean" },
+      { key: "legal_issues_details", label: "Legal issue details", type: "textarea" },
+    ],
+  },
+];
+
+function KycLongForm({ kyc, onSaved }: { kyc: KycFull; onSaved: () => void }) {
+  const [fields, setFields] = useState<Record<string, unknown>>({ ...kyc });
+  const [saving, setSaving] = useState(false);
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set(KYC_SECTIONS.map(s => s.title)));
+
+  function toggleSection(title: string) {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title); else next.add(title);
+      return next;
+    });
+  }
+
+  function sectionPct(section: typeof KYC_SECTIONS[number]): number {
+    const filled = section.fields.filter(f => {
+      const v = fields[f.key];
+      return v !== null && v !== undefined && v !== "";
+    }).length;
+    return Math.round((filled / section.fields.length) * 100);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const kycId = kyc.id as string;
+      if (!kycId) throw new Error("No KYC record ID");
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: kycId, fields }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      toast.success("KYC saved", { position: "top-right" });
+      onSaved();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save", { position: "top-right" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 mt-3">
+      {KYC_SECTIONS.map(section => {
+        const pct = sectionPct(section);
+        const isOpen = openSections.has(section.title);
+        return (
+          <div key={section.title} className="border rounded-lg overflow-hidden">
+            <button
+              onClick={() => toggleSection(section.title)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} />
+                <span className="text-sm font-medium text-brand-navy">{section.title}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                    <div className={`h-full rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[10px] text-gray-500 tabular-nums w-8">{pct}%</span>
+                </div>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              </div>
+            </button>
+            {isOpen && (
+              <div className="px-4 py-3 space-y-3">
+                {section.fields.map(f => (
+                  <div key={f.key}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
+                    {f.type === "textarea" ? (
+                      <textarea
+                        value={(fields[f.key] as string | null) ?? ""}
+                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        rows={2}
+                        className="w-full border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                      />
+                    ) : f.type === "boolean" ? (
+                      <select
+                        value={fields[f.key] === true ? "yes" : fields[f.key] === false ? "no" : ""}
+                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value === "yes" ? true : e.target.value === "no" ? false : null }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full"
+                      >
+                        <option value="">— Select —</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    ) : f.type === "date" ? (
+                      <input
+                        type="date"
+                        value={(fields[f.key] as string | null) ?? ""}
+                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full"
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={(fields[f.key] as string | null) ?? ""}
+                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="flex justify-end pt-2">
+        <Button size="sm" onClick={() => void handleSave()} disabled={saving} className="bg-brand-navy hover:bg-brand-blue">
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+          Save KYC
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function PersonCard({
   roleRow,
   combinedRoles,
@@ -270,6 +426,7 @@ function PersonCard({
 }) {
   const [togglingManage, setTogglingManage] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [showKyc, setShowKyc] = useState(false);
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
 
@@ -389,8 +546,18 @@ function PersonCard({
         </div>
       )}
 
-      {/* can_manage + invite */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      {/* Actions: Review KYC + can_manage + invite */}
+      <div className="flex items-center flex-wrap gap-2">
+        {!profile.is_representative && (
+          <Button
+            size="sm"
+            variant={showKyc ? "default" : "outline"}
+            onClick={() => setShowKyc(!showKyc)}
+            className={`h-7 text-xs gap-1.5 ${showKyc ? "bg-brand-navy hover:bg-brand-blue" : ""}`}
+          >
+            {showKyc ? "Hide KYC" : "Review KYC"}
+          </Button>
+        )}
         <button
           onClick={() => void toggleManage()}
           disabled={togglingManage}
@@ -421,6 +588,14 @@ function PersonCard({
           </Button>
         )}
       </div>
+
+      {/* Inline KYC long-form (collapsible sections) */}
+      {showKyc && kyc && (
+        <KycLongForm
+          kyc={kyc}
+          onSaved={onRefresh}
+        />
+      )}
     </div>
   );
 }
