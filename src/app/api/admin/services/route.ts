@@ -10,6 +10,7 @@ function getServicePrefix(templateName: string): string {
   if (name.includes("domestic")) return "DC";
   if (name.includes("trust") || name.includes("foundation")) return "TFF";
   if (name.includes("relocation")) return "RLM";
+  if (name.includes("bank account")) return "BAO";
   return "SVC";
 }
 

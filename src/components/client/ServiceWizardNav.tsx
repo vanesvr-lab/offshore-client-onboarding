@@ -27,7 +27,7 @@ export function ServiceWizardNav({
   const isLast = currentStep === totalSteps - 1;
 
   return (
-    <div className="sticky bottom-0 bg-white border-t px-6 py-3 -mx-8 -mb-8 flex items-center justify-between gap-3 z-10">
+    <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t px-6 py-3 flex items-center justify-between gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
       <Button
         variant="outline"
         size="sm"

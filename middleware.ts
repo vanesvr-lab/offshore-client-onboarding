@@ -51,7 +51,7 @@ export default auth((req) => {
     session.user.role === "client" &&
     session.user.is_primary === false
   ) {
-    const allowedPaths = ["/kyc", "/documents"];
+    const allowedPaths = ["/kyc", "/documents", "/services"];
     const isAllowed = allowedPaths.some((p) => path.startsWith(p));
     if (!isAllowed && isClientRoute) {
       return NextResponse.redirect(new URL("/kyc", req.url));

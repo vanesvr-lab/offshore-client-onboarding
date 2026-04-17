@@ -115,8 +115,13 @@ export function computePendingActions(
     }
   }
 
-  // KYC per person
+  // KYC per person (deduplicate by profile ID — one person can have multiple roles)
+  const seenProfileIds = new Set<string>();
   for (const person of persons) {
+    const profileId = person.client_profiles?.id;
+    if (!profileId || seenProfileIds.has(profileId)) continue;
+    seenProfileIds.add(profileId);
+
     const kyc = person.client_profiles?.client_profile_kyc ?? null;
     const fullName = person.client_profiles?.full_name ?? "Person";
     const kycCounts = countKycIncomplete(kyc);
