@@ -62,17 +62,24 @@ export function IdentityStep({
   kycRecord,
   documents,
   documentTypes,
+  requirements,
   form,
   onChange,
   onDocumentUploaded,
 }: IdentityStepProps) {
   const validation = useFieldValidation();
 
-  // Find document types for inline uploads
-  const passportType = documentTypes.find((dt) => dt.name === "Certified Passport Copy");
-  const addressType = documentTypes.find((dt) => dt.name === "Proof of Residential Address");
-  const passportDoc = passportType ? documents.find((d) => d.document_type_id === passportType.id) : null;
-  const addressDoc = addressType ? documents.find((d) => d.document_type_id === addressType.id) : null;
+  // Resolve doc type IDs from DD requirements first; fall back to name lookup
+  function resolveDocTypeId(label: string): string | undefined {
+    return (
+      requirements.find((r) => r.requirement_type === "document" && r.document_types?.name === label)?.document_type_id
+      ?? documentTypes.find((dt) => dt.name === label)?.id
+    );
+  }
+  const passportTypeId = resolveDocTypeId("Certified Passport Copy");
+  const addressTypeId = resolveDocTypeId("Proof of Residential Address");
+  const passportDoc = passportTypeId ? documents.find((d) => d.document_type_id === passportTypeId) : null;
+  const addressDoc = addressTypeId ? documents.find((d) => d.document_type_id === addressTypeId) : null;
 
   return (
     <div className="space-y-6">
@@ -98,7 +105,7 @@ export function IdentityStep({
         <DocumentUploadWidget
           clientId={clientId}
           kycRecordId={kycRecord.id}
-          documentTypeId={passportType?.id}
+          documentTypeId={passportTypeId}
           documentTypeName="Certified Passport Copy"
           existingDocument={passportDoc ?? null}
           onUploadComplete={onDocumentUploaded}
@@ -131,7 +138,7 @@ export function IdentityStep({
         <DocumentUploadWidget
           clientId={clientId}
           kycRecordId={kycRecord.id}
-          documentTypeId={addressType?.id}
+          documentTypeId={addressTypeId}
           documentTypeName="Proof of Residential Address"
           existingDocument={addressDoc ?? null}
           onUploadComplete={onDocumentUploaded}

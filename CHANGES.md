@@ -15,6 +15,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 5B: Replace Hardcoded Document Name Lookups (Claude Code)
+
+**IdentityStep.tsx:**
+- `resolveDocTypeId()` helper checks DD requirements first (`r.document_types?.name`), falls back to `documentTypes.find(dt => dt.name === ...)` only if no matching requirement
+- `passportType`/`addressType` replaced with `passportTypeId`/`addressTypeId` (IDs only, no DocumentType object needed)
+
+**DeclarationsStep.tsx:**
+- Now destructures and uses `requirements` prop (was ignored before)
+- `pepDocType` replaced with `pepTypeId` resolved from requirements first
+
+**ReviewStep.tsx:**
+- Document status section now driven by `requirements.filter(r => r.requirement_type === 'document')` instead of hardcoded `["Certified Passport Copy", "Proof of Residential Address", ...]` list
+- Falls back to static level-based list only if no requirements are available
+
 ### 2026-04-17 — B-015 Phase 5C: Compliance Scoring Consolidation (Claude Code)
 
 **Created `src/lib/utils/dueDiligenceConstants.ts`:**

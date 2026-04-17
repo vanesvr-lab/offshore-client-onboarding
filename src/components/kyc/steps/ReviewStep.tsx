@@ -53,24 +53,25 @@ export function ReviewStep({
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
   const isEdd = dueDiligenceLevel === "edd";
 
-  // Required document names based on level
-  const requiredDocNames: string[] = ["Certified Passport Copy", "Proof of Residential Address"];
-  if (dueDiligenceLevel !== "sdd" || requirements.some((r) => r.requirement_key === "source_of_funds_description")) {
-    requiredDocNames.push("Declaration of Source of Funds");
-  }
-  if (isCdd) {
-    requiredDocNames.push("Evidence of Source of Funds", "Bank Reference Letter", "Curriculum Vitae / Resume", "PEP Declaration Form");
-  }
-  if (isEdd) {
-    requiredDocNames.push("Declaration of Source of Wealth", "Evidence of Source of Wealth", "Professional Reference Letter", "Tax Residency Certificate");
-  }
-
-  // Build doc status list
-  const docStatuses = requiredDocNames.map((name) => {
-    const docType = documentTypes.find((dt) => dt.name === name);
-    const uploaded = docType ? documents.find((d) => d.document_type_id === docType.id) : null;
-    return { name, uploaded: !!uploaded };
+  // Build doc status list from DD requirements (avoids hardcoded document names)
+  const documentReqs = requirements.filter((r) => r.requirement_type === "document" && r.document_type_id);
+  const docStatuses = documentReqs.map((req) => {
+    const uploaded = documents.some((d) => d.document_type_id === req.document_type_id && d.is_active !== false);
+    return { name: req.label, uploaded };
   });
+
+  // If no requirements available, fall back to level-based static list
+  const fallbackDocNames: string[] = [];
+  if (docStatuses.length === 0) {
+    fallbackDocNames.push("Certified Passport Copy", "Proof of Residential Address");
+    if (isCdd) fallbackDocNames.push("Evidence of Source of Funds", "Bank Reference Letter", "PEP Declaration Form");
+    if (isEdd) fallbackDocNames.push("Declaration of Source of Wealth", "Tax Residency Certificate");
+    fallbackDocNames.forEach((name) => {
+      const docType = documentTypes.find((dt) => dt.name === name);
+      const uploaded = docType ? documents.some((d) => d.document_type_id === docType.id) : false;
+      docStatuses.push({ name, uploaded });
+    });
+  }
 
   const missingDocs = docStatuses.filter((d) => !d.uploaded);
 

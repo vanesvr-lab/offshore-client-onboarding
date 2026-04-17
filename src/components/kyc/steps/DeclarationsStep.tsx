@@ -27,6 +27,7 @@ export function DeclarationsStep({
   documents,
   documentTypes,
   dueDiligenceLevel,
+  requirements,
   form,
   onChange,
   onDocumentUploaded,
@@ -34,8 +35,11 @@ export function DeclarationsStep({
   const validation = useFieldValidation();
   const isEdd = dueDiligenceLevel === "edd";
 
-  const pepDocType = documentTypes.find((dt) => dt.name === "PEP Declaration Form");
-  const pepDoc = pepDocType ? documents.find((d) => d.document_type_id === pepDocType.id) : null;
+  // Resolve via DD requirements first; fall back to name lookup
+  const pepTypeId =
+    requirements.find((r) => r.requirement_type === "document" && r.document_types?.name === "PEP Declaration Form")?.document_type_id
+    ?? documentTypes.find((dt) => dt.name === "PEP Declaration Form")?.id;
+  const pepDoc = pepTypeId ? documents.find((d) => d.document_type_id === pepTypeId) : null;
 
   const isPep = form.is_pep ?? false;
   const hasLegalIssues = form.legal_issues_declared ?? false;
@@ -87,7 +91,7 @@ export function DeclarationsStep({
           <DocumentUploadWidget
             clientId={clientId}
             kycRecordId={kycRecord.id}
-            documentTypeId={pepDocType?.id}
+            documentTypeId={pepTypeId}
             documentTypeName="PEP Declaration Form"
             existingDocument={pepDoc ?? null}
             onUploadComplete={onDocumentUploaded}
