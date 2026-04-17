@@ -323,12 +323,14 @@ function PersonCard({
   kycPct,
   onReviewKyc,
   onRemove,
+  combinedRoles,
 }: {
   person: ServicePerson;
   serviceId: string;
   kycPct: number;
   onReviewKyc: () => void;
   onRemove: () => void;
+  combinedRoles?: ServicePersonRole[];
 }) {
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
@@ -354,9 +356,7 @@ function PersonCard({
     }
   }
 
-  const role = person.role as ServicePersonRole;
-  const roleLabel = ROLE_LABELS[role] ?? person.role;
-  const roleColor = ROLE_COLORS[role] ?? "bg-gray-100 text-gray-600";
+  const roles = combinedRoles ?? [person.role as ServicePersonRole];
 
   const kycColor =
     kycPct === 100
@@ -388,10 +388,12 @@ function PersonCard({
             <p className="text-sm font-semibold text-brand-navy leading-tight">
               {person.client_profiles?.full_name ?? "Unknown"}
             </p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor}`}>
-                {roleLabel}
-              </span>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              {roles.map((r) => (
+                <span key={r} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}>
+                  {ROLE_LABELS[r] ?? r}
+                </span>
+              ))}
               {person.shareholding_percentage != null && (
                 <span className="text-[10px] text-gray-400">{person.shareholding_percentage}%</span>
               )}
@@ -610,29 +612,46 @@ export function ServiceWizardPeopleStep({
         </p>
       </div>
 
-      {/* Person cards */}
+      {/* Person cards — deduplicated by profile, combined roles */}
       {persons.length === 0 ? (
         <p className="text-sm text-gray-400 py-2">No people added yet.</p>
       ) : (
         <div className="space-y-2.5">
-          {ROLES.flatMap((role) =>
-            persons
-              .filter((p) => p.role === role)
-              .map((p) => {
-                const rawPct = calcKycPct(p.client_profiles?.client_profile_kyc ?? null);
-                const kycPct = kycCompletedIds.has(p.id) ? 100 : rawPct;
-                return (
-                  <PersonCard
-                    key={p.id}
-                    person={p}
-                    serviceId={serviceId}
-                    kycPct={kycPct}
-                    onReviewKyc={() => setReviewingRoleId(p.id)}
-                    onRemove={() => void handleRemove(p.id)}
-                  />
-                );
-              })
-          )}
+          {(() => {
+            // Group by profile ID to deduplicate
+            const profileMap = new Map<string, { person: ServicePerson; roles: ServicePersonRole[]; roleIds: string[] }>();
+            for (const p of persons) {
+              const profileId = p.client_profiles?.id ?? p.id;
+              const existing = profileMap.get(profileId);
+              if (existing) {
+                if (!existing.roles.includes(p.role as ServicePersonRole)) {
+                  existing.roles.push(p.role as ServicePersonRole);
+                }
+                existing.roleIds.push(p.id);
+              } else {
+                profileMap.set(profileId, {
+                  person: p,
+                  roles: [p.role as ServicePersonRole],
+                  roleIds: [p.id],
+                });
+              }
+            }
+            return Array.from(profileMap.values()).map(({ person, roles, roleIds }) => {
+              const rawPct = calcKycPct(person.client_profiles?.client_profile_kyc ?? null);
+              const kycPct = roleIds.some((id) => kycCompletedIds.has(id)) ? 100 : rawPct;
+              return (
+                <PersonCard
+                  key={person.client_profiles?.id ?? person.id}
+                  person={person}
+                  serviceId={serviceId}
+                  kycPct={kycPct}
+                  onReviewKyc={() => setReviewingRoleId(person.id)}
+                  onRemove={() => void handleRemove(person.id)}
+                  combinedRoles={roles}
+                />
+              );
+            });
+          })()}
         </div>
       )}
 
