@@ -939,7 +939,7 @@ export function ServiceDetailClient({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
-      <div className="lg:col-span-2 space-y-4 divide-y divide-gray-100 [&>*]:pt-4 [&>*:first-child]:pt-0">
+      <div className="lg:col-span-2 space-y-4 divide-y divide-blue-200/60 [&>*]:pt-4 [&>*:first-child]:pt-0">
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
         <ServiceCollapsibleSection
