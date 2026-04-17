@@ -259,10 +259,12 @@ function AddProfileDialog({
 
 function PersonCard({
   roleRow,
+  combinedRoles,
   serviceId,
   onRefresh,
 }: {
   roleRow: RoleWithProfile;
+  combinedRoles?: string[];
   serviceId: string;
   onRefresh: () => void;
 }) {
@@ -347,9 +349,11 @@ function PersonCard({
             >
               {profile.full_name}
             </Link>
-            <span className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
-              {roleRow.role}
-            </span>
+            {(combinedRoles ?? [roleRow.role]).map((r) => (
+              <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
+                {r}
+              </span>
+            ))}
             {roleRow.shareholding_percentage != null && (
               <span className="text-[10px] text-gray-400">{roleRow.shareholding_percentage}%</span>
             )}
@@ -483,18 +487,23 @@ export function ServiceDetailClient({
   const typedRoles = (initialRoles as unknown as RoleWithProfile[]);
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
-  // Deduplicate roles by profile ID (show combined role badges)
-  const seenProfileIds = new Set<string>();
-  const uniqueRoles: RoleWithProfile[] = [];
+  // Deduplicate roles by profile ID — collect all roles per profile
+  const profileRolesMap = new Map<string, { person: RoleWithProfile; roles: string[]; roleIds: string[] }>();
   for (const r of typedRoles) {
     const pid = r.client_profiles?.id;
-    if (pid && !seenProfileIds.has(pid)) {
-      seenProfileIds.add(pid);
-      uniqueRoles.push(r);
-    } else if (!pid) {
-      uniqueRoles.push(r);
+    if (pid) {
+      const existing = profileRolesMap.get(pid);
+      if (existing) {
+        if (!existing.roles.includes(r.role)) existing.roles.push(r.role);
+        existing.roleIds.push(r.id);
+      } else {
+        profileRolesMap.set(pid, { person: r, roles: [r.role], roleIds: [r.id] });
+      }
+    } else {
+      profileRolesMap.set(r.id, { person: r, roles: [r.role], roleIds: [r.id] });
     }
   }
+  const uniqueRoles = Array.from(profileRolesMap.values());
 
   const existingProfileIds = new Set(
     typedRoles.map((r) => r.client_profiles?.id).filter(Boolean) as string[]
@@ -772,8 +781,53 @@ export function ServiceDetailClient({
         </div>
       </div>
 
-      {/* ── Content Sections ─────────────────────────────────────────────── */}
-      <div className="space-y-3">
+      {/* ── Workflow Progress Stepper ──────────────────────────────────── */}
+      <div className="bg-white border rounded-xl px-5 py-4 mb-6">
+        <div className="flex items-center justify-between">
+          {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
+            const stepLabels: Record<string, string> = {
+              draft: "Draft",
+              in_progress: "In Progress",
+              submitted: "Submitted",
+              in_review: "In Review",
+              verification: "Verification",
+              approved: "Approved",
+            };
+            const stepIdx = arr.indexOf(service.status as typeof arr[number]);
+            const isActive = idx === stepIdx;
+            const isComplete = idx < stepIdx;
+            const isRejected = service.status === "rejected";
+            return (
+              <div key={step} className="flex items-center flex-1 last:flex-initial">
+                <div className="flex flex-col items-center">
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                    isRejected && isActive ? "bg-red-500 text-white" :
+                    isComplete ? "bg-green-500 text-white" :
+                    isActive ? "bg-brand-navy text-white" :
+                    "bg-gray-200 text-gray-500"
+                  }`}>
+                    {isComplete ? "✓" : idx + 1}
+                  </div>
+                  <span className={`text-[10px] mt-1 font-medium ${
+                    isActive ? "text-brand-navy" : isComplete ? "text-green-600" : "text-gray-400"
+                  }`}>
+                    {isRejected && isActive ? "Rejected" : stepLabels[step]}
+                  </span>
+                </div>
+                {idx < arr.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-2 ${isComplete ? "bg-green-400" : "bg-gray-200"}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Two-column layout ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
+      <div className="lg:col-span-2 space-y-3">
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
         <ServiceCollapsibleSection
@@ -834,16 +888,16 @@ export function ServiceDetailClient({
 
         {/* ── Section 4: People & KYC ──────────────────────────────────────── */}
         <ServiceCollapsibleSection
-          title={`People & KYC (${uniqueRoles.length})`}
+          title={`People & KYC (${uniqueRoles.length} ${uniqueRoles.length === 1 ? "person" : "people"})`}
           percentage={peopleKycPct}
           ragStatus={ragFromPct(peopleKycPct)}
         >
           <div className="pt-4">
             {/* Shareholding tracker */}
-            {typedRoles.some((r) => r.role === "shareholder") && (() => {
+            {typedRoles.some((r: RoleWithProfile) => r.role === "shareholder") && (() => {
               const total = typedRoles
-                .filter((r) => r.role === "shareholder")
-                .reduce((sum, r) => sum + (r.shareholding_percentage ?? 0), 0);
+                .filter((r: RoleWithProfile) => r.role === "shareholder")
+                .reduce((sum: number, r: RoleWithProfile) => sum + (r.shareholding_percentage ?? 0), 0);
               const ok = total >= 95 && total <= 105;
               return (
                 <div className={`flex items-center gap-2 mb-4 text-sm rounded-lg px-3 py-2 ${ok ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
@@ -854,7 +908,7 @@ export function ServiceDetailClient({
             })()}
 
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-500">{uniqueRoles.length} person{uniqueRoles.length !== 1 ? "s" : ""} linked</p>
+              <p className="text-sm text-gray-500">{uniqueRoles.length} {uniqueRoles.length === 1 ? "person" : "people"} linked</p>
               <AddProfileDialog
                 serviceId={service.id}
                 existingProfileIds={existingProfileIds}
@@ -867,10 +921,11 @@ export function ServiceDetailClient({
               <p className="text-sm text-gray-400">No profiles linked yet.</p>
             ) : (
               <div className="space-y-3">
-                {uniqueRoles.map((r) => (
+                {uniqueRoles.map(({ person, roles }) => (
                   <PersonCard
-                    key={r.id}
-                    roleRow={r}
+                    key={person.client_profiles?.id ?? person.id}
+                    roleRow={person}
+                    combinedRoles={roles}
                     serviceId={service.id}
                     onRefresh={handleRolesRefresh}
                   />
@@ -1042,12 +1097,16 @@ export function ServiceDetailClient({
           </div>
         </ServiceCollapsibleSection>
 
+      </div>{/* End left column */}
+
+      {/* ── RIGHT: Sidebar (col-span-1) ─────────────────────────────────── */}
+      <div className="space-y-3">
         {/* ── Section 8: Milestones ────────────────────────────────────────── */}
         <ServiceCollapsibleSection
           title="Milestones"
           icon={<Milestone className="h-4 w-4" />}
           adminOnly
-          defaultOpen={false}
+          defaultOpen={true}
         >
           <div className="pt-4 space-y-4">
             {(
@@ -1113,7 +1172,7 @@ export function ServiceDetailClient({
           title="Audit Trail"
           icon={<Clock className="h-4 w-4" />}
           adminOnly
-          defaultOpen={false}
+          defaultOpen={true}
         >
           <div className="pt-4">
             {/* Filters */}
@@ -1162,7 +1221,8 @@ export function ServiceDetailClient({
           </div>
         </ServiceCollapsibleSection>
 
-      </div>
+      </div>{/* End right column */}
+      </div>{/* End grid */}
     </div>
   );
 }
