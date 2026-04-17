@@ -1404,6 +1404,35 @@ export function ServiceDetailClient({
 
       </div>{/* End right column */}
       </div>{/* End grid */}
+
+      {/* Fixed bottom save bar — only shows when changes are pending */}
+      {pendingChanges && (
+        <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t px-6 py-3 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+          <p className="text-sm text-amber-600 font-medium">You have unsaved changes</p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCancel}
+              className="h-8 text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className="h-8 text-xs bg-brand-navy hover:bg-brand-blue"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Save changes
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom padding for fixed bar */}
+      {pendingChanges && <div className="h-16" />}
     </div>
   );
 }
