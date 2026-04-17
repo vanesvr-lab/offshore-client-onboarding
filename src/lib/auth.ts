@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { createAdminClient } from "./supabase/admin";
+import { DEFAULT_TENANT_ID } from "./tenant";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   providers: [
@@ -15,51 +16,52 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 
         const supabase = createAdminClient();
 
-        // Fetch profile — only active (non-deleted) accounts can log in
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("id, full_name, email, password_hash, is_deleted")
+        // Fetch from new users table — only active accounts
+        const { data: user } = await supabase
+          .from("users")
+          .select("id, full_name, email, password_hash, role, is_active, tenant_id")
           .eq("email", credentials.email as string)
-          .eq("is_deleted", false)
+          .eq("is_active", true)
           .maybeSingle();
 
-        if (!profile?.password_hash) return null;
+        if (!user?.password_hash) return null;
 
         const valid = await bcrypt.compare(
           credentials.password as string,
-          profile.password_hash
+          user.password_hash
         );
         if (!valid) return null;
 
-        // Determine role from table membership
-        const { data: adminRecord } = await supabase
-          .from("admin_users")
-          .select("id")
-          .eq("user_id", profile.id)
-          .maybeSingle();
-
-        // For client logins, check if linked to a non-primary kyc_record
+        // For non-admin users, find their client_profile
+        let clientProfileId: string | null = null;
         let is_primary = true;
-        let kycRecordId: string | null = null;
-        if (!adminRecord) {
-          const { data: kycRecord } = await supabase
-            .from("kyc_records")
-            .select("id, is_primary")
-            .eq("profile_id", profile.id)
+        if (user.role !== "admin") {
+          const { data: profile } = await supabase
+            .from("client_profiles")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("is_deleted", false)
             .maybeSingle();
-          if (kycRecord) {
-            kycRecordId = kycRecord.id;
-            is_primary = kycRecord.is_primary ?? true;
+          if (profile) {
+            clientProfileId = profile.id;
+            // Check if they can_manage any service (primary-like behavior)
+            const { count } = await supabase
+              .from("profile_service_roles")
+              .select("id", { count: "exact", head: true })
+              .eq("client_profile_id", profile.id)
+              .eq("can_manage", true);
+            is_primary = (count ?? 0) > 0;
           }
         }
 
         return {
-          id: profile.id,
-          email: profile.email,
-          name: profile.full_name,
-          role: adminRecord ? "admin" : "client",
+          id: user.id,
+          email: user.email,
+          name: user.full_name,
+          role: user.role === "admin" ? "admin" : "client",
           is_primary,
-          kycRecordId,
+          clientProfileId,
+          tenantId: user.tenant_id ?? DEFAULT_TENANT_ID,
         };
       },
     }),
@@ -70,7 +72,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = (user as { role: string }).role;
         token.is_primary = (user as { is_primary: boolean }).is_primary ?? true;
-        token.kycRecordId = (user as { kycRecordId: string | null }).kycRecordId ?? null;
+        token.clientProfileId = (user as { clientProfileId: string | null }).clientProfileId ?? null;
+        token.tenantId = (user as { tenantId: string }).tenantId ?? DEFAULT_TENANT_ID;
       }
       return token;
     },
@@ -78,7 +81,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       session.user.id = token.id as string;
       session.user.role = token.role as string;
       session.user.is_primary = (token.is_primary as boolean) ?? true;
-      session.user.kycRecordId = (token.kycRecordId as string | null) ?? null;
+      session.user.clientProfileId = (token.clientProfileId as string | null) ?? null;
+      session.user.tenantId = (token.tenantId as string) ?? DEFAULT_TENANT_ID;
       return session;
     },
   },

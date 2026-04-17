@@ -27,9 +27,9 @@ interface SidebarProps {
 
 const ADMIN_NAV = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Clients", href: "/admin/clients", icon: Users, exact: false },
-  { label: "Solutions & Services", href: "/admin/applications", icon: FileText, exact: true },
-  { label: "Review Queue", href: "/admin/queue", icon: ClipboardList, exact: false },
+  { label: "Services", href: "/admin/applications", icon: FileText, exact: true },
+  { label: "Profiles", href: "/admin/profiles", icon: Users, exact: false },
+  { label: "Queue", href: "/admin/queue", icon: ClipboardList, exact: false },
 ];
 
 const ADMIN_SETTINGS_NAV = [

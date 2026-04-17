@@ -27,12 +27,13 @@ export default async function KycPage({
   let dueDiligenceLevel: DueDiligenceLevel;
   let kycRecordFilter: string | null = null; // if set, only return this one record
 
-  if (!isPrimary && session.user.kycRecordId) {
+  const kycRecordId = session.user.clientProfileId ?? (session.user as unknown as { kycRecordId?: string }).kycRecordId;
+  if (!isPrimary && kycRecordId) {
     // Non-primary: get client via kyc_records row
     const { data: kycRow } = await supabase
       .from("kyc_records")
       .select("id, client_id, due_diligence_level, clients(due_diligence_level)")
-      .eq("id", session.user.kycRecordId)
+      .eq("id", kycRecordId)
       .single();
     if (!kycRow?.client_id) redirect("/kyc");
     clientId = kycRow.client_id;

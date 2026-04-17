@@ -26,7 +26,15 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
   const passwordHash = await bcrypt.hash(password, 12);
+
+  // Write to new users table (primary) + old profiles table (backward compat)
   const { error } = await supabase
+    .from("users")
+    .update({ password_hash: passwordHash })
+    .eq("id", payload.sub);
+
+  // Also update old profiles table for backward compatibility
+  await supabase
     .from("profiles")
     .update({ password_hash: passwordHash })
     .eq("id", payload.sub);

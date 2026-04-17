@@ -10,13 +10,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (session.user.role !== "admin") redirect("/dashboard");
 
   const supabase = createAdminClient();
-  const { data: profile } = await supabase
-    .from("profiles")
+  const { data: user } = await supabase
+    .from("users")
     .select("full_name")
     .eq("id", session.user.id)
     .single();
 
-  const userName = profile?.full_name ?? session.user.name;
+  const userName = user?.full_name ?? session.user.name;
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">

@@ -7,8 +7,10 @@ declare module "next-auth" {
       role: string;
       /** true = full portal access; false = restricted non-primary view */
       is_primary: boolean;
-      /** kyc_records.id linked to this login (non-null for invite-based logins) */
-      kycRecordId: string | null;
+      /** client_profiles.id linked to this login (non-null for client logins) */
+      clientProfileId: string | null;
+      /** Tenant UUID for multi-tenancy filtering */
+      tenantId: string;
     } & DefaultSession["user"];
   }
 }

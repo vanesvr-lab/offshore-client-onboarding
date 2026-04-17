@@ -44,7 +44,7 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/admin/dashboard", req.url));
   }
 
-  // Non-primary client: restrict to /kyc and /documents only
+  // Non-primary client (no can_manage on any service): restrict to /kyc and /documents only
   if (
     session &&
     session.user.role === "client" &&

@@ -478,3 +478,164 @@ export interface VerificationCode {
   attempts: number;
   created_at: string;
 }
+
+// ── Phase 1: Services + Profiles Redesign ──────────────────────────────────
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  settings: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AppUser {
+  id: string;
+  tenant_id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  role: 'admin' | 'user';
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientProfile {
+  id: string;
+  tenant_id: string;
+  user_id: string | null;
+  record_type: 'individual' | 'organisation';
+  is_representative: boolean;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  due_diligence_level: DueDiligenceLevel;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined relations (optional)
+  client_profile_kyc?: ClientProfileKyc | null;
+  profile_service_roles?: ProfileServiceRole[];
+  users?: { email: string } | null;
+}
+
+export interface ClientProfileKyc {
+  id: string;
+  tenant_id: string;
+  client_profile_id: string;
+  // Individual identity
+  aliases: string | null;
+  work_address: string | null;
+  work_phone: string | null;
+  work_email: string | null;
+  date_of_birth: string | null;
+  nationality: string | null;
+  passport_country: string | null;
+  passport_number: string | null;
+  passport_expiry: string | null;
+  occupation: string | null;
+  tax_identification_number: string | null;
+  // Financial
+  source_of_funds_description: string | null;
+  source_of_wealth_description: string | null;
+  is_pep: boolean | null;
+  pep_details: string | null;
+  legal_issues_declared: boolean | null;
+  legal_issues_details: string | null;
+  // Organisation
+  business_website: string | null;
+  jurisdiction_incorporated: string | null;
+  date_of_incorporation: string | null;
+  listed_or_unlisted: 'listed' | 'unlisted' | null;
+  jurisdiction_tax_residence: string | null;
+  description_activity: string | null;
+  company_registration_number: string | null;
+  industry_sector: string | null;
+  regulatory_licenses: string | null;
+  // Admin risk assessment
+  sanctions_checked: boolean;
+  sanctions_checked_at: string | null;
+  sanctions_notes: string | null;
+  adverse_media_checked: boolean;
+  adverse_media_checked_at: string | null;
+  adverse_media_notes: string | null;
+  pep_verified: boolean;
+  pep_verified_at: string | null;
+  pep_verified_notes: string | null;
+  risk_rating: 'low' | 'medium' | 'high' | 'prohibited' | null;
+  risk_rating_justification: string | null;
+  risk_rated_by: string | null;
+  risk_rated_at: string | null;
+  geographic_risk_assessment: string | null;
+  relationship_history: string | null;
+  // EDD
+  risk_flags: RiskFlag[] | null;
+  senior_management_approval: boolean | null;
+  senior_management_approved_by: string | null;
+  senior_management_approved_at: string | null;
+  ongoing_monitoring_plan: string | null;
+  // Progress
+  completion_status: 'incomplete' | 'complete';
+  kyc_journey_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceRecord {
+  id: string;
+  tenant_id: string;
+  service_template_id: string;
+  service_details: Record<string, unknown>;
+  status: 'draft' | 'in_progress' | 'submitted' | 'in_review' | 'pending_action' | 'verification' | 'approved' | 'rejected';
+  loe_received: boolean;
+  loe_received_at: string | null;
+  invoice_sent_at: string | null;
+  payment_received_at: string | null;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined relations (optional)
+  service_templates?: { name: string; description: string | null } | null;
+  profile_service_roles?: ProfileServiceRole[];
+}
+
+export interface ProfileServiceRole {
+  id: string;
+  tenant_id: string;
+  client_profile_id: string;
+  service_id: string;
+  role: 'director' | 'shareholder' | 'ubo' | 'other';
+  can_manage: boolean;
+  shareholding_percentage: number | null;
+  invite_sent_at: string | null;
+  invite_sent_by: string | null;
+  created_at: string;
+  // Joined relations (optional)
+  services?: { id: string; service_templates?: { name: string } | null } | null;
+  client_profiles?: { full_name: string } | null;
+}
+
+export interface ProfileRequirementOverride {
+  id: string;
+  tenant_id: string;
+  client_profile_id: string;
+  requirement_id: string;
+  is_required: boolean;
+  reason: string | null;
+  overridden_by: string | null;
+  overridden_at: string;
+}
+
+export interface ServiceSectionOverride {
+  id: string;
+  tenant_id: string;
+  service_id: string;
+  section_key: string;
+  override_status: 'green' | 'amber' | 'red';
+  admin_note: string | null;
+  overridden_by: string | null;
+  overridden_at: string;
+}
