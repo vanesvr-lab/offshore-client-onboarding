@@ -92,7 +92,7 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
 
           <Button
             size="sm"
-            onClick={() => router.push(`/services/${svc.id}`)}
+            onClick={() => router.push(`/services/${svc.id}?startWizard=true`)}
             className="bg-brand-navy hover:bg-brand-blue h-8 px-3 text-xs gap-1"
           >
             Review and Complete

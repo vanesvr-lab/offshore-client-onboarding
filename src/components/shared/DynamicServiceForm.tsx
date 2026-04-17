@@ -58,6 +58,18 @@ export function DynamicServiceForm({
     );
   }
 
+  // Detect partial fill: if any visible field has a value, show red for empty required fields
+  const anyFilled = fields.filter(isVisible).some((f) => {
+    const v = values[f.key];
+    return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
+  });
+
+  function isEmptyRequired(field: ServiceField): boolean {
+    if (!anyFilled || !field.required) return false;
+    const v = values[field.key];
+    return Array.isArray(v) ? v.length === 0 : v == null || v === "";
+  }
+
   // Group fields by section
   const sections: Record<string, ServiceField[]> = {};
   for (const f of fields) {
@@ -77,7 +89,7 @@ export function DynamicServiceForm({
       case "number":
         return (
           <div key={field.key} className={`space-y-1.5 ${field.full_width ? "col-span-2" : ""}`}>
-            <Label className="text-sm flex items-center gap-1">
+            <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
               {field.label}
               {field.required && " *"}
               {field.note && (
@@ -100,7 +112,7 @@ export function DynamicServiceForm({
       case "textarea":
         return (
           <div key={field.key} className="col-span-2 space-y-1.5">
-            <Label className="text-sm flex items-center gap-1">
+            <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
               {field.label}
               {field.required && " *"}
               {field.tooltip && <FieldTooltip content={field.tooltip} />}
@@ -120,7 +132,7 @@ export function DynamicServiceForm({
         const otherKey = `${field.key}_other`;
         return (
           <div key={field.key} className="space-y-1.5">
-            <Label className="text-sm flex items-center gap-1">
+            <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
               {field.label}
               {field.required && " *"}
               {field.tooltip && <FieldTooltip content={field.tooltip} />}
@@ -157,7 +169,7 @@ export function DynamicServiceForm({
       case "boolean":
         return (
           <div key={field.key} className="space-y-1.5">
-            <Label className="text-sm flex items-center gap-1">
+            <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
               {field.label}
               {field.required && " *"}
               {field.note && (
@@ -217,7 +229,7 @@ export function DynamicServiceForm({
         const arr = (Array.isArray(val) ? val : []) as string[];
         return (
           <div key={field.key} className="col-span-2 space-y-1.5">
-            <Label className="text-sm flex items-center gap-1">
+            <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
               {field.label}
               {field.required && " *"}
               {field.tooltip && <FieldTooltip content={field.tooltip} />}

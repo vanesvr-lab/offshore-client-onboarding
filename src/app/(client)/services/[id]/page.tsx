@@ -48,11 +48,13 @@ export default async function ClientServiceDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: { wizardStep?: string };
+  searchParams: { wizardStep?: string; startWizard?: string };
 }) {
   const { id } = await params;
   const autoWizardStep =
-    searchParams.wizardStep !== undefined ? parseInt(searchParams.wizardStep, 10) : undefined;
+    searchParams.wizardStep !== undefined ? parseInt(searchParams.wizardStep, 10) :
+    searchParams.startWizard === "true" ? 0 :
+    undefined;
   const session = await auth();
   if (!session) redirect("/login");
 
@@ -75,7 +77,7 @@ export default async function ClientServiceDetailPage({
   const roleCheck = roleRows?.[0] ?? null;
   if (!roleCheck) notFound(); // no access
 
-  const [serviceRes, docsRes, overridesRes, personsRes, requirementsRes, documentTypesRes] = await Promise.all([
+  const [serviceRes, overridesRes, personsRes, requirementsRes, documentTypesRes] = await Promise.all([
     supabase
       .from("services")
       .select(`
@@ -85,13 +87,6 @@ export default async function ClientServiceDetailPage({
       .eq("id", id)
       .eq("is_deleted", false)
       .maybeSingle(),
-
-    // Docs for this service (all profiles)
-    supabase
-      .from("documents")
-      .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
-      .eq("service_id", id)
-      .eq("is_active", true),
 
     // Section overrides for visible admin notes
     supabase
@@ -129,10 +124,29 @@ export default async function ClientServiceDetailPage({
 
   if (!serviceRes.data) notFound();
 
+  // Fetch docs: include KYC-uploaded docs via client_profile_id for linked profiles
+  const profileIds = (personsRes.data ?? [])
+    .map((p) => (p as unknown as { client_profiles?: { id: string } }).client_profiles?.id)
+    .filter((pid): pid is string => !!pid);
+
+  const docsQuery = profileIds.length > 0
+    ? supabase
+        .from("documents")
+        .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
+        .or(`service_id.eq.${id},client_profile_id.in.(${profileIds.join(",")})`)
+        .eq("is_active", true)
+    : supabase
+        .from("documents")
+        .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
+        .eq("service_id", id)
+        .eq("is_active", true);
+
+  const { data: docsData } = await docsQuery;
+
   return (
     <ClientServiceDetailClient
       service={serviceRes.data as unknown as ClientServiceRecord}
-      documents={(docsRes.data ?? []) as unknown as ClientServiceDoc[]}
+      documents={(docsData ?? []) as unknown as ClientServiceDoc[]}
       overrides={(overridesRes.data ?? []) as unknown as ServiceSectionOverride[]}
       persons={(personsRes.data ?? []) as unknown as ServicePerson[]}
       requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { ServiceWizardStepIndicator } from "./ServiceWizardStepIndicator";
 import { ServiceWizardNav } from "./ServiceWizardNav";
@@ -22,6 +22,7 @@ interface Props {
   documentTypes: DocumentType[];
   startStep?: number;
   onClose: (updatedDetails?: Record<string, unknown>, updatedPersons?: ServicePerson[], updatedDocs?: ClientServiceDoc[]) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 // Maps step indices to the section names in service_fields
@@ -61,8 +62,10 @@ export function ServiceWizard({
   documentTypes,
   startStep = 0,
   onClose,
+  onDirtyChange,
 }: Props) {
   const [currentStep, setCurrentStep] = useState(startStep);
+  const originalDetails = useRef<Record<string, unknown>>(service.service_details ?? {});
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
     service.service_details ?? {}
   );
@@ -72,6 +75,24 @@ export function ServiceWizard({
   const [hideWizardNav, setHideWizardNav] = useState(false);
   const [validationPhase, setValidationPhase] = useState<"loading" | "valid" | "invalid" | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+
+  // Track dirty state — any field change makes the form dirty
+  const isDirty = JSON.stringify(serviceDetails) !== JSON.stringify(originalDetails.current);
+
+  // Notify parent and handle beforeunload when dirty
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
@@ -140,6 +161,7 @@ export function ServiceWizard({
       const ok = await saveServiceDetails();
       if (!ok) return;
     }
+    originalDetails.current = serviceDetails; // clear dirty
     toast.success("Progress saved", { position: "top-right" });
     onClose(serviceDetails, persons, documents);
   }

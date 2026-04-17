@@ -15,6 +15,44 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-022: 10 Client Portal Fixes (Claude Code)
+
+**Fix #1 — Dashboard "Review and Complete" opens wizard:**
+- `DashboardClient.tsx`: "Review and Complete" now navigates to `/services/[id]?startWizard=true`
+- `services/[id]/page.tsx`: Added `startWizard` to searchParams type; `startWizard=true` sets `autoWizardStep=0`
+
+**Fix #2 — "Back to Dashboard" link color:**
+- `ClientServiceDetailClient.tsx`: Renamed "Back to overview" → "Back to Dashboard"; changed to `text-blue-600 hover:text-blue-800 font-semibold`
+
+**Fix #3 — Country search dropdown styling:**
+- `MultiSelectCountry.tsx`: Added `text-gray-900 placeholder:text-gray-500` to input; search input wrapper is now `max-w-md`
+
+**Fix #4 — Red labels for empty required fields:**
+- `DynamicServiceForm.tsx`: Detects partial fill (any field has value). When partially filled, empty required field labels render as `text-red-600`. All field types (text, textarea, select, boolean, multi_select_country) updated.
+
+**Fix #5 — KYC Review Save/Next nav:**
+- `ServiceWizardPeopleStep.tsx`: Changed `compact={true}` → `compact={false}` on KycStepWizard in review mode. The wizard now uses its built-in `sticky bottom-0` nav bar instead of inline compact nav.
+
+**Fix #6 — Invite popup "Email Sent" toast:**
+- `ServiceWizardPeopleStep.tsx`: Changed toast text from "Request sent!" to "Email Sent". Already closes on success (verified).
+
+**Fix #7 — Unsaved changes warning:**
+- `ServiceWizard.tsx`: Added `onDirtyChange` prop; tracks `isDirty` (JSON comparison vs original); adds `beforeunload` handler when dirty; clears dirty on save
+- `ClientServiceDetailClient.tsx`: Tracks `wizardIsDirty`; "Back to Dashboard" shows custom confirmation dialog when dirty ("Leave without saving" / "Stay")
+
+**Fix #8 — Documents show KYC-uploaded docs:**
+- `services/[id]/page.tsx`: Refactored to fetch persons first, then fetch docs using OR query: `service_id.eq.{id},client_profile_id.in.({profileIds})`
+
+**Fix #9 — Document upload client_id FK (already resolved):**
+- Upload route was already omitting `client_id` on insert; DB column already made nullable by user
+
+**Fix #10 — "Back to People" link color:**
+- `ServiceWizardPeopleStep.tsx`: Changed to `text-blue-600 hover:text-blue-800 font-semibold`
+
+**SQL migration needed (user must run):** None for B-022 (client_id was already made nullable)
+
+---
+
 ### 2026-04-17 — B-021: Admin Service Detail Rework (Claude Code)
 
 **Part 1 — Services List "by name":**

@@ -350,7 +350,7 @@ function InviteDialog({
       const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to send");
       onSent(data.invite_sent_at ?? new Date().toISOString());
-      toast.success("Request sent!", { position: "top-right" });
+      toast.success("Email Sent", { position: "top-right" });
       onClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to send", { position: "top-right" });
@@ -630,7 +630,7 @@ export function ServiceWizardPeopleStep({
         <div>
           <button
             onClick={() => setReviewingRoleId(null)}
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-navy mb-3"
+            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold mb-3"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to People
@@ -655,7 +655,7 @@ export function ServiceWizardPeopleStep({
             dueDiligenceLevel={ddLevel}
             requirements={requirements}
             onComplete={handleKycComplete}
-            compact={true}
+            compact={false}
             saveUrl="/api/profiles/kyc/save"
             inlineMode={true}
           />
