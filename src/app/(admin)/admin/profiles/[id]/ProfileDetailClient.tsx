@@ -16,16 +16,21 @@ import {
   Loader2,
   ChevronDown,
   FileText,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { ClientProfile, ClientProfileKyc, ProfileServiceRole, DocumentRecord } from "@/types";
+import type { ClientProfile, ClientProfileKyc, ProfileServiceRole, DocumentRecord, DueDiligenceRequirement, RoleDocumentRequirement, ProfileRequirementOverride } from "@/types";
 
 interface Props {
   profile: ClientProfile;
   kyc: ClientProfileKyc | null;
   roles: ProfileServiceRole[];
   documents: DocumentRecord[];
+  ddRequirements: DueDiligenceRequirement[];
+  roleRequirements: RoleDocumentRequirement[];
+  requirementOverrides: ProfileRequirementOverride[];
 }
 
 // KYC field definitions for display
@@ -128,7 +133,187 @@ function KycSection({
   );
 }
 
-export function ProfileDetailClient({ profile, kyc, roles, documents }: Props) {
+function RequirementsPanel({
+  profileId,
+  ddRequirements,
+  roleRequirements,
+  initialOverrides,
+}: {
+  profileId: string;
+  ddRequirements: DueDiligenceRequirement[];
+  roleRequirements: RoleDocumentRequirement[];
+  initialOverrides: ProfileRequirementOverride[];
+}) {
+  const [overrides, setOverrides] = useState(
+    new Map(initialOverrides.map((o) => [o.requirement_id, o]))
+  );
+  const [waivedId, setWaivedId] = useState<string | null>(null);
+  const [reasonInputs, setReasonInputs] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState(false);
+
+  async function toggleWaiver(reqId: string) {
+    const existing = overrides.get(reqId);
+    setWaivedId(reqId);
+    try {
+      if (existing) {
+        // Remove waiver → reinstate
+        const res = await fetch(
+          `/api/admin/profiles/${profileId}/requirement-overrides/${reqId}`,
+          { method: "DELETE" }
+        );
+        const data = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed");
+        setOverrides((prev) => {
+          const next = new Map(prev);
+          next.delete(reqId);
+          return next;
+        });
+        toast.success("Requirement reinstated");
+      } else {
+        // Create waiver
+        const reason = reasonInputs[reqId] ?? "";
+        const res = await fetch(`/api/admin/profiles/${profileId}/requirement-overrides`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requirement_id: reqId, reason }),
+        });
+        const data = (await res.json()) as { override?: ProfileRequirementOverride; error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed");
+        setOverrides((prev) => {
+          const next = new Map(prev);
+          next.set(reqId, data.override!);
+          return next;
+        });
+        toast.success("Requirement waived");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setWaivedId(null);
+    }
+  }
+
+  const totalReqs = ddRequirements.length + roleRequirements.length;
+  const waivedCount = overrides.size;
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+      >
+        <span className="text-sm font-medium text-gray-900">Requirements</span>
+        <div className="flex items-center gap-2">
+          {waivedCount > 0 && (
+            <span className="text-xs text-amber-600 font-medium">{waivedCount} waived</span>
+          )}
+          <span className="text-xs text-gray-500">{totalReqs} total</span>
+          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 py-3 space-y-4">
+          {/* DD Requirements */}
+          {ddRequirements.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">
+                Due Diligence Requirements
+              </p>
+              <div className="space-y-2">
+                {ddRequirements.map((req) => {
+                  const isWaived = overrides.has(req.id);
+                  const override = overrides.get(req.id);
+                  const isBusy = waivedId === req.id;
+                  return (
+                    <div
+                      key={req.id}
+                      className={`border rounded-lg p-2.5 ${isWaived ? "opacity-60 bg-gray-50" : "bg-white"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm ${isWaived ? "line-through text-gray-400" : "text-gray-800"}`}>
+                            {req.label}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] capitalize text-gray-400">{req.requirement_type}</span>
+                            <span className="text-[10px] text-gray-300">·</span>
+                            <span className="text-[10px] text-gray-400 uppercase">{req.level}</span>
+                            <span className="text-[10px] text-gray-300">·</span>
+                            <span className="text-[10px] text-gray-400">{req.applies_to}</span>
+                          </div>
+                          {override?.reason && (
+                            <p className="text-[11px] text-amber-600 mt-1">Waiver reason: {override.reason}</p>
+                          )}
+                          {!isWaived && (
+                            <div className="mt-1.5">
+                              <input
+                                type="text"
+                                placeholder="Reason for waiver (optional)"
+                                value={reasonInputs[req.id] ?? ""}
+                                onChange={(e) => setReasonInputs((p) => ({ ...p, [req.id]: e.target.value }))}
+                                className="w-full text-xs border rounded px-2 py-1 text-gray-600 placeholder-gray-300"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => void toggleWaiver(req.id)}
+                          disabled={isBusy}
+                          className={`shrink-0 flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+                            isWaived
+                              ? "text-green-600 hover:text-green-700 bg-green-50"
+                              : "text-amber-600 hover:text-amber-700 bg-amber-50"
+                          }`}
+                          title={isWaived ? "Reinstate requirement" : "Waive requirement"}
+                        >
+                          {isBusy ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : isWaived ? (
+                            <ToggleRight className="h-3.5 w-3.5" />
+                          ) : (
+                            <ToggleLeft className="h-3.5 w-3.5" />
+                          )}
+                          {isWaived ? "Reinstate" : "Waive"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Role Document Requirements */}
+          {roleRequirements.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">
+                Role Document Requirements
+              </p>
+              <div className="space-y-1.5">
+                {roleRequirements.map((req) => (
+                  <div key={req.id} className="flex items-center justify-between border rounded-lg px-3 py-2 bg-white">
+                    <div>
+                      <p className="text-sm text-gray-700">{req.document_types?.name ?? req.document_type_id}</p>
+                      <p className="text-[10px] text-gray-400 capitalize">{req.role.replace("_", " ")}</p>
+                    </div>
+                    <CheckCircle className="h-3.5 w-3.5 text-gray-300" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {totalReqs === 0 && (
+            <p className="text-sm text-gray-400 py-2">No requirements configured for this profile&apos;s level and roles.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ProfileDetailClient({ profile, kyc, roles, documents, ddRequirements, roleRequirements, requirementOverrides }: Props) {
   const router = useRouter();
   const [ddLevel, setDdLevel] = useState(profile.due_diligence_level);
   const [savingDd, setSavingDd] = useState(false);
@@ -311,6 +496,16 @@ export function ProfileDetailClient({ profile, kyc, roles, documents }: Props) {
                 Representatives do not require KYC
               </CardContent>
             </Card>
+          )}
+
+          {/* Requirements with waiver toggles */}
+          {!isRep && (
+            <RequirementsPanel
+              profileId={profile.id}
+              ddRequirements={ddRequirements}
+              roleRequirements={roleRequirements}
+              initialOverrides={requirementOverrides}
+            />
           )}
 
           {/* Documents */}

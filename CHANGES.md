@@ -15,6 +15,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 3C+3D: Role Requirements + Profile Requirement Overrides (Claude Code)
+
+**Role Requirements management (`/admin/settings/role-requirements`):**
+- New page + `RoleRequirementsManager.tsx` client component
+- Per role (primary_client/director/shareholder/ubo): list required document types with add/remove
+- POST `/api/admin/role-requirements`, DELETE `/api/admin/role-requirements/[id]`
+- "Role Requirements" added to admin sidebar settings nav
+
+**Profile Requirement Overrides (`/admin/profiles/[id]`):**
+- Profile detail page now fetches cumulative DD requirements, role doc requirements, and existing overrides
+- New `RequirementsPanel` section with collapsible view of all requirements
+- Per DD requirement: "Waive" toggle with optional reason text; waived reqs shown with strikethrough
+- "Reinstate" toggle removes the override
+- Role doc requirements shown read-only (no waiver mechanism — different table)
+- POST `/api/admin/profiles/[id]/requirement-overrides` (upsert waiver)
+- DELETE `/api/admin/profiles/[id]/requirement-overrides/[reqId]` (reinstate)
+
+**Type additions (`src/types/index.ts`):**
+- Added `ProfileRequirementOverride` interface
+
 ### 2026-04-17 — B-015 Phase 3A+3B: Document Types + DD Requirements CRUD (Claude Code)
 
 **Document Types management (`/admin/settings/document-types`):**

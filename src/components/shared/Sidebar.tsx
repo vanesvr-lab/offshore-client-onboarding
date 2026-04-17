@@ -37,6 +37,7 @@ const ADMIN_SETTINGS_NAV = [
   { label: "Verification Rules", href: "/admin/settings/rules", icon: ShieldCheck, exact: false },
   { label: "Document Types", href: "/admin/settings/document-types", icon: Files, exact: false },
   { label: "Due Diligence", href: "/admin/settings/due-diligence", icon: Shield, exact: false },
+  { label: "Role Requirements", href: "/admin/settings/role-requirements", icon: UserCheck, exact: false },
   { label: "Knowledge Base", href: "/admin/settings/knowledge-base", icon: BookOpen, exact: false },
   { label: "Workflow", href: "/admin/settings/workflow", icon: GitBranch, exact: false },
 ];

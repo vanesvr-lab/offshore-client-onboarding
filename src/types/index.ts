@@ -362,6 +362,15 @@ export interface RoleDocumentRequirement {
   document_types?: { id: string; name: string } | null;
 }
 
+export interface ProfileRequirementOverride {
+  id: string;
+  client_profile_id: string;
+  requirement_id: string;
+  is_required: boolean;
+  reason: string | null;
+  overridden_at: string;
+}
+
 export interface ApplicationPerson {
   id: string;
   application_id: string;
