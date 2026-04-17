@@ -15,7 +15,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
-### 2026-04-17 — Phase 1: Services + Profiles Redesign + Multi-Tenancy Foundation
+### 2026-04-17 — B-015: Phase 1 — Services + Profiles Redesign + Multi-Tenancy Foundation
 
 **REQUIRES: Run `supabase/migrations/003-phase1-schema.sql` in Supabase SQL Editor before deploying.**
 
