@@ -867,9 +867,9 @@ export function ServiceDetailClient({
         Back to services
       </Link>
 
-      {/* ── Header ───────────────────────────────────────────────────────── */}
-      <div className="bg-white border rounded-xl px-5 py-4 mb-6">
-        {/* Title row */}
+      {/* ── Sticky Header ────────────────────────────────────────────────── */}
+      <div className="bg-white border rounded-xl px-5 py-4 mb-6 sticky top-0 z-30 shadow-sm">
+        {/* Title + Save/Cancel */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="min-w-0">
             {service.service_number && (
@@ -883,7 +883,7 @@ export function ServiceDetailClient({
             )}
           </div>
 
-          {/* Save/Cancel */}
+          {/* Save/Cancel — always visible spot */}
           {pendingChanges && (
             <div className="flex items-center gap-2 shrink-0">
               <Button
@@ -907,107 +907,58 @@ export function ServiceDetailClient({
           )}
         </div>
 
-        {/* Status + Manager row */}
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Status */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-medium">Status:</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadgeClass(service.status)}`}>
-              {service.status.replace(/_/g, " ")}
-            </span>
-            <div className="relative">
-              <select
-                value={service.status}
-                onChange={(e) => void updateStatus(e.target.value)}
-                disabled={updatingStatus}
-                className="h-7 rounded-lg border border-gray-200 pl-2 pr-6 text-xs appearance-none bg-white cursor-pointer"
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-            </div>
-            {updatingStatus && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
-          </div>
+        {/* Chevron progress bar (inside header) */}
+        <div className="overflow-hidden rounded-lg">
+          <div className="flex">
+            {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
+              const stepLabels: Record<string, string> = {
+                draft: "Draft",
+                in_progress: "In Progress",
+                submitted: "Submitted",
+                in_review: "In Review",
+                verification: "Verification",
+                approved: "Approved",
+              };
+              const stepColors: Record<string, { bg: string; text: string }> = {
+                draft: { bg: "bg-slate-500", text: "text-white" },
+                in_progress: { bg: "bg-blue-600", text: "text-white" },
+                submitted: { bg: "bg-teal-500", text: "text-white" },
+                in_review: { bg: "bg-amber-500", text: "text-white" },
+                verification: { bg: "bg-orange-500", text: "text-white" },
+                approved: { bg: "bg-green-600", text: "text-white" },
+              };
+              const stepIdx = arr.indexOf(service.status as typeof arr[number]);
+              const isActive = idx === stepIdx;
+              const isComplete = idx < stepIdx;
+              const isFuture = idx > stepIdx;
+              const isRejected = service.status === "rejected";
 
-          {/* Divider */}
-          <span className="text-gray-200">|</span>
+              const colors = isRejected && isActive
+                ? { bg: "bg-red-500", text: "text-white" }
+                : isComplete
+                ? stepColors[step]
+                : isActive
+                ? stepColors[step]
+                : { bg: "bg-gray-100", text: "text-gray-400" };
 
-          {/* Account Manager */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-medium">Manager:</span>
-            <div className="relative">
-              <select
-                value={assignedAdminId ?? ""}
-                onChange={(e) => void assignAdmin(e.target.value || null)}
-                className="h-7 rounded-lg border border-gray-200 pl-2 pr-6 text-xs appearance-none bg-white cursor-pointer"
-              >
-                <option value="">— Unassigned —</option>
-                {adminUsers.map((u) => (
-                  <option key={u.user_id} value={u.user_id}>
-                    {u.full_name ?? u.email ?? u.user_id}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Workflow Progress Stepper (Salesforce chevron style) ─────── */}
-      <div className="mb-6 overflow-hidden rounded-xl border">
-        <div className="flex">
-          {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
-            const stepLabels: Record<string, string> = {
-              draft: "Draft",
-              in_progress: "In Progress",
-              submitted: "Submitted",
-              in_review: "In Review",
-              verification: "Verification",
-              approved: "Approved",
-            };
-            const stepColors: Record<string, { bg: string; text: string }> = {
-              draft: { bg: "bg-slate-500", text: "text-white" },
-              in_progress: { bg: "bg-blue-600", text: "text-white" },
-              submitted: { bg: "bg-teal-500", text: "text-white" },
-              in_review: { bg: "bg-amber-500", text: "text-white" },
-              verification: { bg: "bg-orange-500", text: "text-white" },
-              approved: { bg: "bg-green-600", text: "text-white" },
-            };
-            const stepIdx = arr.indexOf(service.status as typeof arr[number]);
-            const isActive = idx === stepIdx;
-            const isComplete = idx < stepIdx;
-            const isFuture = idx > stepIdx;
-            const isRejected = service.status === "rejected";
-
-            const colors = isRejected && isActive
-              ? { bg: "bg-red-500", text: "text-white" }
-              : isComplete
-              ? stepColors[step]
-              : isActive
-              ? stepColors[step]
-              : { bg: "bg-gray-100", text: "text-gray-400" };
-
-            return (
-              <div key={step} className={`relative flex-1 ${colors.bg} ${colors.text}`}>
-                <div className={`flex items-center justify-center h-12 px-4 text-xs font-semibold ${isFuture ? "opacity-60" : ""}`}>
-                  {isComplete && <span className="mr-1.5">✓</span>}
-                  {isRejected && isActive ? "Rejected" : stepLabels[step]}
-                </div>
-                {/* Chevron arrow */}
-                {idx < arr.length - 1 && (
-                  <div className="absolute right-0 top-0 h-full w-4 z-10" style={{ transform: "translateX(50%)" }}>
-                    <svg viewBox="0 0 20 48" className="h-full w-full" preserveAspectRatio="none">
-                      <path d="M0,0 L16,24 L0,48" className={`${isComplete || isActive ? "fill-current" : ""}`} style={{ fill: isComplete || isActive ? undefined : "#f3f4f6" }} />
-                      <path d="M1,0 L17,24 L1,48" fill="white" opacity="0.3" />
-                    </svg>
+              return (
+                <div key={step} className={`relative flex-1 ${colors.bg} ${colors.text}`}>
+                  <div className={`flex items-center justify-center h-10 px-2 text-[11px] font-semibold ${isFuture ? "opacity-60" : ""}`}>
+                    {isComplete && <span className="mr-1">✓</span>}
+                    {isRejected && isActive ? "Rejected" : stepLabels[step]}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {idx < arr.length - 1 && (
+                    <div className="absolute right-0 top-0 h-full w-4 z-10" style={{ transform: "translateX(50%)" }}>
+                      <svg viewBox="0 0 20 48" className="h-full w-full" preserveAspectRatio="none">
+                        <path d="M0,0 L16,24 L0,48" className={`${isComplete || isActive ? "fill-current" : ""}`} style={{ fill: isComplete || isActive ? undefined : "#f3f4f6" }} />
+                        <path d="M1,0 L17,24 L1,48" fill="white" opacity="0.3" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -1024,15 +975,14 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(companySetupPct)}
         >
           {companyFields.length === 0 ? (
-            <p className="text-sm text-gray-400 pt-4">No company setup fields for this template.</p>
+            <p className="text-sm text-gray-400">No company setup fields for this template.</p>
           ) : (
-            <div className="pt-4">
-              <DynamicServiceForm
-                fields={companyFields}
-                values={serviceDetails}
-                onChange={handleFieldChange}
-              />
-            </div>
+            <DynamicServiceForm
+              fields={companyFields}
+              values={serviceDetails}
+              onChange={handleFieldChange}
+              hideHeaders
+            />
           )}
         </ServiceCollapsibleSection>
 
@@ -1043,15 +993,14 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(financialPct)}
         >
           {financialFields.length === 0 ? (
-            <p className="text-sm text-gray-400 pt-4">No financial fields for this template.</p>
+            <p className="text-sm text-gray-400">No financial fields for this template.</p>
           ) : (
-            <div className="pt-4">
-              <DynamicServiceForm
-                fields={financialFields}
-                values={serviceDetails}
-                onChange={handleFieldChange}
-              />
-            </div>
+            <DynamicServiceForm
+              fields={financialFields}
+              values={serviceDetails}
+              onChange={handleFieldChange}
+              hideHeaders
+            />
           )}
         </ServiceCollapsibleSection>
 
@@ -1062,15 +1011,14 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(bankingPct)}
         >
           {bankingFields.length === 0 ? (
-            <p className="text-sm text-gray-400 pt-4">No banking fields for this template.</p>
+            <p className="text-sm text-gray-400">No banking fields for this template.</p>
           ) : (
-            <div className="pt-4">
-              <DynamicServiceForm
-                fields={bankingFields}
-                values={serviceDetails}
-                onChange={handleFieldChange}
-              />
-            </div>
+            <DynamicServiceForm
+              fields={bankingFields}
+              values={serviceDetails}
+              onChange={handleFieldChange}
+              hideHeaders
+            />
           )}
         </ServiceCollapsibleSection>
 
@@ -1289,6 +1237,51 @@ export function ServiceDetailClient({
 
       {/* ── RIGHT: Sidebar (col-span-1) ─────────────────────────────────── */}
       <div className="space-y-3">
+
+        {/* ── Status Change ───────────────────────────────────────────────── */}
+        <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</p>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadgeClass(service.status)}`}>
+              {service.status.replace(/_/g, " ")}
+            </span>
+            <div className="relative flex-1">
+              <select
+                value={service.status}
+                onChange={(e) => void updateStatus(e.target.value)}
+                disabled={updatingStatus}
+                className="w-full h-8 rounded-lg border border-gray-200 pl-2 pr-6 text-xs appearance-none bg-white cursor-pointer"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+            </div>
+            {updatingStatus && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+          </div>
+        </div>
+
+        {/* ── Account Service Owner ───────────────────────────────────────── */}
+        <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Service Owner</p>
+          <div className="relative">
+            <select
+              value={assignedAdminId ?? ""}
+              onChange={(e) => void assignAdmin(e.target.value || null)}
+              className="w-full h-8 rounded-lg border border-gray-200 pl-2 pr-6 text-xs appearance-none bg-white cursor-pointer"
+            >
+              <option value="">— Unassigned —</option>
+              {adminUsers.map((u) => (
+                <option key={u.user_id} value={u.user_id}>
+                  {u.full_name ?? u.email ?? u.user_id}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+
         {/* ── Section 8: Milestones ────────────────────────────────────────── */}
         <ServiceCollapsibleSection
           title="Milestones"

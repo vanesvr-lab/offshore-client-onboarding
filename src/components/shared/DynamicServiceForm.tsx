@@ -47,7 +47,8 @@ export function DynamicServiceForm({
   values,
   onChange,
   readOnly = false,
-}: DynamicServiceFormProps) {
+  hideHeaders = false,
+}: DynamicServiceFormProps & { hideHeaders?: boolean }) {
   if (!fields || fields.length === 0) return null;
 
   // Check if a field should be visible based on show_if conditions
@@ -256,7 +257,11 @@ export function DynamicServiceForm({
         const visibleFields = sectionFields.filter(isVisible);
         if (visibleFields.length === 0) return null;
 
-        return (
+        return hideHeaders ? (
+          <div key={sectionName} className="grid grid-cols-2 gap-4">
+            {visibleFields.map(renderField)}
+          </div>
+        ) : (
           <Card key={sectionName}>
             <CardHeader>
               <CardTitle className="text-brand-navy text-base">{sectionName}</CardTitle>

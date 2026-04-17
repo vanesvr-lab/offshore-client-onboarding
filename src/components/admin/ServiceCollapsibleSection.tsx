@@ -85,15 +85,19 @@ export function ServiceCollapsibleSection({
               </span>
             </>
           )}
-          <ChevronDown
-            className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
-          />
+          <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${open ? "bg-brand-navy" : "bg-gray-200 hover:bg-gray-300"}`}>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180 text-white" : "text-gray-600"}`}
+            />
+          </div>
         </div>
       </button>
 
       {open && (
         <CardContent className="pt-0 pb-5 px-5 border-t border-gray-100">
-          {children}
+          <div className="mt-4 border rounded-lg p-4 bg-white">
+            {children}
+          </div>
         </CardContent>
       )}
     </Card>
