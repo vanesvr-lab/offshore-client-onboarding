@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 5A+5D: Hardcoded List Fixes + Dashboard Analytics Update (Claude Code)
+
+**5A — Fix hardcoded nationality/jurisdiction lists:**
+- `IndividualKycForm.tsx`: Replaced 11-entry NATIONALITIES + 11-entry COUNTRIES with imported `COUNTRIES` from `MultiSelectCountry.tsx` (200+ countries)
+- `OrganisationKycForm.tsx`: Replaced 12-entry JURISDICTIONS with same COUNTRIES list
+- Both files now use a single consistent source of truth for country/jurisdiction lists
+
+**5D — Dashboard analytics to use services table:**
+- Stat cards (Total Services, Awaiting Review, Awaiting Client, Approved This Month) now query `services` table instead of `applications`
+- "Total Applications" → "Total Services", links updated to `/admin/services`
+- Quick Links updated: "All Services", "All Profiles", "Review Queue", "Service Templates", "Due Diligence"
+- Chart data still uses `applications` table (requires `approved_at`/`submitted_at` fields not yet on services)
+
 ### 2026-04-17 — B-015 Phase 3C+3D: Role Requirements + Profile Requirement Overrides (Claude Code)
 
 **Role Requirements management (`/admin/settings/role-requirements`):**

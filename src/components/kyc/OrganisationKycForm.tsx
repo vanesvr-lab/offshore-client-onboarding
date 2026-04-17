@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
+import { COUNTRIES } from "@/components/shared/MultiSelectCountry";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { cn } from "@/lib/utils";
@@ -25,12 +26,6 @@ interface OrganisationKycFormProps {
   documentTypes: DocumentType[];
   prefilled?: Set<string>;
 }
-
-const JURISDICTIONS = [
-  "Mauritius", "British Virgin Islands", "Cayman Islands", "Seychelles",
-  "Malta", "Luxembourg", "Ireland", "Singapore", "Hong Kong", "United Kingdom",
-  "United States", "Other",
-];
 
 function SectionHeader({
   title,
@@ -237,7 +232,7 @@ export function OrganisationKycForm({
                     <SelectValue placeholder="Select jurisdiction…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {JURISDICTIONS.map((j) => (
+                    {COUNTRIES.map((j) => (
                       <SelectItem key={j} value={j}>{j}</SelectItem>
                     ))}
                   </SelectContent>

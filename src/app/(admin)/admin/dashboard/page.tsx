@@ -97,14 +97,15 @@ export default async function AdminDashboardPage() {
     { data: completedApps },
     { data: allStatusApps },
   ] = await Promise.all([
-    supabase.from("applications").select("*", { count: "exact", head: true }).eq("is_deleted", false),
+    // Stat cards now use services table
+    supabase.from("services").select("*", { count: "exact", head: true }).eq("is_deleted", false),
     supabase
-      .from("applications")
+      .from("services")
       .select("*", { count: "exact", head: true })
       .eq("is_deleted", false)
       .eq("status", "submitted"),
     supabase
-      .from("applications")
+      .from("services")
       .select("*", { count: "exact", head: true })
       .eq("is_deleted", false)
       .eq("status", "pending_action"),
@@ -115,8 +116,7 @@ export default async function AdminDashboardPage() {
       )
       .order("created_at", { ascending: false })
       .limit(10),
-    // Card 1: applications approved in the last 6 months
-    // Note: submitted_at can be null if admin approved directly — fall back to created_at
+    // Chart data still from applications (has approved_at, submitted_at)
     supabase
       .from("applications")
       .select("approved_at, submitted_at, created_at")
@@ -124,21 +124,18 @@ export default async function AdminDashboardPage() {
       .eq("status", "approved")
       .gte("approved_at", sixMonthsAgo.toISOString())
       .not("approved_at", "is", null),
-    // Card 2: all status change events (for stage duration calc)
     supabase
       .from("audit_log")
       .select("application_id, previous_value, new_value, created_at")
       .eq("action", "status_changed")
       .order("application_id")
       .order("created_at"),
-    // Card 3: approved/rejected apps in last 4 months
     supabase
       .from("applications")
       .select("status, updated_at")
       .eq("is_deleted", false)
       .in("status", ["approved", "rejected"])
       .gte("updated_at", fourMonthsAgo.toISOString()),
-    // Card 4: all apps for status count
     supabase.from("applications").select("status").eq("is_deleted", false),
   ]);
 
@@ -146,7 +143,7 @@ export default async function AdminDashboardPage() {
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
   const { count: approvedThisMonth } = await supabase
-    .from("applications")
+    .from("services")
     .select("*", { count: "exact", head: true })
     .eq("is_deleted", false)
     .eq("status", "approved")
@@ -155,7 +152,7 @@ export default async function AdminDashboardPage() {
   // ── Stat cards ────────────────────────────────────────────────────────────
 
   const stats = [
-    { label: "Total Applications", value: total ?? 0, href: "/admin/applications" },
+    { label: "Total Services", value: total ?? 0, href: "/admin/services" },
     {
       label: "Awaiting Review",
       value: submitted ?? 0,
@@ -169,7 +166,7 @@ export default async function AdminDashboardPage() {
     {
       label: "Approved This Month",
       value: approvedThisMonth ?? 0,
-      href: "/admin/applications",
+      href: "/admin/services",
     },
   ];
 
@@ -350,11 +347,11 @@ export default async function AdminDashboardPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               {[
-                { label: "All Applications", href: "/admin/applications" },
+                { label: "All Services", href: "/admin/services" },
+                { label: "All Profiles", href: "/admin/profiles" },
                 { label: "Review Queue", href: "/admin/queue" },
-                { label: "All Clients", href: "/admin/clients" },
                 { label: "Service Templates", href: "/admin/settings/templates" },
-                { label: "Verification Rules", href: "/admin/settings/rules" },
+                { label: "Due Diligence", href: "/admin/settings/due-diligence" },
               ].map((link) => (
                 <Link
                   key={link.href}

@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
+import { COUNTRIES } from "@/components/shared/MultiSelectCountry";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { cn } from "@/lib/utils";
@@ -25,16 +26,6 @@ interface IndividualKycFormProps {
   documentTypes: DocumentType[];
   prefilled?: Set<string>;
 }
-
-const NATIONALITIES = [
-  "Mauritian", "British", "French", "American", "South African", "Indian",
-  "Chinese", "Australian", "Canadian", "German", "Other",
-];
-
-const COUNTRIES = [
-  "Mauritius", "United Kingdom", "France", "United States", "South Africa",
-  "India", "China", "Australia", "Canada", "Germany", "Other",
-];
 
 function SectionHeader({
   title,
@@ -264,7 +255,7 @@ export function IndividualKycForm({
                     <SelectValue placeholder="Select nationality…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {NATIONALITIES.map((n) => (
+                    {COUNTRIES.map((n) => (
                       <SelectItem key={n} value={n}>{n}</SelectItem>
                     ))}
                   </SelectContent>
