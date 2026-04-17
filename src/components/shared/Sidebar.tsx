@@ -95,7 +95,7 @@ export function Sidebar({ role, userName, hasApplications, isPrimary = true }: S
 
   // Detect if on a specific application page for contextual nav
   const adminAppMatch = pathname.match(/^\/admin\/applications\/([^/]+)/);
-  const clientAppMatch = pathname.match(/^\/applications\/([^/]+)/);
+  const clientAppMatch = pathname.match(/^\/(?:applications|services)\/([^/]+)/);
   const contextAppId =
     role === "admin" ? adminAppMatch?.[1] : clientAppMatch?.[1];
 
@@ -120,7 +120,7 @@ export function Sidebar({ role, userName, hasApplications, isPrimary = true }: S
         { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
         { label: "New Solution", href: "/apply", icon: PlusCircle, exact: false },
         ...(hasApplications
-          ? [{ label: "My Solutions", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications"] }]
+          ? [{ label: "My Solutions", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications", "/services"] }]
           : []),
       ]
     : [
@@ -267,10 +267,10 @@ export function Sidebar({ role, userName, hasApplications, isPrimary = true }: S
                 <div className="border-t border-white/10 my-3" />
                 <SectionHeader label="Solution" />
                 <NavItem
-                  href={`/applications/${contextAppId}`}
+                  href={`/services/${contextAppId}`}
                   label="Status"
                   icon={FileText}
-                  active={pathname === `/applications/${contextAppId}`}
+                  active={pathname === `/services/${contextAppId}` || pathname === `/applications/${contextAppId}`}
                 />
               </>
             )}

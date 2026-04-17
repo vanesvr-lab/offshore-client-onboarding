@@ -14,6 +14,7 @@ export default auth((req) => {
     path.startsWith("/dashboard") ||
     path.startsWith("/apply") ||
     path.startsWith("/applications") ||
+    path.startsWith("/services") ||
     path.startsWith("/kyc");
   const isAdminRoute = path.startsWith("/admin");
   const isAuthRoute =

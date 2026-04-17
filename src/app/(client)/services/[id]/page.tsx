@@ -43,16 +43,17 @@ export default async function ClientServiceDetailPage({
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
-  // Verify the client can manage this service
-  const { data: roleCheck } = await supabase
+  // Verify the client can manage this service (may have multiple roles)
+  const { data: roleRows } = await supabase
     .from("profile_service_roles")
     .select("id, role")
     .eq("service_id", id)
     .eq("client_profile_id", clientProfileId)
     .eq("can_manage", true)
     .eq("tenant_id", tenantId)
-    .maybeSingle();
+    .limit(1);
 
+  const roleCheck = roleRows?.[0] ?? null;
   if (!roleCheck) notFound(); // no access
 
   const [serviceRes, docsRes, overridesRes] = await Promise.all([
