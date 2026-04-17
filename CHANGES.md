@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 3A+3B: Document Types + DD Requirements CRUD (Claude Code)
+
+**Document Types management (`/admin/settings/document-types`):**
+- New page + `DocumentTypesManager.tsx` client component
+- Grouped by category (identity/corporate/financial/compliance/additional), collapsible cards
+- Create (POST `/api/admin/document-types`), update name/category/applies_to/description (PATCH `/api/admin/document-types/[id]`), toggle active
+- "Document Types" added to `ADMIN_SETTINGS_NAV` in Sidebar
+
+**Due Diligence Requirements CRUD (`/admin/settings/due-diligence`):**
+- `DueDiligenceSettingsManager.tsx` now accepts `documentTypes` prop (page.tsx already updated)
+- Requirements list shows inherited (cumulative) reqs read-only + own-level reqs with remove button
+- Add requirement form: pick Document type from grouped dropdown (auto-fills label + applies_to) OR enter field key
+- Set `applies_to` (individual/organisation/both) per requirement
+- API: POST `/api/admin/due-diligence/requirements` (added to existing route), DELETE `/api/admin/due-diligence/requirements/[id]` (new)
+
+**Type updates (`src/types/index.ts`):**
+- `DueDiligenceRequirement` now includes `field_key: string | null` and `applies_to: "individual" | "organisation" | "both"`
+
 ### 2026-04-17 — B-015 Phase 4A+4B: Client Dashboard + Client Service Detail (Claude Code)
 
 **Client dashboard rewrite (`/dashboard`):**

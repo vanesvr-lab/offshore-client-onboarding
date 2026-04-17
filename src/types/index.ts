@@ -7,9 +7,11 @@ export interface DueDiligenceRequirement {
   level: "basic" | "sdd" | "cdd" | "edd";
   requirement_type: "field" | "document" | "admin_check";
   requirement_key: string;
+  field_key: string | null;
   label: string;
   description: string | null;
   document_type_id: string | null;
+  applies_to: "individual" | "organisation" | "both";
   sort_order: number;
   document_types?: { id: string; name: string } | null;
 }
