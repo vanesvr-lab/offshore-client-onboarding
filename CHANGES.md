@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-019: People & KYC Wizard Step Rework (Claude Code)
+
+**Problem solved:** Removed the confusing dual-navigation (inner "Continue to KYC" + outer wizard nav).
+
+**New design:** Step 4 shows a person roster with per-person KYC status. Clicking "Review KYC" opens a focused KYC form (outer wizard nav hidden). Outer Next/Back handles step navigation only.
+
+**Files created:**
+- `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts` — client-accessible invite route: verifies can_manage, generates token+code, sends Resend email, updates profile_service_roles.invite_sent_at
+
+**Files modified:**
+- `src/app/(client)/services/[id]/page.tsx` — added `invite_sent_at` to `ServicePerson` type + persons query
+- `src/components/client/ServiceWizardPeopleStep.tsx` — complete rewrite: roster view with PersonCard (KYC % bar, Review KYC, Send Invite / Invite Sent ✓, Remove), KYC review mode (replaces roster, shows KycStepWizard in compact+inlineMode), `onNavVisibilityChange` prop replaces `onNext`
+- `src/components/client/ServiceWizard.tsx` — added `hideWizardNav` state, passes `onNavVisibilityChange={setHideWizardNav}` to PeopleStep, conditionally renders `ServiceWizardNav`
+
+**KYC % calculation:** 11 fields (identity 6 + financial 2 + declarations 3); inline in component
+**Invite flow:** email sent via Resend to `/kyc/fill/[token]`; `verification_codes` row inserted without `kyc_record_id` (new model uses `client_profile_kyc`, not `kyc_records`)
+
+---
+
 ### 2026-04-17 — B-018 Batch 2: MiniProgressBar + admin services table rework (Claude Code)
 
 **Files created:**

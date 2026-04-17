@@ -67,6 +67,7 @@ export function ServiceWizard({
   const [persons, setPersons] = useState<ServicePerson[]>(initialPersons);
   const [documents, setDocuments] = useState<ClientServiceDoc[]>(initialDocuments);
   const [saving, setSaving] = useState(false);
+  const [hideWizardNav, setHideWizardNav] = useState(false);
 
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
@@ -190,7 +191,7 @@ export function ServiceWizard({
             onPersonsChange={setPersons}
             requirements={requirements}
             documentTypes={documentTypes}
-            onNext={() => setCurrentStep(4)}
+            onNavVisibilityChange={setHideWizardNav}
           />
         )}
         {currentStep === 4 && (
@@ -209,17 +210,19 @@ export function ServiceWizard({
         )}
       </div>
 
-      {/* Sticky nav */}
-      <ServiceWizardNav
-        currentStep={currentStep}
-        totalSteps={5}
-        saving={saving}
-        canSubmit={canSubmit}
-        onSaveAndClose={handleSaveAndClose}
-        onBack={handleBack}
-        onNext={handleNext}
-        onSubmit={handleSubmit}
-      />
+      {/* Sticky nav — hidden while in KYC review mode */}
+      {!hideWizardNav && (
+        <ServiceWizardNav
+          currentStep={currentStep}
+          totalSteps={5}
+          saving={saving}
+          canSubmit={canSubmit}
+          onSaveAndClose={handleSaveAndClose}
+          onBack={handleBack}
+          onNext={handleNext}
+          onSubmit={handleSubmit}
+        />
+      )}
     </div>
   );
 }

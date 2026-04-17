@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ChevronRight, SkipForward } from "lucide-react";
+import { UserPlus, User, ArrowLeft, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,11 +11,23 @@ import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import type { KycRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 import type { ServicePerson } from "@/app/(client)/services/[id]/page";
 
-interface AvailableProfile {
-  id: string;
-  full_name: string | null;
-  email: string | null;
+// KYC fields used to compute per-person completion percentage
+const KYC_PCT_FIELDS = [
+  "date_of_birth", "nationality", "passport_number", "passport_expiry", "occupation", "address",
+  "source_of_funds_description", "source_of_wealth_description",
+  "is_pep", "legal_issues_declared", "tax_identification_number",
+];
+
+function calcKycPct(kyc: Record<string, unknown> | null): number {
+  if (!kyc) return 0;
+  const filled = KYC_PCT_FIELDS.filter((f) => {
+    const v = kyc[f];
+    return v !== null && v !== undefined && v !== "";
+  }).length;
+  return Math.round((filled / KYC_PCT_FIELDS.length) * 100);
 }
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type ServicePersonRole = "director" | "shareholder" | "ubo";
 
@@ -30,6 +42,8 @@ const ROLE_COLORS: Record<ServicePersonRole, string> = {
   shareholder: "bg-purple-100 text-purple-700",
   ubo: "bg-amber-100 text-amber-700",
 };
+
+// ─── mapToKycRecord ───────────────────────────────────────────────────────────
 
 function mapToKycRecord(person: ServicePerson): KycRecord {
   const kyc = person.client_profiles?.client_profile_kyc ?? {};
@@ -101,6 +115,14 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
   };
 }
 
+// ─── AddPersonModal ───────────────────────────────────────────────────────────
+
+interface AvailableProfile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+}
+
 function AddPersonModal({
   serviceId,
   role,
@@ -130,7 +152,12 @@ function AddPersonModal({
   }
 
   async function handleConfirm() {
-    const body: { role: string; client_profile_id?: string; full_name?: string; shareholding_percentage?: number } = { role };
+    const body: {
+      role: string;
+      client_profile_id?: string;
+      full_name?: string;
+      shareholding_percentage?: number;
+    } = { role };
     const pct = shareholding ? parseFloat(shareholding) : undefined;
     if (pct !== undefined) body.shareholding_percentage = pct;
     if (selected === "new") {
@@ -150,18 +177,32 @@ function AddPersonModal({
       const data = (await res.json()) as { id?: string; profileId?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to add");
 
-      const profileData = selected === "new"
-        ? { id: data.profileId ?? "", full_name: newName.trim(), email: null, due_diligence_level: "sdd", client_profile_kyc: null }
-        : (() => {
-            const p = (profiles ?? []).find((pr) => pr.id === selected);
-            return { id: p?.id ?? "", full_name: p?.full_name ?? "", email: p?.email ?? null, due_diligence_level: "sdd", client_profile_kyc: null };
-          })();
+      const profileData =
+        selected === "new"
+          ? {
+              id: data.profileId ?? "",
+              full_name: newName.trim(),
+              email: null,
+              due_diligence_level: "sdd",
+              client_profile_kyc: null,
+            }
+          : (() => {
+              const p = (profiles ?? []).find((pr) => pr.id === selected);
+              return {
+                id: p?.id ?? "",
+                full_name: p?.full_name ?? "",
+                email: p?.email ?? null,
+                due_diligence_level: "sdd",
+                client_profile_kyc: null,
+              };
+            })();
 
       onAdded({
         id: data.id ?? "",
         role,
         shareholding_percentage: pct ?? null,
         can_manage: false,
+        invite_sent_at: null,
         client_profiles: profileData,
       });
       toast.success(`${ROLE_LABELS[role]} added`);
@@ -187,8 +228,15 @@ function AddPersonModal({
                 <div className="space-y-1">
                   <p className="text-xs text-gray-500 font-medium mb-2">Select existing profile</p>
                   {(profiles ?? []).map((p) => (
-                    <button key={p.id} onClick={() => setSelected(p.id)}
-                      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${selected === p.id ? "border-brand-navy bg-brand-navy/5" : "border-gray-200 hover:border-gray-300"}`}>
+                    <button
+                      key={p.id}
+                      onClick={() => setSelected(p.id)}
+                      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                        selected === p.id
+                          ? "border-brand-navy bg-brand-navy/5"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
                         <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                         <div>
@@ -199,13 +247,23 @@ function AddPersonModal({
                     </button>
                   ))}
                   <div className="relative my-3">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-                    <div className="relative flex justify-center"><span className="bg-white px-2 text-xs text-gray-400">or</span></div>
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-200" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-white px-2 text-xs text-gray-400">or</span>
+                    </div>
                   </div>
                 </div>
               )}
-              <button onClick={() => setSelected("new")}
-                className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${selected === "new" ? "border-brand-navy bg-brand-navy/5" : "border-gray-200 hover:border-gray-300"}`}>
+              <button
+                onClick={() => setSelected("new")}
+                className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                  selected === "new"
+                    ? "border-brand-navy bg-brand-navy/5"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
                 <div className="flex items-center gap-2">
                   <UserPlus className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                   <p className="text-sm font-medium text-brand-navy">Create new profile</p>
@@ -213,19 +271,39 @@ function AddPersonModal({
               </button>
               {selected === "new" && (
                 <div className="space-y-1.5 pt-1">
-                  <Label className="text-sm">Full name <span className="text-red-400">*</span></Label>
-                  <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="As on passport" className="text-sm" autoFocus />
+                  <Label className="text-sm">
+                    Full name <span className="text-red-400">*</span>
+                  </Label>
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="As on passport"
+                    className="text-sm"
+                    autoFocus
+                  />
                 </div>
               )}
               {role === "shareholder" && (
                 <div className="space-y-1.5">
                   <Label className="text-sm">Shareholding %</Label>
-                  <Input type="number" min="0" max="100" value={shareholding} onChange={(e) => setShareholding(e.target.value)} placeholder="e.g. 25" className="text-sm" />
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={shareholding}
+                    onChange={(e) => setShareholding(e.target.value)}
+                    placeholder="e.g. 25"
+                    className="text-sm"
+                  />
                 </div>
               )}
               <div className="flex gap-2 justify-end pt-2">
                 <Button variant="outline" onClick={onClose}>Cancel</Button>
-                <Button onClick={handleConfirm} disabled={!((selected !== "new" || newName.trim().length > 0) && !loading)} className="bg-brand-navy hover:bg-brand-blue">
+                <Button
+                  onClick={handleConfirm}
+                  disabled={!((selected !== "new" || newName.trim().length > 0) && !loading)}
+                  className="bg-brand-navy hover:bg-brand-blue"
+                >
                   {selected === "new" ? "Create & Add" : "Add"}
                 </Button>
               </div>
@@ -237,7 +315,149 @@ function AddPersonModal({
   );
 }
 
-type KycFlowPerson = ServicePerson & { _kycDone?: boolean };
+// ─── PersonCard ───────────────────────────────────────────────────────────────
+
+function PersonCard({
+  person,
+  serviceId,
+  kycPct,
+  onReviewKyc,
+  onRemove,
+}: {
+  person: ServicePerson;
+  serviceId: string;
+  kycPct: number;
+  onReviewKyc: () => void;
+  onRemove: () => void;
+}) {
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
+
+  async function handleSendInvite() {
+    if (!person.client_profiles?.email) {
+      toast.error("This person has no email address — edit their profile first");
+      return;
+    }
+    setInviteSending(true);
+    try {
+      const res = await fetch(`/api/services/${serviceId}/persons/${person.id}/send-invite`, {
+        method: "POST",
+      });
+      const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to send invite");
+      setInviteSentAt(data.invite_sent_at ?? new Date().toISOString());
+      toast.success("Invite sent!");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to send invite");
+    } finally {
+      setInviteSending(false);
+    }
+  }
+
+  const role = person.role as ServicePersonRole;
+  const roleLabel = ROLE_LABELS[role] ?? person.role;
+  const roleColor = ROLE_COLORS[role] ?? "bg-gray-100 text-gray-600";
+
+  const kycColor =
+    kycPct === 100
+      ? "text-green-600"
+      : kycPct > 0
+      ? "text-amber-600"
+      : "text-red-500";
+
+  const kycBarColor =
+    kycPct === 100
+      ? "bg-green-500"
+      : kycPct > 0
+      ? "bg-amber-500"
+      : "bg-red-400";
+
+  const sentDate = inviteSentAt
+    ? new Date(inviteSentAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
+
+  return (
+    <div className="border rounded-xl bg-white px-4 py-3.5 space-y-3">
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+            <User className="h-4 w-4 text-gray-500" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-brand-navy leading-tight">
+              {person.client_profiles?.full_name ?? "Unknown"}
+            </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor}`}>
+                {roleLabel}
+              </span>
+              {person.shareholding_percentage != null && (
+                <span className="text-[10px] text-gray-400">{person.shareholding_percentage}%</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Remove button — only for non-managing persons */}
+        {!person.can_manage && (
+          <button
+            onClick={onRemove}
+            className="text-gray-300 hover:text-red-500 transition-colors p-1 shrink-0"
+            title="Remove from service"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* KYC status bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${kycBarColor}`}
+            style={{ width: `${kycPct}%` }}
+          />
+        </div>
+        <span className={`text-[11px] font-medium tabular-nums ${kycColor}`}>
+          KYC: {kycPct}%
+        </span>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onReviewKyc}
+          className="h-7 px-3 text-xs gap-1.5"
+        >
+          Review KYC
+        </Button>
+
+        {inviteSentAt ? (
+          <span className="text-[11px] text-green-600 flex items-center gap-1">
+            <Mail className="h-3 w-3" />
+            Invite sent {sentDate}
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleSendInvite}
+            disabled={inviteSending}
+            className="h-7 px-3 text-xs gap-1.5 text-gray-500 hover:text-brand-navy"
+          >
+            <Mail className="h-3 w-3" />
+            {inviteSending ? "Sending…" : "Send Invite"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
   serviceId: string;
@@ -245,7 +465,7 @@ interface Props {
   onPersonsChange: (persons: ServicePerson[]) => void;
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
-  onNext: () => void;
+  onNavVisibilityChange: (hide: boolean) => void;
 }
 
 export function ServiceWizardPeopleStep({
@@ -254,206 +474,212 @@ export function ServiceWizardPeopleStep({
   onPersonsChange,
   requirements,
   documentTypes,
-  onNext,
+  onNavVisibilityChange,
 }: Props) {
-  const [persons, setPersons] = useState<KycFlowPerson[]>(initialPersons);
-  const [rosterConfirmed, setRosterConfirmed] = useState(false);
-  const [kycPersonIndex, setKycPersonIndex] = useState(0);
+  const [persons, setPersons] = useState<ServicePerson[]>(initialPersons);
   const [addingRole, setAddingRole] = useState<ServicePersonRole | null>(null);
+  const [reviewingRoleId, setReviewingRoleId] = useState<string | null>(null);
+  // Track which persons have completed KYC in this session (to show 100% locally)
+  const [kycCompletedIds, setKycCompletedIds] = useState<Set<string>>(new Set());
 
-  const handleAdded = useCallback((person: ServicePerson) => {
-    const next = [...persons, person];
-    setPersons(next);
-    onPersonsChange(next);
-  }, [persons, onPersonsChange]);
+  // Hide/show outer wizard nav when entering/leaving KYC review
+  useEffect(() => {
+    onNavVisibilityChange(reviewingRoleId !== null);
+  }, [reviewingRoleId, onNavVisibilityChange]);
 
-  const handleRemove = useCallback(async (roleId: string) => {
-    if (!confirm("Remove this person from the service?")) return;
-    const res = await fetch(`/api/services/${serviceId}/persons/${roleId}`, { method: "DELETE" });
-    if (res.ok) {
-      const next = persons.filter((p) => p.id !== roleId);
+  const handleAdded = useCallback(
+    (person: ServicePerson) => {
+      const next = [...persons, person];
       setPersons(next);
       onPersonsChange(next);
-      toast.success("Removed");
-    }
-  }, [persons, serviceId, onPersonsChange]);
+    },
+    [persons, onPersonsChange]
+  );
 
-  function markKycDone(index: number) {
-    const next = [...persons];
-    next[index] = { ...next[index], _kycDone: true };
-    setPersons(next);
-    onPersonsChange(next);
-    if (index + 1 < persons.length) {
-      setKycPersonIndex(index + 1);
-    } else {
-      onNext();
-    }
-  }
+  const handleRemove = useCallback(
+    async (roleId: string) => {
+      if (!confirm("Remove this person from the service?")) return;
+      const res = await fetch(`/api/services/${serviceId}/persons/${roleId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        const next = persons.filter((p) => p.id !== roleId);
+        setPersons(next);
+        onPersonsChange(next);
+        toast.success("Removed");
+      }
+    },
+    [persons, serviceId, onPersonsChange]
+  );
 
-  // --- Roster view ---
-  if (!rosterConfirmed) {
-    const ROLES: ServicePersonRole[] = ["director", "shareholder", "ubo"];
-    const hasDirector = persons.some((p) => p.role === "director");
+  const reviewingPerson = reviewingRoleId
+    ? persons.find((p) => p.id === reviewingRoleId) ?? null
+    : null;
+
+  // ─── KYC Review view ──────────────────────────────────────────────────────
+  if (reviewingPerson) {
+    const kycRecord = mapToKycRecord(reviewingPerson);
+    const ddLevel = (reviewingPerson.client_profiles?.due_diligence_level as DueDiligenceLevel) ?? "sdd";
+    const roleLabel = ROLE_LABELS[reviewingPerson.role as ServicePersonRole] ?? reviewingPerson.role;
+    const roleColor = ROLE_COLORS[reviewingPerson.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600";
+
+    const handleKycComplete = () => {
+      // Mark this person as KYC-complete in local state
+      setKycCompletedIds((prev) => {
+        const next = new Set(prev);
+        next.add(reviewingPerson.id);
+        return next;
+      });
+      setReviewingRoleId(null);
+    };
 
     return (
-      <div className="space-y-5">
+      <div className="space-y-4">
+        {/* Back + header */}
         <div>
-          <h2 className="text-lg font-semibold text-brand-navy mb-1">People Roster</h2>
-          <p className="text-sm text-gray-500">
-            Add all directors, shareholders, and UBOs for this service. Then continue to complete each person&apos;s KYC.
-          </p>
+          <button
+            onClick={() => setReviewingRoleId(null)}
+            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-navy mb-3"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to People
+          </button>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-brand-navy">
+              {reviewingPerson.client_profiles?.full_name ?? "Unknown"}
+            </h3>
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor}`}>
+              {roleLabel}
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">KYC Information</p>
         </div>
 
-        {/* Add buttons */}
-        <div className="flex flex-wrap gap-2">
-          {ROLES.map((role) => (
-            <Button key={role} size="sm" variant="outline" onClick={() => setAddingRole(role)} className="gap-1.5 border-dashed">
-              <UserPlus className="h-3.5 w-3.5" />
-              Add {ROLE_LABELS[role]}
-            </Button>
-          ))}
-        </div>
-
-        {/* Person list */}
-        {persons.length === 0 ? (
-          <p className="text-sm text-gray-400 py-2">No people added yet.</p>
+        {kycRecord.id ? (
+          <KycStepWizard
+            clientId={reviewingPerson.client_profiles?.id ?? ""}
+            kycRecord={kycRecord}
+            documents={[]}
+            documentTypes={documentTypes}
+            dueDiligenceLevel={ddLevel}
+            requirements={requirements}
+            onComplete={handleKycComplete}
+            compact={true}
+            saveUrl="/api/profiles/kyc/save"
+            inlineMode={true}
+          />
         ) : (
-          <div className="space-y-2">
-            {ROLES.map((role) => {
-              const group = persons.filter((p) => p.role === role);
-              if (group.length === 0) return null;
-              return (
-                <div key={role} className="space-y-1.5">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{ROLE_LABELS[role]}s</p>
-                  {group.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between border rounded-lg px-3 py-2.5 bg-white">
-                      <div className="flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center">
-                          <User className="h-3.5 w-3.5 text-gray-500" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-brand-navy">{p.client_profiles?.full_name ?? "Unknown"}</p>
-                          {p.shareholding_percentage != null && (
-                            <p className="text-xs text-gray-400">{p.shareholding_percentage}% shareholder</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[role]}`}>
-                          {ROLE_LABELS[role]}
-                        </span>
-                        {!p.can_manage && (
-                          <button onClick={() => void handleRemove(p.id)} className="text-gray-300 hover:text-red-500 transition-colors text-xs px-1.5">✕</button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
+          <div className="text-center py-6 rounded-xl border bg-gray-50 space-y-2">
+            <p className="text-sm text-gray-500">
+              No KYC record found for this person.
+            </p>
+            <p className="text-xs text-gray-400">
+              A KYC record is created automatically once the person is linked to a service. Try refreshing if this person was recently added.
+            </p>
+            <Button
+              onClick={() => setReviewingRoleId(null)}
+              variant="outline"
+              size="sm"
+              className="mt-2"
+            >
+              Back to People
+            </Button>
           </div>
         )}
-
-        {!hasDirector && (
-          <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-            At least one director is required before continuing.
-          </p>
-        )}
-
-        <Button
-          onClick={() => { setRosterConfirmed(true); setKycPersonIndex(0); }}
-          disabled={!hasDirector}
-          className="bg-brand-navy hover:bg-brand-blue"
-        >
-          Continue to KYC <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-
-        {addingRole && (
-          <AddPersonModal
-            serviceId={serviceId}
-            role={addingRole}
-            onClose={() => setAddingRole(null)}
-            onAdded={handleAdded}
-          />
-        )}
       </div>
     );
   }
 
-  // --- KYC walkthrough ---
-  if (persons.length === 0) {
-    return (
-      <div className="text-center py-8 space-y-3">
-        <p className="text-gray-500">No people to complete KYC for.</p>
-        <Button onClick={onNext} className="bg-brand-navy hover:bg-brand-blue">Continue to Documents →</Button>
-      </div>
-    );
-  }
-
-  const person = persons[kycPersonIndex];
-  const kycRecord = person ? mapToKycRecord(person) : null;
-  const ddLevel = (person?.client_profiles?.due_diligence_level as DueDiligenceLevel) ?? "sdd";
-  const profile = person?.client_profiles;
+  // ─── Roster view ─────────────────────────────────────────────────────────
+  const ROLES: ServicePersonRole[] = ["director", "shareholder", "ubo"];
+  const hasDirector = persons.some((p) => p.role === "director");
+  const shareholders = persons.filter((p) => p.role === "shareholder");
+  const totalShares = shareholders.reduce(
+    (sum, p) => sum + (p.shareholding_percentage ?? 0),
+    0
+  );
+  const shareholdingWarning =
+    shareholders.length > 0 && Math.abs(totalShares - 100) > 5;
 
   return (
-    <div className="space-y-4">
-      {/* Person breadcrumb */}
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">
-            Person {kycPersonIndex + 1} of {persons.length}
-          </p>
-          <h3 className="font-semibold text-brand-navy">
-            {profile?.full_name ?? "Unknown"}
-            {" "}
-            <span className={`text-xs font-normal px-1.5 py-0.5 rounded capitalize ml-1 ${ROLE_COLORS[person.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600"}`}>
-              {person.role}
-            </span>
-          </h3>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1 text-gray-500"
-          onClick={() => markKycDone(kycPersonIndex)}
-        >
-          <SkipForward className="h-3.5 w-3.5" />
-          Skip for now
-        </Button>
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-brand-navy mb-1">People & KYC</h2>
+        <p className="text-sm text-gray-500">
+          Add directors, shareholders, and UBOs. Click &quot;Review KYC&quot; to complete each person&apos;s compliance information.
+        </p>
       </div>
 
-      {/* Mini step dots */}
-      <div className="flex items-center gap-1.5">
-        {persons.map((p, i) => (
-          <div
-            key={p.id}
-            className={`h-1.5 rounded-full transition-all ${
-              i < kycPersonIndex ? "w-6 bg-green-400" :
-              i === kycPersonIndex ? "w-6 bg-blue-500" :
-              "w-3 bg-gray-200"
-            }`}
-          />
+      {/* Person cards */}
+      {persons.length === 0 ? (
+        <p className="text-sm text-gray-400 py-2">No people added yet.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {ROLES.flatMap((role) =>
+            persons
+              .filter((p) => p.role === role)
+              .map((p) => {
+                const rawPct = calcKycPct(p.client_profiles?.client_profile_kyc ?? null);
+                const kycPct = kycCompletedIds.has(p.id) ? 100 : rawPct;
+                return (
+                  <PersonCard
+                    key={p.id}
+                    person={p}
+                    serviceId={serviceId}
+                    kycPct={kycPct}
+                    onReviewKyc={() => setReviewingRoleId(p.id)}
+                    onRemove={() => void handleRemove(p.id)}
+                  />
+                );
+              })
+          )}
+        </div>
+      )}
+
+      {/* Shareholding tracker */}
+      {shareholders.length > 0 && (
+        <div
+          className={`text-xs px-3 py-2 rounded-lg ${
+            shareholdingWarning
+              ? "bg-amber-50 text-amber-700"
+              : "bg-green-50 text-green-700"
+          }`}
+        >
+          Shareholding: {totalShares}% of 100%
+          {shareholdingWarning && " — must reach 100%"}
+        </div>
+      )}
+
+      {/* Director warning */}
+      {!hasDirector && (
+        <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+          At least one director is required.
+        </p>
+      )}
+
+      {/* Add buttons */}
+      <div className="flex flex-wrap gap-2">
+        {ROLES.map((role) => (
+          <Button
+            key={role}
+            size="sm"
+            variant="outline"
+            onClick={() => setAddingRole(role)}
+            className="gap-1.5 border-dashed"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Add {ROLE_LABELS[role]}
+          </Button>
         ))}
       </div>
 
-      {kycRecord && kycRecord.id ? (
-        <KycStepWizard
-          clientId={profile?.id ?? ""}
-          kycRecord={kycRecord}
-          documents={[]}
-          documentTypes={documentTypes}
-          dueDiligenceLevel={ddLevel}
-          requirements={requirements}
-          onComplete={() => markKycDone(kycPersonIndex)}
-          compact={true}
-          saveUrl="/api/profiles/kyc/save"
-          inlineMode={true}
+      {addingRole && (
+        <AddPersonModal
+          serviceId={serviceId}
+          role={addingRole}
+          onClose={() => setAddingRole(null)}
+          onAdded={handleAdded}
         />
-      ) : (
-        <div className="text-center py-6 space-y-3">
-          <p className="text-sm text-gray-500">KYC record not yet created for this person.</p>
-          <Button onClick={() => markKycDone(kycPersonIndex)} variant="outline">Skip for now</Button>
-        </div>
       )}
     </div>
   );

@@ -33,6 +33,7 @@ export type ServicePerson = {
   role: string;
   shareholding_percentage: number | null;
   can_manage: boolean;
+  invite_sent_at: string | null;
   client_profiles: {
     id: string;
     full_name: string;
@@ -99,7 +100,7 @@ export default async function ClientServiceDetailPage({
     supabase
       .from("profile_service_roles")
       .select(`
-        id, role, shareholding_percentage, can_manage,
+        id, role, shareholding_percentage, can_manage, invite_sent_at,
         client_profiles!inner(
           id, full_name, email, due_diligence_level,
           client_profile_kyc(*)
