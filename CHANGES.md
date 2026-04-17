@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-020 Batch 1: Dashboard rework + toast position + wizardStep link (Claude Code)
+
+**#1 Dashboard Greeting:** "Welcome {name}" headline + subtitle ("Please provide the missing information...")
+
+**#2 Dashboard Service Cards:** Complete rework — removed ACTION NEEDED section; each card now shows status badge, overall progress bar (green/amber by %), "Review and Complete" button, collapsible section checklist (5 sections with ✅/❌ + "Review >" per-section deep-link to wizard step)
+
+**#3 Toast Position:** All `toast.success/error` in `ServiceWizard.tsx` set to `{ position: "top-right" }` so they don't cover wizard nav buttons
+
+**WizardStep query param:** `?wizardStep=N` on `/services/[id]` now auto-opens the wizard at step N (dashboard "Review >" buttons pass this param)
+
+**Files modified:**
+- `src/app/(client)/dashboard/page.tsx` — computes section completions (calcSectionCompletion, calcKycCompletion) server-side per service; passes ServiceCardRow[] to DashboardClient; removed pendingActions
+- `src/components/client/DashboardClient.tsx` — complete rewrite with new greeting + service card design; removed PendingAction types/rendering
+- `src/app/(client)/services/[id]/page.tsx` — reads `searchParams.wizardStep`, passes `autoWizardStep` to client
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx` — added `autoWizardStep?: number` prop; initializes `wizardMode=true` and `wizardStartStep` from it
+- `src/components/client/ServiceWizard.tsx` — toast position top-right on Saved/Progress saved/error
+
+---
+
 ### 2026-04-17 — B-019: People & KYC Wizard Step Rework (Claude Code)
 
 **Problem solved:** Removed the confusing dual-navigation (inner "Continue to KYC" + outer wizard nav).

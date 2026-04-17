@@ -45,10 +45,14 @@ export type ServicePerson = {
 
 export default async function ClientServiceDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: { wizardStep?: string };
 }) {
   const { id } = await params;
+  const autoWizardStep =
+    searchParams.wizardStep !== undefined ? parseInt(searchParams.wizardStep, 10) : undefined;
   const session = await auth();
   if (!session) redirect("/login");
 
@@ -134,6 +138,7 @@ export default async function ClientServiceDetailPage({
       requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
       myRole={roleCheck.role}
+      autoWizardStep={autoWizardStep}
     />
   );
 }

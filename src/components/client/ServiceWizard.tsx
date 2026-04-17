@@ -106,7 +106,7 @@ export function ServiceWizard({
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
       return true;
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(err instanceof Error ? err.message : "Failed to save", { position: "top-right" });
       return false;
     } finally {
       setSaving(false);
@@ -118,7 +118,7 @@ export function ServiceWizard({
     if (currentStep < 3) {
       const ok = await saveServiceDetails();
       if (!ok) return;
-      toast.success("Saved");
+      toast.success("Saved", { position: "top-right" });
     }
     setCurrentStep((s) => Math.min(s + 1, 4));
   }
@@ -136,7 +136,7 @@ export function ServiceWizard({
       const ok = await saveServiceDetails();
       if (!ok) return;
     }
-    toast.success("Progress saved");
+    toast.success("Progress saved", { position: "top-right" });
     onClose(serviceDetails, persons, documents);
   }
 

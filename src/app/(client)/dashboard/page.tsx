@@ -3,9 +3,13 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { DashboardClient } from "@/components/client/DashboardClient";
-import { computePendingActions } from "@/lib/utils/pendingActions";
+import {
+  calcSectionCompletion,
+  calcKycCompletion,
+} from "@/lib/utils/serviceCompletion";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export const dynamic = "force-dynamic";
 
@@ -86,8 +90,8 @@ export default async function DashboardPage() {
     supabase
       .from("profile_service_roles")
       .select(`
-        service_id, role, shareholding_percentage,
-        client_profiles(id, full_name, due_diligence_level, client_profile_kyc(*))
+        service_id, role,
+        client_profiles(id, client_profile_kyc(*))
       `)
       .in("service_id", serviceIds)
       .eq("tenant_id", tenantId),
@@ -98,47 +102,77 @@ export default async function DashboardPage() {
       .eq("is_active", true),
   ]);
 
-  const personsByService = new Map<string, typeof personsRes.data>();
-  for (const row of personsRes.data ?? []) {
-    const sid = (row as { service_id: string }).service_id;
-    if (!personsByService.has(sid)) personsByService.set(sid, []);
-    personsByService.get(sid)!.push(row);
+  type PersonRow = {
+    service_id: string;
+    role: string;
+    client_profiles: { id: string; client_profile_kyc: Record<string, unknown> | null } | null;
+  };
+
+  type DocRow = { service_id: string; verification_status: string };
+
+  const personsByService = new Map<string, PersonRow[]>();
+  for (const row of (personsRes.data ?? []) as unknown as PersonRow[]) {
+    if (!personsByService.has(row.service_id)) personsByService.set(row.service_id, []);
+    personsByService.get(row.service_id)!.push(row);
   }
 
-  const docsByService = new Map<string, typeof docsRes.data>();
-  for (const doc of docsRes.data ?? []) {
-    const sid = (doc as { service_id: string }).service_id;
-    if (!docsByService.has(sid)) docsByService.set(sid, []);
-    docsByService.get(sid)!.push(doc);
+  const docsByService = new Map<string, DocRow[]>();
+  for (const doc of (docsRes.data ?? []) as unknown as DocRow[]) {
+    if (!docsByService.has(doc.service_id)) docsByService.set(doc.service_id, []);
+    docsByService.get(doc.service_id)!.push(doc);
   }
 
-  // Compute pending actions per service
-  const allPendingActions = services.flatMap((svc) => {
-    const personsForService = personsByService.get(svc.id) ?? [];
-    const docsForService = docsByService.get(svc.id) ?? [];
-    return computePendingActions(
-      svc as unknown as Parameters<typeof computePendingActions>[0],
-      personsForService as unknown as Parameters<typeof computePendingActions>[1],
-      docsForService as unknown as Parameters<typeof computePendingActions>[2]
-    );
+  // Build service card rows with section completions
+  const serviceCards = services.map((svc) => {
+    const fields = (svc.service_templates?.service_fields ?? []) as ServiceField[];
+    const details = svc.service_details ?? {};
+    const persons = personsByService.get(svc.id) ?? [];
+    const docs = docsByService.get(svc.id) ?? [];
+
+    const csComplete = calcSectionCompletion(fields, details, "company_setup").percentage >= 100;
+    const fiComplete = calcSectionCompletion(fields, details, "financial").percentage >= 100;
+    const baComplete = calcSectionCompletion(fields, details, "banking").percentage >= 100;
+
+    const hasDirector = persons.some((p) => p.role === "director");
+    const kycPersons = persons.map((p) => ({
+      client_profiles: p.client_profiles
+        ? { client_profile_kyc: p.client_profiles.client_profile_kyc }
+        : null,
+    }));
+    const kycComplete =
+      hasDirector && calcKycCompletion(kycPersons).percentage >= 100;
+
+    const docsComplete = docs.length > 0;
+
+    const sections = [
+      { label: "Company Setup", complete: csComplete, wizardStep: 0 },
+      { label: "Financial", complete: fiComplete, wizardStep: 1 },
+      { label: "Banking", complete: baComplete, wizardStep: 2 },
+      { label: "People & KYC", complete: kycComplete, wizardStep: 3 },
+      { label: "Documents", complete: docsComplete, wizardStep: 4 },
+    ];
+
+    const completedCount = sections.filter((s) => s.complete).length;
+    const overallPct = Math.round((completedCount / sections.length) * 100);
+
+    return {
+      id: svc.id,
+      status: svc.status,
+      service_templates: svc.service_templates
+        ? { name: svc.service_templates.name, description: svc.service_templates.description }
+        : null,
+      overallPct,
+      sections,
+    };
   });
 
-  const allComplete = allPendingActions.length === 0;
+  const allComplete = serviceCards.every((s) => s.overallPct === 100);
   const userName = session.user.name ?? session.user.email ?? "there";
-
-  const dashboardServices = services.map((svc) => ({
-    id: svc.id,
-    status: svc.status,
-    service_templates: svc.service_templates
-      ? { name: svc.service_templates.name, description: svc.service_templates.description }
-      : null,
-  }));
 
   return (
     <DashboardClient
       userName={userName}
-      services={dashboardServices}
-      pendingActions={allPendingActions}
+      services={serviceCards}
       allComplete={allComplete}
     />
   );

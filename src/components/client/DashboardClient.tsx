@@ -1,162 +1,164 @@
 "use client";
 
-import Link from "next/link";
-import { CheckCircle, Clock, AlertCircle, ArrowRight, Info } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getClientStatusLabel } from "@/lib/utils/clientLabels";
-import type { PendingAction } from "@/lib/utils/pendingActions";
 
-type ServiceWithDetails = {
+type ServiceSection = {
+  label: string;
+  complete: boolean;
+  wizardStep: number;
+};
+
+type ServiceCardRow = {
   id: string;
   status: string;
   service_templates: { name: string; description: string | null } | null;
+  overallPct: number;
+  sections: ServiceSection[];
 };
 
 interface Props {
   userName: string;
-  services: ServiceWithDetails[];
-  pendingActions: PendingAction[];
+  services: ServiceCardRow[];
   allComplete: boolean;
 }
 
-const SECTION_BORDER: Record<string, string> = {
-  service_details: "border-l-blue-500",
-  people: "border-l-green-500",
-  kyc: "border-l-amber-500",
-  documents: "border-l-purple-500",
+const STATUS_BADGE: Record<string, string> = {
+  draft: "bg-gray-100 text-gray-600",
+  in_progress: "bg-blue-50 text-blue-700",
+  submitted: "bg-indigo-50 text-indigo-700",
+  in_review: "bg-amber-50 text-amber-700",
+  pending_action: "bg-orange-50 text-orange-700",
+  approved: "bg-green-50 text-green-700",
+  rejected: "bg-red-50 text-red-700",
 };
 
-const SECTION_TEXT: Record<string, string> = {
-  service_details: "text-blue-600",
-  people: "text-green-600",
-  kyc: "text-amber-600",
-  documents: "text-purple-600",
-};
+function ServiceCard({ svc }: { svc: ServiceCardRow }) {
+  const router = useRouter();
+  const [expanded, setExpanded] = useState(false);
+  const badgeClass = STATUS_BADGE[svc.status] ?? "bg-gray-100 text-gray-600";
 
-const SECTION_LABEL: Record<string, string> = {
-  service_details: "Service Details",
-  people: "People",
-  kyc: "KYC",
-  documents: "Documents",
-};
-
-function StatusIcon({ status }: { status: string }) {
-  if (status === "approved") return <CheckCircle className="h-5 w-5 text-green-500" />;
-  if (status === "rejected") return <AlertCircle className="h-5 w-5 text-red-500" />;
-  if (status === "in_review" || status === "submitted") return <Clock className="h-5 w-5 text-amber-500" />;
-  return <Clock className="h-5 w-5 text-gray-300" />;
-}
-
-export function DashboardClient({ userName, services, pendingActions, allComplete }: Props) {
-  // Group pending actions by service
-  const byService = new Map<string, { serviceName: string; actions: PendingAction[] }>();
-  for (const action of pendingActions) {
-    const existing = byService.get(action.serviceId);
-    if (existing) {
-      existing.actions.push(action);
-    } else {
-      byService.set(action.serviceId, { serviceName: action.serviceName, actions: [action] });
-    }
-  }
+  const progressBarColor =
+    svc.overallPct === 100
+      ? "bg-green-500"
+      : svc.overallPct > 0
+      ? "bg-amber-500"
+      : "bg-gray-300";
 
   return (
-    <div className="space-y-6">
-      {/* Greeting banner */}
-      <div className={`rounded-xl px-5 py-4 ${allComplete ? "bg-green-50 border border-green-200" : "bg-amber-50 border border-amber-200"}`}>
-        <div className="flex items-start gap-3">
-          {allComplete
-            ? <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-            : <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          }
-          <div>
-            <p className={`font-semibold ${allComplete ? "text-green-800" : "text-amber-800"}`}>
-              {allComplete
-                ? "All information provided! Your application is under review."
-                : `Hi ${userName}, please provide the missing information below to complete your application.`
-              }
-            </p>
-            {!allComplete && (
-              <p className="text-sm text-amber-700 mt-0.5">
-                Click any item below to go directly to that section.
-              </p>
-            )}
+    <div className="bg-white border rounded-xl overflow-hidden">
+      {/* Card header */}
+      <div className="px-5 py-4">
+        {/* Service name + status badge */}
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <h2 className="font-semibold text-brand-navy text-base leading-snug">
+            {svc.service_templates?.name ?? "Service"}
+          </h2>
+          <span
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize shrink-0 ${badgeClass}`}
+          >
+            {getClientStatusLabel(svc.status)}
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="flex items-center gap-2 mt-2.5 mb-3">
+          <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${progressBarColor}`}
+              style={{ width: `${svc.overallPct}%` }}
+            />
           </div>
+          <span className="text-xs text-gray-500 tabular-nums shrink-0">
+            {svc.overallPct}% complete
+          </span>
+        </div>
+
+        {/* Actions row */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {expanded ? (
+              <><ChevronUp className="h-3.5 w-3.5" /> Hide sections</>
+            ) : (
+              <><ChevronDown className="h-3.5 w-3.5" /> Show sections</>
+            )}
+          </button>
+
+          <Button
+            size="sm"
+            onClick={() => router.push(`/services/${svc.id}`)}
+            className="bg-brand-navy hover:bg-brand-blue h-8 px-3 text-xs gap-1"
+          >
+            Review and Complete
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
 
-      {/* Pending actions */}
-      {!allComplete && byService.size > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Action needed</h2>
-          {Array.from(byService.entries()).map(([serviceId, { serviceName, actions }]) => (
-            <div key={serviceId} className="space-y-2">
-              {services.length > 1 && (
-                <p className="text-xs font-medium text-gray-500 ml-1">{serviceName}</p>
-              )}
-              {actions.map((action, idx) => (
-                <Link
-                  key={`${action.section}-${idx}`}
-                  href={`/services/${serviceId}${action.anchor ?? ""}`}
+      {/* Collapsible sections */}
+      {expanded && (
+        <div className="border-t divide-y">
+          {svc.sections.map((section) => (
+            <div
+              key={section.label}
+              className="flex items-center justify-between px-5 py-2.5"
+            >
+              <div className="flex items-center gap-2.5">
+                {section.complete ? (
+                  <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                )}
+                <span className="text-sm text-gray-700">{section.label}</span>
+                <span
+                  className={`text-[10px] font-medium ${
+                    section.complete ? "text-green-600" : "text-red-500"
+                  }`}
                 >
-                  <div className={`border-l-4 ${SECTION_BORDER[action.section] ?? "border-l-gray-300"} bg-white border border-gray-100 rounded-r-lg px-4 py-3 hover:shadow-sm transition-shadow cursor-pointer flex items-center justify-between`}>
-                    <div>
-                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${SECTION_TEXT[action.section] ?? "text-gray-500"}`}>
-                        {SECTION_LABEL[action.section] ?? action.section}
-                      </span>
-                      <p className="text-sm text-gray-800 mt-0.5">
-                        {action.personName ? (
-                          <><span className="font-medium">{action.personName}</span> — {action.label}</>
-                        ) : action.label}
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-gray-300 ml-4 shrink-0" />
-                  </div>
-                </Link>
-              ))}
+                  {section.complete ? "Complete" : "Incomplete"}
+                </span>
+              </div>
+              <button
+                onClick={() =>
+                  router.push(`/services/${svc.id}?wizardStep=${section.wizardStep}`)
+                }
+                className="text-xs text-brand-blue hover:underline flex items-center gap-0.5"
+              >
+                Review
+                <ArrowRight className="h-3 w-3" />
+              </button>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+export function DashboardClient({ userName, services, allComplete }: Props) {
+  return (
+    <div className="space-y-6">
+      {/* Greeting */}
+      <div>
+        <h1 className="text-2xl font-bold text-brand-navy">Welcome {userName}</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {allComplete
+            ? "All sections complete! Your application is under review."
+            : "Please provide the missing information to complete your application."}
+        </p>
+      </div>
 
       {/* Service cards */}
-      <div>
-        {services.length > 1 && (
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Your Services</h2>
-        )}
-        <div className="grid gap-4">
-          {services.map((svc) => (
-            <Link key={svc.id} href={`/services/${svc.id}`}>
-              <Card className="hover:border-brand-blue hover:shadow-sm transition-all cursor-pointer">
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <StatusIcon status={svc.status} />
-                        <h2 className="font-semibold text-brand-navy">
-                          {svc.service_templates?.name ?? "Service"}
-                        </h2>
-                      </div>
-                      {svc.service_templates?.description && (
-                        <p className="text-sm text-gray-500 mt-0.5 ml-7">{svc.service_templates.description}</p>
-                      )}
-                      <div className="ml-7 mt-1.5">
-                        <span className="text-xs font-medium text-gray-600">
-                          {getClientStatusLabel(svc.status)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 ml-4 text-brand-blue">
-                      <span className="text-sm font-medium">
-                        {svc.status === "draft" || svc.status === "in_progress" ? "Continue" : "View"}
-                      </span>
-                      <ArrowRight className="h-4 w-4" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+      <div className="space-y-4">
+        {services.map((svc) => (
+          <ServiceCard key={svc.id} svc={svc} />
+        ))}
       </div>
     </div>
   );

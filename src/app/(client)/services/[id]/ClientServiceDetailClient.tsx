@@ -24,6 +24,7 @@ interface Props {
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
   myRole: string;
+  autoWizardStep?: number;
 }
 
 // ─── Section completion helpers ──────────────────────────────────────────────
@@ -119,9 +120,10 @@ export function ClientServiceDetailClient({
   requirements,
   documentTypes,
   myRole,
+  autoWizardStep,
 }: Props) {
-  const [wizardMode, setWizardMode] = useState(false);
-  const [wizardStartStep, setWizardStartStep] = useState(0);
+  const [wizardMode, setWizardMode] = useState(autoWizardStep != null);
+  const [wizardStartStep, setWizardStartStep] = useState(autoWizardStep ?? 0);
   // Track live updates from wizard
   const [livePersons, setLivePersons] = useState<ServicePerson[]>(persons);
   const [liveDocs, setLiveDocs] = useState<ClientServiceDoc[]>(documents);
