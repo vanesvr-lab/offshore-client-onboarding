@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 2C: Service Creation Wizard (Claude Code)
+
+**New service wizard (`/admin/services/new`):**
+- `src/app/(admin)/admin/services/new/page.tsx` — server component, fetches templates + profiles
+- `src/app/(admin)/admin/services/new/NewServiceWizard.tsx` — 4-step client wizard: pick template → add people with roles → service details (DynamicServiceForm) → review → create. On submit, POSTs to `/api/admin/services`, redirects to new service detail page.
+
+---
+
 ### 2026-04-17 — B-015 Phase 2A+2B: Services List + Detail Pages (Claude Code)
 
 **Services list page:**
