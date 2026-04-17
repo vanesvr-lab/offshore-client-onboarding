@@ -781,9 +781,9 @@ export function ServiceDetailClient({
         </div>
       </div>
 
-      {/* ── Workflow Progress Stepper ──────────────────────────────────── */}
-      <div className="bg-white border rounded-xl px-5 py-4 mb-6">
-        <div className="flex items-center justify-between">
+      {/* ── Workflow Progress Stepper (Salesforce chevron style) ─────── */}
+      <div className="mb-6 overflow-hidden rounded-xl border">
+        <div className="flex">
           {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
             const stepLabels: Record<string, string> = {
               draft: "Draft",
@@ -793,29 +793,42 @@ export function ServiceDetailClient({
               verification: "Verification",
               approved: "Approved",
             };
+            const stepColors: Record<string, { bg: string; text: string }> = {
+              draft: { bg: "bg-slate-500", text: "text-white" },
+              in_progress: { bg: "bg-blue-600", text: "text-white" },
+              submitted: { bg: "bg-teal-500", text: "text-white" },
+              in_review: { bg: "bg-amber-500", text: "text-white" },
+              verification: { bg: "bg-orange-500", text: "text-white" },
+              approved: { bg: "bg-green-600", text: "text-white" },
+            };
             const stepIdx = arr.indexOf(service.status as typeof arr[number]);
             const isActive = idx === stepIdx;
             const isComplete = idx < stepIdx;
+            const isFuture = idx > stepIdx;
             const isRejected = service.status === "rejected";
+
+            const colors = isRejected && isActive
+              ? { bg: "bg-red-500", text: "text-white" }
+              : isComplete
+              ? stepColors[step]
+              : isActive
+              ? stepColors[step]
+              : { bg: "bg-gray-100", text: "text-gray-400" };
+
             return (
-              <div key={step} className="flex items-center flex-1 last:flex-initial">
-                <div className="flex flex-col items-center">
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                    isRejected && isActive ? "bg-red-500 text-white" :
-                    isComplete ? "bg-green-500 text-white" :
-                    isActive ? "bg-brand-navy text-white" :
-                    "bg-gray-200 text-gray-500"
-                  }`}>
-                    {isComplete ? "✓" : idx + 1}
-                  </div>
-                  <span className={`text-[10px] mt-1 font-medium ${
-                    isActive ? "text-brand-navy" : isComplete ? "text-green-600" : "text-gray-400"
-                  }`}>
-                    {isRejected && isActive ? "Rejected" : stepLabels[step]}
-                  </span>
+              <div key={step} className={`relative flex-1 ${colors.bg} ${colors.text}`}>
+                <div className={`flex items-center justify-center h-12 px-4 text-xs font-semibold ${isFuture ? "opacity-60" : ""}`}>
+                  {isComplete && <span className="mr-1.5">✓</span>}
+                  {isRejected && isActive ? "Rejected" : stepLabels[step]}
                 </div>
+                {/* Chevron arrow */}
                 {idx < arr.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-2 ${isComplete ? "bg-green-400" : "bg-gray-200"}`} />
+                  <div className="absolute right-0 top-0 h-full w-4 z-10" style={{ transform: "translateX(50%)" }}>
+                    <svg viewBox="0 0 20 48" className="h-full w-full" preserveAspectRatio="none">
+                      <path d="M0,0 L16,24 L0,48" className={`${isComplete || isActive ? "fill-current" : ""}`} style={{ fill: isComplete || isActive ? undefined : "#f3f4f6" }} />
+                      <path d="M1,0 L17,24 L1,48" fill="white" opacity="0.3" />
+                    </svg>
+                  </div>
                 )}
               </div>
             );
