@@ -883,82 +883,55 @@ export function ServiceDetailClient({
             )}
           </div>
 
-          {/* Save/Cancel — always visible spot */}
-          {pendingChanges && (
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCancel}
-                className="h-8 text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => void handleSave()}
-                disabled={saving}
-                className="h-8 text-xs bg-brand-navy hover:bg-brand-blue"
-              >
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                Save changes
-              </Button>
-            </div>
-          )}
         </div>
 
-        {/* Chevron progress bar (inside header) */}
-        <div className="overflow-hidden rounded-lg">
-          <div className="flex">
-            {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
-              const stepLabels: Record<string, string> = {
-                draft: "Draft",
-                in_progress: "In Progress",
-                submitted: "Submitted",
-                in_review: "In Review",
-                verification: "Verification",
-                approved: "Approved",
-              };
-              const stepColors: Record<string, { bg: string; text: string }> = {
-                draft: { bg: "bg-slate-500", text: "text-white" },
-                in_progress: { bg: "bg-blue-600", text: "text-white" },
-                submitted: { bg: "bg-teal-500", text: "text-white" },
-                in_review: { bg: "bg-amber-500", text: "text-white" },
-                verification: { bg: "bg-orange-500", text: "text-white" },
-                approved: { bg: "bg-green-600", text: "text-white" },
-              };
-              const stepIdx = arr.indexOf(service.status as typeof arr[number]);
-              const isActive = idx === stepIdx;
-              const isComplete = idx < stepIdx;
-              const isFuture = idx > stepIdx;
-              const isRejected = service.status === "rejected";
+        {/* Salesforce-style path chevron */}
+        <div className="flex items-center mt-3">
+          {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
+            const stepLabels: Record<string, string> = {
+              draft: "Draft",
+              in_progress: "In Progress",
+              submitted: "Submitted",
+              in_review: "In Review",
+              verification: "Verification",
+              approved: "Approved",
+            };
+            const stepIdx = arr.indexOf(service.status as typeof arr[number]);
+            const isActive = idx === stepIdx;
+            const isComplete = idx < stepIdx;
+            const isRejected = service.status === "rejected";
 
-              const colors = isRejected && isActive
-                ? { bg: "bg-red-500", text: "text-white" }
-                : isComplete
-                ? stepColors[step]
-                : isActive
-                ? stepColors[step]
-                : { bg: "bg-gray-100", text: "text-gray-400" };
-
-              return (
-                <div key={step} className={`relative flex-1 ${colors.bg} ${colors.text}`}>
-                  <div className={`flex items-center justify-center h-10 px-2 text-[11px] font-semibold ${isFuture ? "opacity-60" : ""}`}>
-                    {isComplete && <span className="mr-1">✓</span>}
-                    {isRejected && isActive ? "Rejected" : stepLabels[step]}
-                  </div>
-                  {idx < arr.length - 1 && (
-                    <div className="absolute right-0 top-0 h-full w-4 z-10" style={{ transform: "translateX(50%)" }}>
-                      <svg viewBox="0 0 20 48" className="h-full w-full" preserveAspectRatio="none">
-                        <path d="M0,0 L16,24 L0,48" className={`${isComplete || isActive ? "fill-current" : ""}`} style={{ fill: isComplete || isActive ? undefined : "#f3f4f6" }} />
-                        <path d="M1,0 L17,24 L1,48" fill="white" opacity="0.3" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+            // Salesforce-style colors
+            const bgColor = isRejected && isActive
+              ? "#ef4444"
+              : isComplete
+              ? "#16a34a"
+              : isActive
+              ? "#2563eb"
+              : "#e5e7eb";
+            const textColor = (isComplete || isActive || (isRejected && isActive)) ? "#fff" : "#9ca3af";
+            return (
+              <div key={step} className="relative flex-1" style={{ marginRight: idx < arr.length - 1 ? "2px" : 0 }}>
+                <svg viewBox="0 0 200 36" className="w-full h-9" preserveAspectRatio="none">
+                  {/* Main body */}
+                  <path
+                    d={idx === 0
+                      ? "M4,0 L180,0 L200,18 L180,36 L4,36 Q0,36 0,32 L0,4 Q0,0 4,0"
+                      : idx === arr.length - 1
+                      ? "M0,0 L20,0 L20,0 L196,0 Q200,0 200,4 L200,32 Q200,36 196,36 L0,36 L20,18 Z"
+                      : "M0,0 L180,0 L200,18 L180,36 L0,36 L20,18 Z"}
+                    fill={bgColor}
+                  />
+                  {/* Text */}
+                  <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
+                    fill={textColor} fontSize="11" fontWeight="600" fontFamily="system-ui, sans-serif"
+                  >
+                    {isComplete ? "✓ " : ""}{isRejected && isActive ? "Rejected" : stepLabels[step]}
+                  </text>
+                </svg>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -966,7 +939,7 @@ export function ServiceDetailClient({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
-      <div className="lg:col-span-2 space-y-3">
+      <div className="lg:col-span-2 space-y-4 divide-y divide-gray-100 [&>*]:pt-4 [&>*:first-child]:pt-0">
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
         <ServiceCollapsibleSection
