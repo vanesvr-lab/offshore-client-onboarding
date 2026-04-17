@@ -266,19 +266,38 @@ CREATE INDEX IF NOT EXISTS idx_sso_service ON service_section_overrides(service_
 
 -- ─── Migrate profiles → users ──────────────────────────────────────────────
 
+-- Migrate non-deleted profiles first (they take priority for the unique email constraint)
+-- Then migrate deleted ones with email suffixed to avoid conflicts
 INSERT INTO users (id, tenant_id, email, full_name, phone, password_hash, role, is_active, created_at)
 SELECT
   p.id,
   'a1b2c3d4-0000-4000-8000-000000000001',
-  COALESCE(p.email, ''),
+  COALESCE(p.email, 'no-email-' || p.id::text),
   COALESCE(p.full_name, ''),
   p.phone,
   p.password_hash,
   CASE WHEN au.id IS NOT NULL THEN 'admin' ELSE 'user' END,
-  NOT COALESCE(p.is_deleted, false),
+  true,
   COALESCE(p.created_at, now())
 FROM profiles p
 LEFT JOIN admin_users au ON au.user_id = p.id
+WHERE COALESCE(p.is_deleted, false) = false
+ON CONFLICT (id) DO NOTHING;
+
+-- Now migrate soft-deleted profiles with email suffix to avoid unique constraint
+INSERT INTO users (id, tenant_id, email, full_name, phone, password_hash, role, is_active, created_at)
+SELECT
+  p.id,
+  'a1b2c3d4-0000-4000-8000-000000000001',
+  COALESCE(p.email, '') || '+deleted-' || p.id::text,
+  COALESCE(p.full_name, ''),
+  p.phone,
+  p.password_hash,
+  'user',
+  false,
+  COALESCE(p.created_at, now())
+FROM profiles p
+WHERE COALESCE(p.is_deleted, false) = true
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── Migrate kyc_records → client_profiles ─────────────────────────────────
