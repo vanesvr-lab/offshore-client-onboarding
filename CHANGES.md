@@ -15,6 +15,60 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — Phase 1: Services + Profiles Redesign + Multi-Tenancy Foundation
+
+**REQUIRES: Run `supabase/migrations/003-phase1-schema.sql` in Supabase SQL Editor before deploying.**
+
+**New tables (all with `tenant_id`):**
+- `tenants` — multi-tenancy foundation, seeded with GWMS (`a1b2c3d4-0000-4000-8000-000000000001`)
+- `users` — pure auth/login (replaces `profiles` for auth). Columns: email, full_name, phone, password_hash, role (admin|user), is_active
+- `client_profiles` — all persons (replaces kyc_records identity part). Columns: user_id (nullable 1:1→users), record_type, is_representative, full_name, email, phone, address, due_diligence_level
+- `client_profile_kyc` — KYC data (1:1 with client_profiles). All 40+ KYC fields from old kyc_records
+- `services` — billable engagements (replaces applications). Columns: service_template_id, service_details JSONB, status, loe_received, workflow dates
+- `profile_service_roles` — profile↔service junction. Columns: role (director|shareholder|ubo|other), can_manage, shareholding_percentage, invite tracking
+- `profile_requirement_overrides` — per-profile DD requirement waivers
+- `service_section_overrides` — admin RAG status overrides per service section
+
+**Data migration (preserving UUIDs):**
+- `profiles` → `users` (role derived from admin_users)
+- `kyc_records` → `client_profiles` + `client_profile_kyc`
+- `applications` → `services`
+- `profile_roles` + `client_users` → `profile_service_roles`
+
+**Schema additions to existing tables:**
+- `documents`: added `client_profile_id`, `service_id` columns
+- `verification_codes`: added `client_profile_id` column
+- `service_templates`, `document_types`, `due_diligence_requirements`, `due_diligence_settings`, `role_document_requirements`, `audit_log`: added `tenant_id`
+- `due_diligence_requirements`: added `requirement_type` (document|field), `field_key`, `applies_to` (individual|organisation|both)
+
+**Old tables NOT dropped** — backward compatibility. Old pages still read from profiles, clients, kyc_records, applications.
+
+**Code changes:**
+- `src/lib/auth.ts` — queries `users` table, adds `clientProfileId` + `tenantId` to session
+- `src/lib/tenant.ts` — NEW: `DEFAULT_TENANT_ID` + `getTenantId()` helper
+- `src/types/next-auth.d.ts` — session shape: `clientProfileId` + `tenantId` replaces `kycRecordId`
+- `src/types/index.ts` — added: Tenant, AppUser, ClientProfile, ClientProfileKyc, ServiceRecord, ProfileServiceRole, ProfileRequirementOverride, ServiceSectionOverride
+- `middleware.ts` — updated comment, uses clientProfileId fallback
+- `src/app/(admin)/layout.tsx` — queries `users` instead of `profiles`
+- `src/app/(client)/layout.tsx` — queries `client_profiles` + `profile_service_roles`
+- `src/app/(client)/kyc/page.tsx` — uses `clientProfileId` with backward compat fallback
+- `src/components/shared/Sidebar.tsx` — admin nav: Dashboard / Services / Profiles / Queue
+- `src/app/api/auth/set-password/route.ts` — dual-write to `users` + `profiles`
+
+**New pages:**
+- `/admin/profiles` — list page with search, type filter, create dialog
+- `/admin/profiles/[id]` — detail page with collapsible KYC sections, services panel, DD level dropdown
+
+**New API routes:**
+- `POST /api/admin/profiles-v2/create` — create client_profile + client_profile_kyc
+- `PATCH /api/admin/profiles-v2/[id]` — update profile fields
+- `PATCH /api/admin/profiles-v2/[id]/kyc` — update KYC fields
+
+**New component:**
+- `src/components/admin/CreateProfileDialog.tsx` — dialog form for creating profiles
+
+---
+
 ### 2026-04-13 — B-014: Non-Primary Profile Passwordless KYC Flow
 
 **New table:** `verification_codes` — stores access tokens + 6-digit codes for external KYC access (migration done manually in Supabase)
