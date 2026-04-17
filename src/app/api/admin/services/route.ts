@@ -3,6 +3,51 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 
+function getServicePrefix(templateName: string): string {
+  const name = templateName.toLowerCase();
+  if (name.includes("global business")) return "GBC";
+  if (name.includes("authorised") || name.includes("authorized")) return "AC";
+  if (name.includes("domestic")) return "DC";
+  if (name.includes("trust") || name.includes("foundation")) return "TFF";
+  if (name.includes("relocation")) return "RLM";
+  return "SVC";
+}
+
+async function generateServiceNumber(
+  supabase: ReturnType<typeof createAdminClient>,
+  templateId: string
+): Promise<string | null> {
+  try {
+    const { data: template } = await supabase
+      .from("service_templates")
+      .select("name")
+      .eq("id", templateId)
+      .single();
+
+    if (!template?.name) return null;
+
+    const prefix = getServicePrefix(template.name);
+
+    // Find current max for this prefix
+    const { data: existing } = await supabase
+      .from("services")
+      .select("service_number")
+      .like("service_number", `${prefix}-%`)
+      .order("service_number", { ascending: false })
+      .limit(1);
+
+    let nextSeq = 1;
+    if (existing && existing.length > 0 && existing[0].service_number) {
+      const match = (existing[0].service_number as string).match(/^[A-Z]+-(\d+)$/);
+      if (match) nextSeq = parseInt(match[1], 10) + 1;
+    }
+
+    return `${prefix}-${String(nextSeq).padStart(4, "0")}`;
+  } catch {
+    return null;
+  }
+}
+
 /** POST /api/admin/services — Create a new service */
 export async function POST(request: Request) {
   const session = await auth();
@@ -28,6 +73,9 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
+  // Auto-generate service_number
+  const serviceNumber = await generateServiceNumber(supabase, body.service_template_id);
+
   const { data: service, error: svcErr } = await supabase
     .from("services")
     .insert({
@@ -35,6 +83,7 @@ export async function POST(request: Request) {
       service_template_id: body.service_template_id,
       service_details: body.service_details ?? {},
       status: "draft",
+      ...(serviceNumber ? { service_number: serviceNumber } : {}),
     })
     .select("id")
     .single();

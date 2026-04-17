@@ -599,6 +599,7 @@ export interface ServiceRecord {
   id: string;
   tenant_id: string;
   service_template_id: string;
+  service_number: string | null;
   service_details: Record<string, unknown>;
   status: 'draft' | 'in_progress' | 'submitted' | 'in_review' | 'pending_action' | 'verification' | 'approved' | 'rejected';
   loe_received: boolean;
@@ -609,7 +610,7 @@ export interface ServiceRecord {
   created_at: string;
   updated_at: string;
   // Joined relations (optional)
-  service_templates?: { name: string; description: string | null } | null;
+  service_templates?: { name: string; description: string | null; service_fields?: unknown[] | null } | null;
   profile_service_roles?: ProfileServiceRole[];
 }
 

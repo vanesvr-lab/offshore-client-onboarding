@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-018 Batch 1: service_number DB migration + type + auto-generation (Claude Code)
+
+**DB — SQL to run manually in Supabase SQL editor:**
+```sql
+ALTER TABLE services ADD COLUMN IF NOT EXISTS service_number text;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_services_service_number ON services(service_number) WHERE service_number IS NOT NULL;
+```
+
+**Files created:**
+- `src/app/api/admin/migrations/add-service-numbers/route.ts` — POST migration route that backfills `service_number` for all services without one. Uses prefix logic (GBC/AC/DC/TFF/RLM/SVC) based on template name. Run AFTER the SQL above.
+
+**Files modified:**
+- `src/types/index.ts` — Added `service_number: string | null` to `ServiceRecord`; also added `service_fields` to the joined `service_templates` shape for progress bar support
+- `src/app/api/admin/services/route.ts` — POST handler now auto-generates `service_number` on service creation (looks up template name → prefix → max existing → next seq)
+
+---
+
 ### 2026-04-17 — B-017: Client Service Wizard Rework (Claude Code)
 
 **Landing page (ClientServiceDetailClient.tsx — REWRITE):**
