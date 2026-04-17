@@ -15,6 +15,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 5C: Compliance Scoring Consolidation (Claude Code)
+
+**Created `src/lib/utils/dueDiligenceConstants.ts`:**
+- Shared `DD_LEVEL_INCLUDES` (cumulative DD level map) — no longer duplicated
+- Shared `DD_SECTION_FOR_LEVEL` (display section names per DD level)
+
+**Updated `complianceScoring.ts`:**
+- Imports `DD_LEVEL_INCLUDES` / `DD_SECTION_FOR_LEVEL` from shared constants
+- `reqSection()` checks `field_key` first (new schema column), falls back to `requirement_key`
+- `isFieldMet()` call uses `req.field_key ?? req.requirement_key`
+- `DECLARATION_FIELD_KEYS` Set replaces repeated `||` chain for clarity
+
+**Updated `profileDocumentRequirements.ts`:**
+- Removed duplicate `LEVEL_INCLUDES` local constant; imports `DD_LEVEL_INCLUDES` from shared file
+
 ### 2026-04-17 — B-015 Phase 5A+5D: Hardcoded List Fixes + Dashboard Analytics Update (Claude Code)
 
 **5A — Fix hardcoded nationality/jurisdiction lists:**

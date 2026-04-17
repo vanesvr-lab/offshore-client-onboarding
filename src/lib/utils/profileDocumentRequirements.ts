@@ -4,13 +4,7 @@ import type {
   DueDiligenceLevel,
   DocumentRecord,
 } from "@/types";
-
-/** Which requirement levels apply cumulatively to each DD level */
-const LEVEL_INCLUDES: Record<DueDiligenceLevel, string[]> = {
-  sdd: ["basic", "sdd"],
-  cdd: ["basic", "sdd", "cdd"],
-  edd: ["basic", "sdd", "cdd", "edd"],
-};
+import { DD_LEVEL_INCLUDES } from "./dueDiligenceConstants";
 
 export interface DocumentItem {
   document_type_id: string;
@@ -48,7 +42,7 @@ export function getRequiredDocumentsForProfile(
   }
 
   // 2. Collect from due_diligence_requirements for the DD level (cumulative)
-  const levels = LEVEL_INCLUDES[ddLevel] ?? ["basic"];
+  const levels = DD_LEVEL_INCLUDES[ddLevel] ?? ["basic", "sdd", "cdd"];
   for (const req of ddRequirements) {
     if (
       levels.includes(req.level) &&

@@ -6,27 +6,20 @@ import type {
   ComplianceScore,
   SectionScore,
 } from "@/types";
+import { DD_LEVEL_INCLUDES, DD_SECTION_FOR_LEVEL } from "./dueDiligenceConstants";
 
-/** Which requirement levels apply cumulatively to each DD level */
-const LEVEL_INCLUDES: Record<DueDiligenceLevel, ("basic" | "sdd" | "cdd" | "edd")[]> = {
-  sdd: ["basic", "sdd"],
-  cdd: ["basic", "sdd", "cdd"],
-  edd: ["basic", "sdd", "cdd", "edd"],
-};
-
-const SECTION_FOR_LEVEL: Record<string, string> = {
-  basic: "Identity",
-  sdd: "Financial",
-  cdd: "Financial",
-  edd: "Financial",
-};
+const DECLARATION_FIELD_KEYS = new Set([
+  "is_pep", "legal_issues_declared", "tax_identification_number",
+  "relationship_history", "geographic_risk_assessment",
+]);
 
 function reqSection(req: DueDiligenceRequirement): string {
   if (req.requirement_type === "admin_check") return "Admin Checks";
   if (req.level === "basic") return "Identity";
-  if (req.level === "cdd" && (req.requirement_key === "is_pep" || req.requirement_key === "legal_issues_declared" || req.requirement_key === "tax_identification_number")) return "Declarations";
-  if (req.level === "edd" && (req.requirement_key === "relationship_history" || req.requirement_key === "geographic_risk_assessment")) return "Declarations";
-  return SECTION_FOR_LEVEL[req.level] ?? "Other";
+  // Check field_key first (new schema), fall back to requirement_key (old schema)
+  const fieldKey = req.field_key ?? req.requirement_key;
+  if (DECLARATION_FIELD_KEYS.has(fieldKey)) return "Declarations";
+  return DD_SECTION_FOR_LEVEL[req.level] ?? "Other";
 }
 
 function isFieldMet(kycRecord: KycRecord, key: string): boolean {
@@ -72,7 +65,7 @@ export function calculateComplianceScore(
   dueDiligenceLevel: DueDiligenceLevel,
   requirements: DueDiligenceRequirement[]
 ): ComplianceScore {
-  const includedLevels = LEVEL_INCLUDES[dueDiligenceLevel];
+  const includedLevels = DD_LEVEL_INCLUDES[dueDiligenceLevel];
   const applicable = requirements.filter((r) =>
     (includedLevels as string[]).includes(r.level)
   );
@@ -85,7 +78,8 @@ export function calculateComplianceScore(
 
     let met = false;
     if (req.requirement_type === "field") {
-      met = isFieldMet(kycRecord, req.requirement_key);
+      // Use field_key (new schema) if available, fall back to requirement_key
+      met = isFieldMet(kycRecord, req.field_key ?? req.requirement_key);
     } else if (req.requirement_type === "document") {
       met = isDocumentMet(documents, req);
     } else if (req.requirement_type === "admin_check") {
