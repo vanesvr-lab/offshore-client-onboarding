@@ -116,6 +116,7 @@ export interface ServiceTemplate {
   name: string;
   description: string | null;
   is_active: boolean;
+  service_fields: Record<string, unknown>[] | null;
   created_at: string;
   updated_at: string;
   document_requirements?: DocumentRequirement[];

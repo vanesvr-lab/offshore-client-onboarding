@@ -257,20 +257,44 @@ export function DynamicServiceForm({
         const visibleFields = sectionFields.filter(isVisible);
         if (visibleFields.length === 0) return null;
 
+        // Separate turnover fields for 3-column grouped rendering
+        const turnoverFields = visibleFields.filter(f => /estimated_turnover_year/i.test(f.key));
+        const otherFields = visibleFields.filter(f => !/estimated_turnover_year/i.test(f.key));
+
+        const fieldContent = (
+          <>
+            {otherFields.length > 0 && (
+              <div className="grid grid-cols-2 gap-4">
+                {otherFields.map(renderField)}
+              </div>
+            )}
+            {turnoverFields.length > 0 && (
+              <div className={otherFields.length > 0 ? "mt-4" : ""}>
+                <p className="text-sm font-medium text-brand-navy mb-2">Estimated Turnover</p>
+                <div className="grid grid-cols-3 gap-4">
+                  {turnoverFields.map(f => (
+                    <div key={f.key}>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        {f.label.replace(/Estimated annual turnover —\s*/i, "")}
+                        {f.required && <span className={anyFilled && isEmptyRequired(f) ? " text-red-500" : " text-red-400"}> *</span>}
+                      </label>
+                      {renderField(f)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        );
+
         return hideHeaders ? (
-          <div key={sectionName} className="grid grid-cols-2 gap-4">
-            {visibleFields.map(renderField)}
-          </div>
+          <div key={sectionName}>{fieldContent}</div>
         ) : (
           <Card key={sectionName}>
             <CardHeader>
               <CardTitle className="text-brand-navy text-base">{sectionName}</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                {visibleFields.map(renderField)}
-              </div>
-            </CardContent>
+            <CardContent>{fieldContent}</CardContent>
           </Card>
         );
       })}
