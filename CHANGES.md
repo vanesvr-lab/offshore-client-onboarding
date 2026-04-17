@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-018 Batch 2: MiniProgressBar + admin services table rework (Claude Code)
+
+**Files created:**
+- `src/components/shared/MiniProgressBar.tsx` — reusable 60×4px progress bar; green ≥80%, amber >0%, red =0%; tooltip via `title` attribute
+- (serviceCompletion.ts extended) — added `calcSectionCompletion(fields, details, sectionKey)` for Company Setup / Financial / Banking section-filtered completion
+
+**Files modified:**
+- `src/app/(admin)/admin/services/page.tsx` — expanded query: full service_fields, KYC data, batch-fetched documents per service; computes `AdminServiceRow[]` with 5 section percentages + manager list server-side; exports `AdminServiceRow` type and `templateOptions` for filter bar
+- `src/app/(admin)/admin/services/ServicesPageClient.tsx` — complete rewrite: new columns (Ref/service_number, Status, Managers, Co.Setup%, Financial%, Banking%, People&KYC%, Docs%, Last Updated); filter bar with search (ref + manager name), service type chips (driven by templateOptions), status filter chips; "Service" column removed (now a filter); relative time for Last Updated
+
+**Notes:**
+- `lastUpdatedBy` is null/TODO until audit_log is confirmed to track service changes
+- `service_number` shows "No ref" in italic if null (for services created before migration)
+
+---
+
 ### 2026-04-17 — B-018 Batch 1: service_number DB migration + type + auto-generation (Claude Code)
 
 **DB — SQL to run manually in Supabase SQL editor:**

@@ -93,6 +93,38 @@ export function calcKycCompletion(
   return { percentage: pct, ragStatus: toRag(pct) };
 }
 
+// Section matchers mirroring ServiceWizard step routing
+const SECTION_MATCHERS: Record<string, (section: string | undefined) => boolean> = {
+  company_setup: (s) => !s || s === "Details" || /company\s*setup/i.test(s) || /company/i.test(s),
+  financial: (s) => !!s && /financial|finance/i.test(s),
+  banking: (s) => !!s && /bank/i.test(s),
+};
+
+export function calcSectionCompletion(
+  serviceFields: ServiceField[],
+  serviceDetails: Record<string, unknown>,
+  sectionKey: "company_setup" | "financial" | "banking"
+): SectionCompletion {
+  const matcher = SECTION_MATCHERS[sectionKey];
+  const fields = serviceFields.filter((f) => matcher(f.section));
+  if (fields.length === 0) return { percentage: 100, ragStatus: "green" };
+  const required = fields.filter((f) => f.required);
+  if (required.length === 0) {
+    const anyFilled = fields.some((f) => {
+      const v = serviceDetails[f.key];
+      return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
+    });
+    const pct = anyFilled ? 100 : 0;
+    return { percentage: pct, ragStatus: toRag(pct) };
+  }
+  const filled = required.filter((f) => {
+    const v = serviceDetails[f.key];
+    return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
+  }).length;
+  const pct = Math.round((filled / required.length) * 100);
+  return { percentage: pct, ragStatus: toRag(pct) };
+}
+
 export function calcOverallCompletion(sections: SectionCompletion[]): SectionCompletion {
   if (sections.length === 0) return { percentage: 0, ragStatus: "red" };
   const avg = Math.round(sections.reduce((sum, s) => sum + s.percentage, 0) / sections.length);
