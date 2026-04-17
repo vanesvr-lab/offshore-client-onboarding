@@ -5,9 +5,19 @@ import { useRouter } from "next/navigation";
 
 interface HeaderProps {
   userName?: string | null;
+  variant?: "admin" | "client";
 }
 
-export function Header({ userName }: HeaderProps) {
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+export function Header({ userName, variant = "admin" }: HeaderProps) {
   const router = useRouter();
 
   async function handleSignOut() {
@@ -26,8 +36,15 @@ export function Header({ userName }: HeaderProps) {
         </p>
       </div>
       <div className="flex items-center gap-4">
-        {userName && (
-          <span className="text-white text-sm">{userName}</span>
+        {variant === "client" && userName ? (
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-semibold">{getInitials(userName)}</span>
+            </div>
+            <span className="text-white text-sm hidden sm:inline">{userName}</span>
+          </div>
+        ) : (
+          userName && <span className="text-white text-sm">{userName}</span>
         )}
         <button
           onClick={handleSignOut}

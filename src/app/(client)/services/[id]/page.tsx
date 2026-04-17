@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { ClientServiceDetailClient } from "./ClientServiceDetailClient";
-import type { ServiceSectionOverride } from "@/types";
+import type { ServiceSectionOverride, DueDiligenceRequirement, DocumentType } from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,20 @@ export type ClientServiceRecord = {
     name: string;
     description: string | null;
     service_fields: ServiceField[] | null;
+  } | null;
+};
+
+export type ServicePerson = {
+  id: string;
+  role: string;
+  shareholding_percentage: number | null;
+  can_manage: boolean;
+  client_profiles: {
+    id: string;
+    full_name: string;
+    email: string | null;
+    due_diligence_level: string;
+    client_profile_kyc: Record<string, unknown> | null;
   } | null;
 };
 
@@ -56,7 +70,7 @@ export default async function ClientServiceDetailPage({
   const roleCheck = roleRows?.[0] ?? null;
   if (!roleCheck) notFound(); // no access
 
-  const [serviceRes, docsRes, overridesRes] = await Promise.all([
+  const [serviceRes, docsRes, overridesRes, personsRes, requirementsRes, documentTypesRes] = await Promise.all([
     supabase
       .from("services")
       .select(`
@@ -80,6 +94,32 @@ export default async function ClientServiceDetailPage({
       .select("section_key, override_status, admin_note")
       .eq("service_id", id)
       .eq("tenant_id", tenantId),
+
+    // Persons linked to this service
+    supabase
+      .from("profile_service_roles")
+      .select(`
+        id, role, shareholding_percentage, can_manage,
+        client_profiles!inner(
+          id, full_name, email, due_diligence_level,
+          client_profile_kyc(*)
+        )
+      `)
+      .eq("service_id", id)
+      .eq("tenant_id", tenantId),
+
+    // DD requirements for KYC wizards
+    supabase
+      .from("due_diligence_requirements")
+      .select("*, document_types(id, name)")
+      .eq("tenant_id", tenantId)
+      .order("sort_order"),
+
+    // Document types
+    supabase
+      .from("document_types")
+      .select("*")
+      .eq("tenant_id", tenantId),
   ]);
 
   if (!serviceRes.data) notFound();
@@ -89,6 +129,9 @@ export default async function ClientServiceDetailPage({
       service={serviceRes.data as unknown as ClientServiceRecord}
       documents={(docsRes.data ?? []) as unknown as ClientServiceDoc[]}
       overrides={(overridesRes.data ?? []) as unknown as ServiceSectionOverride[]}
+      persons={(personsRes.data ?? []) as unknown as ServicePerson[]}
+      requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
+      documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
       myRole={roleCheck.role}
       clientProfileId={clientProfileId}
     />

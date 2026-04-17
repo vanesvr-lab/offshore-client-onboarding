@@ -15,6 +15,36 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-016: Client Portal Rework — All 5 Phases (Claude Code)
+
+**Phase 1 — Utilities + Tailwind tokens:**
+- `src/lib/utils/pendingActions.ts` — NEW: `PendingAction` type + `computePendingActions()` for server-side dashboard action list
+- `src/lib/utils/serviceCompletion.ts` — NEW: `calcServiceDetailsCompletion`, `calcDocumentsCompletion`, `calcPeopleCompletion`, `calcKycCompletion`, `calcOverallCompletion`
+- `src/lib/utils/clientLabels.ts` — NEW: `CLIENT_STATUS_LABELS` + `getClientStatusLabel()` for friendly status text
+- `tailwind.config.ts` — added `brand['client-primary']` (#3b82f6) and `brand['client-bg']` (#f0f9ff)
+
+**Phase 2 — API Routes for Service Persons:**
+- `src/app/api/services/[id]/persons/route.ts` — POST: add person (existing profile or create new)
+- `src/app/api/services/[id]/persons/[roleId]/route.ts` — PATCH: shareholding; DELETE: remove role row
+- `src/app/api/services/[id]/available-profiles/route.ts` — GET: profiles not yet linked to service
+- `src/app/api/profiles/kyc/save/route.ts` — POST: save `client_profile_kyc` fields (parallel to /api/kyc/save for old model)
+
+**Phase 3 — Service Detail Page Enhancement:**
+- `src/app/(client)/services/[id]/page.tsx` — expanded data fetch: persons, DD requirements, document types; added `ServicePerson` export type
+- `src/components/client/ServicePersonsManager.tsx` — NEW: Add Director/Shareholder/UBO, person cards with inline KycStepWizard, shareholding tracker
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx` — REWRITE: 3 collapsible sections (service details, people & KYC, documents) with RAG dots + % + overall progress bar
+- `src/components/kyc/KycStepWizard.tsx` — added `saveUrl` and `inlineMode` props (backward compatible)
+
+**Phase 4 — Dashboard Rework:**
+- `src/app/(client)/dashboard/page.tsx` — REWRITE: removed 1-service auto-redirect, batch-fetches persons+docs, computes pending actions server-side, renders DashboardClient
+- `src/components/client/DashboardClient.tsx` — NEW: greeting banner (amber/green by status), pending action items with section color-coded left borders, service cards with friendly labels
+
+**Phase 5 — Visual Polish:**
+- `src/components/shared/Header.tsx` — added `variant` prop; client variant shows initials avatar (blue-500 circle, white text)
+- `src/app/(client)/layout.tsx` — changed `bg-gray-50` → `bg-sky-50/30`; passes `variant="client"` to Header
+
+**Do NOT touch admin pages — owner working on admin changes in parallel.**
+
 ### 2026-04-17 — B-015 Phase 5B: Replace Hardcoded Document Name Lookups (Claude Code)
 
 **IdentityStep.tsx:**

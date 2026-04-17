@@ -19,6 +19,8 @@ const config: Config = {
           success: "#10B981",
           danger: "#EF4444",
           muted: "#64748B",
+          "client-primary": "#3b82f6",
+          "client-bg": "#f0f9ff",
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

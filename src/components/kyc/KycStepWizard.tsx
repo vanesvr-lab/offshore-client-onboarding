@@ -20,6 +20,10 @@ interface KycStepWizardProps {
   onComplete: () => void;
   /** compact=true: removes sticky nav padding, skips page scroll, reduces min-height */
   compact?: boolean;
+  /** Override the save API URL (default: /api/kyc/save) */
+  saveUrl?: string;
+  /** If true, final step shows "Save & Close" instead of "Submit for Review" */
+  inlineMode?: boolean;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -54,6 +58,8 @@ export function KycStepWizard({
   requirements,
   onComplete,
   compact = false,
+  saveUrl = "/api/kyc/save",
+  inlineMode = false,
 }: KycStepWizardProps) {
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
   // SDD skips declarations (step index 2)
@@ -85,7 +91,7 @@ export function KycStepWizard({
   async function saveCurrentStep() {
     setSaving(true);
     try {
-      const res = await fetch("/api/kyc/save", {
+      const res = await fetch(saveUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kycRecordId: kycRecord.id, fields: form }),
@@ -120,7 +126,7 @@ export function KycStepWizard({
     if (!saved) return;
 
     // Mark journey completed before submitting
-    const markRes = await fetch("/api/kyc/save", {
+    const markRes = await fetch(saveUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kycRecordId: kycRecord.id, fields: { kyc_journey_completed: true } }),
@@ -238,6 +244,18 @@ export function KycStepWizard({
         </Button>
 
         {isLastStep ? (
+          inlineMode ? (
+            <Button
+              onClick={async () => {
+                const ok = await saveCurrentStep();
+                if (ok) onComplete();
+              }}
+              disabled={saving}
+              className="bg-brand-navy hover:bg-brand-blue gap-1"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Saving…</> : "Save & Close"}
+            </Button>
+          ) : (
           <Button
             onClick={handleSubmit}
             disabled={submitting || saving}
@@ -252,6 +270,7 @@ export function KycStepWizard({
               "Submit for Review"
             )}
           </Button>
+          )
         ) : (
           <Button
             onClick={handleNext}

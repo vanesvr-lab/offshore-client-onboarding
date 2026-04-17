@@ -50,8 +50,8 @@ export default async function ClientLayout({ children }: { children: React.React
     : { count: 0 };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <Header userName={companyName} />
+    <div className="flex flex-col min-h-screen bg-sky-50/30">
+      <Header userName={companyName} variant="client" />
       <div className="flex flex-1 min-h-0">
         <Sidebar
           role="client"
