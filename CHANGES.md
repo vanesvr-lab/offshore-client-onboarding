@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 4A+4B: Client Dashboard + Client Service Detail (Claude Code)
+
+**Client dashboard rewrite (`/dashboard`):**
+- Queries `profile_service_roles WHERE can_manage = true AND client_profile_id = session.user.clientProfileId`
+- If exactly 1 managed service → auto-redirect to `/services/[id]`
+- If 2+ → shows service cards with status icon, action text (unfilled required fields count), Continue/View link
+- If no managed services → empty state with link to KYC
+- Graceful fallback if `clientProfileId` is null (old-model users)
+
+**Client service detail (`/services/[id]`):**
+- Verifies `can_manage = true` before loading (404 if no access)
+- Collapsible sections with RAG indicators: Service Details (editable when draft/in_progress), Documents
+- Shows admin notes (from `service_section_overrides.admin_note`) in amber banner per section
+- KYC reminder card with link to `/kyc`
+- Saves service_details via `PATCH /api/admin/services/[id]`
+
+---
+
 ### 2026-04-17 — B-015 Phase 2C: Service Creation Wizard (Claude Code)
 
 **New service wizard (`/admin/services/new`):**

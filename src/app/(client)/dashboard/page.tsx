@@ -1,474 +1,178 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantId } from "@/lib/tenant";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { CheckCircle, Clock, AlertCircle, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import { OnboardingBanner } from "@/components/client/OnboardingBanner";
-import { CompletionChecklist } from "@/components/client/CompletionChecklist";
-import { KycTaskGroup, type KycChildTask } from "@/components/client/KycTaskGroup";
-import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
-import { formatDate } from "@/lib/utils/formatters";
-import { CheckCircle2, Circle, AlertTriangle, ArrowRight, Users } from "lucide-react";
-import type { Application, KycRecord, DocumentRecord } from "@/types";
-import type { OnboardingStage } from "@/components/client/OnboardingBanner";
-import type { ChecklistSection } from "@/components/client/CompletionChecklist";
 
-function ProfileKycBar({ pct }: { pct: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${pct === 100 ? "bg-green-500" : "bg-brand-accent"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className={`text-xs font-medium ${pct === 100 ? "text-green-600" : "text-gray-600"}`}>{pct}%</span>
-    </div>
-  );
+type ManagedService = {
+  id: string;
+  status: string;
+  service_details: Record<string, unknown>;
+  service_templates: { name: string; description: string | null; service_fields: unknown[] | null } | null;
+  profile_service_roles: { can_manage: boolean }[];
+};
+
+function statusColors(status: string): string {
+  const map: Record<string, string> = {
+    draft: "text-gray-500",
+    in_progress: "text-blue-600",
+    submitted: "text-indigo-600",
+    in_review: "text-amber-600",
+    approved: "text-green-600",
+    rejected: "text-red-600",
+  };
+  return map[status] ?? "text-gray-500";
+}
+
+function StatusIcon({ status }: { status: string }) {
+  if (status === "approved") return <CheckCircle className="h-5 w-5 text-green-500" />;
+  if (status === "rejected") return <AlertCircle className="h-5 w-5 text-red-500" />;
+  if (status === "in_review" || status === "submitted") return <Clock className="h-5 w-5 text-amber-500" />;
+  return <Clock className="h-5 w-5 text-gray-300" />;
+}
+
+function getActionText(service: ManagedService): { text: string; urgent: boolean } {
+  const status = service.status;
+  if (status === "draft") {
+    const fields = (service.service_templates?.service_fields ?? []) as Array<{ key: string; required?: boolean }>;
+    const required = fields.filter((f) => f.required);
+    const filled = required.filter((f) => {
+      const v = service.service_details[f.key];
+      if (Array.isArray(v)) return v.length > 0;
+      return v != null && v !== "";
+    });
+    if (filled.length < required.length) {
+      return { text: `${required.length - filled.length} required field${required.length - filled.length !== 1 ? "s" : ""} to complete`, urgent: true };
+    }
+    return { text: "Ready to submit", urgent: false };
+  }
+  if (status === "in_review") return { text: "Under review by our team", urgent: false };
+  if (status === "submitted") return { text: "Submitted — awaiting review", urgent: false };
+  if (status === "approved") return { text: "Approved", urgent: false };
+  if (status === "rejected") return { text: "Rejected — contact us for details", urgent: true };
+  return { text: "In progress", urgent: false };
 }
 
 export default async function DashboardPage() {
   const session = await auth();
-  const supabase = createAdminClient();
+  if (!session) redirect("/login");
 
-  const { data: clientUser } = await supabase
-    .from("client_users")
-    .select("client_id, clients(company_name)")
-    .eq("user_id", session!.user.id)
-    .maybeSingle();
+  const clientProfileId = session.user.clientProfileId;
 
-  const companyName =
-    (clientUser?.clients as { company_name?: string } | null)?.company_name;
-  const clientId = clientUser?.client_id ?? null;
+  // New model: query managed services via profile_service_roles
+  if (clientProfileId) {
+    const supabase = createAdminClient();
+    const tenantId = getTenantId(session);
 
-  const [
-    { data: applications },
-    { data: kycRecords },
-    { data: documents },
-    { data: appPersons },
-  ] = await Promise.all([
-    clientId
-      ? supabase
-          .from("applications")
-          .select("*, service_templates(name)")
-          .eq("client_id", clientId)
-          .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [] }),
-    clientId
-      ? supabase.from("kyc_records").select("*, profile_roles(role, shareholding_percentage)").eq("client_id", clientId)
-      : Promise.resolve({ data: [] }),
-    clientId
-      ? supabase
-          .from("documents")
-          .select("*, document_types(name)")
-          .eq("client_id", clientId)
-      : Promise.resolve({ data: [] }),
-    // Fetch application_persons to get roles for KYC records
-    clientId
-      ? supabase
-          .from("application_persons")
-          .select("kyc_record_id, role")
-          .in(
-            "application_id",
-            // We'll cross-join after fetch; pass all app IDs
-            ([] as string[]) // placeholder — resolved below after apps fetch
-          )
-      : Promise.resolve({ data: [] }),
-  ]);
+    const { data: roleRows } = await supabase
+      .from("profile_service_roles")
+      .select(`
+        service_id,
+        services(
+          id, status, service_details,
+          service_templates(name, description, service_fields),
+          profile_service_roles(can_manage)
+        )
+      `)
+      .eq("client_profile_id", clientProfileId)
+      .eq("can_manage", true)
+      .eq("tenant_id", tenantId);
 
-  type AppWithTemplate = Application & {
-    service_templates?: { name: string };
-    service_details?: Record<string, unknown>;
-  };
-  const apps = (applications || []) as AppWithTemplate[];
-  const typedKyc = (kycRecords ?? []) as KycRecord[];
-  const typedDocs = (documents ?? []) as DocumentRecord[];
-
-  // Fetch application_persons for all apps to resolve roles for KYC records
-  const allAppIds = apps.map((a) => a.id);
-  const kycRoleMap: Record<string, string> = {}; // kyc_record_id → role
-  if (allAppIds.length > 0) {
-    const { data: persons } = await supabase
-      .from("application_persons")
-      .select("kyc_record_id, role")
-      .in("application_id", allAppIds);
-    for (const p of persons ?? []) {
-      if (p.kyc_record_id) kycRoleMap[p.kyc_record_id] = p.role;
+    // Collect unique services
+    const seen = new Set<string>();
+    const services: ManagedService[] = [];
+    for (const row of roleRows ?? []) {
+      const svc = (row.services as unknown) as ManagedService | null;
+      if (svc && !seen.has(svc.id)) {
+        seen.add(svc.id);
+        services.push(svc);
+      }
     }
-  }
-  // suppress unused warning from placeholder fetch
-  void appPersons;
 
-  // Compute KYC completion across all records
-  let totalFilled = 0;
-  let totalItems = 0;
-
-  const recordCompletions = typedKyc.map((rec) => {
-    const result = calculateKycCompletion(rec, typedDocs);
-    const recFilled = result.sections.reduce((s, sec) => s + sec.filled, 0);
-    const recTotal = result.sections.reduce((s, sec) => s + sec.total, 0);
-    totalFilled += recFilled;
-    totalItems += recTotal;
-    return { record: rec, result, recFilled, recTotal };
-  });
-
-  const kycPct = totalItems > 0 ? Math.round((totalFilled / totalItems) * 100) : 0;
-  const emptyFields = totalItems - totalFilled;
-  const estMinutes = Math.ceil((emptyFields * 30) / 60);
-
-  // Derive onboarding stage
-  const latestApp = apps[0] ?? null;
-  let stage: OnboardingStage = "no_kyc";
-  if (typedKyc.length === 0) {
-    stage = "no_kyc";
-  } else if (kycPct < 100) {
-    stage = "kyc_incomplete";
-  } else if (!latestApp) {
-    stage = "kyc_complete_no_app";
-  } else if (latestApp.status === "approved") {
-    stage = "app_approved";
-  } else if (latestApp.status === "rejected") {
-    stage = "app_rejected";
-  } else if (latestApp.status === "draft") {
-    stage = "app_draft";
-  } else {
-    stage = "app_submitted";
-  }
-
-  // Build checklist sections
-  const checklistSections: ChecklistSection[] = [
-    ...recordCompletions.map(({ record, recFilled, recTotal }) => ({
-      label: record.record_type === "individual" ? "Personal KYC" : "Organisation KYC",
-      filled: recFilled,
-      total: recTotal,
-      href: "/kyc",
-    })),
-    {
-      label: "Application",
-      filled: latestApp && latestApp.status !== "draft" ? 1 : 0,
-      total: 1,
-      href:
-        latestApp && latestApp.status === "draft"
-          ? `/apply/${latestApp.template_id}/details?applicationId=${latestApp.id}`
-          : "/apply",
-    },
-  ];
-
-  // Build KYC child tasks (for grouped KYC item in Next Steps)
-  const kycChildren: KycChildTask[] = recordCompletions.map(({ record, recFilled, recTotal }) => {
-    const role = kycRoleMap[record.id];
-    const roleFallback = role
-      ? role.charAt(0).toUpperCase() + role.slice(1)
-      : record.record_type === "individual" ? "Individual" : "Organisation";
-    const name = (record as unknown as { full_name?: string }).full_name || roleFallback;
-    return {
-      id: `kyc-${record.id}`,
-      name,
-      description: recFilled < recTotal
-        ? `${recTotal - recFilled} fields remaining`
-        : "All fields complete",
-      status: recFilled >= recTotal ? "done" : recFilled > 0 ? "in_progress" : "pending",
-    };
-  });
-
-  // Build non-KYC pending tasks
-  interface PendingTask {
-    id: string;
-    label: string;
-    description: string;
-    href: string;
-    status: "pending" | "in_progress" | "done";
-    priority: number;
-  }
-
-  const pendingTasks: PendingTask[] = [];
-
-  for (const app of apps) {
-    const templateName = app.service_templates?.name ?? "Application";
-    const ref = app.reference_number ?? templateName;
-
-    if (app.status === "draft") {
-      const missingSections: string[] = [];
-      if (!app.contact_name?.trim()) missingSections.push("Primary Contact");
-      if (!app.service_details || Object.keys(app.service_details).length === 0) missingSections.push("Service Details");
-
-      pendingTasks.push({
-        id: `app-details-${app.id}`,
-        label: `Fill details for ${ref}`,
-        description: missingSections.length > 0
-          ? `Pending: ${missingSections.join(", ")}`
-          : "Details filled — upload documents next",
-        href: `/apply/${app.template_id}/details?applicationId=${app.id}`,
-        status: missingSections.length > 0 ? "pending" : "in_progress",
-        priority: 2,
-      });
-    } else if (app.status === "pending_action") {
-      pendingTasks.push({
-        id: `app-action-${app.id}`,
-        label: `Action required for ${ref}`,
-        description: app.admin_notes ?? "Admin has requested additional information",
-        href: `/applications/${app.id}`,
-        status: "pending",
-        priority: 0,
-      });
-    } else if (app.status === "submitted" || app.status === "in_review" || app.status === "verification") {
-      pendingTasks.push({
-        id: `app-review-${app.id}`,
-        label: `${ref} — Under review`,
-        description: `Status: ${app.status.replace(/_/g, " ")}`,
-        href: `/applications/${app.id}`,
-        status: "done",
-        priority: 8,
-      });
-    } else if (app.status === "approved") {
-      pendingTasks.push({
-        id: `app-approved-${app.id}`,
-        label: `${ref} — Approved`,
-        description: "Application has been approved",
-        href: `/applications/${app.id}`,
-        status: "done",
-        priority: 9,
-      });
+    // Auto-redirect if exactly 1 service
+    if (services.length === 1) {
+      redirect(`/services/${services[0].id}`);
     }
-  }
 
-  pendingTasks.sort((a, b) => a.priority - b.priority);
-
-  const nextAction = (() => {
-    if (stage === "no_kyc") return { label: "Complete your KYC profile", href: "/kyc" };
-    if (stage === "kyc_incomplete") return { label: "Continue your KYC profile", href: "/kyc" };
-    if (stage === "kyc_complete_no_app") return { label: "Start your application", href: "/apply" };
-    if (stage === "app_draft" && latestApp)
-      return {
-        label: "Continue your application",
-        href: `/apply/${latestApp.template_id}/details?applicationId=${latestApp.id}`,
-      };
-    return null;
-  })();
-
-  // A4: derive per-app button label/message
-  function appActionLabel(app: AppWithTemplate): { message: string; buttonLabel: string; buttonHref: string; urgent?: boolean } {
-    const detailsHref = `/apply/${app.template_id}/details?applicationId=${app.id}`;
-    const viewHref = `/applications/${app.id}`;
-    const hasDetails = app.service_details && Object.keys(app.service_details).length > 0;
-
-    if (app.status === "draft") {
-      if (!hasDetails) return { message: "Fill in solution details to continue", buttonLabel: "Start →", buttonHref: detailsHref };
-      return { message: "Complete and submit to proceed", buttonLabel: "Continue →", buttonHref: detailsHref };
-    }
-    if (app.status === "pending_action") return { message: "Action required", buttonLabel: "Action Required", buttonHref: viewHref, urgent: true };
-    if (app.status === "approved") return { message: "Application approved", buttonLabel: "View", buttonHref: viewHref };
-    return { message: `Status: ${app.status.replace(/_/g, " ")}`, buttonLabel: "Track", buttonHref: viewHref };
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header + progress bar */}
-      <div className="rounded-lg border bg-white px-5 py-4">
-        <div className="flex items-start justify-between mb-3">
+    // 2+ services: show dashboard
+    if (services.length > 1) {
+      const userName = session.user.name ?? session.user.email ?? "there";
+      return (
+        <div className="space-y-6">
           <div>
-            <h1 className="text-xl font-bold text-brand-navy">
-              {companyName ? companyName : "Welcome"}
-            </h1>
-            <p className="text-sm text-gray-500 mt-0.5">Your Onboarding Progress</p>
+            <h1 className="text-2xl font-bold text-brand-navy">Welcome back, {userName}</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              You have access to {services.length} services.
+            </p>
           </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-brand-navy">{kycPct}%</p>
-            <p className="text-xs text-gray-400">complete</p>
-          </div>
-        </div>
-        <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden mb-3">
-          <div
-            className="h-full rounded-full bg-brand-accent transition-all"
-            style={{ width: `${kycPct}%` }}
-          />
-        </div>
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          {emptyFields > 0 ? (
-            <span>Estimated time to finish: ~{estMinutes} {estMinutes === 1 ? "minute" : "minutes"}</span>
-          ) : (
-            <span className="text-green-600 font-medium">KYC profile complete</span>
-          )}
-          {nextAction && (
-            <Link href={nextAction.href} className="text-brand-blue hover:underline font-medium">
-              Next: {nextAction.label} →
-            </Link>
-          )}
-        </div>
-      </div>
 
-      {/* Main layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Banner + Tasks + Solutions */}
-        <div className="lg:col-span-2 space-y-6">
-          <OnboardingBanner
-            stage={stage}
-            kycPercentage={kycPct}
-            appName={latestApp?.business_name ?? undefined}
-            appId={latestApp?.id ?? undefined}
-            templateId={latestApp?.template_id ?? undefined}
-          />
-
-          {/* Pending Tasks & Next Steps */}
-          <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="text-base text-brand-navy">Your Next Steps</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {kycChildren.length === 0 && pendingTasks.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">No pending tasks. You&apos;re all caught up!</p>
-              ) : (
-                <div className="space-y-1">
-                  {/* Grouped KYC tasks */}
-                  {kycChildren.length > 0 && (
-                    <KycTaskGroup tasks={kycChildren} />
-                  )}
-                  {/* Non-KYC tasks */}
-                  {pendingTasks.map((task) => (
-                    <Link
-                      key={task.id}
-                      href={task.href}
-                      className="flex items-center gap-3 rounded-lg px-3 py-3 hover:bg-gray-50 transition-colors group"
-                    >
-                      <div className="shrink-0">
-                        {task.status === "done" ? (
-                          <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        ) : task.status === "in_progress" ? (
-                          <AlertTriangle className="h-5 w-5 text-amber-500" />
-                        ) : (
-                          <Circle className="h-5 w-5 text-gray-300" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${task.status === "done" ? "text-gray-400 line-through" : "text-brand-navy"}`}>
-                          {task.label}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">{task.description}</p>
-                      </div>
-                      {task.status !== "done" && (
-                        <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-brand-blue shrink-0" />
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Solutions & Services */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between py-4">
-              <CardTitle className="text-base text-brand-navy">Solutions & Services</CardTitle>
-              <Link href="/apply">
-                <Button size="sm" className="bg-brand-navy hover:bg-brand-blue">
-                  New Solution
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {apps.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">No solutions yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {apps.map((app) => {
-                    const { message, buttonLabel, buttonHref, urgent } = appActionLabel(app);
-                    return (
-                      <div
-                        key={app.id}
-                        className="flex items-center justify-between rounded-lg border px-4 py-3"
-                      >
-                        <div>
-                          <p className="font-medium text-brand-navy text-sm">
-                            {app.reference_number || app.business_name || "Draft"}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {app.service_templates?.name}
-                            {app.submitted_at && ` · Submitted ${formatDate(app.submitted_at)}`}
-                          </p>
-                          <p className={`text-xs mt-0.5 ${urgent ? "text-amber-600 font-medium" : "text-gray-400"}`}>
-                            {message}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <StatusBadge status={app.status} />
-                          <Link href={buttonHref}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={urgent ? "border-amber-400 text-amber-600 hover:bg-amber-50" : ""}
-                            >
-                              {buttonLabel}
-                            </Button>
-                          </Link>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Account Profiles — shown if multiple profiles exist */}
-          {typedKyc.length > 1 && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between py-4">
-                <CardTitle className="text-base text-brand-navy flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Account Profiles
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="divide-y">
-                  {typedKyc.filter((r) => r.record_type === "individual").map((rec) => {
-                    const completion = calculateKycCompletion(rec, typedDocs.filter((d) => d.kyc_record_id === rec.id));
-                    const pct = completion.overallPercentage;
-                    const roles = ((rec as unknown as { profile_roles?: { role: string; shareholding_percentage: number | null }[] }).profile_roles ?? []);
-                    const roleLabels = roles.map((r) => {
-                      let label = r.role.replace(/_/g, " ");
-                      if (r.role === "shareholder" && r.shareholding_percentage !== null) {
-                        label += ` (${r.shareholding_percentage}%)`;
-                      }
-                      return label.charAt(0).toUpperCase() + label.slice(1);
-                    });
-                    return (
-                      <div key={rec.id} className="flex items-center justify-between py-3">
-                        <div>
-                          <p className="text-sm font-medium text-brand-navy">
-                            {(rec as unknown as { full_name?: string }).full_name ?? "Unnamed"}
-                            {(rec as unknown as { is_primary?: boolean }).is_primary && (
-                              <span className="ml-2 text-[10px] bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded">Primary</span>
-                            )}
-                          </p>
-                          {roleLabels.length > 0 && (
-                            <p className="text-xs text-gray-500 mt-0.5">{roleLabels.join(", ")}</p>
+          <div className="grid gap-4">
+            {services.map((svc) => {
+              const { text, urgent } = getActionText(svc);
+              return (
+                <Link key={svc.id} href={`/services/${svc.id}`}>
+                  <Card className="hover:border-brand-blue hover:shadow-sm transition-all cursor-pointer">
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <StatusIcon status={svc.status} />
+                            <h2 className="font-semibold text-brand-navy">
+                              {svc.service_templates?.name ?? "Service"}
+                            </h2>
+                          </div>
+                          {svc.service_templates?.description && (
+                            <p className="text-sm text-gray-500 mt-0.5 ml-7">{svc.service_templates.description}</p>
                           )}
+                          <div className="ml-7 mt-1.5">
+                            <span className={`text-xs font-medium capitalize ${statusColors(svc.status)}`}>
+                              {svc.status.replace(/_/g, " ")}
+                            </span>
+                            <span className="text-gray-300 mx-2">·</span>
+                            <span className={`text-xs ${urgent ? "text-amber-600 font-medium" : "text-gray-500"}`}>
+                              {text}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <ProfileKycBar pct={pct} />
-                          <Link href={`/kyc?profileId=${rec.id}`}>
-                            <Button variant="outline" size="sm" className="text-xs h-7">
-                              {pct === 100 ? "View" : "Fill KYC"}
-                            </Button>
-                          </Link>
+                        <div className="flex items-center gap-1 ml-4 text-brand-blue">
+                          <span className="text-sm font-medium">
+                            {svc.status === "draft" ? "Continue" : "View"}
+                          </span>
+                          <ArrowRight className="h-4 w-4" />
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
         </div>
+      );
+    }
 
-        {/* Right: Completion checklist */}
-        <div className="lg:sticky lg:top-4 lg:self-start">
-          <CompletionChecklist sections={checklistSections} />
-        </div>
+    // clientProfileId exists but no managed services → show empty state
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
+        <p className="text-lg font-semibold text-brand-navy">No services yet</p>
+        <p className="text-sm text-gray-500">Your account manager will link services to your profile shortly.</p>
       </div>
+    );
+  }
+
+  // Fallback: no clientProfileId (old-model user or admin viewing) — show legacy message
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
+      <p className="text-lg font-semibold text-brand-navy">Getting your account ready</p>
+      <p className="text-sm text-gray-500">Your profile is being set up. Please check back shortly or contact your account manager.</p>
+      <Link href="/kyc">
+        <Button variant="outline">Complete your KYC</Button>
+      </Link>
     </div>
   );
 }
