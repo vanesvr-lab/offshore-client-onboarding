@@ -15,6 +15,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-015 Phase 2A+2B: Services List + Detail Pages (Claude Code)
+
+**Services list page:**
+- `src/app/(admin)/admin/services/page.tsx` — server component querying `services` + template + profile_service_roles
+- `src/app/(admin)/admin/services/ServicesPageClient.tsx` — search + status filter, table with RAG-ready service rows
+- Sidebar: Services nav now points to `/admin/services` (was `/admin/applications`)
+
+**Service detail page:**
+- `src/app/(admin)/admin/services/[id]/page.tsx` — server component, parallel queries (service, roles+profiles+KYC, overrides, docs, all profiles for add-dialog)
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — 3-col layout: collapsible Service Details + Documents (left), People panel + milestones (right). RAG indicators auto-calculated. can_manage toggle, invite button, add/remove profiles, inline edit service_details, LOE + milestone toggles.
+
+**API routes:**
+- `POST /api/admin/services` — create service + optional role links
+- `PATCH /api/admin/services/[id]` — update status, service_details, LOE, milestones
+- `POST /api/admin/services/[id]/roles` — link profile to service
+- `PATCH /api/admin/services/[id]/roles/[roleId]` — toggle can_manage, update role
+- `DELETE /api/admin/services/[id]/roles/[roleId]` — unlink profile
+- `POST /api/admin/services/[id]/section-override` — upsert RAG override
+- `DELETE /api/admin/services/[id]/section-override?key=...` — remove override
+
+---
+
 ### 2026-04-17 — B-015: Phase 1 — Services + Profiles Redesign + Multi-Tenancy Foundation
 
 **REQUIRES: Run `supabase/migrations/003-phase1-schema.sql` in Supabase SQL Editor before deploying.**
