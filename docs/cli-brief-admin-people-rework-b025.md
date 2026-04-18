@@ -7,11 +7,13 @@
 
 ## Overview
 
-Major rework of the People & KYC section in the admin service detail page. Three main changes:
+Major rework of the People & KYC section AND Documents section in the admin service detail page. Five main changes:
 
 1. **New Add Director/Shareholder/UBO dialog** — proper centered modal with search, existing profile indicators, Individual/Corporation selection
 2. **Per-person role management** — add/remove roles inline, edit profile, KYC adjusts based on profile type
 3. **Ownership Structure** — collapsible section with editable percentages, positioned after add buttons
+4. **Profile documents inside KYC** — passport, proof of address, PEP docs go inside each person's KYC section (not the service-level Documents section)
+5. **Documents section = corporate docs only** — Certificate of Incorporation, Board Resolution, etc. stay in the separate Documents section
 
 ---
 
@@ -213,25 +215,103 @@ Use existing `PATCH /api/admin/services/[id]/roles/[roleId]` with `{ shareholdin
 
 ---
 
-## 4. Fix: KYC values not showing
+## 4. Document Split — Profile Docs Inside KYC, Corporate Docs in Documents Section
 
-The user reports that expanding KYC shows blank fields even when data exists in DB. This is likely the same mapping issue seen before.
+**CRITICAL CHANGE**: Documents must be split into two categories:
 
-**Check:** The `KycLongForm` component receives `kyc` as `KycFull` type. Verify that:
-1. `client_profile_kyc` data is being fetched in the server page query (it already should be via `client_profile_kyc(*)`)
-2. The `kyc` object passed to `KycLongForm` actually contains the data
-3. The field keys in `KYC_SECTIONS` match the column names in `client_profile_kyc`
+### Profile/KYC Documents (inside each person's KYC)
 
-Common issue: `client_profile_kyc` may come back as an **array** (Supabase returns 1:many joins as arrays). If `profile.client_profile_kyc` is `[{...}]` instead of `{...}`, the fields won't resolve.
+These are tied to a specific person via `documents.client_profile_id`:
+- Certified Passport Copy
+- Proof of Residential Address
+- Bank Reference Letter (individual)
+- Source of Funds Declaration
+- PEP Declaration
+- Any document type with category "kyc" in `document_types`
 
-**Fix:** In the PersonCard where `kyc` is extracted, ensure:
-```ts
-const kyc = Array.isArray(profile.client_profile_kyc)
-  ? profile.client_profile_kyc[0] ?? null
-  : (profile.client_profile_kyc as KycFull | null);
+**Where they go:** Inside each person's KYC section, within the relevant sub-section:
+- Identity section: Passport Copy, Proof of Address
+- Financial section: Bank Reference, Source of Funds Declaration
+- Declarations section: PEP Declaration
+
+For each document slot:
+- If uploaded: show file name, verification status, preview/download buttons
+- If not uploaded: show upload button
+- Admin can upload on behalf
+
+**Per-person rendering:** If there are 3 profiles (Ramanov, Steve Rogers, Bruce Banner), each one has their OWN passport upload, proof of address upload, etc. inside their own KYC section.
+
+```
+▼ Ramanov — Director                          KYC: 36%
+  ▼ Identity          ████░░ 60%
+    Full legal name: Ramanov
+    Date of birth: 04/13/1980
+    ...
+    ─── Documents ───
+    📎 Certified Passport Copy      [Upload]
+    📎 Proof of Residential Address  ✓ Uploaded  [Preview] [Download]
+  ► Financial         ░░░░░░ 0%
+  ► Declarations      ░░░░░░ 0%
 ```
 
-This pattern already exists at line ~274 in the current file but verify it's used consistently everywhere `kyc` is passed to `KycLongForm`.
+**Implementation:** In the `KycLongForm` component, add document upload widgets at the bottom of each relevant section. Query documents by `client_profile_id` for each person. The `IdentityStep` in the client wizard already does this — reuse that pattern.
+
+Pass these additional props to `KycLongForm`:
+```ts
+profileId: string;          // client_profiles.id — for document queries
+serviceId: string;          // for upload context
+profileDocuments: ServiceDoc[];  // pre-fetched docs for this profile
+```
+
+### Service/Corporate Documents (in the separate Documents section)
+
+These are tied to the service, NOT to any individual person. They have `documents.service_id` set but `documents.client_profile_id` is null or irrelevant:
+- Certificate of Incorporation
+- Memorandum and Articles of Association
+- Register of Directors
+- Register of Shareholders
+- Proof of Registered Address
+- Certificate of Good Standing
+- Board Resolution
+- Any document type with category "corporate" in `document_types`
+
+**Where they go:** The existing "Documents" collapsible section (Section 5). This section should:
+- Filter to show ONLY corporate/service-level documents (where `document_types.category = 'corporate'`)
+- NOT show KYC/profile documents (passport, address proof, etc.)
+- Keep all existing features: AI verification, admin review, request update, preview, download
+
+### How to distinguish
+
+Use `document_types.category` to determine where each document belongs:
+- `category = 'kyc'` → goes inside person's KYC section
+- `category = 'corporate'` or `category = 'compliance'` → goes in the Documents section
+
+If a document type doesn't have a category, default to the Documents section.
+
+### Data query changes
+
+In the server page, when fetching documents, include `document_types.category`:
+```ts
+supabase
+  .from("documents")
+  .select("*, document_types(id, name, category), client_profiles(id, full_name)")
+  .eq("service_id", id)
+  .eq("is_active", true)
+```
+
+Then split in the client component:
+```ts
+const profileDocs = documents.filter(d => d.document_types?.category === 'kyc');
+const corporateDocs = documents.filter(d => d.document_types?.category !== 'kyc');
+```
+
+Group `profileDocs` by `client_profile_id` and pass to each person's `KycLongForm`.
+
+## 5. Fix: KYC values — full_name from client_profiles
+
+**Already fixed** in the latest commit. `KycLongForm` now accepts `profileName` prop for `full_name` since it lives on `client_profiles`, not `client_profile_kyc`. Same pattern already used for `email` and `phone`.
+
+The remaining blank fields (passport, financial, declarations) are genuinely null in the DB — data was never filled for those profiles. Not a bug.
 
 ---
 
@@ -267,6 +347,10 @@ This pattern already exists at line ~274 in the current file but verify it's use
 4. Select existing profile → adds as director, card auto-expands
 5. Create new Individual → KYC shows individual fields
 6. Create new Corporation → KYC shows corporation fields
+16. Profile docs (passport, address proof) appear INSIDE each person's KYC section
+17. Each person has their own document upload slots
+18. Documents section (Section 5) shows ONLY corporate docs (Certificate of Incorporation, etc.)
+19. No KYC docs appear in the corporate Documents section
 7. Expanded person card shows Roles section with add/remove
 8. Remove a role → updates correctly, removes if last role
 9. Add additional role → updates badge display
