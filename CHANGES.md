@@ -15,6 +15,27 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-18 — B-027 Batch 3: Client KYC review split layout (Claude Code)
+
+**B-027 (KYC document layout rework) — Batch 3**
+
+**Updated:** `src/app/(client)/services/[id]/page.tsx`
+- `ClientServiceDoc` extended: added `mime_type`, `verification_result`, `admin_status` fields
+- Documents query now selects these fields
+
+**Created:** `src/app/api/profiles/[id]/route.ts`
+- PATCH endpoint for updating `email` and `phone` on a `client_profiles` row
+- Clients: email + phone only; admins: full_name, email, phone, address
+- Scoped by tenant_id
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Added `KYC_DOC_CATEGORIES` + `isKycDocCat()` helper
+- Added `ProfileEditPanel` component: email + phone editable (dirty-tracked), roles list with Remove
+- Added `KycDocListPanel` component: shows identity/financial/compliance docs for the person, upload + view (DocumentDetailDialog) per doc row, compact status icons, scrollable if >5 docs
+- KYC review view now shows 2-column top section (Profile+Roles left, KYC Docs right) above KycStepWizard
+- `mapToDocumentRecord` updated to map `mime_type`, `verification_result`, `admin_status` from `ClientServiceDoc`
+- Added imports: `useRef`, `Upload`, `Eye`, `CheckSquare`, `Square`, `DocumentDetailDialog`
+
 ### 2026-04-18 — B-027 Batch 2: DocumentDetailDialog shared component (Claude Code)
 
 **B-027 (KYC document layout rework) — Batch 2**

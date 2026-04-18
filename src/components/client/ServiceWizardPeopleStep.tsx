@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2 } from "lucide-react";
+import { UserPlus, User, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2, Upload, Eye, CheckSquare, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
+import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
+import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 
@@ -129,20 +131,326 @@ function mapToDocumentRecord(doc: ClientServiceDoc): DocumentRecord {
     file_path: "",
     file_name: doc.file_name,
     file_size: null,
-    mime_type: null,
+    mime_type: doc.mime_type ?? null,
     verification_status: doc.verification_status as VerificationStatus,
-    verification_result: null,
+    verification_result: doc.verification_result as import("@/types").VerificationResult | null,
     expiry_date: null,
     notes: null,
     is_active: true,
     uploaded_by: null,
     uploaded_at: doc.uploaded_at,
     verified_at: null,
-    admin_status: null,
+    admin_status: doc.admin_status as "pending" | "approved" | "rejected" | null,
     admin_status_note: null,
     admin_status_by: null,
     admin_status_at: null,
   };
+}
+
+const KYC_DOC_CATEGORIES = ["identity", "financial", "compliance"];
+const isKycDocCat = (cat: string) => KYC_DOC_CATEGORIES.includes(cat);
+
+// ─── ProfileEditPanel ─────────────────────────────────────────────────────────
+
+function ProfileEditPanel({
+  profileId,
+  email: initialEmail,
+  phone: initialPhone,
+  roles,
+  onRoleRemoved,
+}: {
+  profileId: string;
+  email: string | null;
+  phone: string | null;
+  roles: ServicePerson[];
+  onRoleRemoved: (roleId: string) => void;
+}) {
+  const [editEmail, setEditEmail] = useState(initialEmail ?? "");
+  const [editPhone, setEditPhone] = useState(initialPhone ?? "");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  function handleEmailChange(v: string) { setEditEmail(v); setDirty(true); }
+  function handlePhoneChange(v: string) { setEditPhone(v); setDirty(true); }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/profiles/${profileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: editEmail.trim() || null, phone: editPhone.trim() || null }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setDirty(false);
+      toast.success("Profile updated", { position: "top-right" });
+    } catch {
+      toast.error("Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    setEditEmail(initialEmail ?? "");
+    setEditPhone(initialPhone ?? "");
+    setDirty(false);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <div>
+          <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Email</label>
+          <Input
+            type="email"
+            value={editEmail}
+            onChange={(e) => handleEmailChange(e.target.value)}
+            placeholder="email@example.com"
+            className="mt-0.5 text-sm h-8"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Phone</label>
+          <Input
+            type="tel"
+            value={editPhone}
+            onChange={(e) => handlePhoneChange(e.target.value)}
+            placeholder="+230 555 0000"
+            className="mt-0.5 text-sm h-8"
+          />
+        </div>
+        {dirty && (
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue" disabled={saving} onClick={() => void handleSave()}>
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={handleCancel}>Cancel</Button>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t pt-2 space-y-1">
+        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Roles</p>
+        {roles.map((r) => (
+          <div key={r.id} className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600"}`}>
+                {ROLE_LABELS[r.role as ServicePersonRole] ?? r.role}
+              </span>
+              {r.shareholding_percentage != null && (
+                <span className="text-xs text-gray-400">{r.shareholding_percentage}%</span>
+              )}
+            </div>
+            {!r.can_manage && (
+              <button
+                onClick={() => void onRoleRemoved(r.id)}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── KycDocListPanel ──────────────────────────────────────────────────────────
+
+function KycDocListPanel({
+  profileId,
+  serviceId,
+  documents: initialDocs,
+  documentTypes,
+  requirements,
+  dueDiligenceLevel,
+  onDocUploaded,
+}: {
+  profileId: string;
+  serviceId: string;
+  documents: ClientServiceDoc[];
+  documentTypes: DocumentType[];
+  requirements: DueDiligenceRequirement[];
+  dueDiligenceLevel: DueDiligenceLevel;
+  onDocUploaded: (doc: ClientServiceDoc) => void;
+}) {
+  const [localDocs, setLocalDocs] = useState(initialDocs);
+  const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);
+  const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadTypeId, setPendingUploadTypeId] = useState<string | null>(null);
+
+  // Derive required KYC doc types
+  const ddReqDocTypeIds = requirements
+    .filter((r) => r.requirement_type === "document" && r.level === dueDiligenceLevel && r.document_type_id)
+    .map((r) => r.document_type_id as string);
+
+  const kycDocTypes = ddReqDocTypeIds.length > 0
+    ? documentTypes.filter((dt) => ddReqDocTypeIds.includes(dt.id) && isKycDocCat(dt.category))
+    : documentTypes.filter((dt) => isKycDocCat(dt.category));
+
+  const profileDocs = localDocs.filter((d) => d.client_profile_id === profileId);
+
+  function getUploaded(dtId: string) {
+    return profileDocs.find((d) => d.document_type_id === dtId);
+  }
+
+  async function handleUpload(dtId: string, file: File) {
+    setUploadingTypeId(dtId);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("documentTypeId", dtId);
+      fd.append("clientProfileId", profileId);
+      const res = await fetch(`/api/services/${serviceId}/documents/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = (await res.json()) as { document?: ClientServiceDoc; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      if (data.document) {
+        const newDoc = data.document as unknown as ClientServiceDoc;
+        setLocalDocs((prev) => {
+          const without = prev.filter((d) => !(d.document_type_id === dtId && d.client_profile_id === profileId));
+          return [...without, newDoc];
+        });
+        onDocUploaded(newDoc);
+        toast.success("Document uploaded", { position: "top-right" });
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingTypeId(null);
+    }
+  }
+
+  const uploadedCount = kycDocTypes.filter((dt) => getUploaded(dt.id)).length;
+
+  return (
+    <>
+      <div className="space-y-1.5">
+        <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
+          {kycDocTypes.map((dt) => {
+            const uploaded = getUploaded(dt.id);
+            const isUploading = uploadingTypeId === dt.id;
+            const aiStatus = uploaded?.verification_status;
+            const adminStatus = uploaded?.admin_status;
+
+            return (
+              <div key={dt.id} className="flex items-center justify-between py-1.5 border-b last:border-0 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {uploaded
+                    ? <CheckSquare className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                    : <Square className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+                  }
+                  <span className="text-xs text-gray-700 truncate">{dt.name}</span>
+                  {uploaded && (
+                    <span className="flex items-center gap-0.5 shrink-0">
+                      {aiStatus === "verified" && <span className="text-[10px] text-green-600 font-bold">✓</span>}
+                      {aiStatus === "flagged" && <span className="text-[10px] text-amber-500">⚠</span>}
+                      {aiStatus === "manual_review" && <span className="text-[10px] text-orange-500">⚠</span>}
+                      {adminStatus === "approved" && <span className="text-[10px] text-green-600">🟢</span>}
+                      {adminStatus === "rejected" && <span className="text-[10px] text-red-500">🔴</span>}
+                    </span>
+                  )}
+                </div>
+                <div className="shrink-0">
+                  {uploaded ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      onClick={() => setDetailDoc({
+                        id: uploaded.id,
+                        file_name: uploaded.file_name,
+                        mime_type: uploaded.mime_type,
+                        uploaded_at: uploaded.uploaded_at,
+                        document_type_id: uploaded.document_type_id,
+                        verification_status: uploaded.verification_status,
+                        verification_result: uploaded.verification_result,
+                        admin_status: uploaded.admin_status,
+                        document_types: uploaded.document_types,
+                      })}
+                    >
+                      <Eye className="h-3.5 w-3.5 text-gray-400" />
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[10px] gap-1"
+                      disabled={isUploading}
+                      onClick={() => {
+                        setPendingUploadTypeId(dt.id);
+                        uploadInputRef.current?.click();
+                      }}
+                    >
+                      {isUploading
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <><Upload className="h-3 w-3" />Upload</>
+                      }
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-gray-400 pt-1">{uploadedCount} of {kycDocTypes.length} uploaded</p>
+      </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && pendingUploadTypeId) void handleUpload(pendingUploadTypeId, file);
+          e.target.value = "";
+          setPendingUploadTypeId(null);
+        }}
+      />
+
+      {/* Document detail popup */}
+      {detailDoc && (
+        <DocumentDetailDialog
+          doc={detailDoc}
+          isAdmin={false}
+          open={!!detailDoc}
+          onOpenChange={(open) => { if (!open) setDetailDoc(null); }}
+          serviceId={serviceId}
+          onDocumentReplaced={(newDoc) => {
+            if (detailDoc) {
+              const updated = { ...detailDoc, ...newDoc } as DocumentDetailDoc;
+              setDetailDoc(null);
+              setLocalDocs((prev) => {
+                const without = prev.filter((d) => d.id !== detailDoc.id);
+                const asClientDoc: ClientServiceDoc = {
+                  id: updated.id,
+                  file_name: updated.file_name,
+                  mime_type: updated.mime_type ?? null,
+                  verification_status: updated.verification_status ?? "pending",
+                  verification_result: updated.verification_result ?? null,
+                  admin_status: updated.admin_status ?? null,
+                  uploaded_at: updated.uploaded_at,
+                  document_type_id: detailDoc.document_type_id ?? null,
+                  client_profile_id: profileId,
+                  document_types: updated.document_types
+                    ? { name: updated.document_types.name, category: updated.document_types.category ?? "" }
+                    : null,
+                };
+                return [...without, asClientDoc];
+              });
+            }
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 // ─── AddPersonModal ───────────────────────────────────────────────────────────
@@ -1016,9 +1324,11 @@ export function ServiceWizardPeopleStep({
     const ddLevel = (reviewingPerson.client_profiles?.due_diligence_level as DueDiligenceLevel) ?? "sdd";
     const roleLabel = ROLE_LABELS[reviewingPerson.role as ServicePersonRole] ?? reviewingPerson.role;
     const roleColor = ROLE_COLORS[reviewingPerson.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600";
+    const profileId = reviewingPerson.client_profiles?.id ?? "";
+    // All role rows for this profile
+    const profileRoleRows = persons.filter((p) => p.client_profiles?.id === profileId);
 
     const handleKycComplete = () => {
-      // Mark this person as KYC-complete in local state
       setKycCompletedIds((prev) => {
         const next = new Set(prev);
         next.add(reviewingPerson.id);
@@ -1046,15 +1356,44 @@ export function ServiceWizardPeopleStep({
               {roleLabel}
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">KYC Information</p>
+        </div>
+
+        {/* Split top section: Profile (left) + KYC Docs (right) */}
+        <div className="grid grid-cols-2 gap-4 border rounded-xl bg-white p-4">
+          <div>
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">Profile</p>
+            <ProfileEditPanel
+              profileId={profileId}
+              email={reviewingPerson.client_profiles?.email ?? null}
+              phone={null}
+              roles={profileRoleRows}
+              onRoleRemoved={handleRoleRemoved}
+            />
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">KYC Documents</p>
+            <KycDocListPanel
+              profileId={profileId}
+              serviceId={serviceId}
+              documents={documents}
+              documentTypes={documentTypes}
+              requirements={requirements}
+              dueDiligenceLevel={ddLevel}
+              onDocUploaded={(doc) => {
+                const next = [...documents.filter((d) => !(d.document_type_id === doc.document_type_id && d.client_profile_id === doc.client_profile_id)), doc];
+                // bubble up through the wizard chain — not strictly needed but kept for parity
+                void next;
+              }}
+            />
+          </div>
         </div>
 
         {kycRecord.id ? (
           <KycStepWizard
-            clientId={reviewingPerson.client_profiles?.id ?? ""}
+            clientId={profileId}
             kycRecord={kycRecord}
             documents={documents
-              .filter((d) => d.client_profile_id === reviewingPerson.client_profiles?.id)
+              .filter((d) => d.client_profile_id === profileId)
               .map(mapToDocumentRecord)}
             documentTypes={documentTypes}
             dueDiligenceLevel={ddLevel}
@@ -1067,18 +1406,11 @@ export function ServiceWizardPeopleStep({
           />
         ) : (
           <div className="text-center py-6 rounded-xl border bg-gray-50 space-y-2">
-            <p className="text-sm text-gray-500">
-              No KYC record found for this person.
-            </p>
+            <p className="text-sm text-gray-500">No KYC record found for this person.</p>
             <p className="text-xs text-gray-400">
               A KYC record is created automatically once the person is linked to a service. Try refreshing if this person was recently added.
             </p>
-            <Button
-              onClick={() => setReviewingRoleId(null)}
-              variant="outline"
-              size="sm"
-              className="mt-2"
-            >
+            <Button onClick={() => setReviewingRoleId(null)} variant="outline" size="sm" className="mt-2">
               Back to People
             </Button>
           </div>
