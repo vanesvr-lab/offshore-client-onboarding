@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle, FileText,
-  UserCheck, Building2, Users2, Plus, Loader2, Send,
+  UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { AuditTrail } from "@/components/admin/AuditTrail";
@@ -449,8 +450,10 @@ function PersonCard({
   onRefresh: () => void;
 }) {
   const [togglingManage, setTogglingManage] = useState(false);
-  const [sendingInvite, setSendingInvite] = useState(false);
-  const [showKyc, setShowKyc] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
+
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
 
@@ -460,7 +463,14 @@ function PersonCard({
   const kycPct = calcKycPct(kyc);
   const kycDone = kyc?.kyc_journey_completed === true;
 
-  async function toggleManage() {
+  const sentDate = inviteSentAt
+    ? new Date(inviteSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : null;
+
+  const roleLabels = (combinedRoles ?? [roleRow.role]).join(", ");
+
+  async function toggleManage(e: React.MouseEvent) {
+    e.stopPropagation();
     setTogglingManage(true);
     try {
       const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleRow.id}`, {
@@ -479,27 +489,8 @@ function PersonCard({
     }
   }
 
-  async function sendInvite() {
-    if (!profile.email) { toast.error("No email on this profile"); return; }
-    setSendingInvite(true);
-    try {
-      const res = await fetch(`/api/admin/profiles/${profile.id}/send-invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success("Invite sent!");
-      onRefresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to send invite");
-    } finally {
-      setSendingInvite(false);
-    }
-  }
-
-  async function removeFromService() {
+  async function removeFromService(e: React.MouseEvent) {
+    e.stopPropagation();
     if (!confirm(`Remove ${profile.full_name} from this service?`)) return;
     try {
       const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleRow.id}`, { method: "DELETE" });
@@ -513,113 +504,139 @@ function PersonCard({
   }
 
   return (
-    <div className="border rounded-xl p-4 space-y-3">
-      <div className="flex items-start justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {profile.is_representative ? (
-              <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-            ) : profile.record_type === "organisation" ? (
-              <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
-            ) : (
-              <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+    <div className="border rounded-xl overflow-hidden">
+      {/* ── Clickable header — toggles KYC form ─────────────────────── */}
+      <div
+        className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-start gap-3">
+          {/* Left: info */}
+          <div className="flex-1 min-w-0 space-y-2">
+            {/* Name + roles + remove */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {profile.is_representative ? (
+                <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+              ) : profile.record_type === "organisation" ? (
+                <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+              ) : (
+                <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              )}
+              <Link
+                href={`/admin/profiles/${profile.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm font-medium text-brand-navy hover:underline truncate"
+              >
+                {profile.full_name}
+              </Link>
+              {(combinedRoles ?? [roleRow.role]).map((r) => (
+                <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
+                  {r}
+                </span>
+              ))}
+              {roleRow.shareholding_percentage != null && (
+                <span className="text-[10px] text-gray-400">{roleRow.shareholding_percentage}%</span>
+              )}
+              <button
+                onClick={(e) => void removeFromService(e)}
+                className="text-xs text-gray-300 hover:text-red-500 transition-colors ml-auto shrink-0"
+                title="Remove from service"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* KYC progress bar */}
+            {!profile.is_representative && (
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
+                    style={{ width: `${kycPct}%` }}
+                  />
+                </div>
+                <span className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}>
+                  {kycDone ? "✓ Complete" : `KYC: ${kycPct}%`}
+                </span>
+              </div>
             )}
-            <Link
-              href={`/admin/profiles/${profile.id}`}
-              className="text-sm font-medium text-brand-navy hover:underline truncate"
-            >
-              {profile.full_name}
-            </Link>
-            {(combinedRoles ?? [roleRow.role]).map((r) => (
-              <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
-                {r}
-              </span>
-            ))}
-            {roleRow.shareholding_percentage != null && (
-              <span className="text-[10px] text-gray-400">{roleRow.shareholding_percentage}%</span>
+
+            {/* Actions row (stop propagation so clicks don't toggle expand) */}
+            <div className="flex items-center flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+              {/* Portal access toggle */}
+              <button
+                onClick={(e) => void toggleManage(e)}
+                disabled={togglingManage}
+                className={`flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 transition-colors ${
+                  roleRow.can_manage
+                    ? "bg-green-50 text-green-700 hover:bg-green-100"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {togglingManage ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : roleRow.can_manage ? (
+                  <CheckCircle className="h-3 w-3" />
+                ) : (
+                  <XCircle className="h-3 w-3" />
+                )}
+                Portal access
+              </button>
+
+              {/* Invite button */}
+              {!profile.is_representative && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowInviteDialog(true)}
+                  className="h-7 text-xs gap-1.5"
+                >
+                  <Mail className="h-3 w-3" />
+                  {inviteSentAt ? "Resend KYC request" : "Request to Fill and Review KYC"}
+                </Button>
+              )}
+            </div>
+
+            {/* Last request sent info */}
+            {inviteSentAt && sentDate && (
+              <p className="text-[11px] text-green-600 flex items-center gap-1">
+                <Mail className="h-3 w-3" />
+                Last request sent on {sentDate}
+              </p>
             )}
           </div>
-          {profile.email && (
-            <p className="text-[11px] text-gray-400 mt-0.5 truncate">{profile.email}</p>
+
+          {/* Right: chevron */}
+          {!profile.is_representative && kyc && (
+            <ChevronDown
+              className={`h-4 w-4 text-gray-400 transition-transform shrink-0 mt-1 ${expanded ? "rotate-180" : ""}`}
+            />
           )}
         </div>
-        <button
-          onClick={() => void removeFromService()}
-          className="text-xs text-gray-300 hover:text-red-500 transition-colors ml-2 shrink-0"
-          title="Remove from service"
-        >
-          ×
-        </button>
       </div>
 
-      {/* KYC progress */}
-      {!profile.is_representative && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">KYC progress</span>
-            <span className={kycDone ? "text-green-600 font-medium" : "text-gray-500"}>
-              {kycDone ? "✓ Complete" : `${kycPct}%`}
-            </span>
-          </div>
-          <div className="w-full h-1.5 rounded-full bg-gray-200 overflow-hidden">
-            <div
-              className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
-              style={{ width: `${kycPct}%` }}
-            />
-          </div>
+      {/* ── Expandable KYC form ──────────────────────────────────────── */}
+      {expanded && kyc && (
+        <div className="border-t px-4 pb-4">
+          <KycLongForm
+            kyc={kyc}
+            profileEmail={profile.email}
+            profilePhone={profile.phone}
+            onSaved={onRefresh}
+          />
         </div>
       )}
 
-      {/* Actions: Review KYC + can_manage + invite */}
-      <div className="flex items-center flex-wrap gap-2">
-        {!profile.is_representative && (
-          <Button
-            size="sm"
-            variant={showKyc ? "default" : "outline"}
-            onClick={() => setShowKyc(!showKyc)}
-            className={`h-7 text-xs gap-1.5 ${showKyc ? "bg-brand-navy hover:bg-brand-blue" : ""}`}
-          >
-            {showKyc ? "Hide KYC" : "Review KYC"}
-          </Button>
-        )}
-        <button
-          onClick={() => void toggleManage()}
-          disabled={togglingManage}
-          className={`flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 transition-colors ${
-            roleRow.can_manage
-              ? "bg-green-50 text-green-700 hover:bg-green-100"
-              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-          }`}
-        >
-          {togglingManage ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : roleRow.can_manage ? (
-            <CheckCircle className="h-3 w-3" />
-          ) : (
-            <XCircle className="h-3 w-3" />
-          )}
-          Portal access
-        </button>
-        {profile.email && (
-          <Button
-            size="sm" variant="outline"
-            onClick={() => void sendInvite()}
-            disabled={sendingInvite}
-            className="h-7 text-xs"
-          >
-            {sendingInvite ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-            {roleRow.invite_sent_at ? "Resend invite" : "Send invite"}
-          </Button>
-        )}
-      </div>
-
-      {/* Inline KYC long-form (collapsible sections) */}
-      {showKyc && kyc && (
-        <KycLongForm
-          kyc={kyc}
-          profileEmail={profile.email}
-          profilePhone={profile.phone}
-          onSaved={onRefresh}
+      {/* Invite dialog */}
+      {showInviteDialog && (
+        <InviteKycDialog
+          serviceId={serviceId}
+          roleId={roleRow.id}
+          personName={profile.full_name}
+          personEmail={profile.email}
+          roleLabel={roleLabels}
+          onClose={() => setShowInviteDialog(false)}
+          onSent={(sentAt) => setInviteSentAt(sentAt)}
         />
       )}
     </div>

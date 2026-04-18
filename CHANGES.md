@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-023 Batch 2: Admin Collapsible PersonCards + InviteKycDialog (Claude Code)
+
+**Created:** `src/components/shared/InviteKycDialog.tsx`
+- Shared dialog for requesting KYC from a person (same pattern as client InviteDialog)
+- Calls `/api/services/[id]/persons/[roleId]/send-invite`
+- Pre-fills email from props
+
+**Updated:** `/api/services/[id]/persons/[roleId]/send-invite/route.ts`
+- Admin sessions (`session.user.role === "admin"`) can now call this route without `can_manage` check
+
+**Updated:** `ServiceDetailClient.tsx` — admin `PersonCard` rewrite:
+- Card header is now collapsible (click to expand/collapse KYC sections)
+- Chevron indicates expand state; KycLongForm shows inline when expanded
+- Removed old "Review KYC" toggle button; expansion via header click
+- Replaced `sendInvite()` with "Request to Fill and Review KYC" button → InviteKycDialog
+- Shows "Last request sent on {date}" after invite is sent
+
+---
+
 ### 2026-04-17 — B-023 Batch 1: KYC Field Layout (Claude Code)
 
 **Admin KYC sections** (`ServiceDetailClient.tsx`):

@@ -48,19 +48,22 @@ export async function POST(
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
-  // Verify the caller has can_manage=true for this service
-  const { data: callerRole } = await supabase
-    .from("profile_service_roles")
-    .select("id")
-    .eq("service_id", params.id)
-    .eq("client_profile_id", session.user.clientProfileId ?? "")
-    .eq("can_manage", true)
-    .eq("tenant_id", tenantId)
-    .limit(1)
-    .maybeSingle();
+  // Admins can always send invites; clients must have can_manage=true
+  const isAdmin = session.user.role === "admin";
+  if (!isAdmin) {
+    const { data: callerRole } = await supabase
+      .from("profile_service_roles")
+      .select("id")
+      .eq("service_id", params.id)
+      .eq("client_profile_id", session.user.clientProfileId ?? "")
+      .eq("can_manage", true)
+      .eq("tenant_id", tenantId)
+      .limit(1)
+      .maybeSingle();
 
-  if (!callerRole) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!callerRole) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   // Fetch service name for the email
