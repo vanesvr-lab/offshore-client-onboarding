@@ -134,7 +134,7 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
     is_primary: false,
     invite_sent_at: null,
     invite_sent_by: null,
-    due_diligence_level: (profile?.due_diligence_level as DueDiligenceLevel) ?? "sdd",
+    due_diligence_level: (profile?.due_diligence_level as DueDiligenceLevel) ?? "cdd",
     completion_status: (kyc.completion_status as "incomplete" | "complete") ?? "incomplete",
     filled_by: null,
     created_at: (kyc.created_at as string) ?? "",
@@ -164,7 +164,7 @@ function PersonCard({
   const pct = kycPct(kyc);
   const role = person.role as ServicePersonRole;
   const kycRecord = mapToKycRecord(person);
-  const ddLevel = (profile?.due_diligence_level as DueDiligenceLevel) ?? "sdd";
+  const ddLevel = (profile?.due_diligence_level as DueDiligenceLevel) ?? "cdd";
 
   async function handleDelete() {
     if (!confirm(`Remove ${profile?.full_name ?? "this person"} from the service?`)) return;
@@ -339,10 +339,10 @@ function AddPersonModal({
 
       // Build a synthetic person object to update UI without full reload
       const profile = selected === "new"
-        ? { id: data.profileId ?? "", full_name: newName.trim(), email: null, due_diligence_level: "sdd", client_profile_kyc: null }
+        ? { id: data.profileId ?? "", full_name: newName.trim(), email: null, due_diligence_level: "cdd", client_profile_kyc: null }
         : (() => {
             const p = (profiles ?? []).find((pr) => pr.id === selected);
-            return { id: p?.id ?? "", full_name: p?.full_name ?? "", email: p?.email ?? null, due_diligence_level: "sdd", client_profile_kyc: null };
+            return { id: p?.id ?? "", full_name: p?.full_name ?? "", email: p?.email ?? null, due_diligence_level: "cdd", client_profile_kyc: null };
           })();
 
       onAdded({

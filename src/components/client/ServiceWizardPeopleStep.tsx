@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2, Upload, Eye, CheckSquare, Square } from "lucide-react";
+import { UserPlus, User, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2, Upload, Eye, CheckCircle2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,7 +112,7 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
     is_primary: false,
     invite_sent_at: null,
     invite_sent_by: null,
-    due_diligence_level: (profile?.due_diligence_level as DueDiligenceLevel) ?? "sdd",
+    due_diligence_level: (profile?.due_diligence_level as DueDiligenceLevel) ?? "cdd",
     completion_status: (kyc.completion_status as "incomplete" | "complete") ?? "incomplete",
     filled_by: null,
     created_at: (kyc.created_at as string) ?? "",
@@ -198,8 +198,8 @@ function ProfileEditPanel({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-2">
+    <div className="space-y-2">
+      <div className="space-y-1.5">
         <div>
           <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Email</label>
           <Input
@@ -207,7 +207,7 @@ function ProfileEditPanel({
             value={editEmail}
             onChange={(e) => handleEmailChange(e.target.value)}
             placeholder="email@example.com"
-            className="mt-0.5 text-sm h-8"
+            className="text-sm h-7"
           />
         </div>
         <div>
@@ -217,11 +217,11 @@ function ProfileEditPanel({
             value={editPhone}
             onChange={(e) => handlePhoneChange(e.target.value)}
             placeholder="+230 555 0000"
-            className="mt-0.5 text-sm h-8"
+            className="text-sm h-7"
           />
         </div>
         {dirty && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-0.5">
             <Button size="sm" className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue" disabled={saving} onClick={() => void handleSave()}>
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
             </Button>
@@ -230,7 +230,7 @@ function ProfileEditPanel({
         )}
       </div>
 
-      <div className="border-t pt-2 space-y-1">
+      <div className="border-t pt-1.5 space-y-0.5">
         <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Roles</p>
         {roles.map((r) => (
           <div key={r.id} className="flex items-center justify-between">
@@ -330,7 +330,11 @@ function KycDocListPanel({
 
   return (
     <>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
+        <p className="text-[11px] text-gray-500 flex items-center gap-1 mb-1.5">
+          <FileText className="h-3 w-3" />
+          Please upload your documents here
+        </p>
         <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
           {kycDocTypes.map((dt) => {
             const uploaded = getUploaded(dt.id);
@@ -339,13 +343,15 @@ function KycDocListPanel({
             const adminStatus = uploaded?.admin_status;
 
             return (
-              <div key={dt.id} className="flex items-center justify-between py-1.5 border-b last:border-0 gap-2">
+              <div key={dt.id} className="flex items-center justify-between py-1 border-b last:border-0 gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   {uploaded
-                    ? <CheckSquare className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                    : <Square className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+                    ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    : <FileText className="h-4 w-4 text-amber-500 shrink-0" />
                   }
-                  <span className="text-xs text-gray-700 truncate">{dt.name}</span>
+                  <span className={`text-xs truncate ${uploaded ? "text-green-700 font-medium" : "text-amber-700"}`}>
+                    {dt.name}
+                  </span>
                   {uploaded && (
                     <span className="flex items-center gap-0.5 shrink-0">
                       {aiStatus === "verified" && <span className="text-[10px] text-green-600 font-bold">✓</span>}
@@ -380,7 +386,7 @@ function KycDocListPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-6 px-2 text-[10px] gap-1"
+                      className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
                       disabled={isUploading}
                       onClick={() => {
                         setPendingUploadTypeId(dt.id);
@@ -398,7 +404,11 @@ function KycDocListPanel({
             );
           })}
         </div>
-        <p className="text-[10px] text-gray-400 pt-1">{uploadedCount} of {kycDocTypes.length} uploaded</p>
+        <p className="text-[10px] text-gray-500 pt-1 font-medium">
+          <span className={uploadedCount === kycDocTypes.length ? "text-green-600" : "text-amber-600"}>
+            {uploadedCount}
+          </span> of {kycDocTypes.length} uploaded
+        </p>
       </div>
 
       {/* Hidden file input */}
@@ -563,7 +573,7 @@ function AddPersonModal({
               id: p?.id ?? selected ?? "",
               full_name: p?.full_name ?? "",
               email: p?.email ?? null,
-              due_diligence_level: "sdd",
+              due_diligence_level: "cdd",
               record_type: null as string | null,
               client_profile_kyc: null,
             };
@@ -572,7 +582,7 @@ function AddPersonModal({
             id: data.profileId ?? "",
             full_name: newName.trim(),
             email: newEmail.trim() || null,
-            due_diligence_level: "sdd",
+            due_diligence_level: "cdd",
             record_type: recordType as string | null,
             client_profile_kyc: null,
           };
@@ -1100,17 +1110,29 @@ function PersonCard({
     }
   }
 
+  const profileType = (person.client_profiles?.record_type as string | null) ?? "individual";
+
   return (
     <div className="border rounded-xl bg-white px-4 py-3.5 space-y-3">
       {/* Header row */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 flex-wrap">
         <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
           <User className="h-4 w-4 text-gray-500" />
         </div>
-        <div>
-          <p className="text-sm font-semibold text-brand-navy leading-tight">
-            {person.client_profiles?.full_name ?? "Unknown"}
-          </p>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-sm font-semibold text-brand-navy leading-tight">
+              {person.client_profiles?.full_name ?? "Unknown"}
+            </p>
+            {currentRoles.map((r) => (
+              <span key={r} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}>
+                {ROLE_LABELS[r] ?? r}
+              </span>
+            ))}
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 capitalize">
+              {profileType === "organisation" ? "Corporation" : "Individual"}
+            </span>
+          </div>
           {person.client_profiles?.email && (
             <p className="text-xs text-gray-400">{person.client_profiles.email}</p>
           )}
@@ -1321,7 +1343,7 @@ export function ServiceWizardPeopleStep({
   // ─── KYC Review view ──────────────────────────────────────────────────────
   if (reviewingPerson) {
     const kycRecord = mapToKycRecord(reviewingPerson);
-    const ddLevel = (reviewingPerson.client_profiles?.due_diligence_level as DueDiligenceLevel) ?? "sdd";
+    const ddLevel = (reviewingPerson.client_profiles?.due_diligence_level as DueDiligenceLevel) ?? "cdd";
     const roleLabel = ROLE_LABELS[reviewingPerson.role as ServicePersonRole] ?? reviewingPerson.role;
     const roleColor = ROLE_COLORS[reviewingPerson.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600";
     const profileId = reviewingPerson.client_profiles?.id ?? "";
@@ -1359,7 +1381,7 @@ export function ServiceWizardPeopleStep({
         </div>
 
         {/* Split top section: Profile (left) + KYC Docs (right) */}
-        <div className="grid grid-cols-2 gap-4 border rounded-xl bg-white p-4">
+        <div className="grid grid-cols-2 gap-8 border rounded-xl bg-white p-4">
           <div>
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">Profile</p>
             <ProfileEditPanel

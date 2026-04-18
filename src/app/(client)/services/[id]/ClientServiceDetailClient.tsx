@@ -200,9 +200,14 @@ export function ClientServiceDetailClient({
           Back to Dashboard
         </button>
 
-        <h1 className="text-xl font-bold text-brand-navy mb-5">
-          {service.service_templates?.name ?? "Service"}
-        </h1>
+        <div className="mb-5">
+          {service.service_number && (
+            <span className="text-xs font-mono text-gray-400 mr-2">{service.service_number}</span>
+          )}
+          <h1 className="text-xl font-bold text-brand-navy inline">
+            {service.service_templates?.name ?? "Service"}
+          </h1>
+        </div>
 
         <ServiceWizard
           serviceId={service.id}
@@ -238,7 +243,10 @@ export function ClientServiceDetailClient({
 
       {/* Header */}
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-brand-navy">
+        {service.service_number && (
+          <span className="text-xs font-mono text-gray-400 mr-2">{service.service_number}</span>
+        )}
+        <h1 className="text-2xl font-bold text-brand-navy inline">
           {service.service_templates?.name ?? "Service"}
         </h1>
         {service.service_templates?.description && (

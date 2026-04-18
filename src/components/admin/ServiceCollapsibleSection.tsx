@@ -94,10 +94,8 @@ export function ServiceCollapsibleSection({
       </button>
 
       {open && (
-        <CardContent className="pt-0 pb-5 px-5 border-t border-gray-100">
-          <div className="mt-4 border rounded-lg p-4 bg-white">
-            {children}
-          </div>
+        <CardContent className="pt-3 pb-4 px-5 border-t border-gray-100">
+          {children}
         </CardContent>
       )}
     </Card>

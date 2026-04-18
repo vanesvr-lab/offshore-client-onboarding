@@ -24,6 +24,7 @@ export type ClientServiceDoc = {
 export type ClientServiceRecord = {
   id: string;
   status: string;
+  service_number: string | null;
   service_details: Record<string, unknown>;
   service_templates: {
     id: string;
@@ -88,7 +89,7 @@ export default async function ClientServiceDetailPage({
     supabase
       .from("services")
       .select(`
-        id, status, service_details,
+        id, status, service_number, service_details,
         service_templates(id, name, description, service_fields)
       `)
       .eq("id", id)
