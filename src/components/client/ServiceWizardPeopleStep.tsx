@@ -300,8 +300,8 @@ function KycDocListPanel({
   }
 
   async function pollForVerification(docId: string, dtId: string) {
-    // Poll every 2s for up to 30s waiting for AI verification to complete
-    const MAX_ATTEMPTS = 15;
+    // Poll every 2s for up to 50s (server has a 45s AI timeout after which doc is marked manual_review)
+    const MAX_ATTEMPTS = 25;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       try {
@@ -318,6 +318,26 @@ function KycDocListPanel({
       } catch {
         // swallow polling errors
       }
+    }
+    // After max attempts with still-pending status, fetch one last time and accept whatever state it's in
+    try {
+      const res = await fetch(`/api/documents/${docId}`);
+      if (res.ok) {
+        const data = (await res.json()) as { document?: ClientServiceDoc };
+        const finalDocData = data.document;
+        if (finalDocData) {
+          setLocalDocs((prev) => {
+            const without = prev.filter((d) => !(d.document_type_id === dtId && d.client_profile_id === profileId));
+            // Force status to manual_review if still pending after max wait
+            const finalDoc = finalDocData.verification_status === "pending"
+              ? { ...finalDocData, verification_status: "manual_review" }
+              : finalDocData;
+            return [...without, finalDoc as ClientServiceDoc];
+          });
+        }
+      }
+    } catch {
+      // ignore
     }
   }
 

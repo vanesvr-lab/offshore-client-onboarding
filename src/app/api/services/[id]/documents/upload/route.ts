@@ -121,6 +121,7 @@ export async function POST(
 
   // Fire AI verification asynchronously (fire-and-forget — response goes back immediately)
   const docId = doc.id as string;
+  const VERIFICATION_TIMEOUT_MS = 45_000; // hard cap — if AI takes longer than 45s, mark as manual_review
   void (async () => {
     try {
       // Fetch document type's AI verification rules + name
@@ -135,13 +136,19 @@ export async function POST(
         match_rules: [],
       };
 
-      const result = await verifyDocument({
-        fileBuffer,
-        mimeType: file.type,
-        rules,
-        applicationContext: { contact_name: null, business_name: null, ubo_data: null },
-        documentType: docTypeRow?.name ?? null,
-      });
+      // Race the AI call against a timeout
+      const result = await Promise.race([
+        verifyDocument({
+          fileBuffer,
+          mimeType: file.type,
+          rules,
+          applicationContext: { contact_name: null, business_name: null, ubo_data: null },
+          documentType: docTypeRow?.name ?? null,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("AI verification timed out")), VERIFICATION_TIMEOUT_MS)
+        ),
+      ]);
 
       const verificationStatus =
         result.can_read_document === false ? "manual_review" : result.overall_status;
@@ -155,7 +162,14 @@ export async function POST(
         })
         .eq("id", docId);
     } catch {
-      // Verification failure is non-fatal — doc stays as "pending"
+      // Verification timed out or failed — mark for manual review so UI stops waiting
+      await supabase
+        .from("documents")
+        .update({
+          verification_status: "manual_review",
+          verified_at: new Date().toISOString(),
+        })
+        .eq("id", docId);
     }
   })();
 
