@@ -149,7 +149,14 @@ export function IdentityStep({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Email address" fieldKey="email" form={form} onChange={onChange} type="email" required validation={validation} />
         <Field label="Phone number" fieldKey="phone" form={form} onChange={onChange} type="tel" validation={validation} />
-        <Field label="Occupation" fieldKey="occupation" form={form} onChange={onChange} required validation={validation} placeholder="Your profession or job title" />
+      </div>
+
+      {/* Work / Professional Details */}
+      <div>
+        <h3 className="text-sm font-semibold text-brand-navy mb-3">Work / Professional Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Occupation" fieldKey="occupation" form={form} onChange={onChange} required validation={validation} placeholder="Your profession or job title" />
+        </div>
       </div>
     </div>
   );

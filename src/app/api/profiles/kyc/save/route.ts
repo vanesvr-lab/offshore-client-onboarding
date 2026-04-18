@@ -29,14 +29,25 @@ export async function POST(request: Request) {
   const DATE_FIELDS = ["date_of_birth", "passport_expiry", "date_of_incorporation"];
   const BOOLEAN_FIELDS = ["legal_issues_declared", "is_pep", "sanctions_checked", "adverse_media_checked", "pep_verified"];
 
-  // Fields that exist on client_profiles, not client_profile_kyc — skip these
-  const EXCLUDED_FIELDS = ["client_id", "profile_id", "full_name", "email", "phone",
+  // Fields that exist on client_profiles (saved separately)
+  const PROFILE_FIELDS = ["email", "phone"];
+
+  // Fields that must never be written to either table
+  const EXCLUDED_FIELDS = ["client_id", "profile_id", "full_name",
     "record_type", "is_primary", "due_diligence_level", "invite_sent_at", "invite_sent_by",
     "filled_by", "id", "tenant_id", "created_at", "updated_at", "client_profile_id"];
 
   const cleanedFields: Record<string, unknown> = {};
+  const profileUpdates: Record<string, unknown> = {};
+
   for (const [key, value] of Object.entries(fields)) {
     if (EXCLUDED_FIELDS.includes(key)) continue;
+    if (PROFILE_FIELDS.includes(key)) {
+      if (value !== undefined && value !== null && value !== "") {
+        profileUpdates[key] = value;
+      }
+      continue;
+    }
     if (DATE_FIELDS.includes(key) && (value === "" || value === null)) {
       cleanedFields[key] = null;
     } else if (BOOLEAN_FIELDS.includes(key) && value === "") {
@@ -58,5 +69,15 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Update email/phone on client_profiles if provided
+  if (Object.keys(profileUpdates).length > 0) {
+    await supabase
+      .from("client_profiles")
+      .update(profileUpdates)
+      .eq("id", existing.client_profile_id)
+      .eq("tenant_id", tenantId);
+  }
+
   return NextResponse.json({ record: updated });
 }

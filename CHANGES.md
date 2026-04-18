@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-023 Batch 1: KYC Field Layout (Claude Code)
+
+**Admin KYC sections** (`ServiceDetailClient.tsx`):
+- Renamed "Identity" → "Your Identity"; removed `occupation`; added `email`, `phone`
+- Added new section "Work / Professional Details": `occupation`, `work_address`, `work_email`, `work_phone`
+- `KycLongForm` now accepts `profileEmail`/`profilePhone` props and seeds them into initial fields state (since they live on `client_profiles`, not `client_profile_kyc`)
+
+**Client KYC Identity step** (`IdentityStep.tsx`):
+- Moved `occupation` from the bottom grid into a new "Work / Professional Details" subsection
+
+**Save route** (`/api/profiles/kyc/save`):
+- `email` and `phone` removed from EXCLUDED_FIELDS → now handled as PROFILE_FIELDS
+- When `email` or `phone` are in the payload, they are written to `client_profiles` instead of `client_profile_kyc`
+
+---
+
 ### 2026-04-17 — B-022: 10 Client Portal Fixes (Claude Code)
 
 **Fix #1 — Dashboard "Review and Complete" opens wizard:**

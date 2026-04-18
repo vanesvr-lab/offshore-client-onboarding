@@ -260,7 +260,7 @@ function AddProfileDialog({
 // KYC section fields for the collapsible long-form
 const KYC_SECTIONS = [
   {
-    title: "Identity",
+    title: "Your Identity",
     fields: [
       { key: "full_name", label: "Full legal name", type: "text" },
       { key: "aliases", label: "Aliases / other names", type: "text" },
@@ -270,7 +270,8 @@ const KYC_SECTIONS = [
       { key: "passport_number", label: "Passport number", type: "text" },
       { key: "passport_expiry", label: "Passport expiry date", type: "date" },
       { key: "address", label: "Residential address", type: "textarea" },
-      { key: "occupation", label: "Occupation", type: "text" },
+      { key: "email", label: "Email address", type: "text" },
+      { key: "phone", label: "Phone number", type: "text" },
     ],
   },
   {
@@ -290,10 +291,33 @@ const KYC_SECTIONS = [
       { key: "legal_issues_details", label: "Legal issue details", type: "textarea" },
     ],
   },
+  {
+    title: "Work / Professional Details",
+    fields: [
+      { key: "occupation", label: "Occupation", type: "text" },
+      { key: "work_address", label: "Work address", type: "textarea" },
+      { key: "work_email", label: "Work email", type: "text" },
+      { key: "work_phone", label: "Work phone", type: "text" },
+    ],
+  },
 ];
 
-function KycLongForm({ kyc, onSaved }: { kyc: KycFull; onSaved: () => void }) {
-  const [fields, setFields] = useState<Record<string, unknown>>({ ...kyc });
+function KycLongForm({
+  kyc,
+  profileEmail,
+  profilePhone,
+  onSaved,
+}: {
+  kyc: KycFull;
+  profileEmail?: string | null;
+  profilePhone?: string | null;
+  onSaved: () => void;
+}) {
+  const [fields, setFields] = useState<Record<string, unknown>>({
+    ...kyc,
+    email: profileEmail ?? kyc.email ?? "",
+    phone: profilePhone ?? kyc.phone ?? "",
+  });
   const [saving, setSaving] = useState(false);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(KYC_SECTIONS.map(s => s.title)));
 
@@ -593,6 +617,8 @@ function PersonCard({
       {showKyc && kyc && (
         <KycLongForm
           kyc={kyc}
+          profileEmail={profile.email}
+          profilePhone={profile.phone}
           onSaved={onRefresh}
         />
       )}
