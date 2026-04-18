@@ -15,6 +15,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-18 — B-027 Batch 1: Category filter fixes + role dropdown fix (Claude Code)
+
+**B-027 (KYC document layout rework) — Batch 1**
+
+**Updated:** `src/types/index.ts`
+- Removed `'kyc'` from `DocumentType.category` union — there is no `kyc` category in the DB
+- Valid categories: `identity | corporate | financial | compliance | additional`
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- Added module-level `KYC_DOC_CATEGORIES` and `isKycDoc()` helper
+- Fixed `kycDocTypes` filter (line ~580): `category === "kyc"` → `isKycDoc(dt.category)`
+- Fixed `profileDocs` / `corporateDocs` split (lines ~1877): use `isKycDoc()`
+- Fixed role dropdown: `value` now uses `effectiveAddRoleValue` to avoid showing an unselected option when first available role differs from "director"
+
+**Updated:** `src/components/client/ServiceWizardDocumentsStep.tsx`
+- Added `isServiceDoc` helper: `cat === "corporate" || cat === "additional"`
+- Fixed `requiredDocTypes` filter: was `corporate || compliance || ""` → now `corporate || additional`
+- Fixed `documents` state initializer: was excluding `kyc | identity` → now includes only `corporate | additional`
+- Fixed `extraUploaded`: simplified — no longer needs to re-check categories since state only contains service docs
+
 ### 2026-04-17 — B-026 Batch 3: Role management per PersonCard + Corporation KYC (Claude Code)
 
 **B-026 (Client view parity) — Batch 3**

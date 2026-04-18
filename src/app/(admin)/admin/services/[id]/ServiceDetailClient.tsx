@@ -36,6 +36,12 @@ import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
 
+// ─── Document category helpers ────────────────────────────────────────────────
+
+const KYC_DOC_CATEGORIES = ["identity", "financial", "compliance"] as const;
+const isKycDoc = (category: string | null | undefined): boolean =>
+  (KYC_DOC_CATEGORIES as readonly string[]).includes(category ?? "");
+
 // ─── Section field matchers (mirrors ServiceWizard STEP_SECTION_MATCH) ────────
 
 const SECTION_MATCHERS: Record<string, (section: string | undefined) => boolean> = {
@@ -577,7 +583,7 @@ function KycLongForm({
   const [localDocs, setLocalDocs] = useState<ServiceDoc[]>(profileDocuments ?? []);
 
   // KYC-category doc types for this person's doc slots
-  const kycDocTypes = (documentTypes ?? []).filter((dt) => dt.category === "kyc");
+  const kycDocTypes = (documentTypes ?? []).filter((dt) => isKycDoc(dt.category));
 
   function handleDocUploaded(doc: ServiceDoc) {
     setLocalDocs(prev => {
@@ -1189,7 +1195,7 @@ function PersonCard({
             {availableRolesToAdd.length > 0 && (
               <div className="flex items-center gap-2 pt-1 border-t mt-1">
                 <select
-                  value={addRoleValue}
+                  value={availableRolesToAdd.includes(addRoleValue) ? addRoleValue : (availableRolesToAdd[0] ?? addRoleValue)}
                   onChange={(e) => setAddRoleValue(e.target.value as typeof addRoleValue)}
                   className="border rounded px-2 py-1 text-xs flex-1"
                 >
@@ -1874,8 +1880,8 @@ export function ServiceDetailClient({
   const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
 
   // Split documents by category: KYC/profile docs go inside person cards; corporate stays in Documents section
-  const profileDocs = documents.filter((d) => d.document_types?.category === "kyc");
-  const corporateDocs = documents.filter((d) => d.document_types?.category !== "kyc");
+  const profileDocs = documents.filter((d) => isKycDoc(d.document_types?.category));
+  const corporateDocs = documents.filter((d) => !isKycDoc(d.document_types?.category));
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
     service.service_details ?? {}
   );

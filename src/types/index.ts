@@ -260,7 +260,7 @@ export interface EmailLogEntry {
 export interface DocumentType {
   id: string;
   name: string;
-  category: 'identity' | 'kyc' | 'corporate' | 'financial' | 'compliance' | 'additional';
+  category: 'identity' | 'corporate' | 'financial' | 'compliance' | 'additional';
   applies_to: 'individual' | 'organisation' | 'both';
   description: string | null;
   validity_period_days: number | null;
