@@ -8,6 +8,77 @@ A two-portal KYC/AML onboarding web application for GWMS Ltd (licensed managemen
 
 POC build. All core features are complete and the production build passes clean.
 
+## Response Rules (read first, always apply)
+
+- No completion summaries, recap tables, or commit-by-commit breakdowns in chat
+- After tasks: one line only (done / blocked / question)
+- Write all details to CHANGES.md, not to chat
+- Trust tool outputs. No re-verification reads after successful writes
+- No "let me double-check" after a build passes
+- Read only the tail of CHANGES.md unless I ask for more
+- Do not re-read files you've already read this session unless I ask
+
+## Session Coordination
+
+This project is worked on from Claude Code (sometimes terminal, sometimes desktop app, one session at a time). Sessions coordinate through files and git, not chat history.
+
+**Source of truth:**
+- `CHANGES.md` — what's been done, current state, what's next
+- `CLAUDE.md` — project rules (this file)
+- `docs/cli-brief-*.md` — detailed specs for work batches
+- Git log — audit trail of actual changes
+
+**Session startup:**
+- Run `git pull origin main` first
+- Read the tail of `CHANGES.md` before starting work
+- If a brief is referenced (e.g., `docs/cli-brief-xxx.md`), read it fully
+- Do not ask "what's the current state" in chat, read the files
+
+**Session end:**
+- Update `CHANGES.md` with what was done and what's next
+- Commit and push (see Git Workflow Rule)
+- One-line chat summary only
+
+## CLI Brief Pattern
+
+When I give CLI a brief, it will look like this:
+
+> Read docs/cli-brief-[name].md for the full spec. This is [ID]: [short description]. Do NOT stop between batches, commit, push, and keep going until the entire brief is complete.
+
+Treat briefs as autonomous multi-batch work:
+- Complete all batches in the brief before stopping
+- Commit and push after each batch
+- Update CHANGES.md after each batch
+- Do not wait for approval between batches unless the brief says to
+- If blocked, document the blocker in CHANGES.md and stop
+
+## Batch Tracking System
+
+Work is organized into numbered batches using the format `B-XXX` (e.g., B-025, B-027). IDs are sequential as work comes up.
+
+**Assigning the next ID:**
+- Claude assigns the next ID by checking the highest existing number in `docs/cli-brief-*.md` filenames and `CHANGES.md` entries
+- Use the next sequential number (e.g., if B-027 is the latest, next is B-028)
+- Pad to 3 digits (B-001, not B-1)
+
+**Where batches live:**
+- Each batch has a brief at `docs/cli-brief-[descriptive-name]-b[id].md`
+  Example: `docs/cli-brief-kyc-document-layout-b027.md`
+- CHANGES.md references batches by ID for traceability
+- **Commit messages stay clean** — do NOT include the batch ID in commits
+
+**Batch lifecycle:**
+1. Brief is created in `docs/` with full spec
+2. CLI (or Desktop) works the brief, batch by batch within it
+3. Commits use normal descriptive messages (no B-XXX prefix)
+4. CHANGES.md is updated with batch ID + outcome
+5. Brief file stays in `docs/` as historical record
+
+**Referencing batches:**
+- In chat: "work on B-028" or "check B-025 status"
+- In CHANGES.md: `## B-027 — KYC document layout rework (done YYYY-MM-DD)`
+- In commits: normal messages, no batch ID
+
 ## Tech Stack
 
 - **Framework**: Next.js 14 App Router, TypeScript, `src/` directory
