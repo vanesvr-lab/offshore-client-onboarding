@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-18 — B-027 Batch 2: DocumentDetailDialog shared component (Claude Code)
+
+**B-027 (KYC document layout rework) — Batch 2**
+
+**Created:** `src/components/shared/DocumentDetailDialog.tsx`
+- Shared dialog for document review used in both admin and client contexts
+- Props: `doc: DocumentDetailDoc`, `isAdmin`, `open`, `onOpenChange`, `recipients`, `updateRequests`, `serviceId`, `onStatusChange`, `onRequestSent`, `onDocumentReplaced`
+- Inline preview: fetches signed URL, renders image/iframe/download based on mime_type
+- AI verification section: confidence %, rules passed, flags (amber), failed rules (red)
+- Extracted fields collapsible section
+- Admin only: approve/reject (calls `/api/admin/documents/library/{id}/review`), rejection note inline
+- Admin only: "Send Update Request" opens `DocumentUpdateRequestDialog` sub-dialog
+- Shows most recent update request preview below request button
+- Footer: Replace Document (upload, admin+client), Download, Close
+- `DocumentDetailDoc` interface allows use with both `ServiceDoc` and extended `ClientServiceDoc`
+
 ### 2026-04-18 — B-027 Batch 1: Category filter fixes + role dropdown fix (Claude Code)
 
 **B-027 (KYC document layout rework) — Batch 1**
