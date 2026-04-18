@@ -44,6 +44,7 @@ export async function POST(
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const documentTypeId = formData.get("documentTypeId") as string | null;
+  const targetProfileId = (formData.get("clientProfileId") as string | null) ?? clientProfileId;
 
   if (!file) return NextResponse.json({ error: "file is required" }, { status: 400 });
   if (!documentTypeId) return NextResponse.json({ error: "documentTypeId is required" }, { status: 400 });
@@ -67,15 +68,18 @@ export async function POST(
     return NextResponse.json({ error: storageError.message }, { status: 500 });
   }
 
-  // Upsert documents row (one per document type per service)
+  // Upsert documents row (one per document type per profile per service)
   const { data: existing } = await supabase
     .from("documents")
     .select("id")
     .eq("service_id", serviceId)
     .eq("document_type_id", documentTypeId)
+    .eq("client_profile_id", targetProfileId)
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
     .maybeSingle();
+
+  const selectFields = "id, file_name, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, document_types(name, category)";
 
   let doc;
   if (existing?.id) {
@@ -85,11 +89,12 @@ export async function POST(
         file_name: file.name,
         file_path: filePath,
         verification_status: "pending",
+        verification_result: null,
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
       })
       .eq("id", existing.id)
-      .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
+      .select(selectFields)
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
@@ -100,6 +105,7 @@ export async function POST(
         tenant_id: tenantId,
         service_id: serviceId,
         document_type_id: documentTypeId,
+        client_profile_id: targetProfileId,
         file_name: file.name,
         file_path: filePath,
         verification_status: "pending",
@@ -107,7 +113,7 @@ export async function POST(
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
       })
-      .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
+      .select(selectFields)
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
@@ -144,6 +150,7 @@ export async function POST(
         .from("documents")
         .update({
           verification_status: verificationStatus,
+          verification_result: result,
           verified_at: new Date().toISOString(),
         })
         .eq("id", docId);

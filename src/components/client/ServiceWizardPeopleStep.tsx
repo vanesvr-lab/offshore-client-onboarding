@@ -299,6 +299,28 @@ function KycDocListPanel({
     return profileDocs.find((d) => d.document_type_id === dtId);
   }
 
+  async function pollForVerification(docId: string, dtId: string) {
+    // Poll every 2s for up to 30s waiting for AI verification to complete
+    const MAX_ATTEMPTS = 15;
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const res = await fetch(`/api/documents/${docId}`);
+        if (!res.ok) continue;
+        const data = (await res.json()) as { document?: ClientServiceDoc };
+        if (data.document && data.document.verification_status !== "pending") {
+          setLocalDocs((prev) => {
+            const without = prev.filter((d) => !(d.document_type_id === dtId && d.client_profile_id === profileId));
+            return [...without, data.document as ClientServiceDoc];
+          });
+          return;
+        }
+      } catch {
+        // swallow polling errors
+      }
+    }
+  }
+
   async function handleUpload(dtId: string, file: File) {
     setUploadingTypeId(dtId);
     try {
@@ -319,7 +341,9 @@ function KycDocListPanel({
           return [...without, newDoc];
         });
         onDocUploaded(newDoc);
-        toast.success("Document uploaded", { position: "top-right" });
+        toast.success("Document uploaded — AI verification running...", { position: "top-right" });
+        // Start polling for AI verification result
+        void pollForVerification(newDoc.id, dtId);
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -330,78 +354,136 @@ function KycDocListPanel({
 
   const uploadedCount = kycDocTypes.filter((dt) => getUploaded(dt.id)).length;
 
+  // Group docs by category for collapsible sections
+  const CATEGORY_LABELS: Record<string, string> = {
+    identity: "Identity",
+    financial: "Financial",
+    compliance: "Compliance",
+  };
+  const CATEGORY_ORDER = ["identity", "financial", "compliance"];
+  const grouped: Record<string, DocumentType[]> = {};
+  for (const dt of kycDocTypes) {
+    const cat = dt.category || "identity";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(dt);
+  }
+
+  // Initialize open state per category — open if any pending uploads
+  const initialOpen: Record<string, boolean> = {};
+  for (const cat of Object.keys(grouped)) {
+    const uploadedInCat = grouped[cat].filter((dt) => getUploaded(dt.id)).length;
+    initialOpen[cat] = uploadedInCat < grouped[cat].length;
+  }
+  const [openCategories, setOpenCategories] = useState(initialOpen);
+
+  function toggleCategory(cat: string) {
+    setOpenCategories((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  }
+
   return (
     <>
-      <div className="space-y-1">
-        <p className="text-[11px] text-gray-500 flex items-center gap-1 mb-1.5">
+      <div className="space-y-2">
+        <p className="text-[11px] text-gray-500 flex items-center gap-1 mb-1">
           <FileText className="h-3 w-3" />
           Please upload your documents here
         </p>
-        <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
-          {kycDocTypes.map((dt) => {
-            const uploaded = getUploaded(dt.id);
-            const isUploading = uploadingTypeId === dt.id;
-            const aiStatus = uploaded?.verification_status;
-            const adminStatus = uploaded?.admin_status;
+        <div className="overflow-y-auto space-y-1.5" style={{ maxHeight: 360 }}>
+          {CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => {
+            const cats = grouped[cat];
+            const uploadedInCat = cats.filter((dt) => getUploaded(dt.id)).length;
+            const isOpen = openCategories[cat] ?? true;
+            const allUploaded = uploadedInCat === cats.length;
 
             return (
-              <div key={dt.id} className="flex items-center justify-between py-1 border-b last:border-0 gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  {uploaded
-                    ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    : <FileText className="h-4 w-4 text-amber-500 shrink-0" />
-                  }
-                  <span className={`text-xs truncate ${uploaded ? "text-green-700 font-medium" : "text-amber-700"}`}>
-                    {dt.name}
-                  </span>
-                  {uploaded && (
-                    <span className="flex items-center gap-0.5 shrink-0">
-                      {aiStatus === "verified" && <span className="text-[10px] text-green-600 font-bold">✓</span>}
-                      {aiStatus === "flagged" && <span className="text-[10px] text-amber-500">⚠</span>}
-                      {aiStatus === "manual_review" && <span className="text-[10px] text-orange-500">⚠</span>}
-                      {adminStatus === "approved" && <span className="text-[10px] text-green-600">🟢</span>}
-                      {adminStatus === "rejected" && <span className="text-[10px] text-red-500">🔴</span>}
+              <div key={cat} className="border rounded-md bg-gray-50/50">
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(cat)}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-gray-100 rounded-md"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                      {CATEGORY_LABELS[cat] ?? cat}
                     </span>
-                  )}
-                </div>
-                <div className="shrink-0">
-                  {uploaded ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      onClick={() => setDetailDoc({
-                        id: uploaded.id,
-                        file_name: uploaded.file_name,
-                        mime_type: uploaded.mime_type,
-                        uploaded_at: uploaded.uploaded_at,
-                        document_type_id: uploaded.document_type_id,
-                        verification_status: uploaded.verification_status,
-                        verification_result: uploaded.verification_result,
-                        admin_status: uploaded.admin_status,
-                        document_types: uploaded.document_types,
-                      })}
-                    >
-                      <Eye className="h-3.5 w-3.5 text-gray-400" />
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
-                      disabled={isUploading}
-                      onClick={() => {
-                        setPendingUploadTypeId(dt.id);
-                        uploadInputRef.current?.click();
-                      }}
-                    >
-                      {isUploading
-                        ? <Loader2 className="h-3 w-3 animate-spin" />
-                        : <><Upload className="h-3 w-3" />Upload</>
-                      }
-                    </Button>
-                  )}
-                </div>
+                  </div>
+                  <span className={`text-[10px] font-medium ${allUploaded ? "text-green-600" : "text-amber-600"}`}>
+                    {uploadedInCat}/{cats.length}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="px-2.5 pb-1.5 space-y-0.5">
+                    {cats.map((dt) => {
+                      const uploaded = getUploaded(dt.id);
+                      const isUploading = uploadingTypeId === dt.id;
+                      const aiStatus = uploaded?.verification_status;
+                      const adminStatus = uploaded?.admin_status;
+
+                      return (
+                        <div key={dt.id} className="flex items-center justify-between py-1 gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {uploaded
+                              ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                              : <FileText className="h-4 w-4 text-amber-500 shrink-0" />
+                            }
+                            <span className={`text-xs truncate ${uploaded ? "text-green-700 font-medium" : "text-amber-700"}`}>
+                              {dt.name}
+                            </span>
+                            {uploaded && (
+                              <span className="flex items-center gap-0.5 shrink-0">
+                                {aiStatus === "pending" && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                                {aiStatus === "verified" && <span className="text-[10px] text-green-600 font-bold">✓</span>}
+                                {aiStatus === "flagged" && <span className="text-[10px] text-amber-500">⚠</span>}
+                                {aiStatus === "manual_review" && <span className="text-[10px] text-orange-500">⚠</span>}
+                                {adminStatus === "approved" && <span className="text-[10px] text-green-600">🟢</span>}
+                                {adminStatus === "rejected" && <span className="text-[10px] text-red-500">🔴</span>}
+                              </span>
+                            )}
+                          </div>
+                          <div className="shrink-0">
+                            {uploaded ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() => setDetailDoc({
+                                  id: uploaded.id,
+                                  file_name: uploaded.file_name,
+                                  mime_type: uploaded.mime_type,
+                                  uploaded_at: uploaded.uploaded_at,
+                                  document_type_id: uploaded.document_type_id,
+                                  verification_status: uploaded.verification_status,
+                                  verification_result: uploaded.verification_result,
+                                  admin_status: uploaded.admin_status,
+                                  document_types: uploaded.document_types,
+                                })}
+                              >
+                                <Eye className="h-3.5 w-3.5 text-gray-400" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+                                disabled={isUploading}
+                                onClick={() => {
+                                  setPendingUploadTypeId(dt.id);
+                                  uploadInputRef.current?.click();
+                                }}
+                              >
+                                {isUploading
+                                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                                  : <><Upload className="h-3 w-3" />Upload</>
+                                }
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
