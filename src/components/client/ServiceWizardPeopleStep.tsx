@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ArrowLeft, Mail, X, Send, ChevronDown, Search, Loader2 } from "lucide-react";
+import { UserPlus, User, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,8 @@ const ROLE_COLORS: Record<ServicePersonRole, string> = {
   shareholder: "bg-purple-100 text-purple-700",
   ubo: "bg-amber-100 text-amber-700",
 };
+
+const ROLE_LIST: ServicePersonRole[] = ["director", "shareholder", "ubo"];
 
 // ─── mapToKycRecord ───────────────────────────────────────────────────────────
 
@@ -704,79 +706,107 @@ function PersonCard({
   serviceId,
   kycPct,
   onReviewKyc,
-  onRemove,
-  combinedRoles,
+  allRoleRows,
+  onRoleRemoved,
+  onRoleAdded,
 }: {
   person: ServicePerson;
   serviceId: string;
   kycPct: number;
   onReviewKyc: () => void;
-  onRemove: () => void;
-  combinedRoles?: ServicePersonRole[];
+  allRoleRows: ServicePerson[];
+  onRoleRemoved: (roleId: string) => void;
+  onRoleAdded: (person: ServicePerson) => void;
 }) {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
   const inviteSentByName = person.invite_sent_by_name ?? null;
+  const [addingRoleInCard, setAddingRoleInCard] = useState<ServicePersonRole | null>(null);
+  const [shareholdingInput, setShareholdingInput] = useState("");
+  const [addRoleLoading, setAddRoleLoading] = useState(false);
 
-  const roles = combinedRoles ?? [person.role as ServicePersonRole];
-  const combinedRoleLabels = roles.map((r) => ROLE_LABELS[r] ?? r).join(", ");
+  const currentRoles = allRoleRows.map((r) => r.role as ServicePersonRole);
+  const availableRolesToAdd = ROLE_LIST.filter((r) => !currentRoles.includes(r));
+  const combinedRoleLabels = currentRoles.map((r) => ROLE_LABELS[r] ?? r).join(", ");
 
   const kycColor =
-    kycPct === 100
-      ? "text-green-600"
-      : kycPct > 0
-      ? "text-amber-600"
-      : "text-red-500";
-
+    kycPct === 100 ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500";
   const kycBarColor =
-    kycPct === 100
-      ? "bg-green-500"
-      : kycPct > 0
-      ? "bg-amber-500"
-      : "bg-red-400";
+    kycPct === 100 ? "bg-green-500" : kycPct > 0 ? "bg-amber-500" : "bg-red-400";
 
   const sentDate = inviteSentAt
     ? new Date(inviteSentAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
     : null;
 
+  async function handleRemoveRole(roleId: string) {
+    const isLast = allRoleRows.length === 1;
+    const msg = isLast
+      ? "This is the last role for this person. Remove them from the service entirely?"
+      : "Remove this role?";
+    if (!confirm(msg)) return;
+    const res = await fetch(`/api/services/${serviceId}/persons/${roleId}`, { method: "DELETE" });
+    if (res.ok) {
+      onRoleRemoved(roleId);
+      toast.success("Role removed");
+    } else {
+      toast.error("Failed to remove role");
+    }
+  }
+
+  async function handleAddRole() {
+    if (!addingRoleInCard) return;
+    const profileId = person.client_profiles?.id;
+    if (!profileId) return;
+    const pct = shareholdingInput ? parseFloat(shareholdingInput) : undefined;
+    const body: Record<string, unknown> = {
+      role: addingRoleInCard,
+      client_profile_id: profileId,
+    };
+    if (pct !== undefined) body.shareholding_percentage = pct;
+
+    setAddRoleLoading(true);
+    try {
+      const res = await fetch(`/api/services/${serviceId}/persons`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as { id?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to add role");
+      onRoleAdded({
+        id: data.id ?? "",
+        role: addingRoleInCard,
+        shareholding_percentage: pct ?? null,
+        can_manage: false,
+        invite_sent_at: null,
+        invite_sent_by_name: null,
+        client_profiles: person.client_profiles,
+      });
+      toast.success(`${ROLE_LABELS[addingRoleInCard]} added`);
+      setAddingRoleInCard(null);
+      setShareholdingInput("");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to add role");
+    } finally {
+      setAddRoleLoading(false);
+    }
+  }
+
   return (
     <div className="border rounded-xl bg-white px-4 py-3.5 space-y-3">
       {/* Header row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-            <User className="h-4 w-4 text-gray-500" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-brand-navy leading-tight">
-              {person.client_profiles?.full_name ?? "Unknown"}
-            </p>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              {roles.map((r) => (
-                <span
-                  key={r}
-                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}
-                >
-                  {ROLE_LABELS[r] ?? r}
-                </span>
-              ))}
-              {person.shareholding_percentage != null && (
-                <span className="text-[10px] text-gray-400">{person.shareholding_percentage}%</span>
-              )}
-            </div>
-          </div>
+      <div className="flex items-center gap-2.5">
+        <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+          <User className="h-4 w-4 text-gray-500" />
         </div>
-
-        {/* Remove button — only for non-managing persons */}
-        {!person.can_manage && (
-          <button
-            onClick={onRemove}
-            className="text-gray-300 hover:text-red-500 transition-colors p-1 shrink-0"
-            title="Remove from service"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div>
+          <p className="text-sm font-semibold text-brand-navy leading-tight">
+            {person.client_profiles?.full_name ?? "Unknown"}
+          </p>
+          {person.client_profiles?.email && (
+            <p className="text-xs text-gray-400">{person.client_profiles.email}</p>
+          )}
+        </div>
       </div>
 
       {/* KYC status bar */}
@@ -816,8 +846,90 @@ function PersonCard({
             className="h-7 px-3 text-xs gap-1.5 text-gray-500 hover:text-brand-navy"
           >
             <Mail className="h-3 w-3" />
-            Request to fill and review KYC
+            Request KYC
           </Button>
+        )}
+      </div>
+
+      {/* Roles section */}
+      <div className="border-t pt-2.5 space-y-1.5">
+        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Roles</p>
+        {allRoleRows.map((row) => (
+          <div key={row.id} className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                  ROLE_COLORS[row.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {ROLE_LABELS[row.role as ServicePersonRole] ?? row.role}
+              </span>
+              {row.shareholding_percentage != null && (
+                <span className="text-xs text-gray-400">{row.shareholding_percentage}%</span>
+              )}
+            </div>
+            {!row.can_manage && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void handleRemoveRole(row.id)}
+                className="h-6 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+        ))}
+
+        {/* Add role */}
+        {availableRolesToAdd.length > 0 && (
+          <div className="pt-1">
+            {addingRoleInCard === null ? (
+              <select
+                className="text-xs border rounded-md px-2 py-1 text-gray-600 bg-white cursor-pointer"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) setAddingRoleInCard(e.target.value as ServicePersonRole);
+                }}
+              >
+                <option value="">+ Add role…</option>
+                {availableRolesToAdd.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500">{ROLE_LABELS[addingRoleInCard]}:</span>
+                {addingRoleInCard === "shareholder" && (
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={shareholdingInput}
+                    onChange={(e) => setShareholdingInput(e.target.value)}
+                    placeholder="% share"
+                    className="h-7 w-20 text-xs px-2"
+                  />
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => void handleAddRole()}
+                  disabled={addRoleLoading}
+                  className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+                >
+                  {addRoleLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setAddingRoleInCard(null); setShareholdingInput(""); }}
+                  className="h-7 px-2 text-xs"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -875,22 +987,25 @@ export function ServiceWizardPeopleStep({
     [persons, onPersonsChange]
   );
 
-  const handleRemove = useCallback(
-    async (roleId: string) => {
-      if (!confirm("Remove this person from the service?")) return;
-      const res = await fetch(`/api/services/${serviceId}/persons/${roleId}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        const next = persons.filter((p) => p.id !== roleId);
-        setPersons(next);
-        onPersonsChange(next);
-        toast.success("Removed");
-      }
+  const handleRoleRemoved = useCallback(
+    (roleId: string) => {
+      const next = persons.filter((p) => p.id !== roleId);
+      setPersons(next);
+      onPersonsChange(next);
     },
-    [persons, serviceId, onPersonsChange]
+    [persons, onPersonsChange]
   );
 
+  const handleRoleAdded = useCallback(
+    (person: ServicePerson) => {
+      const next = [...persons, person];
+      setPersons(next);
+      onPersonsChange(next);
+    },
+    [persons, onPersonsChange]
+  );
+
+  // reviewingRoleId is any role ID for the profile being reviewed
   const reviewingPerson = reviewingRoleId
     ? persons.find((p) => p.id === reviewingRoleId) ?? null
     : null;
@@ -944,6 +1059,7 @@ export function ServiceWizardPeopleStep({
             documentTypes={documentTypes}
             dueDiligenceLevel={ddLevel}
             requirements={requirements}
+            profileType={reviewingPerson.client_profiles?.record_type === "organisation" ? "organisation" : "individual"}
             onComplete={handleKycComplete}
             compact={false}
             saveUrl="/api/profiles/kyc/save"
@@ -972,7 +1088,6 @@ export function ServiceWizardPeopleStep({
   }
 
   // ─── Roster view ─────────────────────────────────────────────────────────
-  const ROLES: ServicePersonRole[] = ["director", "shareholder", "ubo"];
   const hasDirector = persons.some((p) => p.role === "director");
   const shareholders = persons.filter((p) => p.role === "shareholder");
 
@@ -991,27 +1106,20 @@ export function ServiceWizardPeopleStep({
       ) : (
         <div className="space-y-2.5">
           {(() => {
-            // Group by profile ID to deduplicate
-            const profileMap = new Map<string, { person: ServicePerson; roles: ServicePersonRole[]; roleIds: string[] }>();
+            // Group by profile ID to deduplicate — keep all role rows per profile
+            const profileMap = new Map<string, { person: ServicePerson; roleRows: ServicePerson[] }>();
             for (const p of persons) {
               const profileId = p.client_profiles?.id ?? p.id;
               const existing = profileMap.get(profileId);
               if (existing) {
-                if (!existing.roles.includes(p.role as ServicePersonRole)) {
-                  existing.roles.push(p.role as ServicePersonRole);
-                }
-                existing.roleIds.push(p.id);
+                existing.roleRows.push(p);
               } else {
-                profileMap.set(profileId, {
-                  person: p,
-                  roles: [p.role as ServicePersonRole],
-                  roleIds: [p.id],
-                });
+                profileMap.set(profileId, { person: p, roleRows: [p] });
               }
             }
-            return Array.from(profileMap.values()).map(({ person, roles, roleIds }) => {
+            return Array.from(profileMap.values()).map(({ person, roleRows }) => {
               const rawPct = calcKycPct(person.client_profiles?.client_profile_kyc ?? null);
-              const kycPct = roleIds.some((id) => kycCompletedIds.has(id)) ? 100 : rawPct;
+              const kycPct = roleRows.some((rr) => kycCompletedIds.has(rr.id)) ? 100 : rawPct;
               return (
                 <PersonCard
                   key={person.client_profiles?.id ?? person.id}
@@ -1019,8 +1127,9 @@ export function ServiceWizardPeopleStep({
                   serviceId={serviceId}
                   kycPct={kycPct}
                   onReviewKyc={() => setReviewingRoleId(person.id)}
-                  onRemove={() => void handleRemove(person.id)}
-                  combinedRoles={roles}
+                  allRoleRows={roleRows}
+                  onRoleRemoved={handleRoleRemoved}
+                  onRoleAdded={handleRoleAdded}
                 />
               );
             });
@@ -1050,7 +1159,7 @@ export function ServiceWizardPeopleStep({
 
       {/* Add buttons */}
       <div className="flex flex-wrap gap-2">
-        {ROLES.map((role) => (
+        {ROLE_LIST.map((role) => (
           <Button
             key={role}
             size="sm"

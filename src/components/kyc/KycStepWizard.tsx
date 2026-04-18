@@ -4,6 +4,9 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { IdentityStep } from "./steps/IdentityStep";
 import { FinancialStep } from "./steps/FinancialStep";
 import { DeclarationsStep } from "./steps/DeclarationsStep";
@@ -24,9 +27,156 @@ interface KycStepWizardProps {
   saveUrl?: string;
   /** If true, final step shows "Save & Close" instead of "Submit for Review" */
   inlineMode?: boolean;
+  /** Switch between individual and corporation KYC steps */
+  profileType?: "individual" | "organisation";
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
+const ORG_STEP_LABELS = ["Company Details", "Tax / Financial", "Review & Submit"];
+
+// ─── Corporation step components ─────────────────────────────────────────────
+
+function OrgField({
+  label,
+  fieldKey,
+  form,
+  onChange,
+  type = "text",
+  placeholder,
+  required,
+}: {
+  label: string;
+  fieldKey: keyof KycRecord;
+  form: Partial<KycRecord>;
+  onChange: (fields: Partial<KycRecord>) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-sm">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </Label>
+      {type === "textarea" ? (
+        <Textarea
+          value={(form[fieldKey] as string) ?? ""}
+          onChange={(e) => onChange({ [fieldKey]: e.target.value } as Partial<KycRecord>)}
+          placeholder={placeholder}
+          rows={3}
+          className="text-sm resize-none"
+        />
+      ) : (
+        <Input
+          type={type}
+          value={(form[fieldKey] as string) ?? ""}
+          onChange={(e) => onChange({ [fieldKey]: e.target.value } as Partial<KycRecord>)}
+          placeholder={placeholder}
+          className="text-sm"
+        />
+      )}
+    </div>
+  );
+}
+
+function CompanyDetailsStep({
+  form,
+  onChange,
+}: {
+  form: Partial<KycRecord>;
+  onChange: (fields: Partial<KycRecord>) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-brand-navy mb-1">Company Details</h2>
+        <p className="text-sm text-gray-500">Provide information about the company entity.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <OrgField label="Company name" fieldKey="full_name" form={form} onChange={onChange} required placeholder="Legal entity name" />
+        <OrgField label="Registration number" fieldKey="company_registration_number" form={form} onChange={onChange} required placeholder="Company registration number" />
+        <OrgField label="Jurisdiction of incorporation" fieldKey="jurisdiction_incorporated" form={form} onChange={onChange} required placeholder="e.g. Mauritius" />
+        <OrgField label="Date of incorporation" fieldKey="date_of_incorporation" form={form} onChange={onChange} type="date" required />
+        <OrgField label="Industry sector" fieldKey="industry_sector" form={form} onChange={onChange} placeholder="e.g. Financial Services" />
+        <div className="space-y-1">
+          <Label className="text-sm">Listed or unlisted</Label>
+          <select
+            value={(form.listed_or_unlisted as string) ?? ""}
+            onChange={(e) => onChange({ listed_or_unlisted: (e.target.value || null) as "listed" | "unlisted" | null })}
+            className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+          >
+            <option value="">Select…</option>
+            <option value="listed">Listed</option>
+            <option value="unlisted">Unlisted</option>
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <OrgField label="Business description" fieldKey="description_activity" form={form} onChange={onChange} type="textarea" placeholder="Describe the company's main activities" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CorporateTaxStep({
+  form,
+  onChange,
+}: {
+  form: Partial<KycRecord>;
+  onChange: (fields: Partial<KycRecord>) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-brand-navy mb-1">Tax / Financial</h2>
+        <p className="text-sm text-gray-500">Provide tax residency and financial details.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <OrgField label="Tax residency jurisdiction" fieldKey="jurisdiction_tax_residence" form={form} onChange={onChange} placeholder="e.g. Mauritius" />
+        <OrgField label="Tax identification number" fieldKey="tax_identification_number" form={form} onChange={onChange} placeholder="TIN or equivalent" />
+        <div className="md:col-span-2">
+          <OrgField label="Regulatory licences" fieldKey="regulatory_licenses" form={form} onChange={onChange} type="textarea" placeholder="List any regulatory licences held" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrgReviewStep({ form }: { form: Partial<KycRecord> }) {
+  const rows: { label: string; value: string | null | undefined }[] = [
+    { label: "Company name", value: form.full_name },
+    { label: "Registration number", value: form.company_registration_number },
+    { label: "Jurisdiction of incorporation", value: form.jurisdiction_incorporated },
+    { label: "Date of incorporation", value: form.date_of_incorporation },
+    { label: "Industry sector", value: form.industry_sector },
+    { label: "Listed / unlisted", value: form.listed_or_unlisted },
+    { label: "Business description", value: form.description_activity },
+    { label: "Tax residency", value: form.jurisdiction_tax_residence },
+    { label: "Tax identification number", value: form.tax_identification_number },
+    { label: "Regulatory licences", value: form.regulatory_licenses },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold text-brand-navy mb-1">Review & Submit</h2>
+        <p className="text-sm text-gray-500">Review the information below before submitting.</p>
+      </div>
+      <div className="divide-y divide-gray-100">
+        {rows.map(({ label, value }) => (
+          <div key={label} className="flex gap-3 py-1.5">
+            <span className="text-xs text-gray-500 w-48 shrink-0">{label}</span>
+            {value ? (
+              <span className="text-xs text-gray-800">{value}</span>
+            ) : (
+              <span className="text-xs text-red-400 italic">Not provided</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StepIndicator({ current, total, labels }: { current: number; total: number; labels: string[] }) {
   return (
@@ -60,11 +210,15 @@ export function KycStepWizard({
   compact = false,
   saveUrl = "/api/kyc/save",
   inlineMode = false,
+  profileType = "individual",
 }: KycStepWizardProps) {
-  const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
-  // SDD skips declarations (step index 2)
-  const totalSteps = isCdd ? 4 : 3;
-  const stepLabels = isCdd ? STEP_LABELS : ["Your Identity", "Financial Profile", "Review & Submit"];
+  const isOrg = profileType === "organisation";
+  const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
+  // Organisation: always 3 steps (Company Details → Tax/Financial → Review)
+  // Individual SDD: 3 steps (skips declarations)
+  // Individual CDD/EDD: 4 steps
+  const totalSteps = isOrg ? 3 : (isCdd ? 4 : 3);
+  const stepLabels = isOrg ? ORG_STEP_LABELS : (isCdd ? STEP_LABELS : ["Your Identity", "Financial Profile", "Review & Submit"]);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [form, setForm] = useState<Partial<KycRecord>>(kycRecord);
@@ -161,8 +315,13 @@ export function KycStepWizard({
     }
   }
 
-  // Map visual step index to logical step (SDD skips declarations)
-  function getLogicalStep(visualStep: number): "identity" | "financial" | "declarations" | "review" {
+  // Map visual step index to logical step
+  function getLogicalStep(visualStep: number): "identity" | "financial" | "declarations" | "review" | "org_details" | "org_tax" {
+    if (isOrg) {
+      if (visualStep === 0) return "org_details";
+      if (visualStep === 1) return "org_tax";
+      return "review";
+    }
     if (visualStep === 0) return "identity";
     if (visualStep === 1) return "financial";
     if (!isCdd) return "review"; // step 2 is review for SDD
@@ -178,6 +337,15 @@ export function KycStepWizard({
       <StepIndicator current={currentStep} total={totalSteps} labels={stepLabels} />
 
       <div className={compact ? "min-h-[200px]" : "min-h-[400px]"}>
+        {logicalStep === "org_details" && (
+          <CompanyDetailsStep form={form} onChange={handleChange} />
+        )}
+        {logicalStep === "org_tax" && (
+          <CorporateTaxStep form={form} onChange={handleChange} />
+        )}
+        {logicalStep === "review" && isOrg && (
+          <OrgReviewStep form={form} />
+        )}
         {logicalStep === "identity" && (
           <IdentityStep
             clientId={clientId}
@@ -216,7 +384,7 @@ export function KycStepWizard({
             onDocumentUploaded={handleDocumentUploaded}
           />
         )}
-        {logicalStep === "review" && (
+        {logicalStep === "review" && !isOrg && (
           <ReviewStep
             kycRecord={kycRecord}
             documents={documents}

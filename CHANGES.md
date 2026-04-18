@@ -15,6 +15,33 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-026 Batch 3: Role management per PersonCard + Corporation KYC (Claude Code)
+
+**B-026 (Client view parity) — Batch 3**
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- `PersonCard` completely rewritten with per-role management:
+  - Removed single "X" remove button from header
+  - Added "Roles" section at bottom of each card showing all roles with Remove buttons
+  - Confirmation dialog for last-role removal (removes person from service)
+  - "Add role" dropdown for unassigned roles
+  - If adding Shareholder: % input shown inline
+  - Add role calls `POST /api/services/[id]/persons` with `client_profile_id` + role
+- `PersonCard` now accepts `allRoleRows: ServicePerson[]`, `onRoleRemoved`, `onRoleAdded` (removed `onRemove`, `combinedRoles`)
+- Roster view: grouping updated to produce `roleRows` per profile (all ServicePerson entries)
+- `handleRemove` replaced by `handleRoleRemoved` + `handleRoleAdded` callbacks
+- `profileType` prop passed to `KycStepWizard` based on `record_type`
+- `ROLE_LIST` added as module-level constant
+
+**Updated:** `src/components/kyc/KycStepWizard.tsx`
+- Added `profileType?: "individual" | "organisation"` prop
+- Organisation path: 3 steps — Company Details, Tax / Financial, Review & Submit
+- `CompanyDetailsStep`: company name, registration number, jurisdiction, incorporation date, activity, sector, listed/unlisted
+- `CorporateTaxStep`: tax residency, tax ID, regulatory licences
+- `OrgReviewStep`: tabular summary of all org fields
+- Individual path: unchanged (Identity → Financial → Declarations/Review)
+- Added `Input`, `Label`, `Textarea` imports for org step forms
+
 ### 2026-04-17 — B-026 Batch 2: Add Profile Dialog + Ownership Structure visual (Claude Code)
 
 **B-026 (Client view parity) — Batch 2**
