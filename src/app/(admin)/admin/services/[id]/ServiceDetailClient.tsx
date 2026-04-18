@@ -124,16 +124,20 @@ function AddProfileDialog({
   existingProfileIds,
   allProfiles,
   onAdded,
+  defaultRole = "director",
+  trigger,
 }: {
   serviceId: string;
   existingProfileIds: Set<string>;
   allProfiles: ClientProfile[];
   onAdded: () => void;
+  defaultRole?: "director" | "shareholder" | "ubo" | "other";
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ClientProfile | null>(null);
-  const [role, setRole] = useState<"director" | "shareholder" | "ubo" | "other">("director");
+  const [role, setRole] = useState<"director" | "shareholder" | "ubo" | "other">(defaultRole);
   const [shareholdingPct, setShareholdingPct] = useState("");
   const [canManage, setCanManage] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -182,11 +186,15 @@ function AddProfileDialog({
   }
 
   return (
-    <div className="relative" ref={dialogRef}>
-      <Button size="sm" variant="outline" onClick={() => setOpen(!open)} className="gap-1.5">
-        <Plus className="h-3.5 w-3.5" />
-        Add profile
-      </Button>
+    <div className="relative inline-block" ref={dialogRef}>
+      {trigger ? (
+        <div onClick={() => { setOpen(!open); setRole(defaultRole); }}>{trigger}</div>
+      ) : (
+        <Button size="sm" variant="outline" onClick={() => setOpen(!open)} className="gap-1.5">
+          <Plus className="h-3.5 w-3.5" />
+          Add profile
+        </Button>
+      )}
       {open && (
         <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border z-50 p-4 space-y-3">
           {!selected ? (
@@ -1639,13 +1647,52 @@ export function ServiceDetailClient({
 
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm text-gray-500">{uniqueRoles.length} {uniqueRoles.length === 1 ? "person" : "people"} linked</p>
-              <AddProfileDialog
-                serviceId={service.id}
-                existingProfileIds={existingProfileIds}
-                allProfiles={allProfiles}
-                onAdded={handleRolesRefresh}
-              />
             </div>
+
+            {/* Ownership Structure */}
+            {typedRoles.filter((r: RoleWithProfile) => r.role === "shareholder").length > 0 && (
+              <div className="mb-4 border rounded-lg p-3 bg-gray-50/50">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Ownership Structure</p>
+                <div className="space-y-1.5">
+                  {typedRoles
+                    .filter((r: RoleWithProfile) => r.role === "shareholder")
+                    .map((r: RoleWithProfile) => (
+                      <div key={r.id} className="flex items-center gap-3">
+                        <span className="text-sm text-gray-700 w-40 truncate">{r.client_profiles?.full_name ?? "Unknown"}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-500"
+                            style={{ width: `${r.shareholding_percentage ?? 0}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500 w-10 text-right tabular-nums">{r.shareholding_percentage ?? 0}%</span>
+                      </div>
+                    ))}
+                  {(() => {
+                    const allocated = typedRoles
+                      .filter((r: RoleWithProfile) => r.role === "shareholder")
+                      .reduce((sum: number, r: RoleWithProfile) => sum + (r.shareholding_percentage ?? 0), 0);
+                    const unallocated = 100 - allocated;
+                    return unallocated > 0 ? (
+                      <div className="flex items-center gap-3 opacity-50">
+                        <span className="text-sm text-gray-400 w-40 italic">Unallocated</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                          <div className="h-full rounded-full bg-gray-300" style={{ width: `${unallocated}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 w-10 text-right tabular-nums">{unallocated}%</span>
+                      </div>
+                    ) : null;
+                  })()}
+                  <div className="flex items-center justify-end pt-1 border-t mt-1.5">
+                    <span className="text-xs font-medium text-gray-600">
+                      Total: {typedRoles
+                        .filter((r: RoleWithProfile) => r.role === "shareholder")
+                        .reduce((sum: number, r: RoleWithProfile) => sum + (r.shareholding_percentage ?? 0), 0)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {uniqueRoles.length === 0 ? (
               <p className="text-sm text-gray-400">No profiles linked yet.</p>
@@ -1662,6 +1709,26 @@ export function ServiceDetailClient({
                 ))}
               </div>
             )}
+
+            {/* Add role buttons */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {(["director", "shareholder", "ubo"] as const).map((r) => (
+                <AddProfileDialog
+                  key={r}
+                  serviceId={service.id}
+                  existingProfileIds={existingProfileIds}
+                  allProfiles={allProfiles}
+                  onAdded={handleRolesRefresh}
+                  defaultRole={r}
+                  trigger={
+                    <Button size="sm" variant="outline" className="gap-1.5 border-dashed">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add {r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1)}
+                    </Button>
+                  }
+                />
+              ))}
+            </div>
           </div>
         </ServiceCollapsibleSection>
 
