@@ -34,6 +34,8 @@ export async function POST(
     client_profile_id?: string;
     role: string;
     full_name?: string;
+    email?: string;
+    record_type?: "individual" | "organisation";
     shareholding_percentage?: number;
   };
 
@@ -64,10 +66,10 @@ export async function POST(
       .insert({
         tenant_id: tenantId,
         user_id: null,
-        record_type: "individual",
+        record_type: body.record_type ?? "individual",
         is_representative: false,
         full_name: body.full_name,
-        email: null,
+        email: body.email ?? null,
         due_diligence_level: "sdd",
       })
       .select("id")

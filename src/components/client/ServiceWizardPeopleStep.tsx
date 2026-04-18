@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ArrowLeft, Mail, X, Send } from "lucide-react";
+import { UserPlus, User, ArrowLeft, Mail, X, Send, ChevronDown, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,45 +154,86 @@ interface AvailableProfile {
 function AddPersonModal({
   serviceId,
   role,
+  currentPersons,
   onClose,
   onAdded,
 }: {
   serviceId: string;
   role: ServicePersonRole;
+  currentPersons: ServicePerson[];
   onClose: () => void;
   onAdded: (person: ServicePerson) => void;
 }) {
-  const [profiles, setProfiles] = useState<AvailableProfile[] | null>(null);
-  const [selected, setSelected] = useState<"new" | string>("new");
+  const roleTitle = ROLE_LABELS[role];
+  const [availableProfiles, setAvailableProfiles] = useState<AvailableProfile[] | null>(null);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [recordType, setRecordType] = useState<"individual" | "organisation">("individual");
   const [shareholding, setShareholding] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const fetchProfiles = useCallback(async () => {
-    const res = await fetch(`/api/services/${serviceId}/available-profiles`);
-    const data = (await res.json()) as AvailableProfile[];
-    setProfiles(data);
+  useEffect(() => {
+    fetch(`/api/services/${serviceId}/available-profiles`)
+      .then((r) => r.json() as Promise<AvailableProfile[]>)
+      .then((data) => setAvailableProfiles(data))
+      .catch(() => setAvailableProfiles([]));
   }, [serviceId]);
 
-  if (profiles === null && !loading) {
-    setLoading(true);
-    void fetchProfiles().then(() => setLoading(false));
-  }
+  // Deduplicate linked profiles from currentPersons
+  const linkedMap = useMemo(() => {
+    const map = new Map<string, { profile: NonNullable<ServicePerson["client_profiles"]>; roles: string[] }>();
+    for (const p of currentPersons) {
+      if (!p.client_profiles) continue;
+      const entry = map.get(p.client_profiles.id);
+      if (entry) {
+        entry.roles.push(p.role);
+      } else {
+        map.set(p.client_profiles.id, { profile: p.client_profiles, roles: [p.role] });
+      }
+    }
+    return map;
+  }, [currentPersons]);
+
+  const linkedProfiles = Array.from(linkedMap.values());
+  const searchLower = search.toLowerCase();
+
+  const filteredLinked = linkedProfiles.filter(
+    ({ profile }) =>
+      !search ||
+      (profile.full_name?.toLowerCase().includes(searchLower) ?? false) ||
+      (profile.email?.toLowerCase().includes(searchLower) ?? false)
+  );
+  const filteredAvailable = (availableProfiles ?? []).filter(
+    (p) =>
+      !search ||
+      (p.full_name?.toLowerCase().includes(searchLower) ?? false) ||
+      (p.email?.toLowerCase().includes(searchLower) ?? false)
+  );
+
+  const isCreatingNew = selected === null;
 
   async function handleConfirm() {
     const body: {
       role: string;
       client_profile_id?: string;
       full_name?: string;
+      email?: string;
+      record_type?: string;
       shareholding_percentage?: number;
     } = { role };
+
     const pct = shareholding ? parseFloat(shareholding) : undefined;
     if (pct !== undefined) body.shareholding_percentage = pct;
-    if (selected === "new") {
+
+    if (!isCreatingNew) {
+      body.client_profile_id = selected!;
+    } else {
       if (!newName.trim()) { toast.error("Name is required"); return; }
       body.full_name = newName.trim();
-    } else {
-      body.client_profile_id = selected;
+      if (newEmail.trim()) body.email = newEmail.trim();
+      body.record_type = recordType;
     }
 
     setLoading(true);
@@ -205,27 +246,26 @@ function AddPersonModal({
       const data = (await res.json()) as { id?: string; profileId?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to add");
 
-      const profileData =
-        selected === "new"
-          ? {
-              id: data.profileId ?? "",
-              full_name: newName.trim(),
-              email: null,
+      const profileData = !isCreatingNew
+        ? (() => {
+            const p = (availableProfiles ?? []).find((pr) => pr.id === selected);
+            return {
+              id: p?.id ?? selected ?? "",
+              full_name: p?.full_name ?? "",
+              email: p?.email ?? null,
               due_diligence_level: "sdd",
-              record_type: "individual" as string | null,
+              record_type: null as string | null,
               client_profile_kyc: null,
-            }
-          : (() => {
-              const p = (profiles ?? []).find((pr) => pr.id === selected);
-              return {
-                id: p?.id ?? "",
-                full_name: p?.full_name ?? "",
-                email: p?.email ?? null,
-                due_diligence_level: "sdd",
-                record_type: null as string | null,
-                client_profile_kyc: null,
-              };
-            })();
+            };
+          })()
+        : {
+            id: data.profileId ?? "",
+            full_name: newName.trim(),
+            email: newEmail.trim() || null,
+            due_diligence_level: "sdd",
+            record_type: recordType as string | null,
+            client_profile_kyc: null,
+          };
 
       onAdded({
         id: data.id ?? "",
@@ -236,7 +276,7 @@ function AddPersonModal({
         invite_sent_by_name: null,
         client_profiles: profileData,
       });
-      toast.success(`${ROLE_LABELS[role]} added`);
+      toast.success(`${roleTitle} added`);
       onClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to add person");
@@ -244,105 +284,320 @@ function AddPersonModal({
     }
   }
 
+  const canSubmit = (isCreatingNew ? newName.trim().length > 0 : true) && !loading;
+
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-sm z-[100]">
+      <DialogContent className="max-w-md z-[100]">
         <DialogHeader>
-          <DialogTitle className="text-brand-navy">Add {ROLE_LABELS[role]}</DialogTitle>
+          <DialogTitle className="text-brand-navy">Add {roleTitle}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 pt-1">
-          {loading && profiles === null ? (
-            <p className="text-sm text-gray-400 text-center py-4">Loading…</p>
+        <div className="space-y-4 pt-1">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name or email…"
+              className="text-sm pl-8"
+            />
+          </div>
+
+          {/* Profile list */}
+          {availableProfiles === null ? (
+            <p className="text-sm text-gray-400 text-center py-3">Loading…</p>
           ) : (
-            <>
-              {(profiles ?? []).length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs text-gray-500 font-medium mb-2">Select existing profile</p>
-                  {(profiles ?? []).map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelected(p.id)}
-                      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
-                        selected === p.id
-                          ? "border-brand-navy bg-brand-navy/5"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-brand-navy">{p.full_name ?? "Unnamed"}</p>
-                          {p.email && <p className="text-xs text-gray-400">{p.email}</p>}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                  <div className="relative my-3">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-200" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-white px-2 text-xs text-gray-400">or</span>
+            <div className="max-h-[14rem] overflow-y-auto space-y-1">
+              {/* Linked (disabled) */}
+              {filteredLinked.map(({ profile, roles }) => (
+                <div
+                  key={profile.id}
+                  className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-gray-50 opacity-60 cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">{profile.full_name ?? "Unnamed"}</p>
+                      {profile.email && <p className="text-xs text-gray-400">{profile.email}</p>}
                     </div>
                   </div>
+                  <div className="flex gap-1 ml-2">
+                    {roles.map((r) => (
+                      <span key={r} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">
+                        {ROLE_LABELS[r as ServicePersonRole] ?? r}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              )}
-              <button
-                onClick={() => setSelected("new")}
-                className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
-                  selected === "new"
-                    ? "border-brand-navy bg-brand-navy/5"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <UserPlus className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                  <p className="text-sm font-medium text-brand-navy">Create new profile</p>
-                </div>
-              </button>
-              {selected === "new" && (
-                <div className="space-y-1.5 pt-1">
-                  <Label className="text-sm">
-                    Full name <span className="text-red-400">*</span>
-                  </Label>
-                  <Input
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    placeholder="As on passport"
-                    className="text-sm"
-                    autoFocus
-                  />
-                </div>
-              )}
-              {role === "shareholder" && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Shareholding %</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={shareholding}
-                    onChange={(e) => setShareholding(e.target.value)}
-                    placeholder="e.g. 25"
-                    className="text-sm"
-                  />
-                </div>
-              )}
-              <div className="flex gap-2 justify-end pt-2">
-                <Button variant="outline" onClick={onClose}>Cancel</Button>
-                <Button
-                  onClick={handleConfirm}
-                  disabled={!((selected !== "new" || newName.trim().length > 0) && !loading)}
-                  className="bg-brand-navy hover:bg-brand-blue"
+              ))}
+              {/* Available (selectable) */}
+              {filteredAvailable.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelected((prev) => (prev === p.id ? null : p.id))}
+                  className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                    selected === p.id
+                      ? "border-brand-navy bg-brand-navy/5"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
                 >
-                  {selected === "new" ? "Create & Add" : "Add"}
-                </Button>
-              </div>
-            </>
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-brand-navy">{p.full_name ?? "Unnamed"}</p>
+                      {p.email && <p className="text-xs text-gray-400">{p.email}</p>}
+                    </div>
+                  </div>
+                </button>
+              ))}
+              {filteredLinked.length === 0 && filteredAvailable.length === 0 && search && (
+                <p className="text-sm text-gray-400 text-center py-3">
+                  No profiles match &quot;{search}&quot;
+                </p>
+              )}
+            </div>
           )}
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-2 text-xs text-gray-400">or create new</span>
+            </div>
+          </div>
+
+          {/* Create new */}
+          <div className="space-y-3">
+            <div className="flex gap-4">
+              {(["individual", "organisation"] as const).map((type) => (
+                <label key={type} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value={type}
+                    checked={recordType === type && isCreatingNew}
+                    onChange={() => { setRecordType(type); setSelected(null); }}
+                    className="h-3.5 w-3.5 accent-brand-navy"
+                  />
+                  <span className="text-sm text-gray-700">
+                    {type === "individual" ? "Individual" : "Corporation"}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label className="text-sm">
+                  {recordType === "individual" ? "Full name" : "Corporation name"}{" "}
+                  <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => { setNewName(e.target.value); setSelected(null); }}
+                  placeholder={recordType === "individual" ? "As on passport" : "Legal entity name"}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm text-gray-600">
+                  Email address{" "}
+                  <span className="text-gray-400 font-normal">(optional)</span>
+                </Label>
+                <Input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => { setNewEmail(e.target.value); setSelected(null); }}
+                  placeholder="email@example.com"
+                  className="text-sm"
+                />
+              </div>
+            </div>
+          </div>
+
+          {role === "shareholder" && (
+            <div className="space-y-1.5">
+              <Label className="text-sm">Shareholding %</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={shareholding}
+                onChange={(e) => setShareholding(e.target.value)}
+                placeholder="e.g. 25"
+                className="text-sm"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+            <Button
+              onClick={() => void handleConfirm()}
+              disabled={!canSubmit}
+              className="bg-brand-navy hover:bg-brand-blue"
+            >
+              {loading ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Adding…</>
+              ) : (
+                `Add ${roleTitle}`
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─── OwnershipStructure ───────────────────────────────────────────────────────
+
+function OwnershipStructure({
+  shareholders,
+  serviceId,
+  onSaved,
+}: {
+  shareholders: ServicePerson[];
+  serviceId: string;
+  onSaved: (roleId: string, pct: number) => void;
+}) {
+  const [localPcts, setLocalPcts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(shareholders.map((s) => [s.id, String(s.shareholding_percentage ?? 0)]))
+  );
+  const [saving, setSaving] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Sync when new shareholders are added
+  useEffect(() => {
+    setLocalPcts((prev) => {
+      const next = { ...prev };
+      for (const s of shareholders) {
+        if (!(s.id in next)) next[s.id] = String(s.shareholding_percentage ?? 0);
+      }
+      return next;
+    });
+  }, [shareholders]);
+
+  const total = shareholders.reduce((sum, s) => sum + (parseFloat(localPcts[s.id] ?? "0") || 0), 0);
+  const unallocated = Math.max(0, 100 - total);
+  const isValid = Math.abs(total - 100) < 0.5;
+
+  if (shareholders.length === 0) return null;
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await Promise.all(
+        shareholders.map(async (s) => {
+          const pct = parseFloat(localPcts[s.id] ?? "0") || 0;
+          const res = await fetch(`/api/services/${serviceId}/persons/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ shareholding_percentage: pct }),
+          });
+          if (!res.ok) throw new Error("Save failed");
+          onSaved(s.id, pct);
+        })
+      );
+      toast.success("Shareholding updated", { position: "top-right" });
+    } catch {
+      toast.error("Failed to save shareholding", { position: "top-right" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border rounded-xl overflow-hidden bg-white">
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <ChevronDown
+            className={`h-4 w-4 text-gray-400 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+          />
+          <span className="text-sm font-medium text-brand-navy">Ownership Structure</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium ${isValid ? "text-green-600" : "text-amber-600"}`}>
+            {total.toFixed(0)}% / 100%
+          </span>
+          {!isValid && (
+            <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+              ⚠ Must total 100%
+            </span>
+          )}
+        </div>
+      </button>
+
+      {!collapsed && (
+        <div className="px-4 pb-4 space-y-3 border-t">
+          <div className="space-y-2 pt-3">
+            {shareholders.map((s) => {
+              const pct = parseFloat(localPcts[s.id] ?? "0") || 0;
+              return (
+                <div key={s.id} className="flex items-center gap-3">
+                  <p className="text-sm text-gray-700 w-32 truncate shrink-0">
+                    {s.client_profiles?.full_name ?? "Unknown"}
+                  </p>
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-brand-navy rounded-full transition-all"
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={localPcts[s.id] ?? "0"}
+                      onChange={(e) =>
+                        setLocalPcts((prev) => ({ ...prev, [s.id]: e.target.value }))
+                      }
+                      className="h-7 w-16 text-xs text-center px-1"
+                    />
+                    <span className="text-xs text-gray-400">%</span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {unallocated > 0.5 && (
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-gray-400 w-32 shrink-0">(Unallocated)</p>
+                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gray-300 rounded-full"
+                    style={{ width: `${Math.min(unallocated, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-xs text-gray-400 w-16 text-center tabular-nums">
+                    {unallocated.toFixed(0)}
+                  </span>
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-xs text-gray-500">Total: {total.toFixed(0)}% / 100%</p>
+            <Button
+              size="sm"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -720,12 +975,6 @@ export function ServiceWizardPeopleStep({
   const ROLES: ServicePersonRole[] = ["director", "shareholder", "ubo"];
   const hasDirector = persons.some((p) => p.role === "director");
   const shareholders = persons.filter((p) => p.role === "shareholder");
-  const totalShares = shareholders.reduce(
-    (sum, p) => sum + (p.shareholding_percentage ?? 0),
-    0
-  );
-  const shareholdingWarning =
-    shareholders.length > 0 && Math.abs(totalShares - 100) > 5;
 
   return (
     <div className="space-y-5">
@@ -779,19 +1028,18 @@ export function ServiceWizardPeopleStep({
         </div>
       )}
 
-      {/* Shareholding tracker */}
-      {shareholders.length > 0 && (
-        <div
-          className={`text-xs px-3 py-2 rounded-lg ${
-            shareholdingWarning
-              ? "bg-amber-50 text-amber-700"
-              : "bg-green-50 text-green-700"
-          }`}
-        >
-          Shareholding: {totalShares}% of 100%
-          {shareholdingWarning && " — must reach 100%"}
-        </div>
-      )}
+      {/* Ownership Structure visual */}
+      <OwnershipStructure
+        shareholders={shareholders}
+        serviceId={serviceId}
+        onSaved={(roleId, pct) => {
+          const next = persons.map((p) =>
+            p.id === roleId ? { ...p, shareholding_percentage: pct } : p
+          );
+          setPersons(next);
+          onPersonsChange(next);
+        }}
+      />
 
       {/* Director warning */}
       {!hasDirector && (
@@ -820,6 +1068,7 @@ export function ServiceWizardPeopleStep({
         <AddPersonModal
           serviceId={serviceId}
           role={addingRole}
+          currentPersons={persons}
           onClose={() => setAddingRole(null)}
           onAdded={handleAdded}
         />

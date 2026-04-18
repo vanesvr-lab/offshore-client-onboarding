@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-026 Batch 2: Add Profile Dialog + Ownership Structure visual (Claude Code)
+
+**B-026 (Client view parity) — Batch 2**
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- `AddPersonModal` completely rewritten with enhanced dialog:
+  - Search box (filters both linked and available profiles)
+  - Linked profiles shown at top as disabled with role badges (from `currentPersons` prop)
+  - Available profiles (from API) selectable with click-toggle
+  - "Or create new" section: Individual / Corporation radio, name field, email field
+  - Email and record_type sent in POST body for new profiles
+- `OwnershipStructure` component added:
+  - Collapsible section header showing total %
+  - Editable % inputs per shareholder with progress bars
+  - Unallocated row when total < 100%
+  - Save button PATCHes all shareholding percentages
+  - Warning badge when total ≠ 100%
+  - Updates `persons` state via `onSaved` callback
+- Shareholding text alert replaced with `OwnershipStructure` visual
+- Unused `totalShares` / `shareholdingWarning` variables removed
+
+**Updated:** `src/app/api/services/[id]/persons/route.ts`
+- POST now accepts `email` and `record_type` in request body
+- Creates profile with correct `record_type` (previously hardcoded `"individual"`)
+- Stores `email` on new profile
+
 ### 2026-04-17 — B-026 Batch 1: KYC doc plumbing + Documents step = corporate only (Claude Code)
 
 **B-026 (Client view parity) — Batch 1**
