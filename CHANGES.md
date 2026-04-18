@@ -15,6 +15,39 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-024 Batch 1: Admin Documents Data Layer + API Routes (Claude Code)
+
+**Updated:** `src/app/(admin)/admin/services/[id]/page.tsx`
+- `ServiceDoc` type extended: `verification_result`, `admin_status`, `admin_status_note`, `admin_status_by`, `admin_status_at`, `mime_type`, `client_profiles(id, full_name)`
+- Added `DocumentUpdateRequest` export type
+- Documents query expanded with all new fields + `client_profiles` join
+- Added parallel `document_update_requests` query (grouped by service_id, desc by sent_at)
+- Passes `updateRequests` prop to `ServiceDetailClient`
+
+**Created:** `src/app/api/admin/documents/[id]/request-update/route.ts`
+- POST — admin only, creates `document_update_requests` row + sends email via Resend
+- Body: `{ service_id, sent_to_profile_id, note, auto_populated_from_flags? }`
+- Subject: "Document Update Required — {DocType} for {ServiceName}"
+
+**Created:** `src/app/api/admin/services/[id]/documents/upload/route.ts`
+- POST — admin only, uploads to `documents` table with `service_id` + triggers AI verification
+- Body: FormData `{ file, documentTypeId }`
+
+**DB migrations already run (user confirmed):**
+```sql
+CREATE TABLE document_update_requests (...)  -- see brief for full SQL
+```
+**Note:** If admin_status column doesn't exist on documents, run:
+```sql
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS admin_status text DEFAULT 'pending';
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS admin_status_note text;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS admin_status_by uuid;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS admin_status_at timestamptz;
+```
+(These columns are already used by the existing review route — likely already exist.)
+
+---
+
 ### 2026-04-17 — B-023 Batch 3: Client "Last Request Sent" Info (Claude Code)
 
 **Updated:** `src/app/(client)/services/[id]/page.tsx`

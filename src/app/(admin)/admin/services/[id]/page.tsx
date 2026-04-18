@@ -13,10 +13,30 @@ export type ServiceDoc = {
   file_name: string;
   file_path: string;
   verification_status: string;
+  verification_result: Record<string, unknown> | null;
+  admin_status: string | null;
+  admin_status_note: string | null;
+  admin_status_by: string | null;
+  admin_status_at: string | null;
+  mime_type: string | null;
   uploaded_at: string;
   document_type_id: string | null;
   client_profile_id: string | null;
   document_types: { id?: string; name: string; category: string } | null;
+  client_profiles: { id: string; full_name: string | null } | null;
+};
+
+export type DocumentUpdateRequest = {
+  id: string;
+  document_id: string;
+  service_id: string;
+  requested_by: string;
+  requested_by_name: string | null;
+  sent_to_profile_id: string;
+  sent_to_email: string | null;
+  note: string;
+  auto_populated_from_flags: boolean | null;
+  sent_at: string;
 };
 
 export type ServiceWithTemplate = ServiceRecord & {
@@ -65,6 +85,7 @@ export default async function ServiceDetailPage({
     rolesRes,
     overridesRes,
     docsRes,
+    updateRequestsRes,
     profilesRes,
     adminUsersRes,
     auditRes,
@@ -101,12 +122,21 @@ export default async function ServiceDetailPage({
     supabase
       .from("documents")
       .select(`
-        id, file_name, file_path, verification_status, uploaded_at,
-        document_type_id, client_profile_id,
-        document_types(id, name, category)
+        id, file_name, file_path, verification_status, verification_result,
+        admin_status, admin_status_note, admin_status_by, admin_status_at,
+        mime_type, uploaded_at, document_type_id, client_profile_id,
+        document_types(id, name, category),
+        client_profiles(id, full_name)
       `)
       .eq("service_id", id)
       .eq("is_active", true),
+
+    // Document update requests for this service
+    supabase
+      .from("document_update_requests")
+      .select("*")
+      .eq("service_id", id)
+      .order("sent_at", { ascending: false }),
 
     // All profiles for "Add profile" dialog
     supabase
@@ -164,6 +194,7 @@ export default async function ServiceDetailPage({
         roles={(rolesRes.data ?? []) as unknown as ProfileServiceRole[]}
         overrides={(overridesRes.data ?? []) as unknown as ServiceSectionOverride[]}
         documents={(docsRes.data ?? []) as unknown as ServiceDoc[]}
+        updateRequests={(updateRequestsRes.data ?? []) as unknown as DocumentUpdateRequest[]}
         allProfiles={(profilesRes.data ?? []) as unknown as ClientProfile[]}
         adminUsers={adminUsers}
         auditEntries={(auditRes.data ?? []) as unknown as ServiceAuditEntry[]}

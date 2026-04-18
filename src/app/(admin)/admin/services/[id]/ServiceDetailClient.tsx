@@ -21,7 +21,7 @@ import {
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry } from "@/types";
-import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry } from "./page";
+import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
 
 // ─── Section field matchers (mirrors ServiceWizard STEP_SECTION_MATCH) ────────
 
@@ -650,6 +650,7 @@ interface Props {
   roles: ProfileServiceRole[];
   overrides: ServiceSectionOverride[]; // reserved for future RAG override display
   documents: ServiceDoc[];
+  updateRequests: DocumentUpdateRequest[];
   allProfiles: ClientProfile[];
   adminUsers: AdminUser[];
   auditEntries: ServiceAuditEntry[];
@@ -674,6 +675,7 @@ export function ServiceDetailClient({
   roles: initialRoles,
   overrides: _overrides, // eslint-disable-line @typescript-eslint/no-unused-vars
   documents: initialDocuments,
+  updateRequests: initialUpdateRequests,
   allProfiles,
   adminUsers,
   auditEntries,
@@ -682,6 +684,8 @@ export function ServiceDetailClient({
   const router = useRouter();
   const [service, setService] = useState(initialService);
   const [documents] = useState(initialDocuments);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [updateRequests] = useState(initialUpdateRequests);
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
     service.service_details ?? {}
   );
