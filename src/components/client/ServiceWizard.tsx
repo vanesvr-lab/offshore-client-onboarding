@@ -253,6 +253,7 @@ export function ServiceWizard({
           <ServiceWizardPeopleStep
             serviceId={serviceId}
             persons={persons}
+            documents={documents}
             onPersonsChange={setPersons}
             requirements={requirements}
             documentTypes={documentTypes}
@@ -269,7 +270,7 @@ export function ServiceWizard({
               .map((r) => ({
                 id: r.document_type_id!,
                 name: r.label,
-                category: (r as unknown as { document_types?: { name: string } }).document_types?.name ?? r.label,
+                category: r.document_types?.category ?? "",
               }))}
           />
         )}

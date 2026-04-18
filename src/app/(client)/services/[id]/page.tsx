@@ -13,6 +13,8 @@ export type ClientServiceDoc = {
   file_name: string;
   verification_status: string;
   uploaded_at: string;
+  document_type_id: string | null;
+  client_profile_id: string | null;
   document_types: { name: string; category: string } | null;
 };
 
@@ -40,6 +42,7 @@ export type ServicePerson = {
     full_name: string;
     email: string | null;
     due_diligence_level: string;
+    record_type: string | null;
     client_profile_kyc: Record<string, unknown> | null;
   } | null;
 };
@@ -102,7 +105,7 @@ export default async function ClientServiceDetailPage({
       .select(`
         id, role, shareholding_percentage, can_manage, invite_sent_at, invite_sent_by,
         client_profiles!inner(
-          id, full_name, email, due_diligence_level,
+          id, full_name, email, due_diligence_level, record_type,
           client_profile_kyc(*)
         )
       `)
@@ -112,7 +115,7 @@ export default async function ClientServiceDetailPage({
     // DD requirements for KYC wizards
     supabase
       .from("due_diligence_requirements")
-      .select("*, document_types(id, name)")
+      .select("*, document_types(id, name, category)")
       .eq("tenant_id", tenantId)
       .order("sort_order"),
 
@@ -158,12 +161,12 @@ export default async function ClientServiceDetailPage({
   const docsQuery = profileIds.length > 0
     ? supabase
         .from("documents")
-        .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
+        .select("id, file_name, verification_status, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
         .or(`service_id.eq.${id},client_profile_id.in.(${profileIds.join(",")})`)
         .eq("is_active", true)
     : supabase
         .from("documents")
-        .select("id, file_name, verification_status, uploaded_at, document_types(name, category)")
+        .select("id, file_name, verification_status, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
         .eq("service_id", id)
         .eq("is_active", true);
 

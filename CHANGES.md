@@ -15,6 +15,36 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-026 Batch 1: KYC doc plumbing + Documents step = corporate only (Claude Code)
+
+**B-026 (Client view parity) — Batch 1**
+
+**Updated:** `src/types/index.ts`
+- `DueDiligenceRequirement.document_types` now includes `category?: string | null`
+
+**Updated:** `src/app/(client)/services/[id]/page.tsx`
+- `ClientServiceDoc` type: added `document_type_id: string | null`, `client_profile_id: string | null`
+- `ServicePerson.client_profiles` type: added `record_type: string | null`
+- Persons query: now selects `record_type` from `client_profiles`
+- Documents query: now selects `document_type_id` and `client_profile_id`
+- DD requirements query: now selects `category` from `document_types`
+
+**Updated:** `src/components/client/ServiceWizard.tsx`
+- `ServiceWizardPeopleStep` now receives `documents` prop (passed from wizard state)
+- Fixed `requiredDocTypes` category mapping: uses `r.document_types?.category` (was incorrectly using `document_types.name`)
+
+**Updated:** `src/components/client/ServiceWizardDocumentsStep.tsx`
+- Filters `requiredDocTypes` to corporate/compliance only — KYC docs no longer shown here
+- Filters `extraUploaded` to exclude `kyc` and `identity` category docs
+- KYC docs (passport, address, bank ref, source of funds) now belong in the People & KYC step
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Accepts `documents: ClientServiceDoc[]` prop
+- `mapToKycRecord`: uses actual `record_type` from `client_profiles` (was hardcoded `"individual"`)
+- Added `mapToDocumentRecord()` helper converting `ClientServiceDoc` → `DocumentRecord`
+- `KycStepWizard` now receives profile-specific docs: `documents.filter(d => d.client_profile_id === profile.id).map(mapToDocumentRecord)`
+- Passport and address upload slots in Identity step now show existing uploads
+
 ### 2026-04-17 — B-025 Batch 3: Role management, Edit Profile, Corp KYC (Claude Code)
 
 **Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`

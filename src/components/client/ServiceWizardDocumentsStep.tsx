@@ -131,9 +131,20 @@ export function ServiceWizardDocumentsStep({
   serviceId,
   documents: initialDocuments,
   onDocumentsChange,
-  requiredDocTypes = [],
+  requiredDocTypes: allRequiredDocTypes = [],
 }: Props) {
-  const [documents, setDocuments] = useState<ClientServiceDoc[]>(initialDocuments);
+  // Show only corporate/service-level docs — KYC docs (passport, address, etc.) belong in the People step
+  const requiredDocTypes = allRequiredDocTypes.filter(
+    (dt) => dt.category === "corporate" || dt.category === "compliance" || dt.category === ""
+  );
+
+  const [documents, setDocuments] = useState<ClientServiceDoc[]>(
+    // Only show non-KYC docs in this step
+    initialDocuments.filter((d) => {
+      const cat = d.document_types?.category ?? "";
+      return cat !== "kyc" && cat !== "identity";
+    })
+  );
 
   function handleUploaded(doc: ClientServiceDoc, docTypeId: string) {
     setDocuments((prev) => {
@@ -155,8 +166,10 @@ export function ServiceWizardDocumentsStep({
     });
   }
 
-  // Uploaded docs not covered by required list
+  // Uploaded docs not covered by required list (and not KYC docs)
   const extraUploaded = documents.filter((d) => {
+    const cat = d.document_types?.category ?? "";
+    if (cat === "kyc" || cat === "identity") return false;
     if (!d.document_types) return true;
     return !requiredDocTypes.some((dt) => dt.name === d.document_types?.name);
   });

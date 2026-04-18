@@ -13,7 +13,7 @@ export interface DueDiligenceRequirement {
   document_type_id: string | null;
   applies_to: "individual" | "organisation" | "both";
   sort_order: number;
-  document_types?: { id: string; name: string } | null;
+  document_types?: { id: string; name: string; category?: string | null } | null;
 }
 
 export interface DueDiligenceSettings {

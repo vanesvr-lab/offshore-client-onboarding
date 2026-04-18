@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
-import type { KycRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
-import type { ServicePerson } from "@/app/(client)/services/[id]/page";
+import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
+import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 
 // KYC fields used to compute per-person completion percentage
 const KYC_PCT_FIELDS = [
@@ -53,7 +53,7 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
     id: (kyc.id as string) ?? "",
     client_id: "",
     profile_id: profile?.id ?? null,
-    record_type: "individual",
+    record_type: (profile?.record_type as "individual" | "organisation" | null) ?? "individual",
     full_name: profile?.full_name ?? null,
     email: profile?.email ?? null,
     phone: null,
@@ -113,6 +113,33 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
     filled_by: null,
     created_at: (kyc.created_at as string) ?? "",
     updated_at: (kyc.updated_at as string) ?? "",
+  };
+}
+
+// ─── mapToDocumentRecord ──────────────────────────────────────────────────────
+
+function mapToDocumentRecord(doc: ClientServiceDoc): DocumentRecord {
+  return {
+    id: doc.id,
+    client_id: "",
+    kyc_record_id: null,
+    document_type_id: doc.document_type_id ?? "",
+    file_path: "",
+    file_name: doc.file_name,
+    file_size: null,
+    mime_type: null,
+    verification_status: doc.verification_status as VerificationStatus,
+    verification_result: null,
+    expiry_date: null,
+    notes: null,
+    is_active: true,
+    uploaded_by: null,
+    uploaded_at: doc.uploaded_at,
+    verified_at: null,
+    admin_status: null,
+    admin_status_note: null,
+    admin_status_by: null,
+    admin_status_at: null,
   };
 }
 
@@ -185,6 +212,7 @@ function AddPersonModal({
               full_name: newName.trim(),
               email: null,
               due_diligence_level: "sdd",
+              record_type: "individual" as string | null,
               client_profile_kyc: null,
             }
           : (() => {
@@ -194,6 +222,7 @@ function AddPersonModal({
                 full_name: p?.full_name ?? "",
                 email: p?.email ?? null,
                 due_diligence_level: "sdd",
+                record_type: null as string | null,
                 client_profile_kyc: null,
               };
             })();
@@ -555,6 +584,7 @@ function PersonCard({
 interface Props {
   serviceId: string;
   persons: ServicePerson[];
+  documents: ClientServiceDoc[];
   onPersonsChange: (persons: ServicePerson[]) => void;
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
@@ -564,6 +594,7 @@ interface Props {
 export function ServiceWizardPeopleStep({
   serviceId,
   persons: initialPersons,
+  documents,
   onPersonsChange,
   requirements,
   documentTypes,
@@ -652,7 +683,9 @@ export function ServiceWizardPeopleStep({
           <KycStepWizard
             clientId={reviewingPerson.client_profiles?.id ?? ""}
             kycRecord={kycRecord}
-            documents={[]}
+            documents={documents
+              .filter((d) => d.client_profile_id === reviewingPerson.client_profiles?.id)
+              .map(mapToDocumentRecord)}
             documentTypes={documentTypes}
             dueDiligenceLevel={ddLevel}
             requirements={requirements}
