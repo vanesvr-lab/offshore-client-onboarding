@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-024 Batch 2: Rich Document Cards UI (Claude Code)
+
+**Created:** `src/components/admin/DocumentUpdateRequestDialog.tsx`
+- Dialog for sending document update requests to owners or representatives
+- Radio buttons for recipient selection (document owner vs representative)
+- Optional auto-populate from AI flags (pre-fills note textarea with bullet points)
+- Calls POST /api/admin/documents/[id]/request-update on submit
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- Added `DocumentPreviewDialog`, `DocumentUpdateRequestDialog` imports
+- Replaced simple document list with `AdminDocumentsSection` component
+- `RichDocumentCard` per uploaded doc: AI verification line (confidence %, rules passed), flags, extracted fields (collapsible), approve/reject buttons, preview/download/request-update buttons, update request history
+- Missing docs (required by DD requirements, not uploaded): "Not uploaded" row with Upload button that calls `/api/admin/services/[id]/documents/upload`
+- Flagged summary at bottom when any docs have flags or failed rules
+- `setDocuments`/`setUpdateRequests` used to update state on upload/request-sent (no page reload needed)
+
+---
+
 ### 2026-04-17 — B-024 Batch 1: Admin Documents Data Layer + API Routes (Claude Code)
 
 **Updated:** `src/app/(admin)/admin/services/[id]/page.tsx`

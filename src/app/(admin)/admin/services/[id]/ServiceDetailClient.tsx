@@ -8,12 +8,16 @@ import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle, FileText,
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
+  AlertTriangle, Download, Eye, MessageSquarePlus, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { AuditTrail } from "@/components/admin/AuditTrail";
+import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
+import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
+import type { VerificationResult } from "@/types";
 import {
   calcSectionCompletion,
   calcKycCompletion,
@@ -643,6 +647,577 @@ function PersonCard({
   );
 }
 
+// ─── Admin Documents Section ──────────────────────────────────────────────────
+
+function verificationStatusBadge(status: string) {
+  const map: Record<string, string> = {
+    verified: "bg-green-50 text-green-700 border-green-200",
+    flagged: "bg-amber-50 text-amber-700 border-amber-200",
+    rejected: "bg-red-50 text-red-700 border-red-200",
+    manual_review: "bg-purple-50 text-purple-700 border-purple-200",
+    pending: "bg-gray-100 text-gray-500 border-gray-200",
+  };
+  const cls = map[status] ?? map.pending;
+  const icon = status === "verified" ? "✓" : status === "flagged" ? "⚠" : status === "rejected" ? "✗" : "○";
+  return (
+    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border capitalize ${cls}`}>
+      {icon} {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function adminStatusBadge(status: string | null) {
+  if (status === "approved") return <span className="text-[10px] text-green-700 font-medium">✓ Approved</span>;
+  if (status === "rejected") return <span className="text-[10px] text-red-700 font-medium">✗ Rejected</span>;
+  return <span className="text-[10px] text-gray-400">○ Pending review</span>;
+}
+
+function formatShortDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function RichDocumentCard({
+  doc,
+  serviceId,
+  requests,
+  recipients,
+  onUpdateRequestAdded,
+}: {
+  doc: ServiceDoc;
+  serviceId: string;
+  requests: DocumentUpdateRequest[];
+  recipients: Array<{ id: string; name: string; email: string | null; label: string }>;
+  onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
+}) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
+  const [adminSaving, setAdminSaving] = useState(false);
+  const [adminStatus, setAdminStatus] = useState(doc.admin_status);
+  const [adminStatusNote, setAdminStatusNote] = useState(doc.admin_status_note);
+  const [adminStatusAt, setAdminStatusAt] = useState(doc.admin_status_at);
+  const [extractedOpen, setExtractedOpen] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+
+  const verResult = doc.verification_result as VerificationResult | null;
+  const flags = verResult?.flags ?? [];
+  const ruleResults = verResult?.rule_results ?? [];
+  const extractedFields = verResult?.extracted_fields ?? {};
+  const confidence = verResult?.confidence_score;
+  const passedRules = ruleResults.filter((r) => r.passed).length;
+  const typeName = doc.document_types?.name ?? "Document";
+
+  async function handleApprove() {
+    setAdminSaving(true);
+    try {
+      const res = await fetch(`/api/admin/documents/library/${doc.id}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "approved" }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setAdminStatus("approved");
+      setAdminStatusAt(new Date().toISOString());
+    } catch {
+      toast.error("Failed to approve");
+    } finally {
+      setAdminSaving(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!rejectNote.trim()) return;
+    setAdminSaving(true);
+    try {
+      const res = await fetch(`/api/admin/documents/library/${doc.id}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "rejected", note: rejectNote.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setAdminStatus("rejected");
+      setAdminStatusNote(rejectNote.trim());
+      setAdminStatusAt(new Date().toISOString());
+      setShowRejectForm(false);
+      setRejectNote("");
+    } catch {
+      toast.error("Failed to reject");
+    } finally {
+      setAdminSaving(false);
+    }
+  }
+
+  async function fetchDownloadUrl() {
+    if (downloadUrl) return downloadUrl;
+    setDownloadLoading(true);
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`);
+      const data = (await res.json()) as { url?: string };
+      const url = data.url ?? null;
+      setDownloadUrl(url);
+      return url;
+    } catch {
+      return null;
+    } finally {
+      setDownloadLoading(false);
+    }
+  }
+
+  async function handleDownload() {
+    const url = await fetchDownloadUrl();
+    if (url) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name ?? "document";
+      a.target = "_blank";
+      a.click();
+    }
+  }
+
+  // Most recent request for this doc
+  const latestRequest = requests[0] ?? null;
+  const hasMoreRequests = requests.length > 1;
+
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      {/* Header row */}
+      <div className="px-4 py-3 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <FileText className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-brand-navy">{typeName}</span>
+              {verificationStatusBadge(doc.verification_status)}
+              {adminStatusBadge(adminStatus)}
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Uploaded {formatShortDate(doc.uploaded_at)}
+              {doc.client_profiles?.full_name ? ` · ${doc.client_profiles.full_name}` : ""}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* AI verification line */}
+      {verResult && (
+        <div className="px-4 pb-2 space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-gray-400 font-medium">AI:</span>
+            {confidence !== undefined && (
+              <span className="text-xs font-medium text-gray-700">{Math.round(confidence * 100)}% confidence</span>
+            )}
+            {ruleResults.length > 0 && (
+              <span className={`text-xs font-medium ${passedRules === ruleResults.length ? "text-green-600" : "text-red-600"}`}>
+                {passedRules}/{ruleResults.length} rules passed
+              </span>
+            )}
+            {flags.length > 0 && (
+              <span className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                {flags.length} flag{flags.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {/* Flags */}
+          {flags.length > 0 && (
+            <div className="space-y-1">
+              {flags.map((flag, i) => (
+                <p key={i} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+                  ⚠ {flag}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Failed rules */}
+          {ruleResults.filter((r) => !r.passed).length > 0 && (
+            <div className="space-y-1">
+              {ruleResults.filter((r) => !r.passed).map((rr) => (
+                <div key={rr.rule_number} className="rounded bg-red-50 border border-red-100 px-2 py-1.5 text-xs space-y-0.5">
+                  <p className="font-medium text-red-700">{rr.rule_number}. {rr.rule_text}</p>
+                  {rr.explanation && <p className="text-gray-600">{rr.explanation}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Extracted fields (collapsible) */}
+          {Object.keys(extractedFields).length > 0 && (
+            <div>
+              <button
+                onClick={() => setExtractedOpen(!extractedOpen)}
+                className="text-xs text-brand-blue hover:underline flex items-center gap-1"
+              >
+                <ChevronDown className={`h-3 w-3 transition-transform ${extractedOpen ? "rotate-180" : ""}`} />
+                {extractedOpen ? "Hide" : "Show"} extracted fields
+              </button>
+              {extractedOpen && (
+                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                  {Object.entries(extractedFields).map(([k, v]) => (
+                    <div key={k} className="text-[11px]">
+                      <span className="text-gray-400 capitalize">{k.replace(/_/g, " ")}:</span>{" "}
+                      <span className="text-gray-700 font-medium">{String(v ?? "—")}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Admin review + actions */}
+      <div className="px-4 pb-3 space-y-2 border-t pt-2">
+        {/* Status + approve/reject */}
+        {adminStatus === "approved" && (
+          <p className="text-xs text-green-700 flex items-center gap-1">
+            <CheckCircle className="h-3.5 w-3.5" />
+            Approved {formatShortDate(adminStatusAt)}
+          </p>
+        )}
+        {adminStatus === "rejected" && (
+          <div className="text-xs text-red-700 space-y-0.5">
+            <p className="flex items-center gap-1">
+              <XCircle className="h-3.5 w-3.5" />
+              Rejected {formatShortDate(adminStatusAt)}
+            </p>
+            {adminStatusNote && <p className="text-gray-500 ml-5">Reason: {adminStatusNote}</p>}
+          </div>
+        )}
+
+        {adminStatus !== "approved" && adminStatus !== "rejected" && !showRejectForm && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs text-green-700 border-green-300 hover:bg-green-50 gap-1"
+              disabled={adminSaving}
+              onClick={() => void handleApprove()}
+            >
+              <CheckCircle className="h-3 w-3" />
+              Approve
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs text-red-700 border-red-300 hover:bg-red-50 gap-1"
+              disabled={adminSaving}
+              onClick={() => setShowRejectForm(true)}
+            >
+              <XCircle className="h-3 w-3" />
+              Reject
+            </Button>
+          </div>
+        )}
+        {showRejectForm && (
+          <div className="space-y-1.5">
+            <textarea
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              placeholder="Rejection reason (required)"
+              rows={2}
+              className="w-full text-xs border rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-blue"
+              autoFocus
+            />
+            <div className="flex gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 px-2 text-xs text-red-700 border-red-300 hover:bg-red-50"
+                disabled={adminSaving || !rejectNote.trim()}
+                onClick={() => void handleReject()}
+              >
+                Confirm Reject
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => { setShowRejectForm(false); setRejectNote(""); }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Preview / Download / Request Update */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => setPreviewOpen(true)}
+          >
+            <Eye className="h-3 w-3" />
+            Preview
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1"
+            disabled={downloadLoading}
+            onClick={() => void handleDownload()}
+          >
+            {downloadLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            Download
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1 text-brand-navy border-brand-navy/30 hover:bg-brand-navy/5"
+            onClick={() => setRequestDialogOpen(true)}
+            disabled={recipients.length === 0}
+          >
+            <MessageSquarePlus className="h-3 w-3" />
+            Request Update
+          </Button>
+        </div>
+
+        {/* Latest update request */}
+        {latestRequest && (
+          <div className="mt-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 space-y-0.5">
+            <p className="text-[11px] text-blue-700 flex items-center gap-1">
+              <Mail className="h-3 w-3" />
+              Update requested {formatShortDate(latestRequest.sent_at)}
+              {latestRequest.requested_by_name ? ` by ${latestRequest.requested_by_name}` : ""}
+            </p>
+            <p className="text-xs text-gray-600 italic line-clamp-2">&ldquo;{latestRequest.note}&rdquo;</p>
+            {hasMoreRequests && (
+              <p className="text-[10px] text-blue-500">+{requests.length - 1} more request{requests.length - 1 !== 1 ? "s" : ""}</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Preview dialog */}
+      <DocumentPreviewDialog
+        documentId={doc.id}
+        fileName={doc.file_name ?? "Document"}
+        mimeType={doc.mime_type ?? "application/octet-stream"}
+        uploadedAt={doc.uploaded_at}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+      />
+
+      {/* Request update dialog */}
+      {requestDialogOpen && (
+        <DocumentUpdateRequestDialog
+          documentId={doc.id}
+          documentTypeName={typeName}
+          serviceId={serviceId}
+          recipients={recipients}
+          verificationFlags={flags}
+          open={requestDialogOpen}
+          onOpenChange={setRequestDialogOpen}
+          onSent={onUpdateRequestAdded}
+        />
+      )}
+    </div>
+  );
+}
+
+function AdminDocumentsSection({
+  serviceId,
+  documents,
+  updateRequests,
+  roles,
+  requirements,
+  onDocumentAdded,
+  onUpdateRequestAdded,
+  onRefresh,
+}: {
+  serviceId: string;
+  documents: ServiceDoc[];
+  updateRequests: DocumentUpdateRequest[];
+  roles: RoleWithProfile[];
+  requirements: DueDiligenceRequirement[];
+  onDocumentAdded: (doc: ServiceDoc) => void;
+  onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
+  onRefresh: () => void;
+}) {
+  const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Build requests map: document_id → sorted requests
+  const requestsByDoc = new Map<string, DocumentUpdateRequest[]>();
+  for (const req of updateRequests) {
+    const arr = requestsByDoc.get(req.document_id) ?? [];
+    arr.push(req);
+    requestsByDoc.set(req.document_id, arr);
+  }
+
+  // Build recipients for a given doc: owner + representative
+  function getRecipients(doc: ServiceDoc) {
+    const recipients: Array<{ id: string; name: string; email: string | null; label: string }> = [];
+    // Document owner (person with matching client_profile_id)
+    if (doc.client_profile_id) {
+      const ownerRole = roles.find((r) => r.client_profiles?.id === doc.client_profile_id);
+      if (ownerRole?.client_profiles) {
+        recipients.push({
+          id: ownerRole.client_profiles.id,
+          name: ownerRole.client_profiles.full_name,
+          email: ownerRole.client_profiles.email,
+          label: "Document owner",
+        });
+      }
+    }
+    // Representatives (is_representative=true with can_manage)
+    for (const r of roles) {
+      if (r.client_profiles?.is_representative && r.client_profiles.id !== doc.client_profile_id) {
+        const alreadyAdded = recipients.some((rr) => rr.id === r.client_profiles!.id);
+        if (!alreadyAdded) {
+          recipients.push({
+            id: r.client_profiles.id,
+            name: r.client_profiles.full_name,
+            email: r.client_profiles.email,
+            label: "Representative",
+          });
+        }
+      }
+    }
+    // If no owner found but doc exists, try any can_manage person
+    if (recipients.length === 0) {
+      const manager = roles.find((r) => r.can_manage && r.client_profiles);
+      if (manager?.client_profiles) {
+        recipients.push({
+          id: manager.client_profiles.id,
+          name: manager.client_profiles.full_name,
+          email: manager.client_profiles.email,
+          label: "Service manager",
+        });
+      }
+    }
+    return recipients;
+  }
+
+  // Required doc types that haven't been uploaded yet
+  const uploadedTypeIds = new Set(documents.map((d) => d.document_type_id).filter(Boolean));
+  const missingDocTypes = requirements
+    .filter((r) => r.requirement_type === "document" && r.document_type_id && !uploadedTypeIds.has(r.document_type_id))
+    .map((r) => ({
+      id: r.document_type_id!,
+      name: (r.document_types as unknown as { name: string } | null)?.name ?? r.label ?? "Document",
+      category: "",
+    }));
+
+  // Flagged documents
+  const flaggedDocs = documents.filter((d) => {
+    const vr = d.verification_result as VerificationResult | null;
+    return (vr?.flags?.length ?? 0) > 0 || (vr?.rule_results ?? []).some((r) => !r.passed);
+  });
+
+  async function handleMissingDocUpload(typeId: string, file: File) {
+    setUploadingTypeId(typeId);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("documentTypeId", typeId);
+      const res = await fetch(`/api/admin/services/${serviceId}/documents/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = (await res.json()) as { document?: ServiceDoc; error?: string };
+      if (!res.ok || !data.document) throw new Error(data.error ?? "Upload failed");
+      onDocumentAdded(data.document as ServiceDoc);
+      toast.success("Document uploaded", { position: "top-right" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload failed", { position: "top-right" });
+    } finally {
+      setUploadingTypeId(null);
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="pt-4 space-y-3">
+      {/* Uploaded documents */}
+      {documents.length === 0 && missingDocTypes.length === 0 && (
+        <p className="text-sm text-gray-400">No documents uploaded yet.</p>
+      )}
+
+      {documents.map((doc) => (
+        <RichDocumentCard
+          key={doc.id}
+          doc={doc}
+          serviceId={serviceId}
+          requests={requestsByDoc.get(doc.id) ?? []}
+          recipients={getRecipients(doc)}
+          onUpdateRequestAdded={(req) => {
+            onUpdateRequestAdded(req);
+            onRefresh();
+          }}
+        />
+      ))}
+
+      {/* Missing / required docs */}
+      {missingDocTypes.map((dt) => (
+        <div key={dt.id} className="border rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <FileText className="h-4 w-4 text-gray-300 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-gray-600">{dt.name}</p>
+              <p className="text-[11px] text-gray-400">Required · {dt.category}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] px-1.5 py-0.5 rounded border text-gray-400 border-gray-200">○ Not uploaded</span>
+            <label className={`cursor-pointer ${uploading && uploadingTypeId === dt.id ? "opacity-60 pointer-events-none" : ""}`}>
+              <input
+                type="file"
+                className="sr-only"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+                disabled={uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleMissingDocUpload(dt.id, file);
+                  e.target.value = "";
+                }}
+              />
+              <span className="inline-flex items-center gap-1 border rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                {uploading && uploadingTypeId === dt.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Upload className="h-3 w-3" />
+                )}
+                Upload
+              </span>
+            </label>
+          </div>
+        </div>
+      ))}
+
+      {/* Flagged summary */}
+      {flaggedDocs.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <p className="text-sm font-medium text-amber-800">
+              {flaggedDocs.length} flagged document{flaggedDocs.length !== 1 ? "s" : ""} — requires attention
+            </p>
+          </div>
+          <div className="space-y-1">
+            {flaggedDocs.map((d) => {
+              const vr = d.verification_result as VerificationResult | null;
+              const count = (vr?.flags?.length ?? 0) + (vr?.rule_results ?? []).filter((r) => !r.passed).length;
+              return (
+                <p key={d.id} className="text-xs text-amber-700">
+                  • {d.document_types?.name ?? d.file_name}: {count} flag{count !== 1 ? "s" : ""}
+                </p>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Props ───────────────────────────────────────────────────────────────
 
 interface Props {
@@ -683,9 +1258,8 @@ export function ServiceDetailClient({
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
-  const [documents] = useState(initialDocuments);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [updateRequests] = useState(initialUpdateRequests);
+  const [documents, setDocuments] = useState(initialDocuments);
+  const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
     service.service_details ?? {}
   );
@@ -1097,36 +1671,16 @@ export function ServiceDetailClient({
           percentage={documentsPct}
           ragStatus={ragFromPct(documentsPct)}
         >
-          <div className="pt-4">
-            {documents.length === 0 ? (
-              <p className="text-sm text-gray-400">No documents uploaded yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between border rounded-lg px-3 py-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <FileText className="h-4 w-4 text-gray-400 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-900 truncate">{doc.file_name}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {doc.document_types?.name ?? "Unknown type"}
-                          {doc.uploaded_at && ` · ${new Date(doc.uploaded_at).toLocaleDateString()}`}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-medium capitalize shrink-0 ml-3 ${
-                      doc.verification_status === "verified" ? "text-green-600" :
-                      doc.verification_status === "flagged" ? "text-amber-600" :
-                      doc.verification_status === "rejected" ? "text-red-600" :
-                      "text-gray-400"
-                    }`}>
-                      {doc.verification_status.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <AdminDocumentsSection
+            serviceId={service.id}
+            documents={documents}
+            updateRequests={updateRequests}
+            roles={typedRoles}
+            requirements={requirements}
+            onDocumentAdded={(doc) => setDocuments((prev) => [...prev, doc])}
+            onUpdateRequestAdded={(req) => setUpdateRequests((prev) => [req, ...prev])}
+            onRefresh={handleRolesRefresh}
+          />
         </ServiceCollapsibleSection>
 
         {/* ── Admin divider ─────────────────────────────────────────────────── */}
