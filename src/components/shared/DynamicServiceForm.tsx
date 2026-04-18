@@ -253,7 +253,7 @@ export function DynamicServiceForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={hideHeaders ? "space-y-4" : "space-y-6"}>
       {Object.entries(sections).map(([sectionName, sectionFields]) => {
         // Skip section if all fields are hidden
         const visibleFields = sectionFields.filter(isVisible);
