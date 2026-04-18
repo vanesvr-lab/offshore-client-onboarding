@@ -2,6 +2,7 @@
 
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
 import { ValidatedLabel, FieldWrapper } from "@/components/shared/ValidatedLabel";
+import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -92,8 +93,34 @@ export function IdentityStep({
         <Field label="Full legal name" fieldKey="full_name" form={form} onChange={onChange} required validation={validation} placeholder="As it appears on your passport" />
         <Field label="Aliases / other names" fieldKey="aliases" form={form} onChange={onChange} validation={validation} placeholder="Maiden name, nicknames, etc." />
         <Field label="Date of birth" fieldKey="date_of_birth" form={form} onChange={onChange} type="date" required validation={validation} />
-        <Field label="Nationality" fieldKey="nationality" form={form} onChange={onChange} required validation={validation} placeholder="e.g. British" />
-        <Field label="Passport country" fieldKey="passport_country" form={form} onChange={onChange} required validation={validation} placeholder="Country that issued your passport" />
+        <div className="space-y-1">
+          <ValidatedLabel
+            state={validation.getFieldState("nationality", (form.nationality ?? "") as string, true)}
+            required
+          >Nationality</ValidatedLabel>
+          <FieldWrapper state={validation.getFieldState("nationality", (form.nationality ?? "") as string, true)}>
+            <CountrySelect
+              value={(form.nationality ?? "") as string}
+              onChange={(v) => onChange({ nationality: v })}
+              placeholder="Select nationality..."
+              onBlur={() => validation.markTouched("nationality")}
+            />
+          </FieldWrapper>
+        </div>
+        <div className="space-y-1">
+          <ValidatedLabel
+            state={validation.getFieldState("passport_country", (form.passport_country ?? "") as string, true)}
+            required
+          >Passport country</ValidatedLabel>
+          <FieldWrapper state={validation.getFieldState("passport_country", (form.passport_country ?? "") as string, true)}>
+            <CountrySelect
+              value={(form.passport_country ?? "") as string}
+              onChange={(v) => onChange({ passport_country: v })}
+              placeholder="Country that issued your passport..."
+              onBlur={() => validation.markTouched("passport_country")}
+            />
+          </FieldWrapper>
+        </div>
         <Field label="Passport number" fieldKey="passport_number" form={form} onChange={onChange} required validation={validation} />
         <Field label="Passport expiry date" fieldKey="passport_expiry" form={form} onChange={onChange} type="date" required validation={validation} />
       </div>

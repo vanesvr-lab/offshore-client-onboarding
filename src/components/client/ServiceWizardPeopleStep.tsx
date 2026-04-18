@@ -13,6 +13,7 @@ import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
+import { DD_LEVEL_INCLUDES } from "@/lib/utils/dueDiligenceConstants";
 
 // KYC fields used to compute per-person completion percentage
 const KYC_PCT_FIELDS = [
@@ -201,7 +202,7 @@ function ProfileEditPanel({
     <div className="space-y-2">
       <div className="space-y-1.5">
         <div>
-          <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Email</label>
+          <label className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Email</label>
           <Input
             type="email"
             value={editEmail}
@@ -211,7 +212,7 @@ function ProfileEditPanel({
           />
         </div>
         <div>
-          <label className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Phone</label>
+          <label className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Phone</label>
           <Input
             type="tel"
             value={editPhone}
@@ -231,7 +232,7 @@ function ProfileEditPanel({
       </div>
 
       <div className="border-t pt-1.5 space-y-0.5">
-        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Roles</p>
+        <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Roles</p>
         {roles.map((r) => (
           <div key={r.id} className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
@@ -282,9 +283,10 @@ function KycDocListPanel({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [pendingUploadTypeId, setPendingUploadTypeId] = useState<string | null>(null);
 
-  // Derive required KYC doc types
+  // Derive required KYC doc types — use cumulative levels (cdd includes basic + sdd)
+  const includedLevels = DD_LEVEL_INCLUDES[dueDiligenceLevel] ?? ["basic", "sdd", "cdd"];
   const ddReqDocTypeIds = requirements
-    .filter((r) => r.requirement_type === "document" && r.level === dueDiligenceLevel && r.document_type_id)
+    .filter((r) => r.requirement_type === "document" && includedLevels.includes(r.level as "basic" | "sdd" | "cdd" | "edd") && r.document_type_id)
     .map((r) => r.document_type_id as string);
 
   const kycDocTypes = ddReqDocTypeIds.length > 0
@@ -1183,7 +1185,7 @@ function PersonCard({
 
       {/* Roles section */}
       <div className="border-t pt-2.5 space-y-1.5">
-        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Roles</p>
+        <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Roles</p>
         {allRoleRows.map((row) => (
           <div key={row.id} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1383,7 +1385,7 @@ export function ServiceWizardPeopleStep({
         {/* Split top section: Profile (left) + KYC Docs (right) */}
         <div className="grid grid-cols-2 gap-8 border rounded-xl bg-white p-4">
           <div>
-            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">Profile</p>
+            <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide mb-2">Profile</p>
             <ProfileEditPanel
               profileId={profileId}
               email={reviewingPerson.client_profiles?.email ?? null}
@@ -1393,7 +1395,7 @@ export function ServiceWizardPeopleStep({
             />
           </div>
           <div>
-            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">KYC Documents</p>
+            <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide mb-2">KYC Documents</p>
             <KycDocListPanel
               profileId={profileId}
               serviceId={serviceId}
