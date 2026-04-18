@@ -8,6 +8,8 @@ import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip }
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
+import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
+import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import type { VerificationResult } from "@/types";
 import {
   Select,
@@ -37,6 +39,8 @@ interface DocumentUploadWidgetProps {
   onUploadComplete?: (doc: DocumentRecord) => void;
   compact?: boolean;
   documentTypes?: DocumentType[];
+  /** When set, clicking the eye icon in compact mode opens DocumentDetailDialog instead of DocumentPreviewDialog */
+  documentDetailMode?: boolean;
 }
 
 function formatBytes(bytes: number | null | undefined): string {
@@ -64,6 +68,7 @@ export function DocumentUploadWidget({
   onUploadComplete,
   compact = false,
   documentTypes = [],
+  documentDetailMode = false,
 }: DocumentUploadWidgetProps) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
@@ -148,6 +153,7 @@ export function DocumentUploadWidget({
   });
 
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [showExtracted, setShowExtracted] = useState(false);
 
   // ── Compact (inline) mode ─────────────────────────────────────────────────
@@ -157,6 +163,47 @@ export function DocumentUploadWidget({
       const hasExtracted = vr?.extracted_fields && Object.keys(vr.extracted_fields).length > 0;
       const hasRules = vr?.rule_results && vr.rule_results.length > 0;
       const hasAnyResult = current.verification_status !== "pending";
+
+      // documentDetailMode: show simplified "Already uploaded" state
+      if (documentDetailMode) {
+        const detailDoc: DocumentDetailDoc = {
+          id: current.id,
+          file_name: current.file_name,
+          mime_type: current.mime_type,
+          uploaded_at: current.uploaded_at,
+          document_type_id: current.document_type_id,
+          verification_status: current.verification_status,
+          verification_result: current.verification_result as Record<string, unknown> | null,
+          admin_status: current.admin_status,
+          admin_status_note: current.admin_status_note,
+          admin_status_at: current.admin_status_at,
+        };
+        return (
+          <>
+            <div className="flex items-center gap-2 text-xs">
+              <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+              <span className="text-green-700 font-medium">Already uploaded</span>
+              <span className="text-gray-400 truncate max-w-[120px]">{current.file_name}</span>
+              <button
+                onClick={() => setDetailOpen(true)}
+                className="text-brand-blue hover:underline flex items-center gap-1"
+              >
+                <Eye className="h-3 w-3" />
+                View
+              </button>
+              <button onClick={() => setReplacing(true)} className="text-gray-400 hover:text-gray-600" title="Replace">
+                <RefreshCw className="h-3 w-3" />
+              </button>
+            </div>
+            <DocumentDetailDialog
+              doc={detailDoc}
+              isAdmin={false}
+              open={detailOpen}
+              onOpenChange={setDetailOpen}
+            />
+          </>
+        );
+      }
 
       return (
         <div className="space-y-1">

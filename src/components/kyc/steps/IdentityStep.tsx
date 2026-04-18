@@ -110,6 +110,7 @@ export function IdentityStep({
           existingDocument={passportDoc ?? null}
           onUploadComplete={onDocumentUploaded}
           compact
+          documentDetailMode={!!passportDoc}
         />
       </div>
 
@@ -143,6 +144,7 @@ export function IdentityStep({
           existingDocument={addressDoc ?? null}
           onUploadComplete={onDocumentUploaded}
           compact
+          documentDetailMode={!!addressDoc}
         />
       </div>
 

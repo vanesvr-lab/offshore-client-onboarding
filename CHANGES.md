@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-18 — B-027 Batch 5: KYC section doc status checkmarks (Claude Code)
+
+**B-027 (KYC document layout rework) — Batch 5**
+
+**Updated:** `src/components/shared/DocumentUploadWidget.tsx`
+- Added `documentDetailMode?: boolean` prop
+- When `documentDetailMode={true}` and `existingDocument` is set: renders simplified "☑ Already uploaded" state with file name, Eye/View button, and Replace button; Eye opens `DocumentDetailDialog` (client mode, isAdmin=false)
+- When `documentDetailMode={false}` (default): renders existing detailed compact view with `DocumentPreviewDialog` (backward compatible)
+
+**Updated:** `src/components/kyc/steps/IdentityStep.tsx`
+- `DocumentUploadWidget` for passport and proof of address: pass `documentDetailMode={!!passportDoc}` / `documentDetailMode={!!addressDoc}`
+
+**Updated:** `src/components/kyc/steps/FinancialStep.tsx`
+- `InlineUpload` helper: pass `documentDetailMode={!!existing}` to `DocumentUploadWidget`
+
+**Updated:** `src/components/kyc/steps/DeclarationsStep.tsx`
+- `DocumentUploadWidget` for PEP declaration: pass `documentDetailMode={!!pepDoc}`
+
 ### 2026-04-18 — B-027 Batch 4: Admin PersonCard split layout (Claude Code)
 
 **B-027 (KYC document layout rework) — Batch 4**

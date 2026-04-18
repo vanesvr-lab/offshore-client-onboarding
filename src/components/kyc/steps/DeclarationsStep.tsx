@@ -96,6 +96,7 @@ export function DeclarationsStep({
             existingDocument={pepDoc ?? null}
             onUploadComplete={onDocumentUploaded}
             compact
+            documentDetailMode={!!pepDoc}
           />
         </div>
       </div>

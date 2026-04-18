@@ -52,6 +52,7 @@ function InlineUpload({
         existingDocument={existing ?? null}
         onUploadComplete={onUploadComplete}
         compact
+        documentDetailMode={!!existing}
       />
     </div>
   );
