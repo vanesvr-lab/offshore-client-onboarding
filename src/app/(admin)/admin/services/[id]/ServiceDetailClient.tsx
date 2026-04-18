@@ -1039,13 +1039,9 @@ function PersonCard({
               ) : (
                 <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               )}
-              <Link
-                href={`/admin/profiles/${profile.id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="text-sm font-medium text-brand-navy hover:underline truncate"
-              >
+              <span className="text-sm font-medium text-brand-navy truncate">
                 {profile.full_name}
-              </Link>
+              </span>
               {(combinedRoles ?? [roleRow.role]).map((r) => (
                 <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
                   {r}
