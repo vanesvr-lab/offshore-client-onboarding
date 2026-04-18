@@ -317,17 +317,20 @@ const KYC_SECTIONS = [
 
 function KycLongForm({
   kyc,
+  profileName,
   profileEmail,
   profilePhone,
   onSaved,
 }: {
   kyc: KycFull;
+  profileName?: string | null;
   profileEmail?: string | null;
   profilePhone?: string | null;
   onSaved: () => void;
 }) {
   const [fields, setFields] = useState<Record<string, unknown>>({
     ...kyc,
+    full_name: profileName ?? kyc.full_name ?? "",
     email: profileEmail ?? kyc.email ?? "",
     phone: profilePhone ?? kyc.phone ?? "",
   });
@@ -632,6 +635,7 @@ function PersonCard({
         <div className="border-t px-4 pb-4">
           <KycLongForm
             kyc={kyc}
+            profileName={profile.full_name}
             profileEmail={profile.email}
             profilePhone={profile.phone}
             onSaved={onRefresh}
