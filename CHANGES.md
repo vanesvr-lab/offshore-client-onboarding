@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-18 — B-027 Batch 4: Admin PersonCard split layout (Claude Code)
+
+**B-027 (KYC document layout rework) — Batch 4**
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- Added imports: `useRef`, `CheckSquare`, `Square`, `DocumentDetailDialog`, `DocumentDetailDoc`
+- Added `AdminKycDocListPanel` component (before PersonCard):
+  - Shows identity/financial/compliance docs for the profile
+  - Upload (POST to `/api/services/[id]/documents/upload`) + view (DocumentDetailDialog with isAdmin=true)
+  - Compact status icons (AI + admin status), scrollable if >5 docs
+  - "X of Y uploaded" count
+- `PersonCard` expanded body restructured as 2-column grid:
+  - Left: Profile edit (full name, email, phone) + Roles management (unchanged logic)
+  - Right: `AdminKycDocListPanel`
+  - KYC long-form sections remain below, unchanged
+- `PersonCard` accepts new optional `updateRequests?: DocumentUpdateRequest[]` prop
+- `PersonCard` call site passes `updateRequests={updateRequests}`
+
 ### 2026-04-18 — B-027 Batch 3: Client KYC review split layout (Claude Code)
 
 **B-027 (KYC document layout rework) — Batch 3**
