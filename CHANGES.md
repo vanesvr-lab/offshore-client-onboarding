@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-025 Batch 3: Role management, Edit Profile, Corp KYC (Claude Code)
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- `PersonCard` now accepts `allRoleRows: RoleWithProfile[]` (all role rows for this person)
+- Inline **Edit Profile** section inside expanded card: full_name, email, phone (editable), record_type (read-only); calls PATCH `/api/admin/profiles-v2/[id]`
+- **Roles management section** inside expanded card:
+  - Shows all current roles with individual Remove buttons
+  - Removing last role: confirm dialog before deleting, removes person from service
+  - Add role dropdown (only unassigned roles shown) + optional shareholding % input for shareholder
+- **Corporation KYC sections** (`record_type === "organisation"`): "Company Details" (company name, registration number, jurisdiction, incorporation date, activity, sector, listed/unlisted) and "Tax / Financial" (jurisdiction tax residence, tax ID, regulatory licenses)
+- Added `KycSection` and `KycField` types; `select` field type with `options` array supported
+- `KycLongForm` accepts `recordType` prop; branches to `KYC_SECTIONS_ORG` for organisations
+- Doc slots shown in first section of each KYC form (Identity for individuals, Company Details for corps)
+- `profileRolesMap` now tracks `allRoleRows` instead of `roleIds`
+
+---
+
 ### 2026-04-17 — B-025 Batch 2: New Add Profile Dialog + Ownership Structure (Claude Code)
 
 **Updated:** `src/app/api/admin/services/[id]/roles/route.ts`

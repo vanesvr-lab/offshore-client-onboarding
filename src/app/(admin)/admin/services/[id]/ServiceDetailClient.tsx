@@ -458,8 +458,11 @@ function KycDocSlot({
   );
 }
 
-// KYC section fields for the collapsible long-form
-const KYC_SECTIONS = [
+type KycField = { key: string; label: string; type: string; options?: { value: string; label: string }[] };
+type KycSection = { title: string; fields: KycField[] };
+
+// KYC section fields — Individual
+const KYC_SECTIONS: KycSection[] = [
   {
     title: "Your Identity",
     fields: [
@@ -503,6 +506,38 @@ const KYC_SECTIONS = [
   },
 ];
 
+// KYC section fields — Organisation / Corporation
+const KYC_SECTIONS_ORG: KycSection[] = [
+  {
+    title: "Company Details",
+    fields: [
+      { key: "full_name", label: "Company name", type: "text" },
+      { key: "company_registration_number", label: "Registration number", type: "text" },
+      { key: "jurisdiction_incorporated", label: "Jurisdiction incorporated", type: "text" },
+      { key: "date_of_incorporation", label: "Date of incorporation", type: "date" },
+      { key: "description_activity", label: "Description of activity", type: "textarea" },
+      { key: "industry_sector", label: "Industry sector", type: "text" },
+      {
+        key: "listed_or_unlisted",
+        label: "Listed / Unlisted",
+        type: "select",
+        options: [
+          { value: "listed", label: "Listed" },
+          { value: "unlisted", label: "Unlisted" },
+        ],
+      },
+    ],
+  },
+  {
+    title: "Tax / Financial",
+    fields: [
+      { key: "jurisdiction_tax_residence", label: "Jurisdiction of tax residence", type: "text" },
+      { key: "tax_identification_number", label: "Tax identification number", type: "text" },
+      { key: "regulatory_licenses", label: "Regulatory licenses", type: "textarea" },
+    ],
+  },
+];
+
 function KycLongForm({
   kyc,
   profileName,
@@ -512,6 +547,7 @@ function KycLongForm({
   serviceId,
   profileDocuments,
   documentTypes,
+  recordType,
   onSaved,
   onDocUploaded,
 }: {
@@ -523,9 +559,13 @@ function KycLongForm({
   serviceId?: string;
   profileDocuments?: ServiceDoc[];
   documentTypes?: DocumentType[];
+  recordType?: string;
   onSaved: () => void;
   onDocUploaded?: (doc: ServiceDoc) => void;
 }) {
+  const isOrg = recordType === "organisation";
+  const sections = isOrg ? KYC_SECTIONS_ORG : KYC_SECTIONS;
+
   const [fields, setFields] = useState<Record<string, unknown>>({
     ...kyc,
     full_name: profileName ?? kyc.full_name ?? "",
@@ -533,7 +573,7 @@ function KycLongForm({
     phone: profilePhone ?? kyc.phone ?? "",
   });
   const [saving, setSaving] = useState(false);
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(KYC_SECTIONS.map(s => s.title)));
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set(sections.map(s => s.title)));
   const [localDocs, setLocalDocs] = useState<ServiceDoc[]>(profileDocuments ?? []);
 
   // KYC-category doc types for this person's doc slots
@@ -555,7 +595,7 @@ function KycLongForm({
     });
   }
 
-  function sectionPct(section: typeof KYC_SECTIONS[number]): number {
+  function sectionPct(section: KycSection): number {
     const filled = section.fields.filter(f => {
       const v = fields[f.key];
       return v !== null && v !== undefined && v !== "";
@@ -586,7 +626,7 @@ function KycLongForm({
 
   return (
     <div className="space-y-3 mt-3">
-      {KYC_SECTIONS.map(section => {
+      {sections.map(section => {
         const pct = sectionPct(section);
         const isOpen = openSections.has(section.title);
         return (
@@ -631,6 +671,17 @@ function KycLongForm({
                         <option value="yes">Yes</option>
                         <option value="no">No</option>
                       </select>
+                    ) : f.type === "select" ? (
+                      <select
+                        value={(fields[f.key] as string | null) ?? ""}
+                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
+                        className="border rounded-lg px-3 py-2 text-sm w-full"
+                      >
+                        <option value="">— Select —</option>
+                        {(f.options ?? []).map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
                     ) : f.type === "date" ? (
                       <input
                         type="date"
@@ -648,8 +699,8 @@ function KycLongForm({
                     )}
                   </div>
                 ))}
-                {/* KYC document slots — shown in Identity section only */}
-                {section.title === "Your Identity" && profileId && serviceId && kycDocTypes.length > 0 && (
+                {/* KYC document slots — shown in first section */}
+                {(section.title === "Your Identity" || section.title === "Company Details") && profileId && serviceId && kycDocTypes.length > 0 && (
                   <div className="mt-1 pt-2 border-t">
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Documents</p>
                     <div className="space-y-0">
@@ -830,6 +881,7 @@ function OwnershipStructure({
 
 function PersonCard({
   roleRow,
+  allRoleRows,
   combinedRoles,
   serviceId,
   profileDocuments,
@@ -838,6 +890,7 @@ function PersonCard({
   onRefresh,
 }: {
   roleRow: RoleWithProfile;
+  allRoleRows: RoleWithProfile[];
   combinedRoles?: string[];
   serviceId: string;
   profileDocuments?: ServiceDoc[];
@@ -845,10 +898,18 @@ function PersonCard({
   defaultExpanded?: boolean;
   onRefresh: () => void;
 }) {
-  const [togglingManage, setTogglingManage] = useState(false);
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [addRoleValue, setAddRoleValue] = useState<"director" | "shareholder" | "ubo" | "other">("director");
+  const [addSharePct, setAddSharePct] = useState("");
+  const [addingRole, setAddingRole] = useState(false);
+  const [removingRoleId, setRemovingRoleId] = useState<string | null>(null);
 
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
@@ -865,9 +926,86 @@ function PersonCard({
 
   const roleLabels = (combinedRoles ?? [roleRow.role]).join(", ");
 
-  async function toggleManage(e: React.MouseEvent) {
-    e.stopPropagation();
-    setTogglingManage(true);
+  // Roles not yet assigned to this person
+  const assignedRoles = new Set(allRoleRows.map((r) => r.role));
+  const availableRolesToAdd = (["director", "shareholder", "ubo", "other"] as const).filter(
+    (r) => !assignedRoles.has(r)
+  );
+
+  function openEditProfile() {
+    setEditName(profile.full_name ?? "");
+    setEditEmail(profile.email ?? "");
+    setEditPhone(profile.phone ?? "");
+    setShowEditProfile(true);
+  }
+
+  async function handleSaveProfile() {
+    setSavingProfile(true);
+    try {
+      const res = await fetch(`/api/admin/profiles-v2/${profile.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: editName.trim() || undefined,
+          email: editEmail.trim() || null,
+          phone: editPhone.trim() || null,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      toast.success("Profile saved", { position: "top-right" });
+      setShowEditProfile(false);
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save", { position: "top-right" });
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function handleRemoveRole(roleId: string, isLastRole: boolean) {
+    if (isLastRole) {
+      if (!confirm(`Remove ${profile.full_name} from this service?`)) return;
+    }
+    setRemovingRoleId(roleId);
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleId}`, { method: "DELETE" });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      toast.success(isLastRole ? `${profile.full_name} removed` : "Role removed", { position: "top-right" });
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove", { position: "top-right" });
+    } finally {
+      setRemovingRoleId(null);
+    }
+  }
+
+  async function handleAddRole() {
+    setAddingRole(true);
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_profile_id: profile.id,
+          role: addRoleValue,
+          shareholding_percentage: addRoleValue === "shareholder" && addSharePct ? parseFloat(addSharePct) : null,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      toast.success(`${addRoleValue} role added`, { position: "top-right" });
+      setAddSharePct("");
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to add role", { position: "top-right" });
+    } finally {
+      setAddingRole(false);
+    }
+  }
+
+  async function toggleManage() {
     try {
       const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleRow.id}`, {
         method: "PATCH",
@@ -876,40 +1014,23 @@ function PersonCard({
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success(roleRow.can_manage ? "Portal access removed" : "Portal access granted");
+      toast.success(roleRow.can_manage ? "Portal access removed" : "Portal access granted", { position: "top-right" });
       onRefresh();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update");
-    } finally {
-      setTogglingManage(false);
-    }
-  }
-
-  async function removeFromService(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (!confirm(`Remove ${profile.full_name} from this service?`)) return;
-    try {
-      const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleRow.id}`, { method: "DELETE" });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success("Removed");
-      onRefresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove");
+      toast.error(err instanceof Error ? err.message : "Failed to update", { position: "top-right" });
     }
   }
 
   return (
     <div className="border rounded-xl overflow-hidden">
-      {/* ── Clickable header — toggles KYC form ─────────────────────── */}
+      {/* ── Clickable header ─────────────────────────────────────────── */}
       <div
         className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-start gap-3">
-          {/* Left: info */}
-          <div className="flex-1 min-w-0 space-y-2">
-            {/* Name + roles + remove */}
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {/* Name + type icon + role badges */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {profile.is_representative ? (
                 <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
@@ -930,19 +1051,9 @@ function PersonCard({
                   {r}
                 </span>
               ))}
-              {roleRow.shareholding_percentage != null && (
-                <span className="text-[10px] text-gray-400">{roleRow.shareholding_percentage}%</span>
-              )}
-              <button
-                onClick={(e) => void removeFromService(e)}
-                className="text-xs text-gray-300 hover:text-red-500 transition-colors ml-auto shrink-0"
-                title="Remove from service"
-              >
-                ×
-              </button>
             </div>
 
-            {/* KYC progress bar */}
+            {/* KYC progress */}
             {!profile.is_representative && (
               <div className="flex items-center gap-2">
                 <div className="w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden">
@@ -957,75 +1068,181 @@ function PersonCard({
               </div>
             )}
 
-            {/* Actions row (stop propagation so clicks don't toggle expand) */}
+            {/* Quick actions */}
             <div className="flex items-center flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-              {/* Portal access toggle */}
               <button
-                onClick={(e) => void toggleManage(e)}
-                disabled={togglingManage}
-                className={`flex items-center gap-1.5 text-xs rounded-lg px-2.5 py-1.5 transition-colors ${
-                  roleRow.can_manage
-                    ? "bg-green-50 text-green-700 hover:bg-green-100"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                onClick={() => void toggleManage()}
+                className={`flex items-center gap-1 text-xs rounded px-2 py-1 transition-colors ${
+                  roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                 }`}
               >
-                {togglingManage ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : roleRow.can_manage ? (
-                  <CheckCircle className="h-3 w-3" />
-                ) : (
-                  <XCircle className="h-3 w-3" />
-                )}
+                {roleRow.can_manage ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                 Portal access
               </button>
-
-              {/* Invite button */}
               {!profile.is_representative && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowInviteDialog(true)}
-                  className="h-7 text-xs gap-1.5"
-                >
+                <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1">
                   <Mail className="h-3 w-3" />
-                  {inviteSentAt ? "Resend KYC request" : "Request to Fill and Review KYC"}
+                  {inviteSentAt ? "Resend KYC" : "Request KYC"}
                 </Button>
               )}
+              {inviteSentAt && sentDate && (
+                <span className="text-[11px] text-green-600 flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  Sent {sentDate}
+                </span>
+              )}
             </div>
-
-            {/* Last request sent info */}
-            {inviteSentAt && sentDate && (
-              <p className="text-[11px] text-green-600 flex items-center gap-1">
-                <Mail className="h-3 w-3" />
-                Last request sent on {sentDate}
-              </p>
-            )}
           </div>
 
-          {/* Right: chevron */}
           {!profile.is_representative && kyc && (
-            <ChevronDown
-              className={`h-4 w-4 text-gray-400 transition-transform shrink-0 mt-1 ${expanded ? "rotate-180" : ""}`}
-            />
+            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform shrink-0 mt-1 ${expanded ? "rotate-180" : ""}`} />
           )}
         </div>
       </div>
 
-      {/* ── Expandable KYC form ──────────────────────────────────────── */}
-      {expanded && kyc && (
-        <div className="border-t px-4 pb-4">
-          <KycLongForm
-            kyc={kyc}
-            profileName={profile.full_name}
-            profileEmail={profile.email}
-            profilePhone={profile.phone}
-            profileId={profile.id}
-            serviceId={serviceId}
-            profileDocuments={profileDocuments}
-            documentTypes={documentTypes}
-            onSaved={onRefresh}
-            onDocUploaded={onRefresh}
-          />
+      {/* ── Expanded body ────────────────────────────────────────────── */}
+      {expanded && (
+        <div className="border-t divide-y">
+          {/* Edit Profile */}
+          <div className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+            {!showEditProfile ? (
+              <button
+                onClick={openEditProfile}
+                className="text-xs text-brand-blue hover:underline flex items-center gap-1"
+              >
+                ✏ Edit Profile
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Edit Profile</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Full name</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">
+                      Profile type <span className="text-gray-300">(read-only)</span>
+                    </label>
+                    <div className="border rounded px-2 py-1.5 text-sm bg-gray-50 text-gray-400 mt-0.5 capitalize">
+                      {profile.record_type === "organisation" ? "Corporation" : "Individual"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Email</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-medium">Phone</label>
+                    <input
+                      type="text"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+                    disabled={savingProfile}
+                    onClick={() => void handleSaveProfile()}
+                  >
+                    {savingProfile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={() => setShowEditProfile(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Roles management */}
+          <div className="px-4 py-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Roles</p>
+            {allRoleRows.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm capitalize text-gray-700">{r.role}</span>
+                  {r.shareholding_percentage != null && (
+                    <span className="text-xs text-gray-400">({r.shareholding_percentage}%)</span>
+                  )}
+                </div>
+                <button
+                  disabled={removingRoleId === r.id}
+                  onClick={() => void handleRemoveRole(r.id, allRoleRows.length === 1)}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                >
+                  {removingRoleId === r.id ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "Remove"}
+                </button>
+              </div>
+            ))}
+            {availableRolesToAdd.length > 0 && (
+              <div className="flex items-center gap-2 pt-1 border-t mt-1">
+                <select
+                  value={addRoleValue}
+                  onChange={(e) => setAddRoleValue(e.target.value as typeof addRoleValue)}
+                  className="border rounded px-2 py-1 text-xs flex-1"
+                >
+                  {availableRolesToAdd.map((r) => (
+                    <option key={r} value={r} className="capitalize">{r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                  ))}
+                </select>
+                {addRoleValue === "shareholder" && (
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={addSharePct}
+                    onChange={(e) => setAddSharePct(e.target.value)}
+                    placeholder="%"
+                    className="border rounded px-2 py-1 text-xs w-14"
+                  />
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  disabled={addingRole}
+                  onClick={() => void handleAddRole()}
+                >
+                  {addingRole ? <Loader2 className="h-3 w-3 animate-spin" /> : "+ Add"}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* KYC form */}
+          {kyc && (
+            <div className="px-4 pb-4">
+              <KycLongForm
+                kyc={kyc}
+                profileName={profile.full_name}
+                profileEmail={profile.email}
+                profilePhone={profile.phone}
+                profileId={profile.id}
+                serviceId={serviceId}
+                profileDocuments={profileDocuments}
+                documentTypes={documentTypes}
+                recordType={profile.record_type}
+                onSaved={onRefresh}
+                onDocUploaded={onRefresh}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1687,19 +1904,19 @@ export function ServiceDetailClient({
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
   // Deduplicate roles by profile ID — collect all roles per profile
-  const profileRolesMap = new Map<string, { person: RoleWithProfile; roles: string[]; roleIds: string[] }>();
+  const profileRolesMap = new Map<string, { person: RoleWithProfile; roles: string[]; allRoleRows: RoleWithProfile[] }>();
   for (const r of typedRoles) {
     const pid = r.client_profiles?.id;
     if (pid) {
       const existing = profileRolesMap.get(pid);
       if (existing) {
         if (!existing.roles.includes(r.role)) existing.roles.push(r.role);
-        existing.roleIds.push(r.id);
+        existing.allRoleRows.push(r);
       } else {
-        profileRolesMap.set(pid, { person: r, roles: [r.role], roleIds: [r.id] });
+        profileRolesMap.set(pid, { person: r, roles: [r.role], allRoleRows: [r] });
       }
     } else {
-      profileRolesMap.set(r.id, { person: r, roles: [r.role], roleIds: [r.id] });
+      profileRolesMap.set(r.id, { person: r, roles: [r.role], allRoleRows: [r] });
     }
   }
   const uniqueRoles = Array.from(profileRolesMap.values());
@@ -2033,7 +2250,7 @@ export function ServiceDetailClient({
               <p className="text-sm text-gray-400 mb-4">No profiles linked yet.</p>
             ) : (
               <div className="space-y-3 mb-4">
-                {uniqueRoles.map(({ person, roles: personRoles }) => {
+                {uniqueRoles.map(({ person, roles: personRoles, allRoleRows }) => {
                   const pid = person.client_profiles?.id;
                   const personProfileDocs = pid
                     ? profileDocs.filter((d) => d.client_profile_id === pid)
@@ -2042,6 +2259,7 @@ export function ServiceDetailClient({
                     <PersonCard
                       key={pid ?? person.id}
                       roleRow={person}
+                      allRoleRows={allRoleRows}
                       combinedRoles={personRoles}
                       serviceId={service.id}
                       profileDocuments={personProfileDocs}
