@@ -15,6 +15,34 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-025 Batch 2: New Add Profile Dialog + Ownership Structure (Claude Code)
+
+**Updated:** `src/app/api/admin/services/[id]/roles/route.ts`
+- Extended POST to support creating new profiles (accepts `full_name`, `email`, `record_type` alongside `role`)
+- Creates `client_profiles` row + `client_profile_kyc` row + `profile_service_roles` row
+- Returns `client_profile_id` in response for auto-expand after creation
+- Backwards-compatible: existing `client_profile_id` flow unchanged
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- Replaced dropdown-style `AddProfileDialog` with proper centered `<Dialog>` modal
+  - Title changes per button: "Add Director" / "Add Shareholder" / "Add UBO"
+  - Search list shows ALL profiles; already-linked profiles show role badges and are disabled (grayed, cursor-not-allowed)
+  - Available profiles: clickable with blue highlight on selection
+  - "Or create new" section: Individual/Corporation radio + name (required) + email (optional)
+  - Both paths call POST `/api/admin/services/[id]/roles`
+  - After add: dialog closes, page refreshes, newly added card auto-expands
+- Added `OwnershipStructure` component (replaces static display)
+  - Collapsible; default open when total ≠ 100%
+  - Editable number inputs per shareholder with live progress bars
+  - Unallocated row shows remaining %
+  - Amber warning banner when total ≠ 100%
+  - "Save Ownership" button PATCHes each shareholder's `shareholding_percentage`
+- `PersonCard` accepts `defaultExpanded` prop for auto-expand after adding
+- Added `newlyAddedProfileId` state + `handleProfileAdded` callback
+- Removed now-unused `useRef` import and `existingProfileIds` variable
+
+---
+
 ### 2026-04-17 — B-025 Batch 1: KYC Doc Slots + Document Split (Claude Code)
 
 **Updated:** `src/types/index.ts`

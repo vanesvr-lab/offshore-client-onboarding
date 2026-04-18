@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,6 +11,14 @@ import {
   AlertTriangle, Download, Eye, MessageSquarePlus, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
@@ -122,152 +130,221 @@ function calcKycPct(kyc: KycFull | null): number {
 
 function AddProfileDialog({
   serviceId,
-  existingProfileIds,
   allProfiles,
+  existingRoles,
   onAdded,
   defaultRole = "director",
   trigger,
 }: {
   serviceId: string;
-  existingProfileIds: Set<string>;
   allProfiles: ClientProfile[];
-  onAdded: () => void;
+  existingRoles: RoleWithProfile[];
+  onAdded: (newProfileId?: string) => void;
   defaultRole?: "director" | "shareholder" | "ubo" | "other";
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ClientProfile | null>(null);
-  const [role, setRole] = useState<"director" | "shareholder" | "ubo" | "other">(defaultRole);
-  const [shareholdingPct, setShareholdingPct] = useState("");
-  const [canManage, setCanManage] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newType, setNewType] = useState<"individual" | "organisation">("individual");
   const [saving, setSaving] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) setOpen(false);
+  const roleTitle = defaultRole === "ubo" ? "UBO" : defaultRole.charAt(0).toUpperCase() + defaultRole.slice(1);
+
+  // Map profile_id → roles already on this service
+  const profileRoleMap = new Map<string, string[]>();
+  for (const r of existingRoles) {
+    const pid = r.client_profiles?.id;
+    if (pid) {
+      const arr = profileRoleMap.get(pid) ?? [];
+      if (!arr.includes(r.role)) arr.push(r.role);
+      profileRoleMap.set(pid, arr);
     }
-    if (open) document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [open]);
+  }
 
-  const available = allProfiles.filter(
-    (p) => !existingProfileIds.has(p.id) &&
-      (search === "" || p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        (p.email ?? "").toLowerCase().includes(search.toLowerCase()))
+  const filteredProfiles = allProfiles.filter(
+    (p) =>
+      search === "" ||
+      p.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.email ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  async function handleAdd() {
-    if (!selected) return;
+  function handleOpenChange(v: boolean) {
+    setOpen(v);
+    if (!v) {
+      setSearch("");
+      setSelected(null);
+      setNewName("");
+      setNewEmail("");
+      setNewType("individual");
+    }
+  }
+
+  async function handleSubmit() {
     setSaving(true);
     try {
+      const body = selected
+        ? { client_profile_id: selected.id, role: defaultRole }
+        : { full_name: newName.trim(), email: newEmail.trim() || null, record_type: newType, role: defaultRole };
+
       const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_profile_id: selected.id,
-          role,
-          can_manage: canManage,
-          shareholding_percentage: role === "shareholder" && shareholdingPct ? parseFloat(shareholdingPct) : null,
-        }),
+        body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { error?: string };
+      const data = (await res.json()) as { id?: string; client_profile_id?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success(`${selected.full_name} added as ${role}`);
-      setOpen(false);
-      setSelected(null);
-      setSearch("");
-      onAdded();
+      const name = selected ? selected.full_name : newName.trim();
+      toast.success(`${name} added as ${roleTitle}`, { position: "top-right" });
+      handleOpenChange(false);
+      const newId = selected?.id ?? data.client_profile_id;
+      onAdded(newId);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to add profile");
+      toast.error(err instanceof Error ? err.message : "Failed to add profile", { position: "top-right" });
     } finally {
       setSaving(false);
     }
   }
 
+  const canSubmit = !saving && (selected !== null || newName.trim().length > 0);
+
   return (
-    <div className="relative inline-block" ref={dialogRef}>
-      {trigger ? (
-        <div onClick={() => { setOpen(!open); setRole(defaultRole); }}>{trigger}</div>
-      ) : (
-        <Button size="sm" variant="outline" onClick={() => setOpen(!open)} className="gap-1.5">
+    <>
+      <div onClick={() => setOpen(true)}>{trigger ?? (
+        <Button size="sm" variant="outline" className="gap-1.5">
           <Plus className="h-3.5 w-3.5" />
-          Add profile
+          Add {roleTitle}
         </Button>
-      )}
-      {open && (
-        <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border z-50 p-4 space-y-3">
-          {!selected ? (
-            <>
-              <p className="text-sm font-medium text-gray-700">Select a profile</p>
+      )}</div>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add {roleTitle}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-1">
+            {/* Search existing profiles */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Search existing profiles</p>
               <input
                 type="text"
-                placeholder="Search by name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                placeholder="Search by name or email…"
                 autoFocus
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {available.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-2 text-center">
-                    {search ? "No profiles match" : "All profiles already linked"}
-                  </p>
-                ) : available.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setSelected(p)}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <p className="text-sm font-medium text-gray-900">{p.full_name}</p>
-                    {p.email && <p className="text-xs text-gray-400">{p.email}</p>}
-                  </button>
+              <div className="mt-2 max-h-44 overflow-y-auto border rounded-lg divide-y">
+                {filteredProfiles.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-3 text-center">No profiles found</p>
+                ) : filteredProfiles.map((p) => {
+                  const currentRoles = profileRoleMap.get(p.id) ?? [];
+                  const isLinked = currentRoles.length > 0;
+                  const isSelected = selected?.id === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={isLinked}
+                      onClick={() => !isLinked && setSelected(isSelected ? null : p)}
+                      className={`w-full text-left px-3 py-2.5 flex items-center justify-between transition-colors ${
+                        isLinked
+                          ? "opacity-50 cursor-not-allowed bg-gray-50"
+                          : isSelected
+                          ? "bg-blue-50 border-l-2 border-brand-blue cursor-pointer"
+                          : "hover:bg-gray-50 cursor-pointer"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className={`text-sm font-medium truncate ${isLinked ? "text-gray-400" : "text-gray-900"}`}>
+                          {p.full_name}
+                        </p>
+                        {p.email && <p className="text-xs text-gray-400 truncate">{p.email}</p>}
+                      </div>
+                      {isLinked && currentRoles.length > 0 && (
+                        <div className="flex gap-1 shrink-0 ml-2">
+                          {currentRoles.map((r) => (
+                            <span key={r} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 capitalize">
+                              {r}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {isSelected && (
+                        <span className="text-[11px] text-brand-blue font-medium shrink-0 ml-2">✓ Selected</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400">Or create new</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
+            {/* Create new */}
+            <div className="space-y-3">
+              <div className="flex gap-4">
+                {(["individual", "organisation"] as const).map((t) => (
+                  <label key={t} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="new_record_type"
+                      value={t}
+                      checked={newType === t}
+                      onChange={() => { setNewType(t); setSelected(null); }}
+                    />
+                    <span className="text-sm text-gray-700">{t === "organisation" ? "Corporation" : "Individual"}</span>
+                  </label>
                 ))}
               </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900">{selected.full_name}</p>
-                <button onClick={() => setSelected(null)} className="text-xs text-gray-400 hover:text-gray-600">Change</button>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                  {newType === "organisation" ? "Corporation name" : "Full name"}{" "}
+                  <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => { setNewName(e.target.value); setSelected(null); }}
+                  placeholder={newType === "organisation" ? "Acme Corp Ltd" : "Jane Smith"}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                />
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-500">Role *</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as "director" | "shareholder" | "ubo" | "other")}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="director">Director</option>
-                  <option value="shareholder">Shareholder</option>
-                  <option value="ubo">UBO</option>
-                  <option value="other">Other</option>
-                </select>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Email address</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => { setNewEmail(e.target.value); setSelected(null); }}
+                  placeholder="jane@example.com"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                />
               </div>
-              {role === "shareholder" && (
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-gray-500">Shareholding %</label>
-                  <input
-                    type="number" min="0" max="100" value={shareholdingPct}
-                    onChange={(e) => setShareholdingPct(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="e.g. 25"
-                  />
-                </div>
-              )}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={canManage} onChange={(e) => setCanManage(e.target.checked)} className="rounded" />
-                <span className="text-sm text-gray-700">Can manage this service</span>
-              </label>
-              <Button onClick={() => void handleAdd()} disabled={saving} className="w-full bg-brand-navy hover:bg-brand-blue" size="sm">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                Add to service
-              </Button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" size="sm" />}>Cancel</DialogClose>
+            <Button
+              size="sm"
+              className="bg-brand-navy hover:bg-brand-blue"
+              disabled={!canSubmit}
+              onClick={() => void handleSubmit()}
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              Add {roleTitle}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -605,12 +682,159 @@ function KycLongForm({
   );
 }
 
+// ─── Ownership Structure ──────────────────────────────────────────────────────
+
+function OwnershipStructure({
+  shareholders,
+  serviceId,
+  onSaved,
+}: {
+  shareholders: RoleWithProfile[];
+  serviceId: string;
+  onSaved: () => void;
+}) {
+  const initialPcts = Object.fromEntries(
+    shareholders.map((r) => [r.id, r.shareholding_percentage ?? 0])
+  );
+  const [pcts, setPcts] = useState<Record<string, number>>(initialPcts);
+  const [open, setOpen] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const total = Object.values(pcts).reduce((s, v) => s + (v || 0), 0);
+  const isValid = Math.abs(total - 100) < 0.01;
+  const unallocated = Math.max(0, 100 - total);
+
+  // Keep in sync if shareholders change (e.g. after refresh)
+  useEffect(() => {
+    setPcts(Object.fromEntries(shareholders.map((r) => [r.id, r.shareholding_percentage ?? 0])));
+  }, [shareholders]);
+
+  // Default open if total ≠ 100
+  useEffect(() => {
+    if (!isValid) setOpen(true);
+  }, [isValid]);
+
+  if (shareholders.length === 0) return null;
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await Promise.all(
+        shareholders.map((r) =>
+          fetch(`/api/admin/services/${serviceId}/roles/${r.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ shareholding_percentage: pcts[r.id] ?? 0 }),
+          })
+        )
+      );
+      toast.success("Ownership saved", { position: "top-right" });
+      onSaved();
+    } catch {
+      toast.error("Failed to save ownership", { position: "top-right" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+          <span className="text-sm font-medium text-brand-navy">Ownership Structure</span>
+          {!isValid && (
+            <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+              ⚠ must total 100%
+            </span>
+          )}
+        </div>
+        <span className={`text-xs font-medium tabular-nums ${isValid ? "text-green-600" : "text-amber-600"}`}>
+          {total.toFixed(total % 1 === 0 ? 0 : 1)}% / 100%
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-4 py-3 space-y-2.5">
+          {!isValid && (
+            <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              Shareholding must total 100% ({total.toFixed(1)}% assigned)
+            </div>
+          )}
+
+          {shareholders.map((r) => {
+            const pct = pcts[r.id] ?? 0;
+            return (
+              <div key={r.id} className="flex items-center gap-3">
+                <span className="text-sm text-gray-700 w-36 truncate shrink-0">
+                  {r.client_profiles?.full_name ?? "Unknown"}
+                </span>
+                <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${Math.min(pct, 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={pct}
+                    onChange={(e) => setPcts((prev) => ({ ...prev, [r.id]: parseFloat(e.target.value) || 0 }))}
+                    className="w-16 border rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+              </div>
+            );
+          })}
+
+          {unallocated > 0.01 && (
+            <div className="flex items-center gap-3 opacity-50">
+              <span className="text-sm text-gray-400 w-36 italic shrink-0">Unallocated</span>
+              <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                <div className="h-full rounded-full bg-gray-300" style={{ width: `${Math.min(unallocated, 100)}%` }} />
+              </div>
+              <span className="text-xs text-gray-400 w-16 text-right tabular-nums">{unallocated.toFixed(1)}%</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-2 border-t mt-1">
+            <span className={`text-xs font-medium ${isValid ? "text-green-600" : "text-amber-700"}`}>
+              Total: {total.toFixed(total % 1 === 0 ? 0 : 1)}%
+            </span>
+            <Button
+              size="sm"
+              className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Save Ownership
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Person Card ──────────────────────────────────────────────────────────────
+
 function PersonCard({
   roleRow,
   combinedRoles,
   serviceId,
   profileDocuments,
   documentTypes,
+  defaultExpanded,
   onRefresh,
 }: {
   roleRow: RoleWithProfile;
@@ -618,10 +842,11 @@ function PersonCard({
   serviceId: string;
   profileDocuments?: ServiceDoc[];
   documentTypes?: DocumentType[];
+  defaultExpanded?: boolean;
   onRefresh: () => void;
 }) {
   const [togglingManage, setTogglingManage] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
 
@@ -1479,10 +1704,6 @@ export function ServiceDetailClient({
   }
   const uniqueRoles = Array.from(profileRolesMap.values());
 
-  const existingProfileIds = new Set(
-    typedRoles.map((r) => r.client_profiles?.id).filter(Boolean) as string[]
-  );
-
   // ── Section completion ────────────────────────────────────────────────────
 
   const companyFields = getFieldsForSection("company_setup", serviceFields);
@@ -1649,7 +1870,14 @@ export function ServiceDetailClient({
   // Cast to AuditLogEntry[] for the AuditTrail component
   const auditForComponent = filteredAudit as unknown as AuditLogEntry[];
 
+  const [newlyAddedProfileId, setNewlyAddedProfileId] = useState<string | null>(null);
+
   function handleRolesRefresh() {
+    router.refresh();
+  }
+
+  function handleProfileAdded(profileId?: string) {
+    if (profileId) setNewlyAddedProfileId(profileId);
     router.refresh();
   }
 
@@ -1801,74 +2029,11 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(peopleKycPct)}
         >
           <div className="pt-4">
-            {/* Shareholding tracker */}
-            {typedRoles.some((r: RoleWithProfile) => r.role === "shareholder") && (() => {
-              const total = typedRoles
-                .filter((r: RoleWithProfile) => r.role === "shareholder")
-                .reduce((sum: number, r: RoleWithProfile) => sum + (r.shareholding_percentage ?? 0), 0);
-              const ok = total >= 95 && total <= 105;
-              return (
-                <div className={`flex items-center gap-2 mb-4 text-sm rounded-lg px-3 py-2 ${ok ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
-                  <span>{ok ? "✓" : "⚠"} Shareholding: {total}%</span>
-                  {!ok && <span className="text-xs">(must total 100%)</span>}
-                </div>
-              );
-            })()}
-
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-500">{uniqueRoles.length} {uniqueRoles.length === 1 ? "person" : "people"} linked</p>
-            </div>
-
-            {/* Ownership Structure */}
-            {typedRoles.filter((r: RoleWithProfile) => r.role === "shareholder").length > 0 && (
-              <div className="mb-4 border rounded-lg p-3 bg-gray-50/50">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Ownership Structure</p>
-                <div className="space-y-1.5">
-                  {typedRoles
-                    .filter((r: RoleWithProfile) => r.role === "shareholder")
-                    .map((r: RoleWithProfile) => (
-                      <div key={r.id} className="flex items-center gap-3">
-                        <span className="text-sm text-gray-700 w-40 truncate">{r.client_profiles?.full_name ?? "Unknown"}</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-blue-500"
-                            style={{ width: `${r.shareholding_percentage ?? 0}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-500 w-10 text-right tabular-nums">{r.shareholding_percentage ?? 0}%</span>
-                      </div>
-                    ))}
-                  {(() => {
-                    const allocated = typedRoles
-                      .filter((r: RoleWithProfile) => r.role === "shareholder")
-                      .reduce((sum: number, r: RoleWithProfile) => sum + (r.shareholding_percentage ?? 0), 0);
-                    const unallocated = 100 - allocated;
-                    return unallocated > 0 ? (
-                      <div className="flex items-center gap-3 opacity-50">
-                        <span className="text-sm text-gray-400 w-40 italic">Unallocated</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                          <div className="h-full rounded-full bg-gray-300" style={{ width: `${unallocated}%` }} />
-                        </div>
-                        <span className="text-xs text-gray-400 w-10 text-right tabular-nums">{unallocated}%</span>
-                      </div>
-                    ) : null;
-                  })()}
-                  <div className="flex items-center justify-end pt-1 border-t mt-1.5">
-                    <span className="text-xs font-medium text-gray-600">
-                      Total: {typedRoles
-                        .filter((r: RoleWithProfile) => r.role === "shareholder")
-                        .reduce((sum: number, r: RoleWithProfile) => sum + (r.shareholding_percentage ?? 0), 0)}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {uniqueRoles.length === 0 ? (
-              <p className="text-sm text-gray-400">No profiles linked yet.</p>
+              <p className="text-sm text-gray-400 mb-4">No profiles linked yet.</p>
             ) : (
-              <div className="space-y-3">
-                {uniqueRoles.map(({ person, roles }) => {
+              <div className="space-y-3 mb-4">
+                {uniqueRoles.map(({ person, roles: personRoles }) => {
                   const pid = person.client_profiles?.id;
                   const personProfileDocs = pid
                     ? profileDocs.filter((d) => d.client_profile_id === pid)
@@ -1877,10 +2042,11 @@ export function ServiceDetailClient({
                     <PersonCard
                       key={pid ?? person.id}
                       roleRow={person}
-                      combinedRoles={roles}
+                      combinedRoles={personRoles}
                       serviceId={service.id}
                       profileDocuments={personProfileDocs}
                       documentTypes={documentTypes}
+                      defaultExpanded={!!pid && pid === newlyAddedProfileId}
                       onRefresh={handleRolesRefresh}
                     />
                   );
@@ -1889,14 +2055,14 @@ export function ServiceDetailClient({
             )}
 
             {/* Add role buttons */}
-            <div className="flex flex-wrap gap-2 mt-3">
+            <div className="flex flex-wrap gap-2 mb-4">
               {(["director", "shareholder", "ubo"] as const).map((r) => (
                 <AddProfileDialog
                   key={r}
                   serviceId={service.id}
-                  existingProfileIds={existingProfileIds}
                   allProfiles={allProfiles}
-                  onAdded={handleRolesRefresh}
+                  existingRoles={typedRoles}
+                  onAdded={handleProfileAdded}
                   defaultRole={r}
                   trigger={
                     <Button size="sm" variant="outline" className="gap-1.5 border-dashed">
@@ -1907,6 +2073,13 @@ export function ServiceDetailClient({
                 />
               ))}
             </div>
+
+            {/* Ownership Structure — editable, collapsible */}
+            <OwnershipStructure
+              shareholders={typedRoles.filter((r: RoleWithProfile) => r.role === "shareholder")}
+              serviceId={service.id}
+              onSaved={handleRolesRefresh}
+            />
           </div>
         </ServiceCollapsibleSection>
 
