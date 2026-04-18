@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-023 Batch 3: Client "Last Request Sent" Info (Claude Code)
+
+**Updated:** `src/app/(client)/services/[id]/page.tsx`
+- Added `invite_sent_by` field to persons query
+- After fetch, resolves sender names from `profiles` table by matching user IDs
+- Enriches persons with `invite_sent_by_name` before passing to client component
+- `ServicePerson` type: added `invite_sent_by_name: string | null`
+
+**Updated:** `/api/services/[id]/persons/[roleId]/send-invite/route.ts`
+- Records `invite_sent_by: session.user.id` on the role row when invite is sent
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Shows "Last request sent on {date} by {name}" below invite button when `invite_sent_at` is set
+- `invite_sent_by_name` read as plain const (not state — value is fixed at render time)
+- Added `invite_sent_by_name: null` to the `onAdded(...)` call to satisfy `ServicePerson` type
+
+**DB migration required (run once in Supabase SQL editor):**
+```sql
+ALTER TABLE profile_service_roles ADD COLUMN IF NOT EXISTS invite_sent_by uuid REFERENCES auth.users(id);
+```
+
+---
+
 ### 2026-04-17 — B-023 Batch 2: Admin Collapsible PersonCards + InviteKycDialog (Claude Code)
 
 **Created:** `src/components/shared/InviteKycDialog.tsx`

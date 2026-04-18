@@ -204,6 +204,7 @@ function AddPersonModal({
         shareholding_percentage: pct ?? null,
         can_manage: false,
         invite_sent_at: null,
+        invite_sent_by_name: null,
         client_profiles: profileData,
       });
       toast.success(`${ROLE_LABELS[role]} added`);
@@ -431,6 +432,7 @@ function PersonCard({
 }) {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
+  const inviteSentByName = person.invite_sent_by_name ?? null;
 
   const roles = combinedRoles ?? [person.role as ServicePersonRole];
   const combinedRoleLabels = roles.map((r) => ROLE_LABELS[r] ?? r).join(", ");
@@ -520,7 +522,7 @@ function PersonCard({
         {inviteSentAt ? (
           <span className="text-[11px] text-green-600 flex items-center gap-1">
             <Mail className="h-3 w-3" />
-            Request sent {sentDate}
+            Last request sent on {sentDate}{inviteSentByName ? ` by ${inviteSentByName}` : ""}
           </span>
         ) : (
           <Button

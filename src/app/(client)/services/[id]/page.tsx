@@ -34,6 +34,7 @@ export type ServicePerson = {
   shareholding_percentage: number | null;
   can_manage: boolean;
   invite_sent_at: string | null;
+  invite_sent_by_name: string | null; // resolved sender name (from profiles join)
   client_profiles: {
     id: string;
     full_name: string;
@@ -99,7 +100,7 @@ export default async function ClientServiceDetailPage({
     supabase
       .from("profile_service_roles")
       .select(`
-        id, role, shareholding_percentage, can_manage, invite_sent_at,
+        id, role, shareholding_percentage, can_manage, invite_sent_at, invite_sent_by,
         client_profiles!inner(
           id, full_name, email, due_diligence_level,
           client_profile_kyc(*)
@@ -123,6 +124,31 @@ export default async function ClientServiceDetailPage({
   ]);
 
   if (!serviceRes.data) notFound();
+
+  // Resolve invite sender names (invite_sent_by = user_id → profiles.full_name)
+  const senderIds = (personsRes.data ?? [])
+    .map((p) => (p as unknown as { invite_sent_by?: string | null }).invite_sent_by)
+    .filter((uid): uid is string => !!uid);
+
+  let senderNameMap: Map<string, string> = new Map();
+  if (senderIds.length > 0) {
+    const { data: senderProfiles } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", senderIds);
+    senderNameMap = new Map(
+      (senderProfiles ?? []).map((p) => [p.id, p.full_name ?? ""])
+    );
+  }
+
+  // Enrich persons with resolved sender name
+  const enrichedPersons = (personsRes.data ?? []).map((p) => {
+    const raw = p as unknown as { invite_sent_by?: string | null } & typeof p;
+    return {
+      ...p,
+      invite_sent_by_name: raw.invite_sent_by ? (senderNameMap.get(raw.invite_sent_by) ?? null) : null,
+    };
+  });
 
   // Fetch docs: include KYC-uploaded docs via client_profile_id for linked profiles
   const profileIds = (personsRes.data ?? [])
@@ -148,7 +174,7 @@ export default async function ClientServiceDetailPage({
       service={serviceRes.data as unknown as ClientServiceRecord}
       documents={(docsData ?? []) as unknown as ClientServiceDoc[]}
       overrides={(overridesRes.data ?? []) as unknown as ServiceSectionOverride[]}
-      persons={(personsRes.data ?? []) as unknown as ServicePerson[]}
+      persons={enrichedPersons as unknown as ServicePerson[]}
       requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
       myRole={roleCheck.role}

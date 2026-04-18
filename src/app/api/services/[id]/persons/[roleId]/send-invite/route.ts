@@ -179,11 +179,11 @@ export async function POST(
     );
   }
 
-  // Update invite_sent_at on the role row
+  // Update invite_sent_at and invite_sent_by on the role row
   const sentAt = new Date().toISOString();
   await supabase
     .from("profile_service_roles")
-    .update({ invite_sent_at: sentAt })
+    .update({ invite_sent_at: sentAt, invite_sent_by: session.user.id })
     .eq("id", params.roleId);
 
   return NextResponse.json({ ok: true, invite_sent_at: sentAt });
