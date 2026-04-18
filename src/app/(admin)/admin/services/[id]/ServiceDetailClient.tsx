@@ -17,7 +17,8 @@ import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsible
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
-import type { VerificationResult } from "@/types";
+import { VerificationBadge } from "@/components/client/VerificationBadge";
+import type { VerificationResult, VerificationStatus } from "@/types";
 import {
   calcSectionCompletion,
   calcKycCompletion,
@@ -270,6 +271,116 @@ function AddProfileDialog({
   );
 }
 
+// ─── KYC document slot (per-person document upload inside KYC sections) ──────
+
+function KycDocSlot({
+  docTypeName,
+  docTypeId,
+  profileId,
+  serviceId,
+  existing,
+  onUploaded,
+}: {
+  docTypeName: string;
+  docTypeId: string;
+  profileId: string;
+  serviceId: string;
+  existing: ServiceDoc | null;
+  onUploaded: (doc: ServiceDoc) => void;
+}) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleUpload(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("documentTypeId", docTypeId);
+      fd.append("clientProfileId", profileId);
+      const res = await fetch(`/api/admin/services/${serviceId}/documents/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = (await res.json()) as { document?: ServiceDoc; error?: string };
+      if (!res.ok || !data.document) throw new Error(data.error ?? "Upload failed");
+      onUploaded(data.document as ServiceDoc);
+      toast.success("Document uploaded", { position: "top-right" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload failed", { position: "top-right" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between py-1.5 border-b last:border-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <FileText className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+        <span className="text-xs text-gray-700 truncate">{docTypeName}</span>
+        {existing && (
+          <VerificationBadge status={existing.verification_status as VerificationStatus} />
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0 ml-2">
+        {existing ? (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs gap-0.5"
+              onClick={() => setPreviewOpen(true)}
+            >
+              <Eye className="h-3 w-3" />
+            </Button>
+            <label className="cursor-pointer text-[10px] text-gray-400 hover:text-gray-600 px-1">
+              <input
+                type="file"
+                className="sr-only"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleUpload(f);
+                  e.target.value = "";
+                }}
+              />
+              Replace
+            </label>
+          </>
+        ) : (
+          <label className={`cursor-pointer ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
+            <input
+              type="file"
+              className="sr-only"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+              disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleUpload(f);
+                e.target.value = "";
+              }}
+            />
+            <span className="inline-flex items-center gap-1 border rounded px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 transition-colors">
+              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+              Upload
+            </span>
+          </label>
+        )}
+      </div>
+      {existing && (
+        <DocumentPreviewDialog
+          documentId={existing.id}
+          fileName={existing.file_name ?? "Document"}
+          mimeType={existing.mime_type ?? "application/octet-stream"}
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+        />
+      )}
+    </div>
+  );
+}
+
 // KYC section fields for the collapsible long-form
 const KYC_SECTIONS = [
   {
@@ -320,13 +431,23 @@ function KycLongForm({
   profileName,
   profileEmail,
   profilePhone,
+  profileId,
+  serviceId,
+  profileDocuments,
+  documentTypes,
   onSaved,
+  onDocUploaded,
 }: {
   kyc: KycFull;
   profileName?: string | null;
   profileEmail?: string | null;
   profilePhone?: string | null;
+  profileId?: string;
+  serviceId?: string;
+  profileDocuments?: ServiceDoc[];
+  documentTypes?: DocumentType[];
   onSaved: () => void;
+  onDocUploaded?: (doc: ServiceDoc) => void;
 }) {
   const [fields, setFields] = useState<Record<string, unknown>>({
     ...kyc,
@@ -336,6 +457,18 @@ function KycLongForm({
   });
   const [saving, setSaving] = useState(false);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(KYC_SECTIONS.map(s => s.title)));
+  const [localDocs, setLocalDocs] = useState<ServiceDoc[]>(profileDocuments ?? []);
+
+  // KYC-category doc types for this person's doc slots
+  const kycDocTypes = (documentTypes ?? []).filter((dt) => dt.category === "kyc");
+
+  function handleDocUploaded(doc: ServiceDoc) {
+    setLocalDocs(prev => {
+      const without = prev.filter(d => d.document_type_id !== doc.document_type_id);
+      return [...without, doc];
+    });
+    onDocUploaded?.(doc);
+  }
 
   function toggleSection(title: string) {
     setOpenSections(prev => {
@@ -438,6 +571,25 @@ function KycLongForm({
                     )}
                   </div>
                 ))}
+                {/* KYC document slots — shown in Identity section only */}
+                {section.title === "Your Identity" && profileId && serviceId && kycDocTypes.length > 0 && (
+                  <div className="mt-1 pt-2 border-t">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Documents</p>
+                    <div className="space-y-0">
+                      {kycDocTypes.map(dt => (
+                        <KycDocSlot
+                          key={dt.id}
+                          docTypeName={dt.name}
+                          docTypeId={dt.id}
+                          profileId={profileId}
+                          serviceId={serviceId}
+                          existing={localDocs.find(d => d.document_type_id === dt.id) ?? null}
+                          onUploaded={handleDocUploaded}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -457,11 +609,15 @@ function PersonCard({
   roleRow,
   combinedRoles,
   serviceId,
+  profileDocuments,
+  documentTypes,
   onRefresh,
 }: {
   roleRow: RoleWithProfile;
   combinedRoles?: string[];
   serviceId: string;
+  profileDocuments?: ServiceDoc[];
+  documentTypes?: DocumentType[];
   onRefresh: () => void;
 }) {
   const [togglingManage, setTogglingManage] = useState(false);
@@ -638,7 +794,12 @@ function PersonCard({
             profileName={profile.full_name}
             profileEmail={profile.email}
             profilePhone={profile.phone}
+            profileId={profile.id}
+            serviceId={serviceId}
+            profileDocuments={profileDocuments}
+            documentTypes={documentTypes}
             onSaved={onRefresh}
+            onDocUploaded={onRefresh}
           />
         </div>
       )}
@@ -1267,11 +1428,16 @@ export function ServiceDetailClient({
   adminUsers,
   auditEntries,
   requirements,
+  documentTypes,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
   const [documents, setDocuments] = useState(initialDocuments);
   const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
+
+  // Split documents by category: KYC/profile docs go inside person cards; corporate stays in Documents section
+  const profileDocs = documents.filter((d) => d.document_types?.category === "kyc");
+  const corporateDocs = documents.filter((d) => d.document_types?.category !== "kyc");
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
     service.service_details ?? {}
   );
@@ -1702,15 +1868,23 @@ export function ServiceDetailClient({
               <p className="text-sm text-gray-400">No profiles linked yet.</p>
             ) : (
               <div className="space-y-3">
-                {uniqueRoles.map(({ person, roles }) => (
-                  <PersonCard
-                    key={person.client_profiles?.id ?? person.id}
-                    roleRow={person}
-                    combinedRoles={roles}
-                    serviceId={service.id}
-                    onRefresh={handleRolesRefresh}
-                  />
-                ))}
+                {uniqueRoles.map(({ person, roles }) => {
+                  const pid = person.client_profiles?.id;
+                  const personProfileDocs = pid
+                    ? profileDocs.filter((d) => d.client_profile_id === pid)
+                    : [];
+                  return (
+                    <PersonCard
+                      key={pid ?? person.id}
+                      roleRow={person}
+                      combinedRoles={roles}
+                      serviceId={service.id}
+                      profileDocuments={personProfileDocs}
+                      documentTypes={documentTypes}
+                      onRefresh={handleRolesRefresh}
+                    />
+                  );
+                })}
               </div>
             )}
 
@@ -1738,13 +1912,13 @@ export function ServiceDetailClient({
 
         {/* ── Section 5: Documents ─────────────────────────────────────────── */}
         <ServiceCollapsibleSection
-          title={`Documents (${documents.length})`}
+          title={`Documents (${corporateDocs.length})`}
           percentage={documentsPct}
           ragStatus={ragFromPct(documentsPct)}
         >
           <AdminDocumentsSection
             serviceId={service.id}
-            documents={documents}
+            documents={corporateDocs}
             updateRequests={updateRequests}
             roles={typedRoles}
             requirements={requirements}

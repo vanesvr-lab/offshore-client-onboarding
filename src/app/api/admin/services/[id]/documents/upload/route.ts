@@ -30,6 +30,7 @@ export async function POST(
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const documentTypeId = formData.get("documentTypeId") as string | null;
+  const clientProfileId = (formData.get("clientProfileId") as string | null) || null;
 
   if (!file) return NextResponse.json({ error: "file is required" }, { status: 400 });
   if (!documentTypeId) return NextResponse.json({ error: "documentTypeId is required" }, { status: 400 });
@@ -73,9 +74,10 @@ export async function POST(
         verification_status: "pending",
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
+        ...(clientProfileId ? { client_profile_id: clientProfileId } : {}),
       })
       .eq("id", existing.id)
-      .select("id, file_name, mime_type, verification_status, uploaded_at, document_types(name, category)")
+      .select("id, file_name, mime_type, verification_status, uploaded_at, document_type_id, client_profile_id, document_types(id, name, category)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
@@ -86,6 +88,7 @@ export async function POST(
         tenant_id: tenantId,
         service_id: serviceId,
         document_type_id: documentTypeId,
+        client_profile_id: clientProfileId,
         file_name: file.name,
         file_path: filePath,
         mime_type: file.type,
@@ -94,7 +97,7 @@ export async function POST(
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
       })
-      .select("id, file_name, mime_type, verification_status, uploaded_at, document_types(name, category)")
+      .select("id, file_name, mime_type, verification_status, uploaded_at, document_type_id, client_profile_id, document_types(id, name, category)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;

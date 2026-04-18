@@ -15,6 +15,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-17 — B-025 Batch 1: KYC Doc Slots + Document Split (Claude Code)
+
+**Updated:** `src/types/index.ts`
+- Added `'kyc'` to `DocumentType.category` union (for per-person KYC document types)
+
+**Updated:** `src/app/api/admin/services/[id]/documents/upload/route.ts`
+- Added `clientProfileId` field to FormData parsing
+- `clientProfileId` now included in both insert and update operations
+- Select returns `document_type_id`, `client_profile_id`, `document_types(id, name, category)`
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- Added `KycDocSlot` component: per-person doc upload slot inside KYC sections; calls admin upload route with `clientProfileId` in FormData; shows verification badge + preview/replace for uploaded docs
+- Added `profileId`, `serviceId`, `profileDocuments`, `documentTypes`, `onDocUploaded` props to `KycLongForm`
+- `KycLongForm` renders KYC-category doc slots inside the Identity section (when `profileId` and `documentTypes` are provided)
+- `PersonCard` now accepts `profileDocuments` and `documentTypes` props, passes them to `KycLongForm`
+- Main component splits `documents` into `profileDocs` (category='kyc') and `corporateDocs` (everything else)
+- Each `PersonCard` receives only its own profile's KYC docs
+- `AdminDocumentsSection` receives `corporateDocs` only (corporate/compliance/service-level docs)
+- Documents section title count reflects only corporate docs
+
+---
+
 ### 2026-04-17 — B-024 Batch 2: Rich Document Cards UI (Claude Code)
 
 **Created:** `src/components/admin/DocumentUpdateRequestDialog.tsx`
