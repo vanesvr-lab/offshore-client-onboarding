@@ -29,6 +29,10 @@ interface KycStepWizardProps {
   inlineMode?: boolean;
   /** Switch between individual and corporation KYC steps */
   profileType?: "individual" | "organisation";
+  /** When false, IdentityStep hides the email + phone row (handled by a surrounding ProfileEditPanel). Default: true */
+  showContactFields?: boolean;
+  /** When true, all step-level document upload cards are hidden (handled by a surrounding KycDocListPanel). Default: false */
+  hideDocumentUploads?: boolean;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -211,6 +215,8 @@ export function KycStepWizard({
   saveUrl = "/api/kyc/save",
   inlineMode = false,
   profileType = "individual",
+  showContactFields = true,
+  hideDocumentUploads = false,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -356,6 +362,8 @@ export function KycStepWizard({
             form={form}
             onChange={handleChange}
             onDocumentUploaded={handleDocumentUploaded}
+            showContactFields={showContactFields}
+            hideDocumentUploads={hideDocumentUploads}
           />
         )}
         {logicalStep === "financial" && (
@@ -369,6 +377,7 @@ export function KycStepWizard({
             form={form}
             onChange={handleChange}
             onDocumentUploaded={handleDocumentUploaded}
+            hideDocumentUploads={hideDocumentUploads}
           />
         )}
         {logicalStep === "declarations" && (
@@ -382,6 +391,7 @@ export function KycStepWizard({
             form={form}
             onChange={handleChange}
             onDocumentUploaded={handleDocumentUploaded}
+            hideDocumentUploads={hideDocumentUploads}
           />
         )}
         {logicalStep === "review" && !isOrg && (

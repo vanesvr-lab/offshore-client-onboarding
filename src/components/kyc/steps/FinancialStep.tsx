@@ -17,6 +17,8 @@ interface FinancialStepProps {
   form: Partial<KycRecord>;
   onChange: (fields: Partial<KycRecord>) => void;
   onDocumentUploaded: (doc: DocumentRecord) => void;
+  /** When true, hide all in-step document upload cards (handled in a side panel). Default: false */
+  hideDocumentUploads?: boolean;
 }
 
 function InlineUpload({
@@ -72,6 +74,7 @@ export function FinancialStep({
   form,
   onChange,
   onDocumentUploaded,
+  hideDocumentUploads = false,
 }: FinancialStepProps) {
   const validation = useFieldValidation();
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
@@ -109,18 +112,20 @@ export function FinancialStep({
             </FieldWrapper>
           </div>
 
-          <InlineUpload
-            label="Declaration of Source of Funds"
-            description="Upload a signed declaration describing the origin of your funds."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Declaration of Source of Funds"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Declaration of Source of Funds"
+              description="Upload a signed declaration describing the origin of your funds."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Declaration of Source of Funds"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
 
-          {isCdd && (
+          {!hideDocumentUploads && isCdd && (
             <InlineUpload
               label="Evidence of Source of Funds"
               description="Supporting documents: bank statements, payslips, audited accounts, etc."
@@ -173,27 +178,31 @@ export function FinancialStep({
             </div>
           </div>
 
-          <InlineUpload
-            label="Bank Reference Letter"
-            description="A letter from your bank confirming you are a customer in good standing, dated within the last 3 months."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Bank Reference Letter"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Bank Reference Letter"
+              description="A letter from your bank confirming you are a customer in good standing, dated within the last 3 months."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Bank Reference Letter"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
 
-          <InlineUpload
-            label="Curriculum Vitae / Resume"
-            description="Your CV showing professional background, qualifications, and employment history."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Curriculum Vitae / Resume"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Curriculum Vitae / Resume"
+              description="Your CV showing professional background, qualifications, and employment history."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Curriculum Vitae / Resume"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
         </>
       )}
 
@@ -218,38 +227,44 @@ export function FinancialStep({
             </div>
           </div>
 
-          <InlineUpload
-            label="Declaration of Source of Wealth"
-            description="Signed declaration explaining how you accumulated your wealth."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Declaration of Source of Wealth"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Declaration of Source of Wealth"
+              description="Signed declaration explaining how you accumulated your wealth."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Declaration of Source of Wealth"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
 
-          <InlineUpload
-            label="Evidence of Source of Wealth"
-            description="Supporting documents: share sale agreements, business accounts, inheritance documents, etc."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Evidence of Source of Wealth"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Evidence of Source of Wealth"
+              description="Supporting documents: share sale agreements, business accounts, inheritance documents, etc."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Evidence of Source of Wealth"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
 
-          <InlineUpload
-            label="Professional Reference Letter"
-            description="A reference from a professional who can vouch for your financial standing."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Professional Reference Letter"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Professional Reference Letter"
+              description="A reference from a professional who can vouch for your financial standing."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Professional Reference Letter"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
 
           <div className="space-y-1">
             <ValidatedLabel state={validation.getFieldState("tax_identification_number", (form.tax_identification_number ?? "") as string)}>Tax identification number</ValidatedLabel>
@@ -261,16 +276,18 @@ export function FinancialStep({
             />
           </div>
 
-          <InlineUpload
-            label="Tax Residency Certificate"
-            description="Certificate of tax residency from your country."
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypes={documentTypes}
-            documents={documents}
-            documentTypeName="Tax Residency Certificate"
-            onUploadComplete={onDocumentUploaded}
-          />
+          {!hideDocumentUploads && (
+            <InlineUpload
+              label="Tax Residency Certificate"
+              description="Certificate of tax residency from your country."
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypes={documentTypes}
+              documents={documents}
+              documentTypeName="Tax Residency Certificate"
+              onUploadComplete={onDocumentUploaded}
+            />
+          )}
         </>
       )}
     </div>

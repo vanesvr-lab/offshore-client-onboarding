@@ -3,7 +3,7 @@
   "version": "0.2.0-dev",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "unset ANTHROPIC_API_KEY && next dev --port 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

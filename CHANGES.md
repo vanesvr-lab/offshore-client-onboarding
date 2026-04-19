@@ -15,6 +15,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-031: Client KYC dedup + AI key dev-script fix (Claude Desktop)
+
+**B-031 (Client KYC dedup + AI key fix)**
+
+Removes duplicated email/phone and duplicated document upload cards that appeared in the KYC step forms when the wizard is rendered inside the service review split layout (top-left `ProfileEditPanel` + top-right `KycDocListPanel` already own those concerns). Other wizard mount points (`/kyc`, `/kyc/fill/[token]`, admin) are unchanged via prop defaults.
+
+**Updated:** `src/components/kyc/steps/IdentityStep.tsx`
+- New props: `showContactFields?: boolean` (default `true`), `hideDocumentUploads?: boolean` (default `false`)
+- Passport upload card and Proof of Residential Address upload card wrapped in `!hideDocumentUploads`
+- Email + phone row wrapped in `showContactFields`
+
+**Updated:** `src/components/kyc/steps/FinancialStep.tsx`
+- New prop: `hideDocumentUploads?: boolean` (default `false`)
+- All 8 `InlineUpload` renders (SoF declaration, SoF evidence, bank ref, CV, SoW declaration, SoW evidence, professional ref, tax residency cert) wrapped in `!hideDocumentUploads`
+
+**Updated:** `src/components/kyc/steps/DeclarationsStep.tsx`
+- New prop: `hideDocumentUploads?: boolean` (default `false`)
+- PEP Declaration Form upload card wrapped in `!hideDocumentUploads`
+
+**Updated:** `src/components/kyc/KycStepWizard.tsx`
+- New props `showContactFields` and `hideDocumentUploads` on `KycStepWizardProps`, forwarded into Identity/Financial/Declarations steps
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Review-view `KycStepWizard` mount passes `showContactFields={false}` + `hideDocumentUploads={true}`
+
+**Updated:** `package.json`
+- `"dev"` script now prefixes with `unset ANTHROPIC_API_KEY &&` so Claude Desktop's empty-string export no longer overrides `.env.local`. Resolves tech debt #16 (silent AI verification failure on local dev).
+
+**Brief:** `docs/cli-brief-kyc-dedup-b031.md`
+
+**Verify after pulling:**
+1. `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`
+2. Client KYC review for a person — no duplicate email/phone, no duplicate upload cards
+3. Upload a document — AI verification should transition pending → verified/flagged (not stuck on pending and not silently `manual_review`)
+
 ### 2026-04-18 — B-027 Batch 5: KYC section doc status checkmarks (Claude Code)
 
 **B-027 (KYC document layout rework) — Batch 5**
@@ -949,7 +984,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 13 | **CLAUDE.md is partially outdated** | Low | Sections still reference Supabase Auth (replaced by Auth.js). Should be updated to reflect current architecture. |
 | 14 | **No tests** | Medium | Zero test coverage. Add Vitest + Playwright for critical flows (auth, registration, application submit, document upload, stage changes). |
 | 15 | **`supabase/README.md` has outdated SQL** | Low | Step 3 references `profiles.role` and `profiles.company_name` columns that don't exist. |
-| 16 | **Shell `ANTHROPIC_API_KEY=""` overrides `.env.local`** | Medium | Vanessa's shell exports an empty `ANTHROPIC_API_KEY` (set by Claude Desktop). Next.js merges shell env on top of `.env.local`, so the AI verification silently fails locally with "Could not resolve authentication method." Workaround: start dev with `unset ANTHROPIC_API_KEY; npm run dev`. Permanent fix options: (a) add `unset` to package.json `dev` script, (b) use a `.env.local.development` with explicit override, or (c) configure Claude Desktop to not export the empty var. **Does not affect Vercel** — only local dev. |
 | 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
 | 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
 
@@ -958,4 +992,5 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | # | Item | Resolved | Notes |
 |---|------|----------|-------|
 | 9 (partial) | AI assistant messages hardcoded | 2026-04-07 | Still hardcoded in `ApplicationStatusPanel`, but the new Knowledge Base feeds the real document verification AI prompts so the AI now has actual regulatory context. The status-panel chat is separately a UI placeholder. |
+| 16 | Shell `ANTHROPIC_API_KEY=""` overrode `.env.local` | 2026-04-19 | B-031: `package.json` `dev` script now prefixes `unset ANTHROPIC_API_KEY &&` so `.env.local` always wins. |
 

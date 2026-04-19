@@ -17,6 +17,10 @@ interface IdentityStepProps {
   form: Partial<KycRecord>;
   onChange: (fields: Partial<KycRecord>) => void;
   onDocumentUploaded: (doc: DocumentRecord) => void;
+  /** When false, hide the email + phone row (handled elsewhere, e.g. ProfileEditPanel). Default: true */
+  showContactFields?: boolean;
+  /** When true, hide in-step passport + proof of address upload cards (handled in a side panel). Default: false */
+  hideDocumentUploads?: boolean;
 }
 
 function Field({
@@ -67,6 +71,8 @@ export function IdentityStep({
   form,
   onChange,
   onDocumentUploaded,
+  showContactFields = true,
+  hideDocumentUploads = false,
 }: IdentityStepProps) {
   const validation = useFieldValidation();
 
@@ -126,20 +132,22 @@ export function IdentityStep({
       </div>
 
       {/* Passport upload */}
-      <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
-        <h3 className="text-sm font-medium text-brand-navy">Certified Passport Copy</h3>
-        <p className="text-xs text-gray-500">Upload a clear copy of your passport photo page. Must be certified by a solicitor, notary, or bank official.</p>
-        <DocumentUploadWidget
-          clientId={clientId}
-          kycRecordId={kycRecord.id}
-          documentTypeId={passportTypeId}
-          documentTypeName="Certified Passport Copy"
-          existingDocument={passportDoc ?? null}
-          onUploadComplete={onDocumentUploaded}
-          compact
-          documentDetailMode={!!passportDoc}
-        />
-      </div>
+      {!hideDocumentUploads && (
+        <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+          <h3 className="text-sm font-medium text-brand-navy">Certified Passport Copy</h3>
+          <p className="text-xs text-gray-500">Upload a clear copy of your passport photo page. Must be certified by a solicitor, notary, or bank official.</p>
+          <DocumentUploadWidget
+            clientId={clientId}
+            kycRecordId={kycRecord.id}
+            documentTypeId={passportTypeId}
+            documentTypeName="Certified Passport Copy"
+            existingDocument={passportDoc ?? null}
+            onUploadComplete={onDocumentUploaded}
+            compact
+            documentDetailMode={!!passportDoc}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
@@ -160,25 +168,29 @@ export function IdentityStep({
       </div>
 
       {/* Proof of address upload */}
-      <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
-        <h3 className="text-sm font-medium text-brand-navy">Proof of Residential Address</h3>
-        <p className="text-xs text-gray-500">Upload a utility bill, bank statement, or government correspondence dated within the last 3 months.</p>
-        <DocumentUploadWidget
-          clientId={clientId}
-          kycRecordId={kycRecord.id}
-          documentTypeId={addressTypeId}
-          documentTypeName="Proof of Residential Address"
-          existingDocument={addressDoc ?? null}
-          onUploadComplete={onDocumentUploaded}
-          compact
-          documentDetailMode={!!addressDoc}
-        />
-      </div>
+      {!hideDocumentUploads && (
+        <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
+          <h3 className="text-sm font-medium text-brand-navy">Proof of Residential Address</h3>
+          <p className="text-xs text-gray-500">Upload a utility bill, bank statement, or government correspondence dated within the last 3 months.</p>
+          <DocumentUploadWidget
+            clientId={clientId}
+            kycRecordId={kycRecord.id}
+            documentTypeId={addressTypeId}
+            documentTypeName="Proof of Residential Address"
+            existingDocument={addressDoc ?? null}
+            onUploadComplete={onDocumentUploaded}
+            compact
+            documentDetailMode={!!addressDoc}
+          />
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Email address" fieldKey="email" form={form} onChange={onChange} type="email" required validation={validation} />
-        <Field label="Phone number" fieldKey="phone" form={form} onChange={onChange} type="tel" validation={validation} />
-      </div>
+      {showContactFields && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Email address" fieldKey="email" form={form} onChange={onChange} type="email" required validation={validation} />
+          <Field label="Phone number" fieldKey="phone" form={form} onChange={onChange} type="tel" validation={validation} />
+        </div>
+      )}
 
       {/* Work / Professional Details */}
       <div>

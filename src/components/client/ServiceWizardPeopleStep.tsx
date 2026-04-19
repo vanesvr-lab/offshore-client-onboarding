@@ -1529,6 +1529,8 @@ export function ServiceWizardPeopleStep({
             compact={false}
             saveUrl="/api/profiles/kyc/save"
             inlineMode={true}
+            showContactFields={false}
+            hideDocumentUploads={true}
           />
         ) : (
           <div className="text-center py-6 rounded-xl border bg-gray-50 space-y-2">

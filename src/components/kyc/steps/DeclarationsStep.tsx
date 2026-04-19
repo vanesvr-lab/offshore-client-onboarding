@@ -19,6 +19,8 @@ interface DeclarationsStepProps {
   form: Partial<KycRecord>;
   onChange: (fields: Partial<KycRecord>) => void;
   onDocumentUploaded: (doc: DocumentRecord) => void;
+  /** When true, hide the in-step PEP Declaration upload card (handled in a side panel). Default: false */
+  hideDocumentUploads?: boolean;
 }
 
 export function DeclarationsStep({
@@ -31,6 +33,7 @@ export function DeclarationsStep({
   form,
   onChange,
   onDocumentUploaded,
+  hideDocumentUploads = false,
 }: DeclarationsStepProps) {
   const validation = useFieldValidation();
   const isEdd = dueDiligenceLevel === "edd";
@@ -85,20 +88,22 @@ export function DeclarationsStep({
           </div>
         )}
 
-        <div className="rounded-lg border bg-gray-50 p-3 space-y-2">
-          <h3 className="text-xs font-medium text-brand-navy">PEP Declaration Form</h3>
-          <p className="text-xs text-gray-500">Upload a signed PEP declaration form.</p>
-          <DocumentUploadWidget
-            clientId={clientId}
-            kycRecordId={kycRecord.id}
-            documentTypeId={pepTypeId}
-            documentTypeName="PEP Declaration Form"
-            existingDocument={pepDoc ?? null}
-            onUploadComplete={onDocumentUploaded}
-            compact
-            documentDetailMode={!!pepDoc}
-          />
-        </div>
+        {!hideDocumentUploads && (
+          <div className="rounded-lg border bg-gray-50 p-3 space-y-2">
+            <h3 className="text-xs font-medium text-brand-navy">PEP Declaration Form</h3>
+            <p className="text-xs text-gray-500">Upload a signed PEP declaration form.</p>
+            <DocumentUploadWidget
+              clientId={clientId}
+              kycRecordId={kycRecord.id}
+              documentTypeId={pepTypeId}
+              documentTypeName="PEP Declaration Form"
+              existingDocument={pepDoc ?? null}
+              onUploadComplete={onDocumentUploaded}
+              compact
+              documentDetailMode={!!pepDoc}
+            />
+          </div>
+        )}
       </div>
 
       {/* Legal Issues Declaration */}
