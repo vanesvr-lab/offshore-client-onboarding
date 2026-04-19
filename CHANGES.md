@@ -15,6 +15,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-032: Client KYC polish (Claude Desktop)
+
+**B-032 (Client KYC polish)** — three small UI fixes on the client KYC review screen.
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Inline role-add label for shareholder now reads `Shareholder %:` instead of `Shareholder:`
+
+**Updated:** `src/components/kyc/steps/IdentityStep.tsx`
+- Removed duplicate `Work / Professional Details` heading + Occupation field (moved to FinancialStep)
+
+**Updated:** `src/components/kyc/steps/FinancialStep.tsx`
+- Single `Work / Professional Details` block, rendered above Source of Funds
+- Occupation always visible; work address/phone/email gated by CDD+/EDD (unchanged rule)
+
+**Updated:** `src/components/kyc/steps/DeclarationsStep.tsx`
+- Removed `Switch` import
+- New inline `YesNoRadio` component used for both PEP and Legal Issues declarations
+- Three-state handling: `is_pep` / `legal_issues_declared` null = no selection, `true` = Yes, `false` = No
+- PEP upload card remains visible regardless of the answer (declaration form is still signed when declaring no exposure)
+
+**Brief:** `docs/cli-brief-kyc-polish-b032.md`
+
 ### 2026-04-19 — B-031: Client KYC dedup + AI key dev-script fix (Claude Desktop)
 
 **B-031 (Client KYC dedup + AI key fix)**

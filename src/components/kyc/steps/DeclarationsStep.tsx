@@ -5,7 +5,6 @@ import { ValidatedLabel, FieldWrapper } from "@/components/shared/ValidatedLabel
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
@@ -46,6 +45,43 @@ export function DeclarationsStep({
 
   const isPep = form.is_pep ?? false;
   const hasLegalIssues = form.legal_issues_declared ?? false;
+  const pepValue = form.is_pep === true ? "yes" : form.is_pep === false ? "no" : "";
+  const legalValue = form.legal_issues_declared === true ? "yes" : form.legal_issues_declared === false ? "no" : "";
+
+  function YesNoRadio({
+    name,
+    value,
+    onChange: onVal,
+  }: {
+    name: string;
+    value: "yes" | "no" | "";
+    onChange: (v: "yes" | "no") => void;
+  }) {
+    return (
+      <div className="flex items-center gap-4">
+        <label className={`flex items-center gap-1.5 cursor-pointer text-sm ${value === "yes" ? "text-brand-navy font-medium" : "text-gray-600"}`}>
+          <input
+            type="radio"
+            name={name}
+            checked={value === "yes"}
+            onChange={() => onVal("yes")}
+            className="h-4 w-4 text-brand-navy focus:ring-brand-blue"
+          />
+          Yes
+        </label>
+        <label className={`flex items-center gap-1.5 cursor-pointer text-sm ${value === "no" ? "text-brand-navy font-medium" : "text-gray-600"}`}>
+          <input
+            type="radio"
+            name={name}
+            checked={value === "no"}
+            onChange={() => onVal("no")}
+            className="h-4 w-4 text-brand-navy focus:ring-brand-blue"
+          />
+          No
+        </label>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -56,15 +92,18 @@ export function DeclarationsStep({
 
       {/* PEP Declaration */}
       <div className="rounded-lg border bg-white p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
             <Label className="text-sm font-medium text-brand-navy">Politically Exposed Person (PEP)</Label>
             <p className="text-xs text-gray-500 mt-0.5">Are you, or have you ever been, a politically exposed person or closely associated with one?</p>
           </div>
-          <Switch
-            checked={isPep}
-            onCheckedChange={(checked) => onChange({ is_pep: checked, pep_details: checked ? (form.pep_details ?? "") : "" })}
-          />
+          <div className="pt-0.5">
+            <YesNoRadio
+              name="pep"
+              value={pepValue}
+              onChange={(v) => onChange({ is_pep: v === "yes", pep_details: v === "yes" ? (form.pep_details ?? "") : "" })}
+            />
+          </div>
         </div>
 
         {isPep && (
@@ -108,15 +147,18 @@ export function DeclarationsStep({
 
       {/* Legal Issues Declaration */}
       <div className="rounded-lg border bg-white p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
             <Label className="text-sm font-medium text-brand-navy">Legal Issues or Criminal Record</Label>
             <p className="text-xs text-gray-500 mt-0.5">Have you ever been subject to criminal proceedings, civil litigation, or regulatory sanctions?</p>
           </div>
-          <Switch
-            checked={hasLegalIssues}
-            onCheckedChange={(checked) => onChange({ legal_issues_declared: checked, legal_issues_details: checked ? (form.legal_issues_details ?? "") : "" })}
-          />
+          <div className="pt-0.5">
+            <YesNoRadio
+              name="legal-issues"
+              value={legalValue}
+              onChange={(v) => onChange({ legal_issues_declared: v === "yes", legal_issues_details: v === "yes" ? (form.legal_issues_details ?? "") : "" })}
+            />
+          </div>
         </div>
 
         {hasLegalIssues && (

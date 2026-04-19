@@ -1333,7 +1333,9 @@ function PersonCard({
               </select>
             ) : (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-500">{ROLE_LABELS[addingRoleInCard]}:</span>
+                <span className="text-xs text-gray-500">
+                  {addingRoleInCard === "shareholder" ? "Shareholder %:" : `${ROLE_LABELS[addingRoleInCard]}:`}
+                </span>
                 {addingRoleInCard === "shareholder" && (
                   <Input
                     type="number"

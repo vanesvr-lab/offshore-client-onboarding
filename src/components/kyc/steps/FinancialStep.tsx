@@ -91,6 +91,62 @@ export function FinancialStep({
         <p className="text-sm text-gray-500">Help us understand the source of your funds and financial background. This is required for regulatory compliance.</p>
       </div>
 
+      {/* Work / Professional Details — occupation always; work address/phone/email for CDD+/EDD */}
+      <div>
+        <h3 className="text-sm font-semibold text-brand-navy mb-3">Work / Professional Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <ValidatedLabel
+              state={validation.getFieldState("occupation", (form.occupation ?? "") as string, true)}
+              required
+            >Occupation</ValidatedLabel>
+            <FieldWrapper state={validation.getFieldState("occupation", (form.occupation ?? "") as string, true)}>
+              <Input
+                value={(form.occupation ?? "") as string}
+                onChange={(e) => onChange({ occupation: e.target.value })}
+                onBlur={() => validation.markTouched("occupation")}
+                placeholder="Your profession or job title"
+                className="text-sm"
+              />
+            </FieldWrapper>
+          </div>
+          {showWorkDetails && (
+            <>
+              <div className="md:col-span-2 space-y-1">
+                <ValidatedLabel state={validation.getFieldState("work_address", (form.work_address ?? "") as string)} >Work address</ValidatedLabel>
+                <FieldWrapper state={validation.getFieldState("work_address", (form.work_address ?? "") as string)}>
+                  <Textarea
+                    value={(form.work_address ?? "") as string}
+                    onChange={(e) => onChange({ work_address: e.target.value })}
+                    onBlur={() => validation.markTouched("work_address")}
+                    rows={2}
+                    placeholder="Business / employer address"
+                    className="text-sm resize-none"
+                  />
+                </FieldWrapper>
+              </div>
+              <div className="space-y-1">
+                <ValidatedLabel state={validation.getFieldState("work_phone", (form.work_phone ?? "") as string)}>Work phone</ValidatedLabel>
+                <Input
+                  value={(form.work_phone ?? "") as string}
+                  onChange={(e) => onChange({ work_phone: e.target.value })}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <ValidatedLabel state={validation.getFieldState("work_email", (form.work_email ?? "") as string)}>Work email</ValidatedLabel>
+                <Input
+                  type="email"
+                  value={(form.work_email ?? "") as string}
+                  onChange={(e) => onChange({ work_email: e.target.value })}
+                  className="text-sm"
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {showSourceOfFunds && (
         <>
           <div className="space-y-1">
@@ -142,42 +198,6 @@ export function FinancialStep({
 
       {showWorkDetails && (
         <>
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-semibold text-brand-navy mb-3">Work / Professional Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2 space-y-1">
-                <ValidatedLabel state={validation.getFieldState("work_address", (form.work_address ?? "") as string)} >Work address</ValidatedLabel>
-                <FieldWrapper state={validation.getFieldState("work_address", (form.work_address ?? "") as string)}>
-                  <Textarea
-                    value={(form.work_address ?? "") as string}
-                    onChange={(e) => onChange({ work_address: e.target.value })}
-                    onBlur={() => validation.markTouched("work_address")}
-                    rows={2}
-                    placeholder="Business / employer address"
-                    className="text-sm resize-none"
-                  />
-                </FieldWrapper>
-              </div>
-              <div className="space-y-1">
-                <ValidatedLabel state={validation.getFieldState("work_phone", (form.work_phone ?? "") as string)}>Work phone</ValidatedLabel>
-                <Input
-                  value={(form.work_phone ?? "") as string}
-                  onChange={(e) => onChange({ work_phone: e.target.value })}
-                  className="text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <ValidatedLabel state={validation.getFieldState("work_email", (form.work_email ?? "") as string)}>Work email</ValidatedLabel>
-                <Input
-                  type="email"
-                  value={(form.work_email ?? "") as string}
-                  onChange={(e) => onChange({ work_email: e.target.value })}
-                  className="text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
           {!hideDocumentUploads && (
             <InlineUpload
               label="Bank Reference Letter"
