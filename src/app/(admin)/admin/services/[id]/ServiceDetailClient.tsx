@@ -956,14 +956,15 @@ function AdminKycDocListPanel({
           const isUploading = uploadingTypeId === dt.id;
           const aiStatus = uploaded?.verification_status;
           const adminStatus = uploaded?.admin_status;
+          // Green only when admin has approved. Uploaded-but-unreviewed = neutral.
+          const isApproved = uploaded && adminStatus === "approved";
 
           return (
             <div key={dt.id} className="flex items-center justify-between py-1.5 border-b last:border-0 gap-2">
               <div className="flex items-center gap-2 min-w-0">
-                {uploaded
-                  ? <CheckSquare className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                  : <Square className="h-3.5 w-3.5 text-gray-300 shrink-0" />
-                }
+                {!uploaded && <Square className="h-3.5 w-3.5 text-gray-300 shrink-0" />}
+                {uploaded && !isApproved && <CheckSquare className="h-3.5 w-3.5 text-gray-500 shrink-0" />}
+                {isApproved && <CheckSquare className="h-3.5 w-3.5 text-green-500 shrink-0" />}
                 <span className="text-xs text-gray-700 truncate">{dt.name}</span>
                 {uploaded && (
                   <DocumentStatusBadge

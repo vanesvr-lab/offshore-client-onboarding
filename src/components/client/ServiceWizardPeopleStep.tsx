@@ -416,8 +416,8 @@ function KycDocListPanel({
           <FileText className="h-3 w-3" />
           Please upload your documents here
         </p>
-        <DocumentStatusLegend defaultOpen={false} />
-        <div className="overflow-y-auto space-y-1.5 mt-2" style={{ maxHeight: 360 }}>
+        <DocumentStatusLegend defaultOpen={true} />
+        <div className="overflow-y-auto space-y-1 mt-2" style={{ maxHeight: 280 }}>
           {CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => {
             const cats = grouped[cat];
             const uploadedInCat = cats.filter((dt) => getUploaded(dt.id)).length;
@@ -429,7 +429,7 @@ function KycDocListPanel({
                 <button
                   type="button"
                   onClick={() => toggleCategory(cat)}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-gray-100 rounded-md"
+                  className="w-full flex items-center justify-between px-2.5 py-1 hover:bg-gray-100 rounded-md"
                 >
                   <div className="flex items-center gap-1.5">
                     <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
@@ -443,22 +443,27 @@ function KycDocListPanel({
                 </button>
 
                 {isOpen && (
-                  <div className="px-2.5 pb-1.5 space-y-0.5">
+                  <div className="px-2.5 pb-1 space-y-0">
                     {cats.map((dt) => {
                       const uploaded = getUploaded(dt.id);
                       const isUploading = uploadingTypeId === dt.id;
                       const aiStatus = uploaded?.verification_status;
                       const adminStatus = uploaded?.admin_status;
+                      // Green only when admin has approved. Uploaded-but-unreviewed = neutral.
+                      const isApproved = uploaded && adminStatus === "approved";
 
                       return (
-                        <div key={dt.id} className="py-1">
+                        <div key={dt.id} className="py-0.5">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 min-w-0">
-                              {uploaded
-                                ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                                : <FileText className="h-4 w-4 text-amber-500 shrink-0" />
-                              }
-                              <span className={`text-xs truncate ${uploaded ? "text-green-700 font-medium" : "text-amber-700"}`}>
+                              {!uploaded && <FileText className="h-4 w-4 text-amber-500 shrink-0" />}
+                              {uploaded && !isApproved && <FileText className="h-4 w-4 text-gray-500 shrink-0" />}
+                              {isApproved && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+                              <span className={`text-xs truncate ${
+                                !uploaded ? "text-amber-700"
+                                : isApproved ? "text-green-700 font-medium"
+                                : "text-gray-700"
+                              }`}>
                                 {dt.name}
                               </span>
                               {uploaded && (

@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-035: Green reserved for admin-approved; legend default open; tighter doc list (Claude Desktop)
+
+**B-035 (Doc list display tweaks)**
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Left-side doc icon:
+  - Not uploaded → `FileText` amber (unchanged)
+  - Uploaded but not admin-approved → `FileText` gray-500 (was green CheckCircle2)
+  - Admin approved → `CheckCircle2` green (unchanged)
+- Name text color: amber when missing, gray-700 when uploaded-not-approved, green-700 when approved
+- `DocumentStatusLegend` now `defaultOpen={true}`
+- Doc list: `maxHeight 360` → `280`, per-row `py-1` → `py-0.5`, category header `py-1.5` → `py-1`, category body `space-y-0.5` → `space-y-0`
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `AdminKycDocListPanel`
+- Same treatment: `CheckSquare` stays green only when `admin_status === "approved"`; uploaded-unreviewed becomes neutral gray-500
+
+**Rationale:** green is the universal "good to go" signal. Showing green on upload before anyone has reviewed it misleads clients into thinking the document is accepted. The two-track status badge already conveys AI + admin state; the left-side icon now only turns green when the admin has actually approved.
+
 ### 2026-04-19 — B-034: Status icons, legend, preview fallback, color palette (Claude Desktop)
 
 **B-034 (Client KYC display polish)**
