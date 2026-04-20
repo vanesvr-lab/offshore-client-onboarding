@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, Save } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, Loader2, Save, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,6 +18,7 @@ import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
 import { COUNTRIES } from "@/components/shared/MultiSelectCountry";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
+import { computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import { cn } from "@/lib/utils";
 import type { KycRecord, DocumentRecord, DocumentType } from "@/types";
 
@@ -25,6 +27,10 @@ interface IndividualKycFormProps {
   documents: DocumentRecord[];
   documentTypes: DocumentType[];
   prefilled?: Set<string>;
+  /** B-042 — uploaded documents to mine for AI-extracted prefill values. Defaults to `documents` when omitted. */
+  personDocs?: DocumentRecord[];
+  /** B-042 — document type definitions for the prefill helper. Defaults to `documentTypes` when omitted. */
+  personDocTypes?: DocumentType[];
 }
 
 function SectionHeader({
@@ -113,6 +119,8 @@ export function IndividualKycForm({
   documents: initialDocs,
   documentTypes,
   prefilled = new Set(),
+  personDocs,
+  personDocTypes,
 }: IndividualKycFormProps) {
   const [fields, setFields] = useState<Partial<KycRecord>>({
     full_name: initialRecord.full_name ?? "",
@@ -199,6 +207,57 @@ export function IndividualKycForm({
   const isPep = fields.is_pep;
   const hasLegalIssues = fields.legal_issues_declared;
 
+  const [prefilling, setPrefilling] = useState(false);
+  const prefillSourceDocs = personDocs ?? docs;
+  const prefillSourceDocTypes = personDocTypes ?? documentTypes;
+  const prefillable = computePrefillableFields({
+    form: fields as Record<string, unknown>,
+    docs: prefillSourceDocs.map((d) => ({
+      id: d.id,
+      document_type_id: d.document_type_id ?? null,
+      uploaded_at: d.uploaded_at ?? null,
+      verification_result: (d.verification_result ?? null) as {
+        extracted_fields?: Record<string, unknown> | null;
+      } | null,
+    })),
+    docTypes: prefillSourceDocTypes.map((t) => ({
+      id: t.id,
+      name: t.name,
+      ai_extraction_fields: t.ai_extraction_fields ?? null,
+    })),
+  });
+
+  async function handlePrefillClick() {
+    if (!initialRecord.id) {
+      toast.error("Couldn't fill from document — please try again.");
+      return;
+    }
+    setPrefilling(true);
+    try {
+      const payload: Record<string, string> = {};
+      for (const row of prefillable) payload[row.target] = row.value;
+      if (Object.keys(payload).length === 0) {
+        toast.message("All extractable fields are already filled.");
+        setPrefilling(false);
+        return;
+      }
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: initialRecord.id, fields: payload }),
+      });
+      if (!res.ok) throw new Error("save failed");
+
+      setFields((prev) => ({ ...prev, ...payload }));
+      const n = Object.keys(payload).length;
+      toast.success(`Filled ${n} field${n === 1 ? "" : "s"} from your uploaded document.`);
+    } catch {
+      toast.error("Couldn't fill from document — please try again.");
+    } finally {
+      setPrefilling(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {/* Save indicator */}
@@ -208,6 +267,25 @@ export function IndividualKycForm({
 
       {/* Field legend */}
       <FieldLegend />
+
+      {/* B-042 — on-demand AI prefill */}
+      {prefillable.length > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void handlePrefillClick()}
+          disabled={prefilling}
+          className="w-full h-auto py-3 border-2 border-dashed border-brand-blue/60 bg-brand-blue/5 hover:bg-brand-blue/10 text-brand-navy flex flex-col items-center justify-center gap-0.5"
+        >
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
+            {prefilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-brand-blue" />}
+            Fill from uploaded document
+          </span>
+          <span className="text-[11px] text-gray-500 font-normal">
+            Uses values extracted from your passport / ID.
+          </span>
+        </Button>
+      )}
 
       {/* Section 1: Personal Details */}
       <div>

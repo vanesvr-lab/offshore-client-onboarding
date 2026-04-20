@@ -13,7 +13,6 @@ import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { DocumentStatusLegend } from "@/components/shared/DocumentStatusLegend";
-import { AiPrefillBanner } from "@/components/shared/AiPrefillBanner";
 import { compressIfImage } from "@/lib/imageCompression";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
@@ -266,8 +265,6 @@ function ProfileEditPanel({
 
 function KycDocListPanel({
   profileId,
-  kycRecordId,
-  profileValues,
   serviceId,
   documents: initialDocs,
   documentTypes,
@@ -276,10 +273,6 @@ function KycDocListPanel({
   onDocUploaded,
 }: {
   profileId: string;
-  /** client_profile_kyc.id — used by the AI prefill banner to write into the KYC row. */
-  kycRecordId?: string | null;
-  /** Current profile + KYC column values, for the banner "keep mine" toggle. */
-  profileValues?: Record<string, unknown>;
   serviceId: string;
   documents: ClientServiceDoc[];
   documentTypes: DocumentType[];
@@ -550,39 +543,6 @@ function KycDocListPanel({
                             </div>
                           </div>
 
-                          {/* AI prefill banner — only when the upload has a dismissible prefill */}
-                          {uploaded && kycRecordId && (
-                            <AiPrefillBanner
-                              doc={{
-                                id: uploaded.id,
-                                verification_result:
-                                  (uploaded.verification_result as unknown as DocumentRecord["verification_result"]) ?? null,
-                                prefill_dismissed_at: uploaded.prefill_dismissed_at ?? null,
-                              }}
-                              docType={dt}
-                              kycRecord={{ id: kycRecordId, ...(profileValues ?? {}) }}
-                              profileValues={profileValues}
-                              className="mt-2"
-                              onApplied={() => {
-                                setLocalDocs((prev) =>
-                                  prev.map((d) =>
-                                    d.id === uploaded.id
-                                      ? { ...d, prefill_dismissed_at: new Date().toISOString() }
-                                      : d
-                                  )
-                                );
-                              }}
-                              onDismiss={() => {
-                                setLocalDocs((prev) =>
-                                  prev.map((d) =>
-                                    d.id === uploaded.id
-                                      ? { ...d, prefill_dismissed_at: new Date().toISOString() }
-                                      : d
-                                  )
-                                );
-                              }}
-                            />
-                          )}
                         </div>
                       );
                     })}
@@ -1586,19 +1546,6 @@ export function ServiceWizardPeopleStep({
           <div>
             <KycDocListPanel
               profileId={profileId}
-              kycRecordId={kycRecord.id || null}
-              profileValues={{
-                full_name: reviewingPerson.client_profiles?.full_name ?? null,
-                address: kycRecord.address,
-                date_of_birth: kycRecord.date_of_birth,
-                nationality: kycRecord.nationality,
-                passport_country: kycRecord.passport_country,
-                passport_number: kycRecord.passport_number,
-                passport_expiry: kycRecord.passport_expiry,
-                occupation: kycRecord.occupation,
-                tax_identification_number: kycRecord.tax_identification_number,
-                jurisdiction_tax_residence: kycRecord.jurisdiction_tax_residence,
-              }}
               serviceId={serviceId}
               documents={documents}
               documentTypes={documentTypes}
@@ -1632,6 +1579,10 @@ export function ServiceWizardPeopleStep({
             inlineMode={true}
             showContactFields={false}
             hideDocumentUploads={true}
+            personDocs={documents
+              .filter((d) => d.client_profile_id === profileId)
+              .map(mapToDocumentRecord)}
+            personDocTypes={documentTypes}
           />
         ) : (
           <div className="text-center py-6 rounded-xl border bg-gray-50 space-y-2">

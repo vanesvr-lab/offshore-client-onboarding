@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,7 @@ import { IdentityStep } from "./steps/IdentityStep";
 import { FinancialStep } from "./steps/FinancialStep";
 import { DeclarationsStep } from "./steps/DeclarationsStep";
 import { ReviewStep } from "./steps/ReviewStep";
+import { computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
 interface KycStepWizardProps {
@@ -37,6 +38,10 @@ interface KycStepWizardProps {
   showErrorsImmediately?: boolean;
   /** B-039 — when true, render the Back / Save & Continue bar fixed to viewport bottom so it is always visible. */
   fixedNav?: boolean;
+  /** B-042 — uploaded documents for the active person (used to detect AI-extracted data ready to drop into the form). */
+  personDocs?: DocumentRecord[];
+  /** B-042 — document type definitions for the docs above (so the prefill helper can read ai_extraction_fields). */
+  personDocTypes?: DocumentType[];
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -186,19 +191,44 @@ function OrgReviewStep({ form }: { form: Partial<KycRecord> }) {
   );
 }
 
-function StepIndicator({ current, total, labels }: { current: number; total: number; labels: string[] }) {
+function StepIndicator({
+  current,
+  total,
+  labels,
+  identityStepIndex,
+  showIdentityPrefillHint,
+}: {
+  current: number;
+  total: number;
+  labels: string[];
+  identityStepIndex?: number;
+  showIdentityPrefillHint?: boolean;
+}) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1">
-        {Array.from({ length: total }).map((_, i) => (
-          <div key={i} className="flex items-center gap-1 flex-1">
-            <div
-              className={`h-2 flex-1 rounded-full transition-all duration-300 ${
-                i < current ? "bg-brand-accent" : i === current ? "bg-brand-navy" : "bg-gray-200"
-              }`}
-            />
-          </div>
-        ))}
+        {Array.from({ length: total }).map((_, i) => {
+          const isIdentity = identityStepIndex !== undefined && i === identityStepIndex;
+          return (
+            <div key={i} className="flex items-center gap-1 flex-1">
+              <div className="relative flex-1">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    i < current ? "bg-brand-accent" : i === current ? "bg-brand-navy" : "bg-gray-200"
+                  }`}
+                />
+                {isIdentity && showIdentityPrefillHint && (
+                  <span
+                    className="absolute -top-2 -right-1 inline-flex items-center"
+                    title="AI-extracted data is available — fill it in from the Identity step."
+                  >
+                    <Sparkles className="h-3 w-3 text-blue-500" />
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
       <p className="text-xs text-gray-500">
         Step {current + 1} of {total} — <span className="font-medium text-brand-navy">{labels[current]}</span>
@@ -223,6 +253,8 @@ export function KycStepWizard({
   hideDocumentUploads = false,
   showErrorsImmediately = false,
   fixedNav = false,
+  personDocs,
+  personDocTypes,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -344,9 +376,44 @@ export function KycStepWizard({
   const logicalStep = getLogicalStep(currentStep);
   const isLastStep = currentStep === totalSteps - 1;
 
+  // B-042 — surface a ✨ on the Identity step circle when there is AI-extracted
+  // data still missing from the form. Only meaningful for the individual flow.
+  const identityStepIndex = isOrg ? undefined : 0;
+  const prefillDocs = personDocs ?? documents;
+  const prefillDocTypes = personDocTypes ?? documentTypes;
+  const prefillableSummary = useMemo(
+    () =>
+      isOrg
+        ? []
+        : computePrefillableFields({
+            form: form as Record<string, unknown>,
+            docs: prefillDocs.map((d) => ({
+              id: d.id,
+              document_type_id: d.document_type_id ?? null,
+              uploaded_at: d.uploaded_at ?? null,
+              verification_result: (d.verification_result ?? null) as {
+                extracted_fields?: Record<string, unknown> | null;
+              } | null,
+            })),
+            docTypes: prefillDocTypes.map((t) => ({
+              id: t.id,
+              name: t.name,
+              ai_extraction_fields: t.ai_extraction_fields ?? null,
+            })),
+          }),
+    [isOrg, form, prefillDocs, prefillDocTypes]
+  );
+  const showIdentityPrefillHint = prefillableSummary.length > 0;
+
   return (
     <div className="space-y-6">
-      <StepIndicator current={currentStep} total={totalSteps} labels={stepLabels} />
+      <StepIndicator
+        current={currentStep}
+        total={totalSteps}
+        labels={stepLabels}
+        identityStepIndex={identityStepIndex}
+        showIdentityPrefillHint={showIdentityPrefillHint}
+      />
 
       <div className={compact ? "min-h-[200px]" : "min-h-[400px]"}>
         {logicalStep === "org_details" && (
@@ -371,6 +438,9 @@ export function KycStepWizard({
             showContactFields={showContactFields}
             hideDocumentUploads={hideDocumentUploads}
             showErrorsImmediately={showErrorsImmediately}
+            personDocs={prefillDocs}
+            personDocTypes={prefillDocTypes}
+            kycRecordId={kycRecord.id}
           />
         )}
         {logicalStep === "financial" && (

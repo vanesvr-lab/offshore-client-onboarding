@@ -15,6 +15,40 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-042: On-demand AI prefill in KYC Identity step (Claude Code)
+
+**B-042 (On-demand AI prefill)** — moves the prefill decision out of the doc upload moment and into the Identity step where the fields live. Replaces the forced `AiPrefillBanner` (Apply/Skip + conflict-mode select) with a single, opt-in "✨ Fill from uploaded document" button plus a subtle ✨ indicator on the Identity step nav.
+
+**Created:**
+- `src/lib/kyc/computePrefillable.ts` — pure helper used by both surfaces. For each uploaded doc it reads `verification_result.extracted_fields`, intersects with the doc type's `ai_extraction_fields`, keeps only targets whitelisted in `KYC_PREFILLABLE_FIELDS`, drops empty values, drops targets whose form field is already non-empty, and returns a de-duplicated list (earliest upload wins on tie).
+
+**Modified:**
+- `src/components/kyc/steps/IdentityStep.tsx` — new props `personDocs`, `personDocTypes`, `kycRecordId`. Renders the full-width dashed Sparkles button above the field grid when `computePrefillableFields(...)` is non-empty. Click flow: compute payload → POST `/api/profiles/kyc/save` → on 2xx call `onChange` with the patch and toast `Filled N field(s)…`; on error toast the failure and leave form state untouched.
+- `src/components/kyc/KycStepWizard.tsx` — new props `personDocs` + `personDocTypes`. Renders a Lucide `Sparkles` icon (`text-blue-500`, absolute-positioned top-right of the Identity step bar) via `StepIndicator` when the helper has at least one row. Icon has a `title` for the tooltip. Also passes `personDocs/personDocTypes/kycRecordId` down to `IdentityStep`. Org flow is untouched.
+- `src/components/kyc/IndividualKycForm.tsx` — same button rendered at the top of the form body (used on the `/kyc` and admin client KYC pages). Accepts optional `personDocs`/`personDocTypes`, falls back to its existing `documents`/`documentTypes` when omitted. On success it merges the patch into the internal form state (same `setFields` that `useAutoSave` watches).
+- `src/components/client/ServiceWizardPeopleStep.tsx` — removed the old `<AiPrefillBanner />` block and its import. Removed the now-unused `kycRecordId`/`profileValues` props from `KycDocListPanel` (they only existed to feed the banner). Passes `personDocs` + `personDocTypes` to `<KycStepWizard>` for the reviewed person.
+
+**Deleted:**
+- `src/components/shared/AiPrefillBanner.tsx`
+- `src/app/api/documents/[id]/dismiss-prefill/route.ts`
+
+**Kept untouched (intentional):**
+- `documents.prefill_dismissed_at` column — stops being read/written from the front end but no migration.
+- `src/lib/constants/prefillFields.ts` — `KYC_PREFILLABLE_FIELDS` is reused by the helper.
+- `/api/profiles/kyc/save` — unchanged, reused by both surfaces.
+- `OrganisationKycForm` — out of scope per spec.
+
+**Ambiguity noted in-flight:** the brief names `IndividualKycForm` as the step-wizard's Identity target, but in this repo `KycStepWizard` renders `IdentityStep`, not `IndividualKycForm`. Both components are client-facing and can host the button, so the button was added to **both** — `IdentityStep` for the wizard flow (People step → review person → KYC wizard) and `IndividualKycForm` for the standalone `/kyc` + admin KYC pages. The helper is the same in both places.
+
+**Build:** `npm run build` passes lint + types. Grep confirms no remaining `AiPrefillBanner` or `dismiss-prefill` references in `src/`.
+
+**Brief:** `docs/cli-brief-ai-prefill-on-demand-b042.md`
+**Design spec:** `docs/superpowers/specs/2026-04-20-ai-prefill-on-demand-design.md`
+
+**Dev-server reset:** `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`
+
+---
+
 ### 2026-04-20 — B-041: Sanitize upload filenames for Supabase Storage (Claude Desktop)
 
 **B-041 (Invalid storage key fix)**

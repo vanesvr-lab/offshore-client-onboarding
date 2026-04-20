@@ -1,11 +1,16 @@
 "use client";
 
+import { useState } from "react";
+import { Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
 import { ValidatedLabel, FieldWrapper } from "@/components/shared/ValidatedLabel";
 import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceRequirement } from "@/types";
 
 interface IdentityStepProps {
@@ -23,6 +28,12 @@ interface IdentityStepProps {
   hideDocumentUploads?: boolean;
   /** B-037 — when true, empty required fields render as red on first paint (no need for focus). */
   showErrorsImmediately?: boolean;
+  /** B-042 — uploaded documents for the active person (used by the prefill helper). */
+  personDocs?: DocumentRecord[];
+  /** B-042 — document type definitions in scope for the person's uploads. */
+  personDocTypes?: DocumentType[];
+  /** B-042 — KYC record id posted to /api/profiles/kyc/save when the user clicks the prefill button. */
+  kycRecordId?: string | null;
 }
 
 function Field({
@@ -76,8 +87,70 @@ export function IdentityStep({
   showContactFields = true,
   hideDocumentUploads = false,
   showErrorsImmediately = false,
+  personDocs,
+  personDocTypes,
+  kycRecordId,
 }: IdentityStepProps) {
   const validation = useFieldValidation({ showErrorsImmediately });
+  const [prefilling, setPrefilling] = useState(false);
+
+  const prefillableDocs = personDocs ?? documents;
+  const prefillableDocTypes = personDocTypes ?? documentTypes;
+  const effectiveKycRecordId = kycRecordId ?? kycRecord.id ?? null;
+
+  const prefillable = computePrefillableFields({
+    form: form as Record<string, unknown>,
+    docs: prefillableDocs.map((d) => ({
+      id: d.id,
+      document_type_id: d.document_type_id ?? null,
+      uploaded_at: d.uploaded_at ?? null,
+      verification_result: (d.verification_result ?? null) as {
+        extracted_fields?: Record<string, unknown> | null;
+      } | null,
+    })),
+    docTypes: prefillableDocTypes.map((t) => ({
+      id: t.id,
+      name: t.name,
+      ai_extraction_fields: t.ai_extraction_fields ?? null,
+    })),
+  });
+
+  async function handlePrefillClick() {
+    if (!effectiveKycRecordId) {
+      toast.error("Couldn't fill from document — please try again.");
+      return;
+    }
+    setPrefilling(true);
+    try {
+      const payload: Record<string, string> = {};
+      for (const row of prefillable) payload[row.target] = row.value;
+      if (Object.keys(payload).length === 0) {
+        toast.message("All extractable fields are already filled.");
+        setPrefilling(false);
+        return;
+      }
+
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: effectiveKycRecordId, fields: payload }),
+      });
+      if (!res.ok) throw new Error("save failed");
+
+      const patch: Partial<KycRecord> = {};
+      for (const [k, v] of Object.entries(payload)) {
+        (patch as Record<string, unknown>)[k] = v;
+      }
+      onChange(patch);
+
+      const n = Object.keys(payload).length;
+      toast.success(`Filled ${n} field${n === 1 ? "" : "s"} from your uploaded document.`);
+    } catch {
+      toast.error("Couldn't fill from document — please try again.");
+    } finally {
+      setPrefilling(false);
+    }
+  }
 
   // Resolve doc type IDs from DD requirements first; fall back to name lookup
   function resolveDocTypeId(label: string): string | undefined {
@@ -97,6 +170,24 @@ export function IdentityStep({
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Your Identity</h2>
         <p className="text-sm text-gray-500">Please provide your identity information and upload your passport and proof of address.</p>
       </div>
+
+      {prefillable.length > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void handlePrefillClick()}
+          disabled={prefilling}
+          className="w-full h-auto py-3 border-2 border-dashed border-brand-blue/60 bg-brand-blue/5 hover:bg-brand-blue/10 text-brand-navy flex flex-col items-center justify-center gap-0.5"
+        >
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
+            {prefilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-brand-blue" />}
+            Fill from uploaded document
+          </span>
+          <span className="text-[11px] text-gray-500 font-normal">
+            Uses values extracted from your passport / ID.
+          </span>
+        </Button>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Full legal name" fieldKey="full_name" form={form} onChange={onChange} required validation={validation} placeholder="As it appears on your passport" />
