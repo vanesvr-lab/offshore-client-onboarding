@@ -93,8 +93,17 @@ CREATE TABLE IF NOT EXISTS documents_history (
   admin_status_note   text,
   admin_status_by     uuid,
   admin_status_at     timestamptz,
-  prefill_dismissed_at timestamptz
+  prefill_dismissed_at timestamptz,
+  admin_reviewed_at   timestamptz,
+  admin_reviewed_by   uuid,
+  rejection_reason    text
 );
+
+-- Additive guards for databases that already have documents_history from an earlier partial run.
+ALTER TABLE documents_history
+  ADD COLUMN IF NOT EXISTS admin_reviewed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS admin_reviewed_by uuid,
+  ADD COLUMN IF NOT EXISTS rejection_reason text;
 
 CREATE INDEX IF NOT EXISTS idx_documents_history_doc
   ON documents_history(document_id, changed_at DESC);
@@ -145,7 +154,8 @@ BEGIN
     verification_status, verification_result,
     expiry_date, notes, is_active, uploaded_by, uploaded_at, verified_at,
     admin_status, admin_status_note, admin_status_by, admin_status_at,
-    prefill_dismissed_at
+    prefill_dismissed_at,
+    admin_reviewed_at, admin_reviewed_by, rejection_reason
   ) VALUES (
     COALESCE(NEW.id, OLD.id), TG_OP, uid, public.get_history_actor_role(uid),
     COALESCE(NEW.client_id, OLD.client_id),
@@ -170,7 +180,10 @@ BEGIN
     COALESCE(NEW.admin_status_note, OLD.admin_status_note),
     COALESCE(NEW.admin_status_by, OLD.admin_status_by),
     COALESCE(NEW.admin_status_at, OLD.admin_status_at),
-    COALESCE(NEW.prefill_dismissed_at, OLD.prefill_dismissed_at)
+    COALESCE(NEW.prefill_dismissed_at, OLD.prefill_dismissed_at),
+    COALESCE(NEW.admin_reviewed_at, OLD.admin_reviewed_at),
+    COALESCE(NEW.admin_reviewed_by, OLD.admin_reviewed_by),
+    COALESCE(NEW.rejection_reason, OLD.rejection_reason)
   );
   RETURN COALESCE(NEW, OLD);
 END;
