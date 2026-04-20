@@ -14,6 +14,7 @@ import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { DocumentStatusLegend } from "@/components/shared/DocumentStatusLegend";
 import { AiPrefillBanner } from "@/components/shared/AiPrefillBanner";
+import { compressIfImage } from "@/lib/imageCompression";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 import { DD_LEVEL_INCLUDES } from "@/lib/utils/dueDiligenceConstants";
@@ -351,16 +352,29 @@ function KycDocListPanel({
   }
 
   async function handleUpload(dtId: string, file: File) {
+    setUploadingTypeId(dtId);
+
+    // B-037 — compress images client-side before hitting Vercel.
+    let uploadFile = file;
+    if (file.type.startsWith("image/") && file.size > 500 * 1024) {
+      const optimisingToast = toast.loading("Optimising image…", { position: "top-right" });
+      try {
+        uploadFile = await compressIfImage(file);
+      } finally {
+        toast.dismiss(optimisingToast);
+      }
+    }
+
     // Vercel serverless body limit (Hobby = 4.5 MB). Catch client-side to avoid HTML 413 → JSON parse error.
     const VERCEL_LIMIT = 4.5 * 1024 * 1024;
-    if (file.size > VERCEL_LIMIT) {
-      toast.error(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+    if (uploadFile.size > VERCEL_LIMIT) {
+      toast.error(`File is too large (${(uploadFile.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+      setUploadingTypeId(null);
       return;
     }
-    setUploadingTypeId(dtId);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", uploadFile);
       fd.append("documentTypeId", dtId);
       fd.append("clientProfileId", profileId);
       const res = await fetch(`/api/services/${serviceId}/documents/upload`, {

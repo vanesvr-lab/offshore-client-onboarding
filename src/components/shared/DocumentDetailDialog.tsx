@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
+import { compressIfImage } from "@/lib/imageCompression";
 import type { DocumentUpdateRequest } from "@/app/(admin)/admin/services/[id]/page";
 import type { VerificationResult } from "@/types";
 
@@ -215,17 +216,30 @@ export function DocumentDetailDialog({
 
   async function handleReplace(file: File) {
     if (!serviceId || !doc.document_type_id) return;
+    setReplacing(true);
+
+    // B-037 — compress images client-side before hitting Vercel.
+    let uploadFile = file;
+    if (file.type.startsWith("image/") && file.size > 500 * 1024) {
+      const optimisingToast = toast.loading("Optimising image…", { position: "top-right" });
+      try {
+        uploadFile = await compressIfImage(file);
+      } finally {
+        toast.dismiss(optimisingToast);
+      }
+    }
+
     // Vercel serverless request body limit is 4.5 MB on Hobby.
     // Catch this client-side so the user sees a clear message instead of HTML 413.
     const VERCEL_LIMIT = 4.5 * 1024 * 1024;
-    if (file.size > VERCEL_LIMIT) {
-      toast.error(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+    if (uploadFile.size > VERCEL_LIMIT) {
+      toast.error(`File is too large (${(uploadFile.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+      setReplacing(false);
       return;
     }
-    setReplacing(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", uploadFile);
       fd.append("documentTypeId", doc.document_type_id);
       const res = await fetch(`/api/services/${serviceId}/documents/upload`, {
         method: "POST",

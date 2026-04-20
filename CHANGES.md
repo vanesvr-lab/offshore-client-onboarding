@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-037 Fix 1: Client-side image compression before upload (Claude Code)
+
+**B-037 Fix 1 — phone photos no longer hit Vercel's 4.5 MB body limit**
+
+Companion to B-036 (which only blocked the upload + showed a clear error). This fix transparently shrinks images before they ever leave the browser, so a typical 6–10 MB phone photo of a passport/utility bill lands as ~1–2 MB JPEG.
+
+**Added:** `browser-image-compression@^2.0.2` (npm install).
+
+**Created:** `src/lib/imageCompression.ts`
+- `compressIfImage(file)` — image inputs >500 KB are compressed to a 2 MB target with a 2400 px max edge, JPEG output, web worker on. PDFs and other non-image types pass through untouched. Any failure (worker error, OOM, unsupported format) returns the original file (fail open).
+- File extension is rewritten to `.jpg` on PNG/WebP/TIFF/GIF/HEIC inputs so the FormData filename matches the new content type.
+- If compression somehow inflates the file, the original is returned.
+
+**Updated upload sites** — all three call sites that POST to `/api/services/[id]/documents/upload`:
+- `src/components/client/ServiceWizardPeopleStep.tsx` `handleUpload`
+- `src/components/shared/DocumentDetailDialog.tsx` `handleReplace`
+- `src/components/client/ServiceWizardDocumentsStep.tsx` `handleFile`
+
+Each now: shows a `toast.loading("Optimising image…")` while compressing → calls `compressIfImage(file)` → checks the post-compression size against the existing 4.5 MB Vercel guard (now also added to the documents-step site, which previously had none) → uploads. The "File is too large" guard is preserved as a safety net for edge cases (e.g. a 15 MB image that still can't get under 4.5 MB).
+
+**Build:** `npm run build` passes lint + types.
+
+**Brief:** `docs/cli-brief-upload-compression-and-required-fields-b037.md`
+
+---
+
 ### 2026-04-19 — B-036: Graceful upload error handling + 4.5 MB client-side guard (Claude Desktop)
 
 **B-036 (Upload error handling)**

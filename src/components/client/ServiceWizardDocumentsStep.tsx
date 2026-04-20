@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { CheckCircle, Upload, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { compressIfImage } from "@/lib/imageCompression";
 import type { ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 
 // Document types that are commonly required for services
@@ -43,8 +44,28 @@ function DocRow({
 
   async function handleFile(file: File) {
     setUploading(true);
+
+    // B-037 — compress images client-side before hitting Vercel.
+    let uploadFile = file;
+    if (file.type.startsWith("image/") && file.size > 500 * 1024) {
+      const optimisingToast = toast.loading("Optimising image…", { position: "top-right" });
+      try {
+        uploadFile = await compressIfImage(file);
+      } finally {
+        toast.dismiss(optimisingToast);
+      }
+    }
+
+    // Vercel serverless body limit (Hobby = 4.5 MB) — safety net after compression.
+    const VERCEL_LIMIT = 4.5 * 1024 * 1024;
+    if (uploadFile.size > VERCEL_LIMIT) {
+      toast.error(`File is too large (${(uploadFile.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+      setUploading(false);
+      return;
+    }
+
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", uploadFile);
     fd.append("documentTypeId", docType.id);
 
     try {
