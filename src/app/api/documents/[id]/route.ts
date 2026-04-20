@@ -19,7 +19,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("documents")
     .select(
-      "id, file_name, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, mime_type, document_types(name, category)"
+      "id, file_name, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, admin_status_note, admin_status_at, prefill_dismissed_at, mime_type, document_types(name, category)"
     )
     .eq("id", id)
     .eq("is_active", true)

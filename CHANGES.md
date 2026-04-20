@@ -15,6 +15,34 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-033 Complete (Claude Code)
+
+**B-033 (AI Processing, Two-Track Status, Prefill & History) — batches 1–5 shipped**
+
+Batches 1–4 delivered schema + data config + verifier + UI. Batch 5 is final verification, polish, and this summary.
+
+**Batch 5 polish commits:**
+- `src/app/api/documents/[id]/route.ts` — GET now also returns `admin_status_note`, `admin_status_at`, `prefill_dismissed_at`. Without this, the KycDocListPanel poll was overwriting `prefill_dismissed_at` with `undefined` after AI completion, which caused the banner to flash back briefly on some uploads.
+
+**Verification outcome (end-to-end audit of the 5 status flows from Batch 4):**
+1. Passport upload (AI on + extraction on) → upload route sets `verification_status='pending'` + `admin_status='pending_review'` + schedules AI; completion writes `verified|flagged|manual_review`. Compact badge on KYC panel + full pair badge in detail dialog render correctly. ✅
+2. CV upload (AI on, extraction off) → same path; `extracted_fields={}` on completion; prefill banner does NOT render (no applicable fields). ✅
+3. PEP upload with AI disabled at doc type level → upload route sets `verification_status='not_run'`, background job is not fired; badge shows "AI skipped · Pending admin review". ✅
+4. Prefill banner displays extracted fields when the doc type has `prefill_field` mapped to a whitelisted KYC column. Apply → `/api/profiles/kyc/save` (handles full_name/address on client_profiles, all KYC columns on client_profile_kyc) + `/api/documents/[id]/dismiss-prefill` → banner hides, `prefill_dismissed_at` persists. ✅
+5. Admin clicks Re-run AI in DocumentDetailDialog → `/api/admin/documents/[id]/rerun-ai` overwrites `verification_status`, `verification_result`, `verified_at`, and clears `prefill_dismissed_at`. Dialog's local state updates immediately; a page refresh on the client side re-surfaces the banner. ✅
+
+**Build + lint:** `npm run build` clean; `npm run lint` returns "No ESLint warnings or errors".
+
+**Drift guard:** `assert_documents_history_sync()` is invoked at the end of `004-ai-processing-and-history.sql`; the migration aborts if any `documents` column is not mirrored in `documents_history`.
+
+**Apply step reminder (manual):** run `supabase/migrations/004-ai-processing-and-history.sql` in the Supabase SQL editor; then `POST /api/admin/migrations/seed-ai-defaults` (or press the "Seed defaults" button in Admin → Settings → AI Document Rules) to populate per-doc-type config.
+
+**Follow-ups deferred:** history UI (timeline viewer); admin-side prefill (Certificate of Incorporation → clients/applications); per-field Apply in prefill banner; bulk admin approve; history tables for services/clients/client_profiles; per-doc email notifications; schema-drift CI hook.
+
+**Brief:** `docs/cli-brief-ai-processing-and-history-b033.md`
+
+---
+
 ### 2026-04-19 — B-033 Batch 4: Status badges + prefill banner + admin approve/reject (Claude Code)
 
 **B-033 Batch 4 — two-track status badges, AI prefill banner, admin re-run AI**
