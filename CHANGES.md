@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-038: Compact KYC document panel header (Claude Desktop)
+
+**B-038 (vertical space reduction on KYC review screen)**
+
+**Updated:** `src/components/shared/DocumentStatusLegend.tsx`
+- Rewritten as a single-line horizontal legend, always visible (no collapse)
+- Shortened labels: "AI verified" → "Verified", "AI flagged" → "Flagged", etc.
+- Two tracks separated by a subtle middle dot instead of a horizontal rule
+- Text dropped to 10px, icons 3px, gap-x-2 — fits on one row even in narrow columns
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- `KycDocListPanel`: header row now holds KYC Documents title + "X of Y uploaded" count + legend on a single line (`flex justify-between`)
+- Removed the standalone "Please upload your documents here" caption line
+- Removed the standalone "KYC Documents" header that was above the panel in the split layout (redundant with the in-panel header)
+- Removed the footer "X of Y uploaded" line (now inline in the header)
+- Scroll area `maxHeight: 280 → 240`
+
+**Vertical space saved:** ~90px on initial render of the KYC review panel (eliminated 2 heading rows + 1 footer line + compacted legend from 3 rows → 1 row).
+
 ### 2026-04-19 — B-037 Fix 3: Required-field errors visible on load (Claude Code)
 
 **B-037 Fix 3 — landing on a wizard now immediately shows what's mandatory**

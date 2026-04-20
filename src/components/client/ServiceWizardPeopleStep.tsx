@@ -436,13 +436,18 @@ function KycDocListPanel({
 
   return (
     <>
-      <div className="space-y-2">
-        <p className="text-[11px] text-gray-500 flex items-center gap-1 mb-1">
-          <FileText className="h-3 w-3" />
-          Please upload your documents here
-        </p>
-        <DocumentStatusLegend defaultOpen={true} />
-        <div className="overflow-y-auto space-y-1 mt-2" style={{ maxHeight: 280 }}>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide flex items-center gap-1">
+            <FileText className="h-3 w-3" />
+            KYC Documents
+            <span className={`ml-1 text-[10px] font-medium normal-case tracking-normal ${uploadedCount === kycDocTypes.length ? "text-green-600" : "text-amber-600"}`}>
+              · {uploadedCount} of {kycDocTypes.length} uploaded
+            </span>
+          </p>
+          <DocumentStatusLegend />
+        </div>
+        <div className="overflow-y-auto space-y-1" style={{ maxHeight: 240 }}>
           {CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => {
             const cats = grouped[cat];
             const uploadedInCat = cats.filter((dt) => getUploaded(dt.id)).length;
@@ -582,11 +587,6 @@ function KycDocListPanel({
             );
           })}
         </div>
-        <p className="text-[10px] text-gray-500 pt-1 font-medium">
-          <span className={uploadedCount === kycDocTypes.length ? "text-green-600" : "text-amber-600"}>
-            {uploadedCount}
-          </span> of {kycDocTypes.length} uploaded
-        </p>
       </div>
 
       {/* Hidden file input */}
@@ -1574,7 +1574,6 @@ export function ServiceWizardPeopleStep({
             />
           </div>
           <div>
-            <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide mb-2">KYC Documents</p>
             <KycDocListPanel
               profileId={profileId}
               kycRecordId={kycRecord.id || null}
