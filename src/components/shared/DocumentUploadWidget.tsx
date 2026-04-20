@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
+import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import type { VerificationResult } from "@/types";
 import {
   Select,
@@ -180,10 +181,13 @@ export function DocumentUploadWidget({
         };
         return (
           <>
-            <div className="flex items-center gap-2 text-xs">
-              <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-              <span className="text-green-700 font-medium">Already uploaded</span>
-              <span className="text-gray-400 truncate max-w-[120px]">{current.file_name}</span>
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <span className="text-gray-600 truncate max-w-[140px]">{current.file_name}</span>
+              <DocumentStatusBadge
+                aiStatus={current.verification_status}
+                adminStatus={current.admin_status}
+                compact
+              />
               <button
                 onClick={() => setDetailOpen(true)}
                 className="text-brand-blue hover:underline flex items-center gap-1"

@@ -30,10 +30,10 @@ export async function POST(request: Request) {
   const BOOLEAN_FIELDS = ["legal_issues_declared", "is_pep", "sanctions_checked", "adverse_media_checked", "pep_verified"];
 
   // Fields that exist on client_profiles (saved separately)
-  const PROFILE_FIELDS = ["email", "phone"];
+  const PROFILE_FIELDS = ["email", "phone", "full_name", "address"];
 
   // Fields that must never be written to either table
-  const EXCLUDED_FIELDS = ["client_id", "profile_id", "full_name",
+  const EXCLUDED_FIELDS = ["client_id", "profile_id",
     "record_type", "is_primary", "due_diligence_level", "invite_sent_at", "invite_sent_by",
     "filled_by", "id", "tenant_id", "created_at", "updated_at", "client_profile_id"];
 

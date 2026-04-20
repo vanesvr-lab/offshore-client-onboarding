@@ -15,6 +15,8 @@ export type ClientServiceDoc = {
   verification_status: string;
   verification_result: Record<string, unknown> | null;
   admin_status: string | null;
+  /** B-033 — set when the AI prefill banner has been applied or skipped for this upload. */
+  prefill_dismissed_at: string | null;
   uploaded_at: string;
   document_type_id: string | null;
   client_profile_id: string | null;
@@ -165,12 +167,12 @@ export default async function ClientServiceDetailPage({
   const docsQuery = profileIds.length > 0
     ? supabase
         .from("documents")
-        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
+        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, prefill_dismissed_at, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
         .or(`service_id.eq.${id},client_profile_id.in.(${profileIds.join(",")})`)
         .eq("is_active", true)
     : supabase
         .from("documents")
-        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
+        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, prefill_dismissed_at, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
         .eq("service_id", id)
         .eq("is_active", true);
 

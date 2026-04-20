@@ -15,6 +15,51 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-033 Batch 4: Status badges + prefill banner + admin approve/reject (Claude Code)
+
+**B-033 Batch 4 — two-track status badges, AI prefill banner, admin re-run AI**
+
+**Created:** `src/components/shared/DocumentStatusBadge.tsx`
+- Two-pill badge (AI status + admin status) with a `compact` mode that renders two colored dots + tooltip. Color map per brief: emerald (verified/approved), amber (flagged/manual_review), blue pulse (pending), grey (not_run), orange (pending_review), red (rejected).
+- Legacy `admin_status === 'pending'` rows are normalized to `pending_review` for display.
+
+**Created:** `src/components/shared/AiPrefillBanner.tsx`
+- Renders a single one-document banner showing each `(field.label → value)` pair where `field.prefill_field` is mapped + whitelisted.
+- Banner auto-hides when: no applicable fields, `doc.prefill_dismissed_at` is already set, or it was locally dismissed.
+- `keep mine` (default) vs `overwrite all` toggle; Apply → `/api/profiles/kyc/save` then `/api/documents/[id]/dismiss-prefill`; Skip → just dismisses.
+- Uses `KYC_PREFILLABLE_FIELDS` for field gating and looks up current values from both the joined KYC row and any provided `profileValues` (client_profiles fields like `full_name`/`address`).
+
+**Created:** `src/app/api/documents/[id]/dismiss-prefill/route.ts`
+- POST, auth required. Access gate: admin bypass, then uploader check, then service manager check via `profile_service_roles`, then direct `client_profile_id` match. Sets `prefill_dismissed_at=now()`.
+
+**Updated:** `src/app/api/profiles/kyc/save/route.ts`
+- `full_name` and `address` now route to `client_profiles` alongside the existing `email`/`phone` pathway so the prefill banner can write them. `full_name` removed from `EXCLUDED_FIELDS`.
+
+**Updated:** `src/app/(client)/services/[id]/page.tsx`
+- `ClientServiceDoc` gains `prefill_dismissed_at: string | null`; the documents `select()` (both branches) now loads that column so the banner can hide itself without a follow-up fetch.
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- `KycDocListPanel` now accepts `kycRecordId` + `profileValues`, displays `DocumentStatusBadge` in compact mode per uploaded row (replacing the emoji combo), and mounts `AiPrefillBanner` directly below each uploaded doc row when a KYC record id is available.
+- Review-view mount passes `kycRecord.id` + the current profile/KYC values so the banner's "keep mine" toggle can skip fields that already have a value.
+- The post-replace update inside `DocumentDetailDialog.onDocumentReplaced` populates `prefill_dismissed_at: null` so TypeScript stays happy with the new shape.
+
+**Updated:** `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+- `AdminKycDocListPanel` replaced the emoji status icons with the compact `DocumentStatusBadge` (AI dot + admin dot + hover tooltip).
+
+**Updated:** `src/components/shared/DocumentUploadWidget.tsx`
+- Compact `documentDetailMode` state now shows file name + compact `DocumentStatusBadge` + View/Replace (replaces the "Already uploaded" green-check copy).
+
+**Updated:** `src/components/shared/DocumentDetailDialog.tsx`
+- Adds a "Status" section at the top of the body rendering `DocumentStatusBadge` (AI + admin pills). Local state `aiStatus`/`aiVerResult` keeps the dialog in sync after a re-run.
+- New **Re-run AI** button next to Approve/Reject (and in a lighter row after approve/reject so admins can still re-verify). POSTs `/api/admin/documents/[id]/rerun-ai`, updates local state on success.
+- `useEffect` syncs AI status when the `doc` prop changes.
+
+**Build:** `npm run build` passes lint + types.
+
+**Brief:** `docs/cli-brief-ai-processing-and-history-b033.md`
+
+---
+
 ### 2026-04-19 — B-033 Batch 3: verifyDocument rework + upload branching + rerun endpoint (Claude Code)
 
 **B-033 Batch 3 — AI verifier + upload branching + `POST /api/admin/documents/[id]/rerun-ai`**

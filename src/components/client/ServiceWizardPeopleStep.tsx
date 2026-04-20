@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
+import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
+import { AiPrefillBanner } from "@/components/shared/AiPrefillBanner";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 import { DD_LEVEL_INCLUDES } from "@/lib/utils/dueDiligenceConstants";
@@ -262,6 +264,8 @@ function ProfileEditPanel({
 
 function KycDocListPanel({
   profileId,
+  kycRecordId,
+  profileValues,
   serviceId,
   documents: initialDocs,
   documentTypes,
@@ -270,6 +274,10 @@ function KycDocListPanel({
   onDocUploaded,
 }: {
   profileId: string;
+  /** client_profile_kyc.id — used by the AI prefill banner to write into the KYC row. */
+  kycRecordId?: string | null;
+  /** Current profile + KYC column values, for the banner "keep mine" toggle. */
+  profileValues?: Record<string, unknown>;
   serviceId: string;
   documents: ClientServiceDoc[];
   documentTypes: DocumentType[];
@@ -441,64 +449,98 @@ function KycDocListPanel({
                       const adminStatus = uploaded?.admin_status;
 
                       return (
-                        <div key={dt.id} className="flex items-center justify-between py-1 gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {uploaded
-                              ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                              : <FileText className="h-4 w-4 text-amber-500 shrink-0" />
-                            }
-                            <span className={`text-xs truncate ${uploaded ? "text-green-700 font-medium" : "text-amber-700"}`}>
-                              {dt.name}
-                            </span>
-                            {uploaded && (
-                              <span className="flex items-center gap-0.5 shrink-0">
-                                {aiStatus === "pending" && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
-                                {aiStatus === "verified" && <span className="text-[10px] text-green-600 font-bold">✓</span>}
-                                {aiStatus === "flagged" && <span className="text-[10px] text-amber-500">⚠</span>}
-                                {aiStatus === "manual_review" && <span className="text-[10px] text-orange-500">⚠</span>}
-                                {adminStatus === "approved" && <span className="text-[10px] text-green-600">🟢</span>}
-                                {adminStatus === "rejected" && <span className="text-[10px] text-red-500">🔴</span>}
+                        <div key={dt.id} className="py-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {uploaded
+                                ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                                : <FileText className="h-4 w-4 text-amber-500 shrink-0" />
+                              }
+                              <span className={`text-xs truncate ${uploaded ? "text-green-700 font-medium" : "text-amber-700"}`}>
+                                {dt.name}
                               </span>
-                            )}
+                              {uploaded && (
+                                <DocumentStatusBadge
+                                  aiStatus={aiStatus}
+                                  adminStatus={adminStatus}
+                                  compact
+                                  className="shrink-0"
+                                />
+                              )}
+                            </div>
+                            <div className="shrink-0">
+                              {uploaded ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => setDetailDoc({
+                                    id: uploaded.id,
+                                    file_name: uploaded.file_name,
+                                    mime_type: uploaded.mime_type,
+                                    uploaded_at: uploaded.uploaded_at,
+                                    document_type_id: uploaded.document_type_id,
+                                    verification_status: uploaded.verification_status,
+                                    verification_result: uploaded.verification_result,
+                                    admin_status: uploaded.admin_status,
+                                    document_types: uploaded.document_types,
+                                  })}
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-gray-400" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+                                  disabled={isUploading}
+                                  onClick={() => {
+                                    setPendingUploadTypeId(dt.id);
+                                    uploadInputRef.current?.click();
+                                  }}
+                                >
+                                  {isUploading
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <><Upload className="h-3 w-3" />Upload</>
+                                  }
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="shrink-0">
-                            {uploaded ? (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 w-6 p-0"
-                                onClick={() => setDetailDoc({
-                                  id: uploaded.id,
-                                  file_name: uploaded.file_name,
-                                  mime_type: uploaded.mime_type,
-                                  uploaded_at: uploaded.uploaded_at,
-                                  document_type_id: uploaded.document_type_id,
-                                  verification_status: uploaded.verification_status,
-                                  verification_result: uploaded.verification_result,
-                                  admin_status: uploaded.admin_status,
-                                  document_types: uploaded.document_types,
-                                })}
-                              >
-                                <Eye className="h-3.5 w-3.5 text-gray-400" />
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
-                                disabled={isUploading}
-                                onClick={() => {
-                                  setPendingUploadTypeId(dt.id);
-                                  uploadInputRef.current?.click();
-                                }}
-                              >
-                                {isUploading
-                                  ? <Loader2 className="h-3 w-3 animate-spin" />
-                                  : <><Upload className="h-3 w-3" />Upload</>
-                                }
-                              </Button>
-                            )}
-                          </div>
+
+                          {/* AI prefill banner — only when the upload has a dismissible prefill */}
+                          {uploaded && kycRecordId && (
+                            <AiPrefillBanner
+                              doc={{
+                                id: uploaded.id,
+                                verification_result:
+                                  (uploaded.verification_result as unknown as DocumentRecord["verification_result"]) ?? null,
+                                prefill_dismissed_at: uploaded.prefill_dismissed_at ?? null,
+                              }}
+                              docType={dt}
+                              kycRecord={{ id: kycRecordId, ...(profileValues ?? {}) }}
+                              profileValues={profileValues}
+                              className="mt-2"
+                              onApplied={() => {
+                                setLocalDocs((prev) =>
+                                  prev.map((d) =>
+                                    d.id === uploaded.id
+                                      ? { ...d, prefill_dismissed_at: new Date().toISOString() }
+                                      : d
+                                  )
+                                );
+                              }}
+                              onDismiss={() => {
+                                setLocalDocs((prev) =>
+                                  prev.map((d) =>
+                                    d.id === uploaded.id
+                                      ? { ...d, prefill_dismissed_at: new Date().toISOString() }
+                                      : d
+                                  )
+                                );
+                              }}
+                            />
+                          )}
                         </div>
                       );
                     })}
@@ -550,6 +592,7 @@ function KycDocListPanel({
                   verification_status: updated.verification_status ?? "pending",
                   verification_result: updated.verification_result ?? null,
                   admin_status: updated.admin_status ?? null,
+                  prefill_dismissed_at: null,
                   uploaded_at: updated.uploaded_at,
                   document_type_id: detailDoc.document_type_id ?? null,
                   client_profile_id: profileId,
@@ -1502,6 +1545,19 @@ export function ServiceWizardPeopleStep({
             <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide mb-2">KYC Documents</p>
             <KycDocListPanel
               profileId={profileId}
+              kycRecordId={kycRecord.id || null}
+              profileValues={{
+                full_name: reviewingPerson.client_profiles?.full_name ?? null,
+                address: kycRecord.address,
+                date_of_birth: kycRecord.date_of_birth,
+                nationality: kycRecord.nationality,
+                passport_country: kycRecord.passport_country,
+                passport_number: kycRecord.passport_number,
+                passport_expiry: kycRecord.passport_expiry,
+                occupation: kycRecord.occupation,
+                tax_identification_number: kycRecord.tax_identification_number,
+                jurisdiction_tax_residence: kycRecord.jurisdiction_tax_residence,
+              }}
               serviceId={serviceId}
               documents={documents}
               documentTypes={documentTypes}

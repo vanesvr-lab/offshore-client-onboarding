@@ -24,6 +24,7 @@ import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
+import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
@@ -965,13 +966,12 @@ function AdminKycDocListPanel({
                 }
                 <span className="text-xs text-gray-700 truncate">{dt.name}</span>
                 {uploaded && (
-                  <span className="flex items-center gap-0.5 shrink-0">
-                    {aiStatus === "verified" && <span className="text-[10px] text-green-600 font-bold">✓</span>}
-                    {aiStatus === "flagged" && <span className="text-[10px] text-amber-500">⚠</span>}
-                    {aiStatus === "manual_review" && <span className="text-[10px] text-orange-500">⚠</span>}
-                    {adminStatus === "approved" && <span className="text-[10px]">🟢</span>}
-                    {adminStatus === "rejected" && <span className="text-[10px]">🔴</span>}
-                  </span>
+                  <DocumentStatusBadge
+                    aiStatus={aiStatus}
+                    adminStatus={adminStatus}
+                    compact
+                    className="shrink-0"
+                  />
                 )}
               </div>
               <div className="shrink-0">

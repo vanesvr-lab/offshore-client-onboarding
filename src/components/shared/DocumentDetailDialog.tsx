@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { X, Download, CheckCircle, XCircle, AlertTriangle, ChevronDown, Upload, Loader2 } from "lucide-react";
+import { X, Download, CheckCircle, XCircle, AlertTriangle, ChevronDown, RefreshCw, Upload, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
+import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import type { DocumentUpdateRequest } from "@/app/(admin)/admin/services/[id]/page";
 import type { VerificationResult } from "@/types";
 
@@ -86,6 +87,16 @@ export function DocumentDetailDialog({
   const [replacing, setReplacing] = useState(false);
   const replaceInputRef = useRef<HTMLInputElement>(null);
 
+  const [aiStatus, setAiStatus] = useState<string | null>(doc.verification_status ?? null);
+  const [aiVerResult, setAiVerResult] = useState<Record<string, unknown> | null>(doc.verification_result ?? null);
+  const [rerunning, setRerunning] = useState(false);
+
+  // Sync AI status when doc prop changes
+  useEffect(() => {
+    setAiStatus(doc.verification_status ?? null);
+    setAiVerResult(doc.verification_result ?? null);
+  }, [doc.verification_status, doc.verification_result]);
+
   // Fetch signed URL when dialog opens
   useEffect(() => {
     if (!open) return;
@@ -109,7 +120,7 @@ export function DocumentDetailDialog({
     setAdminStatusAt(doc.admin_status_at);
   }, [doc.admin_status, doc.admin_status_note, doc.admin_status_at]);
 
-  const verResult = doc.verification_result as VerificationResult | null;
+  const verResult = (aiVerResult ?? doc.verification_result) as VerificationResult | null;
   const flags = verResult?.flags ?? [];
   const ruleResults = verResult?.rule_results ?? [];
   const extractedFields = verResult?.extracted_fields ?? {};
@@ -163,6 +174,30 @@ export function DocumentDetailDialog({
       toast.error("Failed to reject");
     } finally {
       setAdminSaving(false);
+    }
+  }
+
+  async function handleRerunAi() {
+    setRerunning(true);
+    try {
+      const res = await fetch(`/api/admin/documents/${doc.id}/rerun-ai`, { method: "POST" });
+      const data = (await res.json()) as {
+        document?: {
+          verification_status?: string;
+          verification_result?: Record<string, unknown> | null;
+        };
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Re-run failed");
+      if (data.document) {
+        setAiStatus(data.document.verification_status ?? null);
+        setAiVerResult(data.document.verification_result ?? null);
+      }
+      toast.success("AI verification re-ran", { position: "top-right" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Re-run failed");
+    } finally {
+      setRerunning(false);
     }
   }
 
@@ -253,6 +288,12 @@ export function DocumentDetailDialog({
             </div>
 
             <div className="p-5 space-y-5">
+              {/* Two-track status */}
+              <section>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Status</p>
+                <DocumentStatusBadge aiStatus={aiStatus} adminStatus={adminStatus} />
+              </section>
+
               {/* AI Verification */}
               {verResult && (
                 <section>
@@ -339,7 +380,7 @@ export function DocumentDetailDialog({
                   )}
 
                   {adminStatus !== "approved" && adminStatus !== "rejected" && !showRejectForm && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         variant="outline" size="sm"
                         className="h-8 px-3 text-xs text-green-700 border-green-300 hover:bg-green-50 gap-1"
@@ -357,6 +398,31 @@ export function DocumentDetailDialog({
                       >
                         <XCircle className="h-3 w-3" />
                         Reject
+                      </Button>
+                      <Button
+                        variant="outline" size="sm"
+                        className="h-8 px-3 text-xs gap-1"
+                        disabled={rerunning}
+                        onClick={() => void handleRerunAi()}
+                        title="Re-run AI verification on this document"
+                      >
+                        {rerunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                        Re-run AI
+                      </Button>
+                    </div>
+                  )}
+
+                  {(adminStatus === "approved" || adminStatus === "rejected") && (
+                    <div className="pt-1">
+                      <Button
+                        variant="outline" size="sm"
+                        className="h-7 px-2.5 text-xs gap-1"
+                        disabled={rerunning}
+                        onClick={() => void handleRerunAi()}
+                        title="Re-run AI verification on this document"
+                      >
+                        {rerunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                        Re-run AI
                       </Button>
                     </div>
                   )}
