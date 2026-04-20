@@ -147,7 +147,7 @@ export function MultiSelectCountry({
               <button
                 type="button"
                 onClick={() => removeCountry(country)}
-                className="text-brand-navy/50 hover:text-brand-navy ml-0.5"
+                className="text-gray-600 hover:text-red-600 ml-0.5"
                 aria-label={`Remove ${country}`}
               >
                 <X className="h-3 w-3" />
@@ -176,7 +176,7 @@ export function MultiSelectCountry({
         />
         <button
           type="button"
-          className="absolute right-2 top-2 p-0.5 text-gray-400 hover:text-gray-600"
+          className="absolute right-2 top-2 p-0.5 text-gray-600 hover:text-gray-800"
           onClick={(e) => { e.stopPropagation(); setOpen(!open); setSearch(""); }}
         >
           <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -211,7 +211,7 @@ export function MultiSelectCountry({
               </button>
             ))
           ) : (
-            <div className="px-3 py-3 text-sm text-gray-400 text-center">
+            <div className="px-3 py-3 text-sm text-gray-500 text-center">
               No matching countries
             </div>
           )}

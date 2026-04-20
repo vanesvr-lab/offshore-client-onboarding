@@ -63,7 +63,7 @@ export function CountrySelect({ value, onChange, placeholder = "Select country..
         <button
           type="button"
           onClick={() => { setCustomMode(false); onChange(""); }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 hover:text-gray-600"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 hover:text-gray-800"
           title="Use dropdown instead"
         >
           ↺
@@ -89,7 +89,7 @@ export function CountrySelect({ value, onChange, placeholder = "Select country..
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white border rounded-md shadow-lg">
           <div className="p-2 border-b">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-600" />
               <input
                 type="text"
                 value={search}

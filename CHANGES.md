@@ -15,6 +15,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-037 Fix 2: Country dropdown palette tightened (Claude Code)
+
+**B-037 Fix 2 — `text-gray-400` removed from interactive country selectors**
+
+Per the palette rule from B-034, `text-gray-400` is reserved for genuinely disabled / informational UI. The country pickers were using it on active controls, making them look disabled.
+
+**Updated:** `src/components/shared/CountrySelect.tsx`
+- "Use dropdown instead" reset button: `text-gray-400 hover:text-gray-600` → `text-gray-600 hover:text-gray-800`.
+- Search input magnifier icon: `text-gray-400` → `text-gray-600`.
+
+**Updated:** `src/components/shared/MultiSelectCountry.tsx`
+- Selected-country chip "×" remove button: `text-brand-navy/50 hover:text-brand-navy` → `text-gray-600 hover:text-red-600` (matches the palette rule for chip removal).
+- Trigger chevron button: `text-gray-400 hover:text-gray-600` → `text-gray-600 hover:text-gray-800`.
+- Empty-state "No matching countries": `text-gray-400` → `text-gray-500`.
+- Disabled-state em-dash placeholder kept as `text-gray-400` (legitimate disabled use).
+
+**Build:** `npm run build` passes lint + types.
+
+---
+
 ### 2026-04-19 — B-037 Fix 1: Client-side image compression before upload (Claude Code)
 
 **B-037 Fix 1 — phone photos no longer hit Vercel's 4.5 MB body limit**
