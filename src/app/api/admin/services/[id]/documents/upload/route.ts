@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { verifyDocument } from "@/lib/ai/verifyDocument";
-import type { VerificationRules } from "@/types";
+import type { AiExtractionField, VerificationRules } from "@/types";
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -53,6 +53,17 @@ export async function POST(
     return NextResponse.json({ error: storageError.message }, { status: 500 });
   }
 
+  const { data: docTypeRow } = await supabase
+    .from("document_types")
+    .select(
+      "name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields"
+    )
+    .eq("id", documentTypeId)
+    .maybeSingle();
+
+  const aiEnabled = docTypeRow?.ai_enabled !== false;
+  const initialVerificationStatus = aiEnabled ? "pending" : "not_run";
+
   // Upsert: one active document per type per service
   const { data: existing } = await supabase
     .from("documents")
@@ -63,6 +74,9 @@ export async function POST(
     .eq("is_active", true)
     .maybeSingle();
 
+  const selectFields =
+    "id, file_name, mime_type, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, prefill_dismissed_at, document_types(id, name, category)";
+
   let doc;
   if (existing?.id) {
     const { data, error } = await supabase
@@ -71,13 +85,20 @@ export async function POST(
         file_name: file.name,
         file_path: filePath,
         mime_type: file.type,
-        verification_status: "pending",
+        verification_status: initialVerificationStatus,
+        verification_result: null,
+        verified_at: null,
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
+        admin_status: "pending_review",
+        admin_status_note: null,
+        admin_status_by: null,
+        admin_status_at: null,
+        prefill_dismissed_at: null,
         ...(clientProfileId ? { client_profile_id: clientProfileId } : {}),
       })
       .eq("id", existing.id)
-      .select("id, file_name, mime_type, verification_status, uploaded_at, document_type_id, client_profile_id, document_types(id, name, category)")
+      .select(selectFields)
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
@@ -92,31 +113,32 @@ export async function POST(
         file_name: file.name,
         file_path: filePath,
         mime_type: file.type,
-        verification_status: "pending",
+        verification_status: initialVerificationStatus,
         is_active: true,
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
+        admin_status: "pending_review",
       })
-      .select("id, file_name, mime_type, verification_status, uploaded_at, document_type_id, client_profile_id, document_types(id, name, category)")
+      .select(selectFields)
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
   }
 
-  // Fire AI verification asynchronously
+  if (!aiEnabled) {
+    return NextResponse.json({ document: doc });
+  }
+
   const docId = doc.id as string;
   void (async () => {
     try {
-      const { data: docTypeRow } = await supabase
-        .from("document_types")
-        .select("name, ai_verification_rules")
-        .eq("id", documentTypeId)
-        .maybeSingle();
-
       const rules: VerificationRules = (docTypeRow?.ai_verification_rules as VerificationRules | null) ?? {
         extract_fields: [],
         match_rules: [],
       };
+      const extractionFields = Array.isArray(docTypeRow?.ai_extraction_fields)
+        ? (docTypeRow?.ai_extraction_fields as AiExtractionField[])
+        : [];
 
       const result = await verifyDocument({
         fileBuffer,
@@ -124,6 +146,9 @@ export async function POST(
         rules,
         applicationContext: { contact_name: null, business_name: null, ubo_data: null },
         documentType: docTypeRow?.name ?? null,
+        plainTextRules: docTypeRow?.verification_rules_text ?? null,
+        extractionEnabled: docTypeRow?.ai_extraction_enabled === true,
+        aiExtractionFields: extractionFields,
       });
 
       const verificationStatus =
@@ -138,7 +163,7 @@ export async function POST(
         })
         .eq("id", docId);
     } catch {
-      // Verification failure is non-fatal
+      // Verification failure is non-fatal; leave row marked as pending so UI retries manually.
     }
   })();
 

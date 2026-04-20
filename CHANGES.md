@@ -15,6 +15,39 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-033 Batch 3: verifyDocument rework + upload branching + rerun endpoint (Claude Code)
+
+**B-033 Batch 3 — AI verifier + upload branching + `POST /api/admin/documents/[id]/rerun-ai`**
+
+**Updated:** `src/lib/ai/verifyDocument.ts`
+- Added `extractionEnabled` + `aiExtractionFields` params to the call shape. Prompt now:
+  - describes each extraction field (key/label/type/hint) when extraction is on, or
+  - explicitly instructs the model to return `extracted_fields = {}` when off.
+- `overall_status` is enforced server-side from `rule_results`: all-pass → verified, any-fail → flagged, unreadable → manual_review. Extraction failures never flag a doc.
+- Date-typed extracted fields are normalized to ISO `YYYY-MM-DD`; unparseable dates are dropped and appended to `flags` instead of erroring.
+- `match_results` is always returned as `[]` (legacy field kept in the schema).
+- New `AiSkippedResult` type in `src/types/index.ts` (reserved for future explicit "skipped" rendering).
+
+**Updated:** `src/app/api/services/[id]/documents/upload/route.ts` and `src/app/api/admin/services/[id]/documents/upload/route.ts`
+- Loads `document_types.ai_enabled/ai_extraction_enabled/ai_extraction_fields/verification_rules_text` up front.
+- Sets `verification_status = 'not_run'` when AI is disabled and skips the background AI job entirely.
+- On re-upload (existing row) resets `admin_status='pending_review'`, clears note/by/at, clears `prefill_dismissed_at`, resets `verification_result` and `verified_at`.
+- On new insert explicitly sets `admin_status='pending_review'` (DB default covers it, but belt-and-braces for older schemas).
+- Background AI call now passes `plainTextRules`, `extractionEnabled`, `aiExtractionFields` from the doc type config.
+- Select-back includes `prefill_dismissed_at` so the client can render the banner without a follow-up fetch.
+
+**Updated:** `src/app/api/documents/library/route.ts`
+- Same AI-enabled branching + extraction config forwarding. New documents now insert with `admin_status='pending_review'`, `prefill_dismissed_at=null`.
+
+**Created:** `src/app/api/admin/documents/[id]/rerun-ai/route.ts`
+- Admin-only POST. Refuses to run when the doc type has AI disabled. Sets `verification_status='pending'` + clears prior result + clears `prefill_dismissed_at` before running. Downloads the file from storage and re-runs `verifyDocument` with current config. Writes back status, result, verified_at. Logs `document_ai_rerun` to `audit_log`.
+
+**Build:** `npm run build` passes lint + types.
+
+**Brief:** `docs/cli-brief-ai-processing-and-history-b033.md`
+
+---
+
 ### 2026-04-19 — B-033 Batch 2: Seed AI defaults + admin rules editor rework (Claude Code)
 
 **B-033 Batch 2 — per-doc-type AI config + new Settings UI**

@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyDocument } from "@/lib/ai/verifyDocument";
-import type { DocumentType } from "@/types";
+import type { AiExtractionField, DocumentType } from "@/types";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -104,7 +104,11 @@ export async function POST(request: Request) {
   }
   await deactivateQuery;
 
-  // Insert new document record with pending status
+  const typedDocType = docType as DocumentType | null;
+  const aiEnabled = typedDocType?.ai_enabled !== false;
+  const initialVerificationStatus = aiEnabled ? "pending" : "not_run";
+
+  // Insert new document record
   const { data: doc, error: dbError } = await supabase
     .from("documents")
     .insert({
@@ -115,11 +119,13 @@ export async function POST(request: Request) {
       file_name: file.name,
       file_size: file.size,
       mime_type: file.type,
-      verification_status: "pending",
+      verification_status: initialVerificationStatus,
       expiry_date: expiryDate || null,
       notes: notes || null,
       uploaded_by: session.user.id,
       uploaded_at: new Date().toISOString(),
+      admin_status: "pending_review",
+      prefill_dismissed_at: null,
     })
     .select()
     .single();
@@ -128,8 +134,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: dbError?.message ?? "Insert failed" }, { status: 500 });
   }
 
-  // Run AI verification in background (don't block response)
-  runAiVerification(doc.id, fileBuffer, file.type, docType as DocumentType | null).catch(() => {});
+  // Run AI verification in background when enabled.
+  if (aiEnabled) {
+    runAiVerification(doc.id, fileBuffer, file.type, typedDocType).catch(() => {});
+  }
 
   revalidatePath(`/admin/clients/${clientId}/documents`);
 
@@ -157,6 +165,10 @@ async function runAiVerification(
     document_type_expected: rules?.document_type_expected ?? docType?.name ?? undefined,
   };
 
+  const extractionFields = Array.isArray(docType?.ai_extraction_fields)
+    ? (docType?.ai_extraction_fields as AiExtractionField[])
+    : [];
+
   try {
     const result = await verifyDocument({
       fileBuffer,
@@ -164,6 +176,9 @@ async function runAiVerification(
       rules: verifyRules,
       applicationContext: { contact_name: null, business_name: null, ubo_data: null },
       documentType: docType?.name ?? null,
+      plainTextRules: docType?.verification_rules_text ?? null,
+      extractionEnabled: docType?.ai_extraction_enabled === true,
+      aiExtractionFields: extractionFields,
     });
 
     await supabase

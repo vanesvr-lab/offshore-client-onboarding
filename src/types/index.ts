@@ -240,6 +240,12 @@ export interface VerificationResult {
   rule_results?: RuleResult[];
 }
 
+/** B-033: return shape when AI is disabled for a document type. */
+export interface AiSkippedResult {
+  skipped: true;
+  reason: string;
+}
+
 export interface AuditLogEntry {
   id: string;
   application_id: string;

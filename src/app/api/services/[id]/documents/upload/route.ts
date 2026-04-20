@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { verifyDocument } from "@/lib/ai/verifyDocument";
-import type { VerificationRules } from "@/types";
+import type { AiExtractionField, VerificationRules } from "@/types";
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -25,7 +25,6 @@ export async function POST(
   const tenantId = getTenantId(session);
   const supabase = createAdminClient();
 
-  // Verify caller has access to this service
   const clientProfileId = session.user.clientProfileId;
   if (!clientProfileId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -59,7 +58,6 @@ export async function POST(
   const fileBuffer = Buffer.from(await file.arrayBuffer());
   const filePath = `services/${serviceId}/${documentTypeId}/${Date.now()}-${file.name}`;
 
-  // Upload to storage
   const { error: storageError } = await supabase.storage
     .from("documents")
     .upload(filePath, fileBuffer, { contentType: file.type, upsert: true });
@@ -67,6 +65,18 @@ export async function POST(
   if (storageError) {
     return NextResponse.json({ error: storageError.message }, { status: 500 });
   }
+
+  // Load document type config up front so we know whether to skip AI.
+  const { data: docTypeRow } = await supabase
+    .from("document_types")
+    .select(
+      "name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields"
+    )
+    .eq("id", documentTypeId)
+    .maybeSingle();
+
+  const aiEnabled = docTypeRow?.ai_enabled !== false;
+  const initialVerificationStatus = aiEnabled ? "pending" : "not_run";
 
   // Upsert documents row (one per document type per profile per service)
   const { data: existing } = await supabase
@@ -79,7 +89,8 @@ export async function POST(
     .eq("is_active", true)
     .maybeSingle();
 
-  const selectFields = "id, file_name, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, document_types(name, category)";
+  const selectFields =
+    "id, file_name, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, prefill_dismissed_at, document_types(name, category)";
 
   let doc;
   if (existing?.id) {
@@ -88,10 +99,18 @@ export async function POST(
       .update({
         file_name: file.name,
         file_path: filePath,
-        verification_status: "pending",
+        mime_type: file.type,
+        verification_status: initialVerificationStatus,
         verification_result: null,
+        verified_at: null,
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
+        // Re-upload resets admin review + prefill banner so it shows again.
+        admin_status: "pending_review",
+        admin_status_note: null,
+        admin_status_by: null,
+        admin_status_at: null,
+        prefill_dismissed_at: null,
       })
       .eq("id", existing.id)
       .select(selectFields)
@@ -108,10 +127,13 @@ export async function POST(
         client_profile_id: targetProfileId,
         file_name: file.name,
         file_path: filePath,
-        verification_status: "pending",
+        mime_type: file.type,
+        verification_status: initialVerificationStatus,
         is_active: true,
         uploaded_at: new Date().toISOString(),
         uploaded_by: session.user.id,
+        // DB default is 'pending_review' but set explicitly to survive older schemas.
+        admin_status: "pending_review",
       })
       .select(selectFields)
       .single();
@@ -119,24 +141,25 @@ export async function POST(
     doc = data;
   }
 
+  // If AI is disabled on this doc type, skip the background job entirely.
+  if (!aiEnabled) {
+    return NextResponse.json({ document: doc });
+  }
+
   // Fire AI verification asynchronously (fire-and-forget — response goes back immediately)
   const docId = doc.id as string;
-  const VERIFICATION_TIMEOUT_MS = 45_000; // hard cap — if AI takes longer than 45s, mark as manual_review
+  const VERIFICATION_TIMEOUT_MS = 45_000;
   void (async () => {
     try {
-      // Fetch document type's AI verification rules + name
-      const { data: docTypeRow } = await supabase
-        .from("document_types")
-        .select("name, ai_verification_rules")
-        .eq("id", documentTypeId)
-        .maybeSingle();
-
       const rules: VerificationRules = (docTypeRow?.ai_verification_rules as VerificationRules | null) ?? {
         extract_fields: [],
         match_rules: [],
       };
 
-      // Race the AI call against a timeout
+      const extractionFields = Array.isArray(docTypeRow?.ai_extraction_fields)
+        ? (docTypeRow?.ai_extraction_fields as AiExtractionField[])
+        : [];
+
       const result = await Promise.race([
         verifyDocument({
           fileBuffer,
@@ -144,6 +167,9 @@ export async function POST(
           rules,
           applicationContext: { contact_name: null, business_name: null, ubo_data: null },
           documentType: docTypeRow?.name ?? null,
+          plainTextRules: docTypeRow?.verification_rules_text ?? null,
+          extractionEnabled: docTypeRow?.ai_extraction_enabled === true,
+          aiExtractionFields: extractionFields,
         }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("AI verification timed out")), VERIFICATION_TIMEOUT_MS)
@@ -162,7 +188,6 @@ export async function POST(
         })
         .eq("id", docId);
     } catch {
-      // Verification timed out or failed — mark for manual review so UI stops waiting
       await supabase
         .from("documents")
         .update({

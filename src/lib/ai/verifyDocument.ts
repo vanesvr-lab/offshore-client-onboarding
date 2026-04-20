@@ -1,5 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { VerificationRules, VerificationResult, RuleResult } from "@/types";
+import type {
+  AiExtractionField,
+  RuleResult,
+  VerificationResult,
+  VerificationRules,
+} from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Lazy-instantiate the Anthropic client to avoid module-load-time env issues
@@ -28,15 +33,12 @@ interface VerifyParams {
   documentType?: string | null;
   /** Plain English rules typed by admin in Settings > Verification Rules */
   plainTextRules?: string | null;
+  /** B-033 — when true, the prompt asks the model to populate extracted_fields. */
+  extractionEnabled?: boolean;
+  /** B-033 — extraction schema per document type (key/label/hint/type). */
+  aiExtractionFields?: AiExtractionField[];
 }
 
-/**
- * Load active knowledge base entries relevant to this verification.
- * Pulls all rules and document_requirements + any regulatory_text where
- * applies_to.document_type matches (or is unset). Fails open — if the
- * table doesn't exist yet or the query fails, returns an empty list so
- * verification still proceeds.
- */
 async function loadRelevantKnowledgeBase(
   documentType: string | null
 ): Promise<string> {
@@ -58,17 +60,13 @@ async function loadRelevantKnowledgeBase(
     };
 
     const entries = data as Entry[];
-
-    // Filter: include if applies_to.document_type matches OR is unset
     const relevant = entries.filter((e) => {
       const appliesDocType = (e.applies_to?.document_type as string) ?? null;
-      if (!appliesDocType) return true; // applies to everything
-      if (!documentType) return true; // no doc type to filter by
+      if (!appliesDocType) return true;
+      if (!documentType) return true;
       return appliesDocType.toLowerCase() === documentType.toLowerCase();
     });
-
     if (relevant.length === 0) return "";
-
     return relevant
       .map((e) => {
         const src = e.source ? ` (Source: ${e.source})` : "";
@@ -80,6 +78,37 @@ async function loadRelevantKnowledgeBase(
   }
 }
 
+/**
+ * Best-effort ISO-date normalization. Accepts YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, D MMM YYYY, etc.
+ * Returns ISO `YYYY-MM-DD` on success, null if unparseable.
+ */
+function normalizeDate(raw: string): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  const dmY = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/;
+  const m = trimmed.match(dmY);
+  if (m) {
+    const [, d, mo, yRaw] = m;
+    const y = yRaw.length === 2 ? (Number(yRaw) > 50 ? `19${yRaw}` : `20${yRaw}`) : yRaw;
+    const dn = Number(d);
+    const mn = Number(mo);
+    if (dn >= 1 && dn <= 31 && mn >= 1 && mn <= 12) {
+      return `${y.padStart(4, "0")}-${String(mn).padStart(2, "0")}-${String(dn).padStart(2, "0")}`;
+    }
+  }
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getUTCFullYear();
+    const mo = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(parsed.getUTCDate()).padStart(2, "0");
+    return `${y}-${mo}-${d}`;
+  }
+  return null;
+}
+
 export async function verifyDocument({
   fileBuffer,
   mimeType,
@@ -87,28 +116,35 @@ export async function verifyDocument({
   applicationContext,
   documentType,
   plainTextRules,
+  extractionEnabled,
+  aiExtractionFields,
 }: VerifyParams): Promise<VerificationResult> {
   const base64 = fileBuffer.toString("base64");
   const isImage = mimeType.startsWith("image/");
+  const doExtract = Boolean(extractionEnabled && aiExtractionFields && aiExtractionFields.length > 0);
 
-  // Load applicable knowledge base entries (fails open if table missing)
   const knowledgeBase = await loadRelevantKnowledgeBase(
     documentType ?? rules.document_type_expected ?? null
   );
 
-  const systemPrompt = `You are a compliance document verification assistant for Mauritius Offshore Client Portal, a licensed management company in Mauritius. Your job is to analyze uploaded documents and verify they meet KYC/AML requirements.
+  const systemPrompt = `You are a compliance document verification assistant for a licensed management company in Mauritius. Your job is to analyze uploaded documents and verify they meet KYC/AML requirements.
 
 You will receive:
 1. A document image or PDF
 2. The expected document type
-3. Fields to extract
+3. Either a list of fields to extract (with hints + types) OR an instruction to not extract
 4. Application context (applicant name, company name)
-5. Verification rules written in plain English by the compliance team (when provided)
-6. Relevant compliance knowledge base entries (rules, document requirements, and regulatory text from the Mauritius FSC and related authorities)
+5. Verification rules written in plain English by the compliance team
+6. Relevant compliance knowledge base entries
 
-When plain English verification rules are provided, apply EACH numbered rule to the document. For each rule, determine whether it PASSES or FAILS with a brief explanation and specific evidence from the document. If no numbered rules are provided, fall back to basic document verification (readability, document type match, field extraction).
+Apply EACH numbered verification rule independently. For each rule decide PASS/FAIL with a brief explanation and specific evidence from the document.
 
-When evaluating the document, reference the knowledge base entries to determine whether the document satisfies the cited rules and regulatory requirements. Cite the entries by their TITLE in your reasoning when relevant.
+overall_status is derived ONLY from rule_results:
+  - all rules pass → "verified"
+  - any rule fails → "flagged"
+  - document is unreadable → "manual_review" (and set can_read_document: false)
+
+Extraction failures (missing, ambiguous, unparseable fields) MUST NOT change overall_status. If a field cannot be extracted, leave it out of extracted_fields and add a short note to "flags" instead.
 
 Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
 
@@ -116,12 +152,24 @@ Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
     ? `Verification rules (apply each one):\n${plainTextRules}`
     : rules.match_rules.length > 0
       ? `Matching rules (structured):\n${JSON.stringify(rules.match_rules, null, 2)}`
-      : "No specific rules — perform basic verification (readability, document type match, field extraction)";
+      : "No specific rules — perform basic verification (readability, document type match).";
+
+  const extractionSection = doExtract
+    ? `Extract the following fields. For each, obey the type hint. Return an empty string only if truly not visible.\n${
+        (aiExtractionFields ?? [])
+          .map(
+            (f, i) =>
+              `  ${i + 1}. key="${f.key}" label="${f.label}" type=${f.type}${
+                f.ai_hint ? ` hint="${f.ai_hint}"` : ""
+              }`
+          )
+          .join("\n")
+      }\nReturn extracted_fields as a flat object keyed by the field "key" values.\nFor date-typed fields, return them in ISO format (YYYY-MM-DD) if possible.`
+    : `Do not extract any fields. Set extracted_fields to {}.`;
 
   const userPrompt = `Verify this document.
 
-Expected document type: ${rules.document_type_expected || "any"}
-Fields to extract: ${JSON.stringify(rules.extract_fields)}
+Expected document type: ${documentType || rules.document_type_expected || "any"}
 
 Application context:
 - Applicant name: ${applicationContext.contact_name || "not provided"}
@@ -129,6 +177,8 @@ Application context:
 - UBOs: ${JSON.stringify(applicationContext.ubo_data)}
 
 ${rulesSection}
+
+${extractionSection}
 ${
   knowledgeBase
     ? `\nRelevant compliance knowledge base:\n${knowledgeBase}\n`
@@ -138,16 +188,8 @@ Respond with this exact JSON schema:
 {
   "can_read_document": boolean,
   "document_type_detected": string,
-  "extracted_fields": { "field_name": "extracted_value" },
-  "match_results": [
-    {
-      "field": string,
-      "expected": string,
-      "found": string,
-      "passed": boolean,
-      "note": string
-    }
-  ],
+  "extracted_fields": { "field_key": "extracted_value" },
+  "match_results": [],
   "rule_results": [
     {
       "rule_number": number,
@@ -164,10 +206,9 @@ Respond with this exact JSON schema:
 }
 
 Notes:
-- rule_results: populate only when numbered plain English rules were provided; one entry per rule
-- overall_status: "verified" if ALL rules pass, "flagged" if ANY rule fails, "manual_review" if document cannot be read
-- If you cannot read the document clearly, set can_read_document: false and overall_status: "manual_review"
-- If using structured match_rules (not plain text), keep rule_results as an empty array`;
+- rule_results: one entry per numbered rule when rules were provided, else [].
+- match_results: always return [] (legacy field; keep empty).
+- overall_status depends ONLY on rule_results (see system prompt).`;
 
   const contentBlock = isImage
     ? ({
@@ -194,25 +235,21 @@ Notes:
     messages: [
       {
         role: "user",
-        content: [
-          contentBlock,
-          { type: "text", text: userPrompt },
-        ],
+        content: [contentBlock, { type: "text", text: userPrompt }],
       },
     ],
   });
 
   let text =
     response.content[0].type === "text" ? response.content[0].text : "";
-
-  // Strip markdown code fences if the AI wrapped the JSON in ```json ... ```
   text = text.trim();
   if (text.startsWith("```")) {
     text = text.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
   }
 
+  let parsed: VerificationResult;
   try {
-    return JSON.parse(text) as VerificationResult;
+    parsed = JSON.parse(text) as VerificationResult;
   } catch {
     return {
       can_read_document: false,
@@ -226,4 +263,39 @@ Notes:
       reasoning: text,
     };
   }
+
+  // Normalize date-typed extracted fields; drop unparseable + append a flag.
+  if (doExtract && parsed.extracted_fields) {
+    const typeByKey = new Map<string, AiExtractionField["type"]>();
+    for (const f of aiExtractionFields ?? []) typeByKey.set(f.key, f.type);
+    const cleaned: Record<string, string> = {};
+    const addFlags: string[] = [];
+    for (const [k, v] of Object.entries(parsed.extracted_fields)) {
+      if (!v) continue;
+      if (typeByKey.get(k) === "date") {
+        const iso = normalizeDate(String(v));
+        if (iso) cleaned[k] = iso;
+        else addFlags.push(`Could not parse date for "${k}" — original: "${v}"`);
+      } else {
+        cleaned[k] = String(v);
+      }
+    }
+    parsed.extracted_fields = cleaned;
+    if (addFlags.length) parsed.flags = [...(parsed.flags ?? []), ...addFlags];
+  } else if (!doExtract) {
+    parsed.extracted_fields = {};
+  }
+
+  // Enforce: overall_status derives from rule_results only.
+  if (parsed.can_read_document === false) {
+    parsed.overall_status = "manual_review";
+  } else if (Array.isArray(parsed.rule_results) && parsed.rule_results.length > 0) {
+    const anyFailed = parsed.rule_results.some((r) => !r.passed);
+    parsed.overall_status = anyFailed ? "flagged" : "verified";
+  }
+
+  // Always return match_results as []; the new contract doesn't use it.
+  parsed.match_results = [];
+
+  return parsed;
 }
