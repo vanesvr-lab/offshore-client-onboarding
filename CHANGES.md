@@ -15,6 +15,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-041: Sanitize upload filenames for Supabase Storage (Claude Desktop)
+
+**B-041 (Invalid storage key fix)**
+
+Supabase Storage rejects object keys that contain spaces, colons, and several other special characters (seen as `Invalid key: ...Screenshot 2026-04-20 at 12.23.38 AM.jpg`). Screenshots and many phone-camera filenames include spaces + colons by default.
+
+**Fix:** all four upload routes now sanitize the incoming filename before building the storage path. Preserves extension, replaces non-word chars with underscores, collapses repeats, trims edges, caps length at 120 chars. Storage key becomes e.g. `services/{id}/{typeId}/{ts}-Screenshot_2026-04-20_at_12.23.38_AM.jpg`.
+
+- `src/app/api/services/[id]/documents/upload/route.ts`
+- `src/app/api/admin/services/[id]/documents/upload/route.ts`
+- `src/app/api/documents/upload/route.ts`
+- `src/app/api/documents/library/route.ts`
+
+DB column `file_name` still stores the original filename (display value); only the storage key is sanitized.
+
 ### 2026-04-20 — B-040: Replace-document save propagation + AI polling (Claude Desktop)
 
 **B-040 (replace flow UI refresh)**

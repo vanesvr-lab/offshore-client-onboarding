@@ -56,7 +56,14 @@ export async function POST(
   }
 
   const fileBuffer = Buffer.from(await file.arrayBuffer());
-  const filePath = `services/${serviceId}/${documentTypeId}/${Date.now()}-${file.name}`;
+  // Supabase Storage rejects keys containing spaces or several special chars. Sanitize the filename while preserving the extension.
+  const safeName = file.name
+    .normalize("NFKD")
+    .replace(/[^\w.\-]+/g, "_")   // replace any non-word, non-dot, non-dash with underscore
+    .replace(/_+/g, "_")          // collapse multiple underscores
+    .replace(/^_+|_+$/g, "")      // trim leading/trailing underscores
+    .slice(0, 120);               // cap length defensively
+  const filePath = `services/${serviceId}/${documentTypeId}/${Date.now()}-${safeName || "file"}`;
 
   const { error: storageError } = await supabase.storage
     .from("documents")
