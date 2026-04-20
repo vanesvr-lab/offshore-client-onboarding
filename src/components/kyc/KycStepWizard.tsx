@@ -35,6 +35,8 @@ interface KycStepWizardProps {
   hideDocumentUploads?: boolean;
   /** B-037 — when true, empty required fields render as red on first paint. Default: false (preserves admin behaviour). */
   showErrorsImmediately?: boolean;
+  /** B-039 — when true, render the Back / Save & Continue bar fixed to viewport bottom so it is always visible. */
+  fixedNav?: boolean;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -220,6 +222,7 @@ export function KycStepWizard({
   showContactFields = true,
   hideDocumentUploads = false,
   showErrorsImmediately = false,
+  fixedNav = false,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -412,10 +415,16 @@ export function KycStepWizard({
         )}
       </div>
 
+      {/* Spacer reserves room at the bottom of the page so fixed nav never covers final fields */}
+      {fixedNav && <div aria-hidden className="h-20" />}
+
       {/* Navigation */}
-      <div className={compact
-        ? "flex items-center justify-between pt-4 border-t mt-6"
-        : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between"
+      <div className={
+        fixedNav
+          ? "fixed bottom-0 left-0 right-0 z-40 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.04)] px-6 py-3 flex items-center justify-between"
+          : compact
+            ? "flex items-center justify-between pt-4 border-t mt-6"
+            : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between"
       }>
         <Button
           variant="outline"

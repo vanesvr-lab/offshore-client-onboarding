@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-039: Always-visible navigation bar on KYC review (Claude Desktop)
+
+**B-039 (fixed-bottom nav on KYC review)**
+
+**Updated:** `src/components/kyc/KycStepWizard.tsx`
+- Added `fixedNav?: boolean` prop (default `false`). When `true`:
+  - Nav bar renders with `position: fixed, bottom-0, left-0, right-0, z-40` — always visible regardless of scroll position
+  - Subtle shadow above the bar for separation from content
+  - A 80px spacer is added above the nav so fixed positioning never covers the final form fields
+- Prior `sticky bottom-0 -mx-8 -mb-8` path remained for other mount sites that expect it (standalone `/kyc`, external fill)
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Review-view `KycStepWizard` mount now passes `fixedNav` — Back / Save & Continue always visible while reviewing a person's KYC
+
+**Rationale:** `sticky bottom-0` only works when inside a scroll container whose last child is the sticky element. The review view's parent is a plain `<div className="space-y-4">` (no overflow context), so sticky didn't pin reliably. Fixed positioning avoids the container dependency entirely.
+
 ### 2026-04-20 — B-038: Compact KYC document panel header (Claude Desktop)
 
 **B-038 (vertical space reduction on KYC review screen)**
