@@ -57,7 +57,20 @@ export type ApplicationStatus =
   | "approved"
   | "rejected";
 
-export type VerificationStatus = "pending" | "verified" | "flagged" | "manual_review";
+export type VerificationStatus = "pending" | "verified" | "flagged" | "manual_review" | "not_run";
+
+/** B-033 alias — same set as VerificationStatus, kept distinct for new code clarity. */
+export type AiVerificationStatus = VerificationStatus;
+
+export type AdminReviewStatus = "pending_review" | "approved" | "rejected";
+
+export interface AiExtractionField {
+  key: string;
+  label: string;
+  ai_hint?: string;
+  type: "string" | "date";
+  prefill_field: string | null; // column on client_profile_kyc, or null
+}
 
 export type DocumentCategory = "corporate" | "kyc" | "compliance";
 
@@ -265,6 +278,14 @@ export interface DocumentType {
   description: string | null;
   validity_period_days: number | null;
   ai_verification_rules: Record<string, unknown> | null;
+  /** Plain-English numbered rules typed by admin in Settings → Verification Rules. */
+  verification_rules_text?: string | null;
+  /** B-033 — when false, uploads skip AI and go straight to pending admin review. */
+  ai_enabled?: boolean;
+  /** B-033 — when true (and ai_enabled), the AI prompt asks for extracted_fields. */
+  ai_extraction_enabled?: boolean;
+  /** B-033 — list of fields the AI should extract; some map to a KYC prefill column. */
+  ai_extraction_fields?: AiExtractionField[];
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -419,11 +440,13 @@ export type DocumentRecord = {
   uploaded_by: string | null;
   uploaded_at: string;
   verified_at: string | null;
-  // Admin manual review
-  admin_status: 'pending' | 'approved' | 'rejected' | null;
+  // Admin manual review (B-033: legacy 'pending' is migrated to 'pending_review' in DB)
+  admin_status: AdminReviewStatus | 'pending' | null;
   admin_status_note: string | null;
   admin_status_by: string | null;
   admin_status_at: string | null;
+  /** B-033 — set when client applies / dismisses the AI prefill banner for this upload. */
+  prefill_dismissed_at?: string | null;
 }
 
 export interface DocumentLink {

@@ -33,6 +33,7 @@ export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
   verified: "Verified",
   flagged: "Flagged",
   manual_review: "Manual Review",
+  not_run: "AI Skipped",
 };
 
 export const VERIFICATION_STATUS_COLORS: Record<VerificationStatus, string> = {
@@ -40,6 +41,7 @@ export const VERIFICATION_STATUS_COLORS: Record<VerificationStatus, string> = {
   verified: "bg-green-100 text-green-700",
   flagged: "bg-amber-100 text-amber-700",
   manual_review: "bg-blue-100 text-blue-700",
+  not_run: "bg-gray-100 text-gray-600",
 };
 
 export const BUSINESS_TYPES = [

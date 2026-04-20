@@ -15,6 +15,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-033 Batch 1: Schema migration (Claude Code)
+
+**B-033 Batch 1 — AI processing columns + admin status normalization + history tables**
+
+**Created:** `supabase/migrations/004-ai-processing-and-history.sql`
+- `document_types`: new `ai_enabled bool default true`, `ai_extraction_enabled bool default false`, `ai_extraction_fields jsonb default '[]'`.
+- `documents.verification_status` check constraint extended to allow `'not_run'`.
+- `documents.admin_status` default set to `'pending_review'`; legacy nulls + `'pending'` rows backfilled to `'pending_review'`; column made `NOT NULL`; check constraint now `('pending_review','approved','rejected')`.
+- `documents.prefill_dismissed_at timestamptz` (nullable).
+- New table **`documents_history`** mirroring all current `documents` columns plus `history_id, document_id, operation, changed_at, changed_by, changed_by_role`. Index on `(document_id, changed_at desc)`.
+- New table **`client_profile_kyc_history`** storing the full row as JSONB (40+ columns; trade-off documented inline). Index on `(client_profile_kyc_id, changed_at desc)`.
+- Helper `public.get_history_actor_role(uid)` infers `admin | client | system` from `admin_users` membership.
+- Triggers `documents_history_trg` and `client_profile_kyc_history_trg` (`AFTER INSERT|UPDATE|DELETE FOR EACH ROW`) snapshot rows on every change. Triggers swallow missing `auth.uid()` so service-role writes still log (`actor_role='system'`).
+- RLS: both history tables read-only to admins; no insert/update/delete policy → only triggers can write.
+- `assert_documents_history_sync()` compares column lists between `documents` and `documents_history` and is invoked at the end of the migration so any future drift fails it loudly.
+
+**Created:** `src/lib/constants/prefillFields.ts`
+- `KYC_PREFILLABLE_FIELDS` whitelist (10 columns) + `KycPrefillableField` type + `isKycPrefillableField` guard.
+
+**Updated:** `src/types/index.ts`
+- Added `'not_run'` to `VerificationStatus`; added type aliases `AiVerificationStatus`, `AdminReviewStatus`; added `AiExtractionField` interface.
+- `DocumentType` now declares optional `verification_rules_text`, `ai_enabled`, `ai_extraction_enabled`, `ai_extraction_fields`.
+- `DocumentRecord.admin_status` widened to `AdminReviewStatus | 'pending' | null` (legacy 'pending' kept for compat). Added optional `prefill_dismissed_at`.
+
+**Updated:** `src/lib/utils/constants.ts`
+- `VERIFICATION_STATUS_LABELS` / `_COLORS` extended with `not_run` entries (`AI Skipped` + grey).
+
+**Build:** `npm run build` passes lint + types.
+
+**Apply step (manual):** open Supabase SQL editor and execute `supabase/migrations/004-ai-processing-and-history.sql`. The file ends with `SELECT public.assert_documents_history_sync()` so the migration aborts if the history schema misses any documents column.
+
+**Brief:** `docs/cli-brief-ai-processing-and-history-b033.md`
+
+---
+
 ### 2026-04-19 — B-032: Client KYC polish (Claude Desktop)
 
 **B-032 (Client KYC polish)** — three small UI fixes on the client KYC review screen.
