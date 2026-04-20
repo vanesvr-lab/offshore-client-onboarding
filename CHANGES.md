@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-033 Batch 2: Seed AI defaults + admin rules editor rework (Claude Code)
+
+**B-033 Batch 2 — per-doc-type AI config + new Settings UI**
+
+**Created:** `src/app/api/admin/migrations/seed-ai-defaults/route.ts`
+- `POST` — admin-only, idempotent. Seeds `ai_enabled`, `ai_extraction_enabled`, `ai_extraction_fields` for the 12 named doc types from the brief. Sets `verification_rules_text` only when the row currently has `null` (existing rules are preserved).
+- For any other active doc type, fills `ai_enabled=true`, `ai_extraction_enabled=false`, `ai_extraction_fields=[]` only where unset.
+- Returns `{ seeded[], fallbacks[], summary }` so the admin can see what was found / missing / inserted.
+
+**Updated:** `src/app/api/admin/document-types/[id]/rules/route.ts`
+- PATCH payload now `{ ai_enabled, ai_extraction_enabled, ai_extraction_fields, verification_rules_text }`. Backwards-compatible: also accepts the old `verificationRulesText` camelCase key.
+- Validates: `ai_extraction_fields` must be an array, each item needs unique non-empty `key` + `label`; `prefill_field` must be either `null`/empty or a value in the `KYC_PREFILLABLE_FIELDS` whitelist.
+
+**Updated:** `src/app/(admin)/admin/settings/rules/page.tsx`
+- Renamed page heading to "AI Document Rules" + descriptive lead.
+- Each card now shows: `Enable AI` toggle, `Extract fields` toggle (greyed when AI is off), an editable extraction-fields table (Key / Label / Type / Prefill to / AI hint / delete) with `Add field`, the verification-rules textarea, and a single `Save` button.
+- "Seed defaults" button in the page header POSTs to the new migration endpoint and reloads the doc-types list.
+- Prefill-target dropdown is populated from `KYC_PREFILLABLE_FIELDS` plus a `— none —` option.
+- Save serializes only the relevant fields and clears `ai_extraction_fields` to `[]` when AI is disabled.
+
+**Build:** `npm run build` passes lint + types.
+
+**Brief:** `docs/cli-brief-ai-processing-and-history-b033.md`
+
+---
+
 ### 2026-04-19 — B-033 Batch 1: Schema migration (Claude Code)
 
 **B-033 Batch 1 — AI processing columns + admin status normalization + history tables**
