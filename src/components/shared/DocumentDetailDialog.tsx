@@ -127,7 +127,19 @@ export function DocumentDetailDialog({
   const confidence = verResult?.confidence_score;
   const passedRules = ruleResults.filter((r) => r.passed).length;
   const typeName = doc.document_types?.name ?? doc.file_name;
-  const mimeType = doc.mime_type ?? "";
+  // Fall back to filename extension when mime_type is null on older uploads.
+  function inferMimeFromName(name: string | null | undefined): string {
+    if (!name) return "";
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    if (["jpg","jpeg"].includes(ext)) return "image/jpeg";
+    if (ext === "png") return "image/png";
+    if (ext === "webp") return "image/webp";
+    if (ext === "gif") return "image/gif";
+    if (ext === "tiff" || ext === "tif") return "image/tiff";
+    if (ext === "pdf") return "application/pdf";
+    return "";
+  }
+  const mimeType = doc.mime_type ?? inferMimeFromName(doc.file_name);
   const isImage = mimeType.startsWith("image/");
   const isPdf = mimeType === "application/pdf";
 

@@ -79,10 +79,10 @@ export function CountrySelect({ value, onChange, placeholder = "Select country..
         onClick={() => setOpen(!open)}
         className="w-full text-left border rounded-md px-3 py-2 text-sm bg-white hover:border-gray-400 flex items-center justify-between"
       >
-        <span className={value ? "text-gray-900" : "text-gray-400"}>
+        <span className={value ? "text-gray-900" : "text-gray-500"}>
           {value || placeholder}
         </span>
-        <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+        <ChevronDown className="h-4 w-4 text-gray-600 shrink-0" />
       </button>
 
       {open && (

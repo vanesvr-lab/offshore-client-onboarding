@@ -15,6 +15,38 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-034: Status icons, legend, preview fallback, color palette (Claude Desktop)
+
+**B-034 (Client KYC display polish)**
+
+**Updated:** `src/components/shared/DocumentStatusBadge.tsx`
+- Replaced colored dots with Lucide icons:
+  - AI status: ShieldCheck / ShieldAlert / ShieldQuestion / Loader2 / ShieldOff
+  - Admin status: UserCheck / UserX / Clock
+- Compact mode: icon pair with native `title` tooltip + aria-label
+- Expanded mode: icon + label pills
+
+**Created:** `src/components/shared/DocumentStatusLegend.tsx`
+- Collapsible legend explaining the 8 status icons
+- Default collapsed; toggle with chevron
+- Mounted below "Please upload your documents here" in `KycDocListPanel`
+
+**Updated:** `src/components/shared/DocumentDetailDialog.tsx`
+- Added `inferMimeFromName()` helper — falls back to filename extension (jpg/jpeg/png/webp/gif/tiff/pdf) when `mime_type` is null on older uploaded rows
+- Fixes "Preview not available for this file type" for historical uploads where mime_type wasn't stored
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx`
+- Mounted `DocumentStatusLegend` after the upload-here caption
+- Eye icon and Remove role link: `text-gray-400` → `text-gray-600` (was too light, looked disabled)
+- Shareholding % label: gray-400 → gray-600
+- Remove hover: red-500 → red-600
+
+**Updated:** `src/components/shared/CountrySelect.tsx`
+- Placeholder text: gray-400 → gray-500
+- Chevron icon: gray-400 → gray-600
+
+**Rationale:** gray-400 now reserved for truly disabled/informational contexts. Interactive icons and links use gray-600 so users don't mistake them for disabled controls.
+
 ### 2026-04-19 — B-033 Complete (Claude Code)
 
 **B-033 (AI Processing, Two-Track Status, Prefill & History) — batches 1–5 shipped**

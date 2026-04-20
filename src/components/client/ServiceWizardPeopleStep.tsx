@@ -12,6 +12,7 @@ import { KycStepWizard } from "@/components/kyc/KycStepWizard";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
+import { DocumentStatusLegend } from "@/components/shared/DocumentStatusLegend";
 import { AiPrefillBanner } from "@/components/shared/AiPrefillBanner";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement, VerificationStatus } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
@@ -242,13 +243,13 @@ function ProfileEditPanel({
                 {ROLE_LABELS[r.role as ServicePersonRole] ?? r.role}
               </span>
               {r.shareholding_percentage != null && (
-                <span className="text-xs text-gray-400">{r.shareholding_percentage}%</span>
+                <span className="text-xs text-gray-600">{r.shareholding_percentage}%</span>
               )}
             </div>
             {!r.can_manage && (
               <button
                 onClick={() => void onRoleRemoved(r.id)}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                className="text-xs text-gray-600 hover:text-red-600 transition-colors"
               >
                 Remove
               </button>
@@ -415,7 +416,8 @@ function KycDocListPanel({
           <FileText className="h-3 w-3" />
           Please upload your documents here
         </p>
-        <div className="overflow-y-auto space-y-1.5" style={{ maxHeight: 360 }}>
+        <DocumentStatusLegend defaultOpen={false} />
+        <div className="overflow-y-auto space-y-1.5 mt-2" style={{ maxHeight: 360 }}>
           {CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => {
             const cats = grouped[cat];
             const uploadedInCat = cats.filter((dt) => getUploaded(dt.id)).length;
@@ -486,7 +488,7 @@ function KycDocListPanel({
                                     document_types: uploaded.document_types,
                                   })}
                                 >
-                                  <Eye className="h-3.5 w-3.5 text-gray-400" />
+                                  <Eye className="h-3.5 w-3.5 text-gray-600" />
                                 </Button>
                               ) : (
                                 <Button
