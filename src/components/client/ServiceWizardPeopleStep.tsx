@@ -351,6 +351,12 @@ function KycDocListPanel({
   }
 
   async function handleUpload(dtId: string, file: File) {
+    // Vercel serverless body limit (Hobby = 4.5 MB). Catch client-side to avoid HTML 413 → JSON parse error.
+    const VERCEL_LIMIT = 4.5 * 1024 * 1024;
+    if (file.size > VERCEL_LIMIT) {
+      toast.error(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+      return;
+    }
     setUploadingTypeId(dtId);
     try {
       const fd = new FormData();
@@ -361,8 +367,13 @@ function KycDocListPanel({
         method: "POST",
         body: fd,
       });
-      const data = (await res.json()) as { document?: ClientServiceDoc; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      const raw = await res.text();
+      let data: { document?: ClientServiceDoc; error?: string } = {};
+      try { data = raw ? JSON.parse(raw) as typeof data : {}; } catch { /* non-JSON (e.g. 413 HTML) */ }
+      if (!res.ok) {
+        if (res.status === 413) throw new Error("File is too large. Please upload under 4.5 MB.");
+        throw new Error(data.error ?? `Upload failed (${res.status})`);
+      }
       if (data.document) {
         const newDoc = data.document as unknown as ClientServiceDoc;
         setLocalDocs((prev) => {

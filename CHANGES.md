@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-036: Graceful upload error handling + 4.5 MB client-side guard (Claude Desktop)
+
+**B-036 (Upload error handling)**
+
+Vercel serverless functions on Hobby tier reject request bodies over 4.5 MB with a plain-text 413 HTML page. Client code was calling `res.json()` on this and throwing `Unexpected token 'R', "Request En"...`. Fixed by:
+
+**Updated:** `src/components/shared/DocumentDetailDialog.tsx` — `handleReplace`
+- Client-side size check at 4.5 MB with a clear toast before the request fires
+- Read response as text + try-parse-JSON so non-JSON 413/500 bodies don't throw
+- Special 413 handling returns "File is too large. Please upload under 4.5 MB."
+
+**Updated:** `src/components/client/ServiceWizardPeopleStep.tsx` — `handleUpload`
+- Same pattern: client-side 4.5 MB check + resilient response parsing
+
+Server-side `MAX_FILE_SIZE` (10 MB) on the upload route is now superseded by Vercel's 4.5 MB cap. To raise this, we'd either upgrade to Vercel Pro (100 MB bodies) or implement direct-to-Supabase uploads via signed URL. Not done in this batch.
+
 ### 2026-04-19 — B-035: Green reserved for admin-approved; legend default open; tighter doc list (Claude Desktop)
 
 **B-035 (Doc list display tweaks)**

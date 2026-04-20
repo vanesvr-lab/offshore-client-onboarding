@@ -215,6 +215,13 @@ export function DocumentDetailDialog({
 
   async function handleReplace(file: File) {
     if (!serviceId || !doc.document_type_id) return;
+    // Vercel serverless request body limit is 4.5 MB on Hobby.
+    // Catch this client-side so the user sees a clear message instead of HTML 413.
+    const VERCEL_LIMIT = 4.5 * 1024 * 1024;
+    if (file.size > VERCEL_LIMIT) {
+      toast.error(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please upload a file under 4.5 MB.`);
+      return;
+    }
     setReplacing(true);
     try {
       const fd = new FormData();
@@ -224,8 +231,14 @@ export function DocumentDetailDialog({
         method: "POST",
         body: fd,
       });
-      const data = (await res.json()) as { document?: Partial<DocumentDetailDoc>; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      // Read as text first so a non-JSON body (e.g. a 413 HTML page) doesn't throw.
+      const raw = await res.text();
+      let data: { document?: Partial<DocumentDetailDoc>; error?: string } = {};
+      try { data = raw ? JSON.parse(raw) as typeof data : {}; } catch { /* non-JSON response */ }
+      if (!res.ok) {
+        if (res.status === 413) throw new Error("File is too large. Please upload under 4.5 MB.");
+        throw new Error(data.error ?? `Upload failed (${res.status})`);
+      }
       toast.success("Document replaced", { position: "top-right" });
       if (data.document) onDocumentReplaced?.(data.document);
       onOpenChange(false);
