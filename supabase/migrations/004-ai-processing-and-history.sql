@@ -33,15 +33,10 @@ ALTER TABLE documents
   ADD CONSTRAINT documents_verification_status_check
   CHECK (verification_status IN ('pending','verified','flagged','manual_review','not_run'));
 
--- admin_status — default pending_review, backfill nulls, enforce NOT NULL
-ALTER TABLE documents
-  ALTER COLUMN admin_status SET DEFAULT 'pending_review';
-
-UPDATE documents SET admin_status = 'pending_review' WHERE admin_status IS NULL;
-
--- Also migrate any legacy 'pending' rows to 'pending_review' so the new check constraint accepts them.
-UPDATE documents SET admin_status = 'pending_review' WHERE admin_status = 'pending';
-
+-- admin_status migration
+-- Order matters: drop OLD check constraint FIRST (it rejects 'pending_review'),
+-- THEN backfill, THEN add the new constraint. Earlier revision of this migration
+-- ran the UPDATE before the DROP which hit constraint violation 23514.
 DO $$
 DECLARE r record;
 BEGIN
@@ -51,6 +46,12 @@ BEGIN
     EXECUTE 'ALTER TABLE documents DROP CONSTRAINT ' || quote_ident(r.conname);
   END LOOP;
 END $$;
+
+ALTER TABLE documents
+  ALTER COLUMN admin_status SET DEFAULT 'pending_review';
+
+UPDATE documents SET admin_status = 'pending_review'
+  WHERE admin_status IS NULL OR admin_status = 'pending';
 
 ALTER TABLE documents
   ALTER COLUMN admin_status SET NOT NULL,
