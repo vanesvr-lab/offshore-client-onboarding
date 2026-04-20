@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-040: Replace-document save propagation + AI polling (Claude Desktop)
+
+**B-040 (replace flow UI refresh)**
+
+Server-side the replace path already persisted the new file correctly. Two client-side issues made it feel like the save didn't happen:
+
+**Fix 1 — `KycDocListPanel` ignored prop updates after mount**
+- `src/components/client/ServiceWizardPeopleStep.tsx`: `localDocs` was initialized once from `initialDocs` and never synced. Added a `useEffect` to re-seed `localDocs` when the parent updates the `documents` prop.
+
+**Fix 2 — No AI polling after a replace**
+- `onDocumentReplaced` handler in the same file now calls `pollForVerification(newDocId, dtId)` if the replaced doc's status came back as `'pending'`. Previously only the first-time upload path kicked off polling, so a replaced doc stayed in "AI checking..." state until a manual page refresh.
+
+**Verify:**
+- Open a doc, click Replace Document → select a file
+- Dialog closes; doc row shows new file name immediately
+- "AI checking..." spinner appears for up to ~45s, then flips to Verified / Flagged / Manual review based on AI outcome
+
 ### 2026-04-20 — B-039: Always-visible navigation bar on KYC review (Claude Desktop)
 
 **B-039 (fixed-bottom nav on KYC review)**

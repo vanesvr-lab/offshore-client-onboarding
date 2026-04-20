@@ -293,6 +293,11 @@ function KycDocListPanel({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [pendingUploadTypeId, setPendingUploadTypeId] = useState<string | null>(null);
 
+  // Keep localDocs in sync when the parent updates the docs prop (e.g. after a replace from the detail dialog)
+  useEffect(() => {
+    setLocalDocs(initialDocs);
+  }, [initialDocs]);
+
   // Derive required KYC doc types — use cumulative levels (cdd includes basic + sdd)
   const includedLevels = DD_LEVEL_INCLUDES[dueDiligenceLevel] ?? ["basic", "sdd", "cdd"];
   const ddReqDocTypeIds = requirements
@@ -614,6 +619,7 @@ function KycDocListPanel({
           onDocumentReplaced={(newDoc) => {
             if (detailDoc) {
               const updated = { ...detailDoc, ...newDoc } as DocumentDetailDoc;
+              const dtId = detailDoc.document_type_id ?? null;
               setDetailDoc(null);
               setLocalDocs((prev) => {
                 const without = prev.filter((d) => d.id !== detailDoc.id);
@@ -626,7 +632,7 @@ function KycDocListPanel({
                   admin_status: updated.admin_status ?? null,
                   prefill_dismissed_at: null,
                   uploaded_at: updated.uploaded_at,
-                  document_type_id: detailDoc.document_type_id ?? null,
+                  document_type_id: dtId,
                   client_profile_id: profileId,
                   document_types: updated.document_types
                     ? { name: updated.document_types.name, category: updated.document_types.category ?? "" }
@@ -634,6 +640,10 @@ function KycDocListPanel({
                 };
                 return [...without, asClientDoc];
               });
+              // Kick off AI verification polling for the replaced doc so its status updates without a page refresh.
+              if (dtId && (updated.verification_status ?? "pending") === "pending") {
+                void pollForVerification(updated.id, dtId);
+              }
             }
           }}
         />
