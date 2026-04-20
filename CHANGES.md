@@ -15,6 +15,59 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-044: Per-field AI prefill icon + proof-of-address reseed (Claude Code)
+
+**B-044 (Per-field prefill icon + proof-of-address fix)** — bug-fix + new UX affordance.
+
+**Item 1 — "Fill from uploaded document" not appearing after POA upload.**
+
+Diagnosis from a static read of the code (no Supabase console available from this session):
+
+- `src/app/api/admin/migrations/seed-ai-defaults/route.ts` and the in-repo seed both set `ai_extraction_enabled=true` and the first extraction field to `{key:"address_on_document", prefill_field:"address"}` — correct.
+- `src/lib/kyc/computePrefillable.ts` tolerates the POA doc exactly like the passport doc (same mapping path — look up doc type config by `document_type_id`, intersect extracted_fields with `ai_extraction_fields`, require `prefill_field ∈ KYC_PREFILLABLE_FIELDS`, drop empty + already-filled targets).
+- `src/components/client/ServiceWizardPeopleStep.tsx` passes `documents.filter(d => d.client_profile_id === profileId)` as `personDocs` — same filter for both docs, so the passport working while POA does not rules out a profile-id mismatch at the client.
+
+**Most likely cause** (verifiable with the Supabase SQL snippets in the brief): an admin saved an edit on `/admin/settings/rules` that cleared the `prefill_field` dropdown on POA's `address_on_document` extraction field. Confirmed against the rules editor — the dropdown includes a `— none —` option, and selecting it would persist `prefill_field: null` (and the rules-page form only re-emits `ai_extraction_fields` when AI is enabled; if the admin toggled AI off and back on mid-edit, it would also wipe the list).
+
+**Remedy:** new idempotent admin endpoint **`POST /api/admin/migrations/reseed-proof-of-address-extraction`** (`src/app/api/admin/migrations/reseed-proof-of-address-extraction/route.ts`). Restores POA's canonical seed config (`ai_enabled=true`, `ai_extraction_enabled=true`, `ai_extraction_fields` set to the exact seed from `seed-ai-defaults`), returns `{ before, after }` so the admin can see what changed. Admin-only. Safe to re-run.
+
+**How to confirm at runtime:** either run the Supabase SQL from the brief's "Check A / Check B" and look at the columns on that row, or invoke the reseed endpoint and re-check. If after the reseed the top button still does not appear, item 1 of this batch will not be the fix and the cause is elsewhere (AI-prompt key mismatch, client_profile_id mismatch on the upload row, verification_status=pending) — those branches are listed in the brief's likely-outcomes table. Logged here so the next session can pick up without re-deriving.
+
+**Item 2 — Per-field ✨ prefill icon.**
+
+New pattern — a small ✨ Sparkles button appears inline next to a KYC form field label whenever the AI has extracted a matching value for that target, regardless of whether the form field is currently empty. Hover shows the extracted value + source doc; click replaces the current value.
+
+**Created:**
+- `src/components/kyc/FieldPrefillIcon.tsx` — reusable inline button that calls the provided `onFill` callback. Wrapped in the shadcn `Tooltip` shim (`@/components/ui/tooltip`, added in B-043). Tooltip content:
+  - Line 1: `Extracted: "<value>"` (truncated at 60 chars)
+  - Line 2: `From: <doc type> — click to use`
+  Uses `aria-label="Fill <field> from uploaded document"`, keyboard-focusable, swaps to a spinner while the save is in flight.
+
+**Updated:** `src/lib/kyc/computePrefillable.ts`
+- Added `computeAvailableExtracts({ docs, docTypes })` — same stable-sort + per-target dedup as the existing helper, but without the "form field must be empty" filter. Exported alongside `computePrefillableFields` (which stays as the source of truth for the top bulk-fill button + step-nav indicator).
+
+**Updated:** `src/components/kyc/IndividualKycForm.tsx`
+- Computes `availableByTarget: Map<string, PrefillableField>` once at the top. New `handleFieldPrefill` POSTs a single-field payload to `/api/profiles/kyc/save` and merges the value into local `setFields` on success. Toast: `Filled <label> from <doc type>.` on success, `Couldn't fill from document — please try again.` on error.
+- Icons rendered inline on the Full legal name / Date of birth / Nationality / Passport country / Passport number / Passport expiry / Residential address / Occupation / TIN labels (every `FieldRow` whose target is in `KYC_PREFILLABLE_FIELDS` and has an available extract).
+
+**Updated:** `src/components/kyc/steps/IdentityStep.tsx`
+- Internal `Field` helper now accepts optional `prefillFrom` + `onPrefillField`. If both are set it renders `FieldPrefillIcon` inside the `ValidatedLabel`.
+- New `handleFieldPrefill` mirrors the IndividualKycForm version but uses the wizard's `onChange` (controlled-form pattern) instead of local state.
+- Icons wired on Full legal name, Date of birth, Nationality, Passport country, Passport number, Passport expiry, and Residential address.
+
+**Ambiguity resolved in-flight:** the brief's Item 1 "Check C" debug instructions point at `IndividualKycForm.tsx`, but the user flow that triggered the bug (Service wizard → People step → Review KYC) renders `KycStepWizard → IdentityStep`, not `IndividualKycForm`. Both surfaces got the per-field icon.
+
+**Deferred / not in scope (flagged as tech debt):**
+- `FinancialStep` and `DeclarationsStep` don't yet receive `personDocs/personDocTypes` from `KycStepWizard`, so icons on Occupation (wizard flow — there is none in IdentityStep), TIN, and `jurisdiction_tax_residence` are only visible in `IndividualKycForm` (the standalone `/kyc` + admin KYC pages). Threading the two props into those steps is a small future batch.
+
+**Build:** `npm run build` passes lint + types.
+
+**Brief:** `docs/cli-brief-per-field-prefill-icon-b044.md`
+
+**Dev-server reset:** `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`
+
+---
+
 ### 2026-04-20 — B-043: Client wizard polish, 6 items (Claude Code)
 
 **B-043 (Client wizard polish)** — six related UX/security fixes shipped together.

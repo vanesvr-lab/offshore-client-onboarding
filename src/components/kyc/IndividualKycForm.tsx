@@ -18,7 +18,9 @@ import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
 import { COUNTRIES } from "@/components/shared/MultiSelectCountry";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
-import { computePrefillableFields } from "@/lib/kyc/computePrefillable";
+import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
+import type { PrefillableField } from "@/lib/kyc/computePrefillable";
+import { FieldPrefillIcon } from "@/components/kyc/FieldPrefillIcon";
 import { cn } from "@/lib/utils";
 import type { KycRecord, DocumentRecord, DocumentType } from "@/types";
 
@@ -210,8 +212,7 @@ export function IndividualKycForm({
   const [prefilling, setPrefilling] = useState(false);
   const prefillSourceDocs = personDocs ?? docs;
   const prefillSourceDocTypes = personDocTypes ?? documentTypes;
-  const prefillable = computePrefillableFields({
-    form: fields as Record<string, unknown>,
+  const prefillInput = {
     docs: prefillSourceDocs.map((d) => ({
       id: d.id,
       document_type_id: d.document_type_id ?? null,
@@ -225,6 +226,38 @@ export function IndividualKycForm({
       name: t.name,
       ai_extraction_fields: t.ai_extraction_fields ?? null,
     })),
+  };
+  const availableExtracts = computeAvailableExtracts(prefillInput);
+  const availableByTarget = new Map<string, PrefillableField>();
+  for (const row of availableExtracts) availableByTarget.set(row.target, row);
+
+  async function handleFieldPrefill(
+    target: string,
+    value: string,
+    sourceDocLabel: string,
+    fieldLabel: string,
+  ) {
+    if (!initialRecord.id) {
+      toast.error("Couldn't fill from document — please try again.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: initialRecord.id, fields: { [target]: value } }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      setFields((prev) => ({ ...prev, [target]: value }));
+      toast.success(`Filled ${fieldLabel} from ${sourceDocLabel}.`);
+    } catch {
+      toast.error("Couldn't fill from document — please try again.");
+    }
+  }
+  const prefillable = computePrefillableFields({
+    form: fields as Record<string, unknown>,
+    docs: prefillInput.docs,
+    docTypes: prefillInput.docTypes,
   });
 
   async function handlePrefillClick() {
@@ -300,7 +333,16 @@ export function IndividualKycForm({
           <div className="border border-t-0 rounded-b-lg px-4 py-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FieldRow prefilled={prefilled.has("full_name")} mandatory>
-                <Label className="text-xs">Full legal name *</Label>
+                <Label className="text-xs">
+                  Full legal name *
+                  {availableByTarget.get("full_name") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("full_name")!}
+                      fieldLabel="Full legal name"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Input
                   value={fields.full_name ?? ""}
                   onChange={(e) => set("full_name", e.target.value)}
@@ -316,7 +358,16 @@ export function IndividualKycForm({
                 />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("date_of_birth")} mandatory>
-                <Label className="text-xs">Date of birth *</Label>
+                <Label className="text-xs">
+                  Date of birth *
+                  {availableByTarget.get("date_of_birth") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("date_of_birth")!}
+                      fieldLabel="Date of birth"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Input
                   type="date"
                   value={fields.date_of_birth ?? ""}
@@ -324,7 +375,16 @@ export function IndividualKycForm({
                 />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("nationality")} mandatory>
-                <Label className="text-xs">Nationality *</Label>
+                <Label className="text-xs">
+                  Nationality *
+                  {availableByTarget.get("nationality") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("nationality")!}
+                      fieldLabel="Nationality"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Select
                   value={fields.nationality ?? ""}
                   onValueChange={(v) => set("nationality", v ?? "")}
@@ -340,7 +400,16 @@ export function IndividualKycForm({
                 </Select>
               </FieldRow>
               <FieldRow>
-                <Label className="text-xs">Passport issuing country</Label>
+                <Label className="text-xs">
+                  Passport issuing country
+                  {availableByTarget.get("passport_country") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("passport_country")!}
+                      fieldLabel="Passport issuing country"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Select
                   value={fields.passport_country ?? ""}
                   onValueChange={(v) => set("passport_country", v ?? "")}
@@ -356,14 +425,32 @@ export function IndividualKycForm({
                 </Select>
               </FieldRow>
               <FieldRow prefilled={prefilled.has("passport_number")} mandatory>
-                <Label className="text-xs">Passport number *</Label>
+                <Label className="text-xs">
+                  Passport number *
+                  {availableByTarget.get("passport_number") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("passport_number")!}
+                      fieldLabel="Passport number"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Input
                   value={fields.passport_number ?? ""}
                   onChange={(e) => set("passport_number", e.target.value)}
                 />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("passport_expiry")} mandatory>
-                <Label className="text-xs">Passport expiry date *</Label>
+                <Label className="text-xs">
+                  Passport expiry date *
+                  {availableByTarget.get("passport_expiry") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("passport_expiry")!}
+                      fieldLabel="Passport expiry date"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Input
                   type="date"
                   value={fields.passport_expiry ?? ""}
@@ -393,7 +480,16 @@ export function IndividualKycForm({
             </div>
 
             <FieldRow prefilled={prefilled.has("address")} mandatory>
-              <Label className="text-xs">Residential address *</Label>
+              <Label className="text-xs">
+                Residential address *
+                {availableByTarget.get("address") && (
+                  <FieldPrefillIcon
+                    prefillFrom={availableByTarget.get("address")!}
+                    fieldLabel="Residential address"
+                    onFill={handleFieldPrefill}
+                  />
+                )}
+              </Label>
               <Textarea
                 value={fields.address ?? ""}
                 onChange={(e) => set("address", e.target.value)}
@@ -441,7 +537,16 @@ export function IndividualKycForm({
                 <Input type="email" value={fields.work_email ?? ""} onChange={(e) => set("work_email", e.target.value)} />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("occupation")} mandatory>
-                <Label className="text-xs">Occupation / Profession *</Label>
+                <Label className="text-xs">
+                  Occupation / Profession *
+                  {availableByTarget.get("occupation") && (
+                    <FieldPrefillIcon
+                      prefillFrom={availableByTarget.get("occupation")!}
+                      fieldLabel="Occupation / Profession"
+                      onFill={handleFieldPrefill}
+                    />
+                  )}
+                </Label>
                 <Input value={fields.occupation ?? ""} onChange={(e) => set("occupation", e.target.value)} />
               </FieldRow>
             </div>
@@ -670,7 +775,16 @@ export function IndividualKycForm({
 
             {/* TIN */}
             <FieldRow>
-              <Label className="text-xs">Tax Identification Number (TIN)</Label>
+              <Label className="text-xs">
+                Tax Identification Number (TIN)
+                {availableByTarget.get("tax_identification_number") && (
+                  <FieldPrefillIcon
+                    prefillFrom={availableByTarget.get("tax_identification_number")!}
+                    fieldLabel="Tax Identification Number"
+                    onFill={handleFieldPrefill}
+                  />
+                )}
+              </Label>
               <Input
                 value={fields.tax_identification_number ?? ""}
                 onChange={(e) => set("tax_identification_number", e.target.value)}

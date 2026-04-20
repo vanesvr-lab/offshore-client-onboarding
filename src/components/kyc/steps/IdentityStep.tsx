@@ -10,7 +10,9 @@ import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { computePrefillableFields } from "@/lib/kyc/computePrefillable";
+import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
+import type { PrefillableField } from "@/lib/kyc/computePrefillable";
+import { FieldPrefillIcon } from "@/components/kyc/FieldPrefillIcon";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceRequirement } from "@/types";
 
 interface IdentityStepProps {
@@ -45,6 +47,8 @@ function Field({
   placeholder,
   required,
   validation,
+  prefillFrom,
+  onPrefillField,
 }: {
   label: string;
   fieldKey: keyof KycRecord;
@@ -54,13 +58,29 @@ function Field({
   placeholder?: string;
   required?: boolean;
   validation: ReturnType<typeof useFieldValidation>;
+  prefillFrom?: PrefillableField;
+  onPrefillField?: (
+    target: string,
+    value: string,
+    sourceDocLabel: string,
+    fieldLabel: string,
+  ) => Promise<void>;
 }) {
   const value = (form[fieldKey] ?? "") as string;
   const state = validation.getFieldState(fieldKey as string, value, required);
 
   return (
     <div className="space-y-1">
-      <ValidatedLabel state={state} required={required}>{label}</ValidatedLabel>
+      <ValidatedLabel state={state} required={required}>
+        {label}
+        {prefillFrom && onPrefillField && (
+          <FieldPrefillIcon
+            prefillFrom={prefillFrom}
+            fieldLabel={label}
+            onFill={onPrefillField}
+          />
+        )}
+      </ValidatedLabel>
       <FieldWrapper state={state}>
         <Input
           type={type}
@@ -98,8 +118,7 @@ export function IdentityStep({
   const prefillableDocTypes = personDocTypes ?? documentTypes;
   const effectiveKycRecordId = kycRecordId ?? kycRecord.id ?? null;
 
-  const prefillable = computePrefillableFields({
-    form: form as Record<string, unknown>,
+  const prefillInput = {
     docs: prefillableDocs.map((d) => ({
       id: d.id,
       document_type_id: d.document_type_id ?? null,
@@ -113,7 +132,39 @@ export function IdentityStep({
       name: t.name,
       ai_extraction_fields: t.ai_extraction_fields ?? null,
     })),
+  };
+  const prefillable = computePrefillableFields({
+    form: form as Record<string, unknown>,
+    docs: prefillInput.docs,
+    docTypes: prefillInput.docTypes,
   });
+  const availableExtracts = computeAvailableExtracts(prefillInput);
+  const availableByTarget = new Map<string, PrefillableField>();
+  for (const row of availableExtracts) availableByTarget.set(row.target, row);
+
+  async function handleFieldPrefill(
+    target: string,
+    value: string,
+    sourceDocLabel: string,
+    fieldLabel: string,
+  ) {
+    if (!effectiveKycRecordId) {
+      toast.error("Couldn't fill from document — please try again.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: effectiveKycRecordId, fields: { [target]: value } }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      onChange({ [target]: value } as Partial<KycRecord>);
+      toast.success(`Filled ${fieldLabel} from ${sourceDocLabel}.`);
+    } catch {
+      toast.error("Couldn't fill from document — please try again.");
+    }
+  }
 
   async function handlePrefillClick() {
     if (!effectiveKycRecordId) {
@@ -190,14 +241,43 @@ export function IdentityStep({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Full legal name" fieldKey="full_name" form={form} onChange={onChange} required validation={validation} placeholder="As it appears on your passport" />
+        <Field
+          label="Full legal name"
+          fieldKey="full_name"
+          form={form}
+          onChange={onChange}
+          required
+          validation={validation}
+          placeholder="As it appears on your passport"
+          prefillFrom={availableByTarget.get("full_name")}
+          onPrefillField={handleFieldPrefill}
+        />
         <Field label="Aliases / other names" fieldKey="aliases" form={form} onChange={onChange} validation={validation} placeholder="Maiden name, nicknames, etc." />
-        <Field label="Date of birth" fieldKey="date_of_birth" form={form} onChange={onChange} type="date" required validation={validation} />
+        <Field
+          label="Date of birth"
+          fieldKey="date_of_birth"
+          form={form}
+          onChange={onChange}
+          type="date"
+          required
+          validation={validation}
+          prefillFrom={availableByTarget.get("date_of_birth")}
+          onPrefillField={handleFieldPrefill}
+        />
         <div className="space-y-1">
           <ValidatedLabel
             state={validation.getFieldState("nationality", (form.nationality ?? "") as string, true)}
             required
-          >Nationality</ValidatedLabel>
+          >
+            Nationality
+            {availableByTarget.get("nationality") && (
+              <FieldPrefillIcon
+                prefillFrom={availableByTarget.get("nationality")!}
+                fieldLabel="Nationality"
+                onFill={handleFieldPrefill}
+              />
+            )}
+          </ValidatedLabel>
           <FieldWrapper state={validation.getFieldState("nationality", (form.nationality ?? "") as string, true)}>
             <CountrySelect
               value={(form.nationality ?? "") as string}
@@ -211,7 +291,16 @@ export function IdentityStep({
           <ValidatedLabel
             state={validation.getFieldState("passport_country", (form.passport_country ?? "") as string, true)}
             required
-          >Passport country</ValidatedLabel>
+          >
+            Passport country
+            {availableByTarget.get("passport_country") && (
+              <FieldPrefillIcon
+                prefillFrom={availableByTarget.get("passport_country")!}
+                fieldLabel="Passport country"
+                onFill={handleFieldPrefill}
+              />
+            )}
+          </ValidatedLabel>
           <FieldWrapper state={validation.getFieldState("passport_country", (form.passport_country ?? "") as string, true)}>
             <CountrySelect
               value={(form.passport_country ?? "") as string}
@@ -221,8 +310,27 @@ export function IdentityStep({
             />
           </FieldWrapper>
         </div>
-        <Field label="Passport number" fieldKey="passport_number" form={form} onChange={onChange} required validation={validation} />
-        <Field label="Passport expiry date" fieldKey="passport_expiry" form={form} onChange={onChange} type="date" required validation={validation} />
+        <Field
+          label="Passport number"
+          fieldKey="passport_number"
+          form={form}
+          onChange={onChange}
+          required
+          validation={validation}
+          prefillFrom={availableByTarget.get("passport_number")}
+          onPrefillField={handleFieldPrefill}
+        />
+        <Field
+          label="Passport expiry date"
+          fieldKey="passport_expiry"
+          form={form}
+          onChange={onChange}
+          type="date"
+          required
+          validation={validation}
+          prefillFrom={availableByTarget.get("passport_expiry")}
+          onPrefillField={handleFieldPrefill}
+        />
       </div>
 
       {/* Passport upload */}
@@ -246,7 +354,16 @@ export function IdentityStep({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
           <div className="space-y-1">
-            <ValidatedLabel state={validation.getFieldState("address", (form.address ?? "") as string, true)} required>Residential address</ValidatedLabel>
+            <ValidatedLabel state={validation.getFieldState("address", (form.address ?? "") as string, true)} required>
+              Residential address
+              {availableByTarget.get("address") && (
+                <FieldPrefillIcon
+                  prefillFrom={availableByTarget.get("address")!}
+                  fieldLabel="Residential address"
+                  onFill={handleFieldPrefill}
+                />
+              )}
+            </ValidatedLabel>
             <FieldWrapper state={validation.getFieldState("address", (form.address ?? "") as string, true)}>
               <Textarea
                 value={(form.address ?? "") as string}

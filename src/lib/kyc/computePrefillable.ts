@@ -40,6 +40,67 @@ function toIsoTimestamp(raw: string | null | undefined): number {
 }
 
 /**
+ * B-044 — variant of computePrefillableFields that ignores form state.
+ * Returns every extracted value whose prefill_field maps to a whitelisted KYC
+ * column, regardless of whether the target form field is currently empty.
+ * Used by the per-field ✨ icon in the Identity step: the icon is visible
+ * whenever an extract exists, so power users can override a typed value with
+ * the AI's value on one click.
+ *
+ * Stable order + per-target de-dup matches computePrefillableFields so the
+ * two helpers agree on which doc each target sources from.
+ */
+export function computeAvailableExtracts(args: {
+  docs: DocLike[];
+  docTypes: DocTypeLike[];
+}): PrefillableField[] {
+  const { docs, docTypes } = args;
+  if (!docs.length || !docTypes.length) return [];
+
+  const typeById = new Map<string, DocTypeLike>();
+  for (const dt of docTypes) typeById.set(dt.id, dt);
+
+  const ordered = [...docs].sort((a, b) => {
+    const diff = toIsoTimestamp(a.uploaded_at) - toIsoTimestamp(b.uploaded_at);
+    if (diff !== 0) return diff;
+    return a.id.localeCompare(b.id);
+  });
+
+  const seenTargets = new Set<string>();
+  const out: PrefillableField[] = [];
+
+  for (const doc of ordered) {
+    if (!doc.document_type_id) continue;
+    const type = typeById.get(doc.document_type_id);
+    if (!type) continue;
+    const extracted = doc.verification_result?.extracted_fields ?? {};
+    if (!extracted || typeof extracted !== "object") continue;
+
+    const fields = Array.isArray(type.ai_extraction_fields) ? type.ai_extraction_fields : [];
+    for (const f of fields) {
+      const target = f.prefill_field;
+      if (!target || !PREFILLABLE_SET.has(target)) continue;
+      if (seenTargets.has(target)) continue;
+
+      const raw = (extracted as Record<string, unknown>)[f.key];
+      if (isEmpty(raw)) continue;
+      const value = String(raw).trim();
+      if (!value) continue;
+
+      seenTargets.add(target);
+      out.push({
+        target,
+        value,
+        sourceDocId: doc.id,
+        sourceDocLabel: type.name,
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
  * B-042 — single source of truth for "is there extracted data ready to drop
  * into the KYC form?" Consumed by both the Identity step "Fill from uploaded
  * document" button and the ✨ indicator on the wizard step nav.
