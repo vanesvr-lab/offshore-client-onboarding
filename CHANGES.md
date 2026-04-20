@@ -15,6 +15,42 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-20 — B-043: Client wizard polish, 6 items (Claude Code)
+
+**B-043 (Client wizard polish)** — six related UX/security fixes shipped together.
+
+**Item 1 — CSP allows Supabase iframe previews.**
+- `next.config.js` — `frame-src 'self' blob:` → `frame-src 'self' blob: https://*.supabase.co`. Same wildcard shape as the existing `connect-src` entry. Fixes the "upload looks blank" bug where `DocumentDetailDialog`, `DocumentPreviewDialog`, and `DocumentViewer` were embedding signed Supabase URLs inside `<iframe>` and hitting a `Framing '…supabase.co' violates Content Security Policy` block. Dev server must restart for the CSP header to reload.
+
+**Item 2 — Country picker placeholder readable.**
+- `src/components/shared/MultiSelectCountry.tsx` — search input `placeholder:text-gray-500` → `placeholder:text-gray-700`. Keeps distinction from typed value (`text-gray-900`) but no longer looks disabled.
+
+**Item 3 — Sticky wizard footer cleared above the macOS Dock.**
+- `src/components/client/ServiceWizardNav.tsx` — `fixed bottom-0` → `fixed bottom-6`, plus `border-x rounded-t-lg` so the floating footer reads as intentional. Kept the existing `left-[260px]` offset so it aligns to the main content column (covers Item 4 verification).
+- `src/components/kyc/KycStepWizard.tsx` (`fixedNav` branch) — same fix, and replaced `left-0 right-0` with `left-[260px] right-0` so the Back button aligns to the main column instead of the viewport edge.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — the admin "You have unsaved changes" bar uses the same sticky-bottom pattern; got the same `bottom-6 + border-x + rounded-t-lg` update.
+- Spacers bumped to match: `ServiceWizard.tsx` body padding `pb-20` → `pb-28`; `KycStepWizard.tsx` `fixedNav` spacer `h-20` → `h-28`.
+
+**Item 5 — Submit blockers surfaced.**
+- `src/components/client/ServiceWizard.tsx` — computes `submitBlockers: string[]` alongside `canSubmit`. Reuses the step indicator labels ("Company Setup", "Financial", "Banking"). People step has two sub-reasons: no director, or at least one profile missing KYC. Passed into `ServiceWizardNav` and into `ServiceWizardDocumentsStep` (the final step).
+- New `src/components/ui/tooltip.tsx` — thin wrapper over `@base-ui/react/tooltip` (no Radix dependency). Provides `Tooltip`, `TooltipTrigger`, `TooltipContent`, `TooltipProvider` with shadcn-style styling.
+- `src/components/client/ServiceWizardNav.tsx` — when on the final step with Submit disabled and blockers present, the Submit button is wrapped in a `Tooltip` whose content lists `• blocker 1 • blocker 2 …`. Trigger is a `<span tabIndex=0>` so hover works even though the actual button is disabled.
+- `src/components/client/ServiceWizardDocumentsStep.tsx` — renders an amber "Before you can submit" card at the top of the Documents (final) step body showing the same blocker list. New `submitBlockers` prop.
+
+**Item 6 — Save-before-back on KYC exit.**
+- `src/components/kyc/KycStepWizard.tsx` — `saveCurrentStep` converted to `useCallback`; new `onRegisterFlush?: (flush) => void` prop. A `useEffect` registers the latest `saveCurrentStep` with the parent on every form change, and clears it on unmount.
+- `src/components/client/ServiceWizardPeopleStep.tsx` — holds a `kycFlushRef`. New `handleExitKycReview()` awaits the flush before calling `setReviewingRoleId(null)`. On failure it toasts `Couldn't save your changes — please try again.` and keeps the panel open. The "Back to People" link shows a `Saving…` spinner while the flush is in flight. No `AlertDialog` needed since the save always runs; users never lose edits and never have to answer a dialog. The `onRegisterFlush` prop is wired onto the `<KycStepWizard>` mount.
+
+**Item 4** — verified on the ServiceWizard side-by-side during Item 3. KYC wizard inner step-nav also re-aligned to `left-[260px]` so the wizard's Back sits under the same column as ServiceWizard's footer.
+
+**Build:** `npm run build` passes lint + type check.
+
+**Brief:** `docs/cli-brief-wizard-polish-b043.md`
+
+**Dev-server reset (required — CSP header change):** `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`
+
+---
+
 ### 2026-04-20 — B-042: On-demand AI prefill in KYC Identity step (Claude Code)
 
 **B-042 (On-demand AI prefill)** — moves the prefill decision out of the doc upload moment and into the Identity step where the fields live. Replaces the forced `AiPrefillBanner` (Apply/Skip + conflict-mode select) with a single, opt-in "✨ Fill from uploaded document" button plus a subtle ✨ indicator on the Identity step nav.

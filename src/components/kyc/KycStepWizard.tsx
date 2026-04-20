@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -42,6 +42,8 @@ interface KycStepWizardProps {
   personDocs?: DocumentRecord[];
   /** B-042 — document type definitions for the docs above (so the prefill helper can read ai_extraction_fields). */
   personDocTypes?: DocumentType[];
+  /** B-043 — parent registers a flush callback so it can save pending edits before navigating away. */
+  onRegisterFlush?: (flush: (() => Promise<boolean>) | null) => void;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -255,6 +257,7 @@ export function KycStepWizard({
   fixedNav = false,
   personDocs,
   personDocTypes,
+  onRegisterFlush,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -286,7 +289,7 @@ export function KycStepWizard({
     });
   }, []);
 
-  async function saveCurrentStep() {
+  const saveCurrentStep = useCallback(async () => {
     setSaving(true);
     try {
       const res = await fetch(saveUrl, {
@@ -303,7 +306,15 @@ export function KycStepWizard({
       setSaving(false);
     }
     return true;
-  }
+  }, [saveUrl, kycRecord.id, form]);
+
+  // B-043 — expose saveCurrentStep to the parent so it can flush pending edits
+  // before navigating away (e.g. "Back to People" exits the KYC review panel).
+  useEffect(() => {
+    if (!onRegisterFlush) return;
+    onRegisterFlush(saveCurrentStep);
+    return () => onRegisterFlush(null);
+  }, [onRegisterFlush, saveCurrentStep]);
 
   async function handleNext() {
     const ok = await saveCurrentStep();
@@ -486,12 +497,12 @@ export function KycStepWizard({
       </div>
 
       {/* Spacer reserves room at the bottom of the page so fixed nav never covers final fields */}
-      {fixedNav && <div aria-hidden className="h-20" />}
+      {fixedNav && <div aria-hidden className="h-28" />}
 
       {/* Navigation */}
       <div className={
         fixedNav
-          ? "fixed bottom-0 left-0 right-0 z-40 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.04)] px-6 py-3 flex items-center justify-between"
+          ? "fixed bottom-6 left-[260px] right-0 z-40 bg-white border-t border-x rounded-t-lg shadow-[0_-2px_8px_rgba(0,0,0,0.04)] px-6 py-3 flex items-center justify-between"
           : compact
             ? "flex items-center justify-between pt-4 border-t mt-6"
             : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between"

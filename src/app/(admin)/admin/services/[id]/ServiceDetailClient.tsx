@@ -2772,7 +2772,7 @@ export function ServiceDetailClient({
 
       {/* Fixed bottom save bar — only shows when changes are pending */}
       {pendingChanges && (
-        <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t px-6 py-3 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+        <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
           <p className="text-sm text-amber-600 font-medium">You have unsaved changes</p>
           <div className="flex items-center gap-2">
             <Button

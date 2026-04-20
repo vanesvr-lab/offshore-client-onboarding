@@ -1453,6 +1453,29 @@ export function ServiceWizardPeopleStep({
   const [reviewingRoleId, setReviewingRoleId] = useState<string | null>(null);
   // Track which persons have completed KYC in this session (to show 100% locally)
   const [kycCompletedIds, setKycCompletedIds] = useState<Set<string>>(new Set());
+  // B-043 — flush handle registered by the inner KycStepWizard so we can save
+  // pending edits before the user leaves the review panel.
+  const kycFlushRef = useRef<(() => Promise<boolean>) | null>(null);
+  const [leaving, setLeaving] = useState(false);
+
+  async function handleExitKycReview() {
+    const flush = kycFlushRef.current;
+    if (!flush) {
+      setReviewingRoleId(null);
+      return;
+    }
+    setLeaving(true);
+    try {
+      const ok = await flush();
+      if (!ok) {
+        toast.error("Couldn't save your changes — please try again.");
+        return;
+      }
+      setReviewingRoleId(null);
+    } finally {
+      setLeaving(false);
+    }
+  }
 
   // Hide/show outer wizard nav when entering/leaving KYC review
   useEffect(() => {
@@ -1515,11 +1538,12 @@ export function ServiceWizardPeopleStep({
         {/* Back + header */}
         <div>
           <button
-            onClick={() => setReviewingRoleId(null)}
-            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold mb-3"
+            onClick={() => void handleExitKycReview()}
+            disabled={leaving}
+            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold mb-3 disabled:opacity-60"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to People
+            {leaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+            {leaving ? "Saving…" : "Back to People"}
           </button>
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-brand-navy">
@@ -1583,6 +1607,7 @@ export function ServiceWizardPeopleStep({
               .filter((d) => d.client_profile_id === profileId)
               .map(mapToDocumentRecord)}
             personDocTypes={documentTypes}
+            onRegisterFlush={(fn) => { kycFlushRef.current = fn; }}
           />
         ) : (
           <div className="text-center py-6 rounded-xl border bg-gray-50 space-y-2">

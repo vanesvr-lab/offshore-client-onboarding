@@ -119,6 +119,20 @@ export function ServiceWizard({
     completedSteps.includes(2) &&
     completedSteps.includes(3);
 
+  // B-043 — human-readable reasons why Submit is disabled. Same labels as the step indicator.
+  const WIZARD_STEP_LABELS = ["Company Setup", "Financial", "Banking", "People & KYC"];
+  const submitBlockers: string[] = [];
+  if (!completedSteps.includes(0)) submitBlockers.push(`${WIZARD_STEP_LABELS[0]} — required fields are incomplete`);
+  if (!completedSteps.includes(1)) submitBlockers.push(`${WIZARD_STEP_LABELS[1]} — required fields are incomplete`);
+  if (!completedSteps.includes(2)) submitBlockers.push(`${WIZARD_STEP_LABELS[2]} — required fields are incomplete`);
+  if (!completedSteps.includes(3)) {
+    if (!hasDirector) {
+      submitBlockers.push("At least one director must be added in the People step");
+    } else if (!allKycDone) {
+      submitBlockers.push("All directors, shareholders, and UBOs must complete their KYC");
+    }
+  }
+
   async function saveServiceDetails(): Promise<boolean> {
     setSaving(true);
     try {
@@ -227,7 +241,7 @@ export function ServiceWizard({
       />
 
       {/* Step content */}
-      <div className="flex-1 pb-20">
+      <div className="flex-1 pb-28">
         {currentStep === 0 && (
           <ServiceWizardStep
             fields={step0Fields}
@@ -265,6 +279,7 @@ export function ServiceWizard({
             serviceId={serviceId}
             documents={documents}
             onDocumentsChange={setDocuments}
+            submitBlockers={submitBlockers}
             requiredDocTypes={requirements
               .filter((r) => r.requirement_type === "document" && r.document_type_id)
               .map((r) => ({
@@ -283,6 +298,7 @@ export function ServiceWizard({
           totalSteps={5}
           saving={saving}
           canSubmit={canSubmit}
+          submitBlockers={submitBlockers}
           onSaveAndClose={handleSaveAndClose}
           onBack={handleBack}
           onNext={handleNext}

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { toast } from "sonner";
-import { CheckCircle, Upload, FileText, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, Upload, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { compressIfImage } from "@/lib/imageCompression";
 import type { ClientServiceDoc } from "@/app/(client)/services/[id]/page";
@@ -22,6 +22,8 @@ interface Props {
   documents: ClientServiceDoc[];
   onDocumentsChange: (docs: ClientServiceDoc[]) => void;
   requiredDocTypes?: RequiredDocType[];
+  /** B-043 — reasons why Submit is still disabled; surfaced as an amber card at the top of this step. */
+  submitBlockers?: string[];
 }
 
 function DocRow({
@@ -153,6 +155,7 @@ export function ServiceWizardDocumentsStep({
   documents: initialDocuments,
   onDocumentsChange,
   requiredDocTypes: allRequiredDocTypes = [],
+  submitBlockers = [],
 }: Props) {
   // Show only corporate/service-level docs — KYC docs (passport, address, etc.) belong in the People step
   const isServiceDoc = (cat: string) => cat === "corporate" || cat === "additional";
@@ -200,6 +203,22 @@ export function ServiceWizardDocumentsStep({
           Upload the required documents for this service. All files must be clear and legible.
         </p>
       </div>
+
+      {submitBlockers.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Before you can submit</p>
+              <ul className="mt-1.5 space-y-0.5 text-xs text-amber-800 list-disc pl-4">
+                {submitBlockers.map((b, i) => (
+                  <li key={i}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {requiredDocTypes.length === 0 && documents.length === 0 ? (
         <p className="text-sm text-gray-400 py-4 text-center">

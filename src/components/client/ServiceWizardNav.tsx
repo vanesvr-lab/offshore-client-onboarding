@@ -2,6 +2,12 @@
 
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Props {
   currentStep: number;
@@ -12,6 +18,8 @@ interface Props {
   onBack: () => void;
   onNext: () => void;
   onSubmit: () => void;
+  /** B-043 — human-readable reasons why Submit is disabled; surfaced via tooltip. */
+  submitBlockers?: string[];
 }
 
 export function ServiceWizardNav({
@@ -23,11 +31,25 @@ export function ServiceWizardNav({
   onBack,
   onNext,
   onSubmit,
+  submitBlockers = [],
 }: Props) {
   const isLast = currentStep === totalSteps - 1;
+  const showSubmitTooltip = isLast && !canSubmit && submitBlockers.length > 0;
+
+  const submitBtn = (
+    <Button
+      size="sm"
+      onClick={onSubmit}
+      disabled={!canSubmit || saving}
+      className="bg-green-600 hover:bg-green-700 text-white"
+    >
+      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+      Submit ✓
+    </Button>
+  );
 
   return (
-    <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t px-6 py-3 flex items-center justify-between gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+    <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-between gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
       <Button
         variant="outline"
         size="sm"
@@ -49,15 +71,28 @@ export function ServiceWizardNav({
         </Button>
 
         {isLast ? (
-          <Button
-            size="sm"
-            onClick={onSubmit}
-            disabled={!canSubmit || saving}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-            Submit ✓
-          </Button>
+          showSubmitTooltip ? (
+            <TooltipProvider>
+              <Tooltip>
+                {/* Disabled buttons don't fire hover; wrap in span so the tooltip still works. */}
+                <TooltipTrigger
+                  render={<span className="inline-block" tabIndex={0} />}
+                >
+                  {submitBtn}
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium mb-1">Before submitting, please complete:</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {submitBlockers.map((b, i) => (
+                      <li key={i}>{b}</li>
+                    ))}
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            submitBtn
+          )
         ) : (
           <Button
             size="sm"

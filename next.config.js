@@ -21,7 +21,7 @@ const nextConfig = {
             "img-src 'self' data: blob: https:",
             "font-src 'self'",
             "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.resend.com",
-            "frame-src 'self' blob:",
+            "frame-src 'self' blob: https://*.supabase.co",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
