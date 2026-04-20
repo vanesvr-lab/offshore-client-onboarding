@@ -33,6 +33,8 @@ interface KycStepWizardProps {
   showContactFields?: boolean;
   /** When true, all step-level document upload cards are hidden (handled by a surrounding KycDocListPanel). Default: false */
   hideDocumentUploads?: boolean;
+  /** B-037 — when true, empty required fields render as red on first paint. Default: false (preserves admin behaviour). */
+  showErrorsImmediately?: boolean;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -217,6 +219,7 @@ export function KycStepWizard({
   profileType = "individual",
   showContactFields = true,
   hideDocumentUploads = false,
+  showErrorsImmediately = false,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -364,6 +367,7 @@ export function KycStepWizard({
             onDocumentUploaded={handleDocumentUploaded}
             showContactFields={showContactFields}
             hideDocumentUploads={hideDocumentUploads}
+            showErrorsImmediately={showErrorsImmediately}
           />
         )}
         {logicalStep === "financial" && (
@@ -378,6 +382,7 @@ export function KycStepWizard({
             onChange={handleChange}
             onDocumentUploaded={handleDocumentUploaded}
             hideDocumentUploads={hideDocumentUploads}
+            showErrorsImmediately={showErrorsImmediately}
           />
         )}
         {logicalStep === "declarations" && (
@@ -392,6 +397,7 @@ export function KycStepWizard({
             onChange={handleChange}
             onDocumentUploaded={handleDocumentUploaded}
             hideDocumentUploads={hideDocumentUploads}
+            showErrorsImmediately={showErrorsImmediately}
           />
         )}
         {logicalStep === "review" && !isOrg && (

@@ -270,6 +270,7 @@ function PersonCard({
                   compact={true}
                   saveUrl="/api/profiles/kyc/save"
                   inlineMode={true}
+                  showErrorsImmediately
                 />
               ) : (
                 <p className="text-sm text-gray-400">KYC record not found. Contact your account manager.</p>

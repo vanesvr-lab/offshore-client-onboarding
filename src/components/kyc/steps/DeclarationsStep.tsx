@@ -20,6 +20,8 @@ interface DeclarationsStepProps {
   onDocumentUploaded: (doc: DocumentRecord) => void;
   /** When true, hide the in-step PEP Declaration upload card (handled in a side panel). Default: false */
   hideDocumentUploads?: boolean;
+  /** B-037 — when true, empty required fields render as red on first paint (no need for focus). */
+  showErrorsImmediately?: boolean;
 }
 
 export function DeclarationsStep({
@@ -33,8 +35,9 @@ export function DeclarationsStep({
   onChange,
   onDocumentUploaded,
   hideDocumentUploads = false,
+  showErrorsImmediately = false,
 }: DeclarationsStepProps) {
-  const validation = useFieldValidation();
+  const validation = useFieldValidation({ showErrorsImmediately });
   const isEdd = dueDiligenceLevel === "edd";
 
   // Resolve via DD requirements first; fall back to name lookup

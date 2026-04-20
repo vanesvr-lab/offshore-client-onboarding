@@ -19,6 +19,8 @@ interface FinancialStepProps {
   onDocumentUploaded: (doc: DocumentRecord) => void;
   /** When true, hide all in-step document upload cards (handled in a side panel). Default: false */
   hideDocumentUploads?: boolean;
+  /** B-037 — when true, empty required fields render as red on first paint (no need for focus). */
+  showErrorsImmediately?: boolean;
 }
 
 function InlineUpload({
@@ -75,8 +77,9 @@ export function FinancialStep({
   onChange,
   onDocumentUploaded,
   hideDocumentUploads = false,
+  showErrorsImmediately = false,
 }: FinancialStepProps) {
-  const validation = useFieldValidation();
+  const validation = useFieldValidation({ showErrorsImmediately });
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
   const isEdd = dueDiligenceLevel === "edd";
 

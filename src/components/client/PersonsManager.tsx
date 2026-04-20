@@ -240,6 +240,7 @@ function PersonCard({
               <div className="px-4 py-4">
                 <KycStepWizard
                   compact
+                  showErrorsImmediately
                   clientId={clientId ?? ""}
                   kycRecord={kyc}
                   documents={personDocuments ?? []}

@@ -15,6 +15,35 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-19 — B-037 Fix 3: Required-field errors visible on load (Claude Code)
+
+**B-037 Fix 3 — landing on a wizard now immediately shows what's mandatory**
+
+Today required fields only turn red after touch (focus + blur). The user wants the empty-required state visible from first paint so the form's expectations are obvious without interaction.
+
+**Updated:** `src/hooks/useFieldValidation.ts`
+- New optional argument: `useFieldValidation({ showErrorsImmediately?: boolean })`. When `true`, `getFieldState()` returns `"error"` for every empty required field on first render — no `touched` membership required. Default remains `false` so admin-side forms keep current behaviour.
+
+**Updated step components** to forward the prop into the hook (default `false` to preserve any not-yet-flipped admin call sites):
+- `src/components/kyc/steps/IdentityStep.tsx`
+- `src/components/kyc/steps/FinancialStep.tsx`
+- `src/components/kyc/steps/DeclarationsStep.tsx`
+
+**Updated wizard:** `src/components/kyc/KycStepWizard.tsx`
+- New prop `showErrorsImmediately?: boolean` threaded into `IdentityStep`, `FinancialStep`, and `DeclarationsStep`. Default `false`.
+
+**Flipped at every client-facing mount site:**
+- `src/app/(client)/kyc/KycPageClient.tsx`
+- `src/components/client/ServicePersonsManager.tsx`
+- `src/components/client/PersonsManager.tsx`
+- `src/components/client/ServiceWizardPeopleStep.tsx`
+
+Each now passes `showErrorsImmediately` (truthy shorthand). Admin pages continue to use the default-off behaviour.
+
+**Build:** `npm run build` passes lint + types.
+
+---
+
 ### 2026-04-19 — B-037 Fix 2: Country dropdown palette tightened (Claude Code)
 
 **B-037 Fix 2 — `text-gray-400` removed from interactive country selectors**

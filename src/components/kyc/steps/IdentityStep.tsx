@@ -21,6 +21,8 @@ interface IdentityStepProps {
   showContactFields?: boolean;
   /** When true, hide in-step passport + proof of address upload cards (handled in a side panel). Default: false */
   hideDocumentUploads?: boolean;
+  /** B-037 — when true, empty required fields render as red on first paint (no need for focus). */
+  showErrorsImmediately?: boolean;
 }
 
 function Field({
@@ -73,8 +75,9 @@ export function IdentityStep({
   onDocumentUploaded,
   showContactFields = true,
   hideDocumentUploads = false,
+  showErrorsImmediately = false,
 }: IdentityStepProps) {
-  const validation = useFieldValidation();
+  const validation = useFieldValidation({ showErrorsImmediately });
 
   // Resolve doc type IDs from DD requirements first; fall back to name lookup
   function resolveDocTypeId(label: string): string | undefined {

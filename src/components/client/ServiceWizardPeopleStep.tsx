@@ -1617,6 +1617,7 @@ export function ServiceWizardPeopleStep({
             profileType={reviewingPerson.client_profiles?.record_type === "organisation" ? "organisation" : "individual"}
             onComplete={handleKycComplete}
             compact={false}
+            showErrorsImmediately
             saveUrl="/api/profiles/kyc/save"
             inlineMode={true}
             showContactFields={false}

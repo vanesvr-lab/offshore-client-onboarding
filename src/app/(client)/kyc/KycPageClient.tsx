@@ -179,6 +179,7 @@ export function KycPageClient({
           documentTypes={documentTypes}
           dueDiligenceLevel={dueDiligenceLevel}
           requirements={requirements}
+          showErrorsImmediately
           onComplete={() => {
             setCompleted(true);
             router.refresh();
