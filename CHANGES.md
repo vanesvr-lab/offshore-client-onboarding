@@ -15,6 +15,110 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-22 — B-045: RLS default-deny on every public table (Claude Code)
+
+> ⚠️ **MIGRATION NOT YET APPLIED.** The SQL file exists at
+> `supabase/migrations/005-rls-default-deny.sql` but has NOT been run against
+> the live database. Until the user applies it, the Supabase advisory
+> (`rls_disabled_in_public` / `sensitive_columns_exposed`) remains open and
+> the anon key can still read public tables.
+
+**B-045 (RLS default-deny on public tables)** — closes the Supabase security
+advisory. The `NEXT_PUBLIC_SUPABASE_ANON_KEY` ships in the browser bundle;
+with RLS disabled, anyone on the internet could hit
+`https://<ref>.supabase.co/rest/v1/<table>` and read every row. The app uses
+`createAdminClient()` (service role) for every server-side query, which
+bypasses RLS, so enabling RLS **with no policies** blocks the anon key
+without breaking a single app query.
+
+**Created:** `supabase/migrations/005-rls-default-deny.sql`
+- Explicit enumerated `ALTER TABLE public.<x> ENABLE ROW LEVEL SECURITY` for
+  every public-schema table across `schema.sql` + migrations 002/003/004:
+  profiles, clients, client_users, admin_users, service_templates,
+  document_requirements, knowledge_base, applications, document_uploads,
+  audit_log, client_account_managers, email_log, document_types,
+  kyc_records, application_persons, application_details_gbc_ac, documents,
+  document_links, process_templates, process_requirements, client_processes,
+  process_documents, due_diligence_requirements, due_diligence_settings,
+  profile_roles, role_document_requirements, tenants, users,
+  client_profiles, client_profile_kyc, services, profile_service_roles,
+  profile_requirement_overrides, service_section_overrides,
+  documents_history, client_profile_kyc_history.
+- Safety-net `DO $$ … $$` block that iterates `pg_tables where schemaname =
+  'public'` and enables RLS on any remaining tables — catches things like
+  `verification_codes` which is referenced in migration 003 but never
+  `CREATE TABLE`-d in this repo (exists in the live DB from an earlier
+  bootstrap).
+- Final assertion that raises loudly if any public table still has
+  `relrowsecurity=false` after the run — migration aborts rather than
+  claiming success with a hole.
+- **No policies added.** Empty policies on RLS-enabled tables means anon +
+  authenticated roles can read nothing. That is the whole point. The two
+  history tables from migration 004 already have admin-read policies; those
+  stay as-is.
+- Idempotent — re-running the migration after apply is a no-op.
+
+**Apply step (manual — user runs once):**
+1. Open Supabase SQL editor.
+2. Paste the contents of `supabase/migrations/005-rls-default-deny.sql`.
+3. Run. The transaction either commits cleanly or aborts with the list of
+   tables still missing RLS (only happens if a new table was added between
+   writing this migration and applying it).
+
+**Apply endpoint (Option B in the brief) — intentionally not implemented.**
+The migration uses multi-statement PL/pgSQL `DO` blocks and an enforced
+`COMMIT`. `supabase-js` has no generic `exec_sql` RPC and can only run
+table-level ops, so routing through an admin endpoint would require
+installing a helper function first — strictly more moving parts than
+pasting the SQL once. Documenting the choice so the next session doesn't
+wonder why it isn't there.
+
+**Smoke-test plan (run AFTER applying the migration):**
+1. Client: load `/dashboard` → application list renders.
+2. Admin: load `/admin/dashboard` → stats + recent activity render.
+3. Register a fresh test user → succeeds (the `auth.users → profiles` trigger
+   runs as the DB owner and bypasses RLS).
+4. Upload a document on an in-progress application → still works.
+
+If any of these fail, the most likely cause is a DB trigger / function that
+was silently relying on anon access. Fix by setting `SECURITY DEFINER` on
+the function so it runs as the owner, not the caller. Record the adjustment
+inside the migration file if needed.
+
+**Advisory verification (run AFTER applying):** from the terminal, with the
+anon key from `.env.local`:
+
+```bash
+SUPABASE_URL="https://ylrjcqaelzgjopqqfnmt.supabase.co"
+ANON_KEY="<contents of NEXT_PUBLIC_SUPABASE_ANON_KEY>"
+
+for t in profiles client_profiles kyc_records documents; do
+  echo "=== $t ==="
+  curl -s "$SUPABASE_URL/rest/v1/$t?select=*&limit=1" \
+    -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY" | head -c 400
+  echo
+done
+```
+
+Expected response for each table: an empty array `[]` OR a
+`{"code":"42501","message":"permission denied for table <t>"}`-style
+response. **NOT** rows of data. Paste the actual curl responses into this
+entry once available so the fix is auditable. Reload the Supabase advisor
+within a minute — the `rls_disabled_in_public` and
+`sensitive_columns_exposed` findings should clear.
+
+**Build:** `npm run build` passes lint + types (migration is pure SQL; no TS
+changes).
+
+**Tech-debt tracker (this file):** item #3 amended — severity dropped from
+High → Medium with a note that the exploitable path is closed and that
+per-tenant policies remain open work for the broader move-off-service-role
+project.
+
+**Brief:** `docs/cli-brief-rls-default-deny-b045.md`
+
+---
+
 ### 2026-04-20 — B-044: Per-field AI prefill icon + proof-of-address reseed (Claude Code)
 
 **B-044 (Per-field prefill icon + proof-of-address fix)** — bug-fix + new UX affordance.
@@ -1491,7 +1595,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 |---|------|----------|-------|
 | 1 | **No multi-tenancy / tenant isolation** | High | All admins see ALL clients across the platform. SaaS model needs an `organizations` table, tenant-aware queries, and per-tenant RLS. |
 | 2 | **All admins are equal** | High | No admin roles (super-admin, manager, reviewer). Anyone in `admin_users` can do everything. |
-| 3 | **RLS bypassed app-wide** | High | Every server-side query uses `createAdminClient()` (service role). Security is enforced at the API/page layer via NextAuth session checks only. Fine for POC, must add RLS or per-tenant filtering before production SaaS launch. |
+| 3 | **RLS bypassed app-wide (partial)** | Medium | The anon key can no longer hit raw tables — RLS is enabled default-deny on every public-schema table (B-045). The service role still bypasses everything and all server-side queries go through `createAdminClient()`. Before production SaaS launch we need real per-tenant policies so we can move app queries off the service role. |
 | 4 | **No invite/onboarding flow for admins** | Medium | Adding an admin requires manual SQL/API. Build `/admin/settings/admins` page with invite-by-email + accept-flow. |
 | 5 | **No audit log of admin-on-admin actions** | Medium | Adding/removing admins isn't tracked in `audit_log`. |
 | 6 | **`src/lib/supabase/client.ts` is dead code** | Low | No longer imported anywhere after Auth.js migration. Safe to delete. |
