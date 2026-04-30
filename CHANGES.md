@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-046 (Batch 3): Review All KYC walk-through (Claude Code)
+
+**3.1 — "Review all KYC" button:**
+- `src/components/client/ServiceWizardPeopleStep.tsx`: top toolbar now renders a primary blue **Review all KYC** button on the right when there is at least one person. Hidden otherwise.
+
+**3.2 — Walk-through state + KycStepWizard hook:**
+- `src/components/kyc/KycStepWizard.tsx`: new prop `reviewAllContext?: { current: number; total: number; personName?: string | null; onAdvance: () => void }`. When set:
+  - Renders a header inside the wizard: `Reviewing person {current+1} of {total} — {Name}` plus a small "X remaining" / "Last person" counter.
+  - On the final wizard step, replaces the existing "Save & Close" button with **Save** (chevron) for non-last and **Save & Finish** (chevron) for the last person. On click: saves; on success calls `onAdvance` if not last, otherwise calls `onComplete`.
+- `ServiceWizardPeopleStep.tsx`: holds `reviewAllOrder: string[] | null` (one role-row id per unique profile, in card order) + `reviewAllIndex`. Clicking Review-All builds the order, sets index = 0, opens the wizard for `order[0]`. `onAdvance` increments the index, marks the just-completed person locally, and re-points `reviewingRoleId` to the next role row. KycStepWizard now receives `key={reviewingPerson.id}` so its internal state (currentStep, form) re-initialises cleanly on each person.
+
+**3.3 — Single-person Review KYC unchanged:**
+- When `reviewAllContext` is `undefined`, the wizard's last-step button keeps the existing `Save & Close` (inlineMode) / `Submit for Review` behaviour.
+
+**3.4 — Edge cases:**
+- Exit mid-walk via "Back to People" or the unsaved-changes path (`handleExitKycReview`) clears `reviewAllOrder` + `reviewAllIndex` — re-entering Review-All starts fresh from the first person.
+- The wizard auto-saves and remounts on advance, so partially completed KYC for an in-progress person is preserved when the next person loads.
+- Walk visits every person regardless of completion state, per spec.
+
+`npm run build` clean.
+
+---
+
 ### 2026-04-30 — B-046 (Batch 2): People & KYC Add buttons + tabbed Add modal (Claude Code)
 
 **Important schema note for the brief reader:** the brief described `kyc_records` and `application_persons`. The live dashboard flow (`/services/[id]`) uses the newer data model: `client_profiles` + `profile_service_roles` (no `kyc_records` table). The legacy `kyc_records` model is still used by the admin People view (`PersonsManager.tsx`) and the older `/apply/[templateId]/details` route. Per brief scope ("admin out of scope; gate shared components"), all Batch 2 work was applied to `ServiceWizardPeopleStep.tsx` (the actual client-facing People step), not `PersonsManager.tsx`. Admin layouts unchanged.

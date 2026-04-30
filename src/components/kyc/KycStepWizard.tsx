@@ -44,6 +44,18 @@ interface KycStepWizardProps {
   personDocTypes?: DocumentType[];
   /** B-043 — parent registers a flush callback so it can save pending edits before navigating away. */
   onRegisterFlush?: (flush: (() => Promise<boolean>) | null) => void;
+  /**
+   * B-046 — when set, the wizard runs as part of a "Review all KYC" walk.
+   * The final-step button becomes "Save" / "Save & Finish" (with a chevron),
+   * and a header inside the wizard shows the user's place in the walk.
+   * Implies inlineMode behaviour (no submit-for-review on the last step).
+   */
+  reviewAllContext?: {
+    current: number;
+    total: number;
+    personName?: string | null;
+    onAdvance: () => void;
+  };
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -258,6 +270,7 @@ export function KycStepWizard({
   personDocs,
   personDocTypes,
   onRegisterFlush,
+  reviewAllContext,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -418,6 +431,26 @@ export function KycStepWizard({
 
   return (
     <div className="space-y-6">
+      {/* B-046 — review-all walk-through header */}
+      {reviewAllContext && (
+        <div className="flex items-center justify-between rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">
+          <p className="text-sm">
+            <span className="text-gray-500">Reviewing person {reviewAllContext.current + 1} of {reviewAllContext.total}</span>
+            {reviewAllContext.personName && (
+              <>
+                {" "}—{" "}
+                <span className="font-semibold text-brand-navy">{reviewAllContext.personName}</span>
+              </>
+            )}
+          </p>
+          <span className="text-xs text-gray-400">
+            {reviewAllContext.current + 1 < reviewAllContext.total
+              ? `${reviewAllContext.total - reviewAllContext.current - 1} remaining`
+              : "Last person"}
+          </span>
+        </div>
+      )}
+
       <StepIndicator
         current={currentStep}
         total={totalSteps}
@@ -518,7 +551,30 @@ export function KycStepWizard({
         </Button>
 
         {isLastStep ? (
-          inlineMode ? (
+          reviewAllContext ? (
+            <Button
+              onClick={async () => {
+                const ok = await saveCurrentStep();
+                if (!ok) return;
+                if (reviewAllContext.current + 1 < reviewAllContext.total) {
+                  reviewAllContext.onAdvance();
+                } else {
+                  onComplete();
+                }
+              }}
+              disabled={saving}
+              className="bg-brand-navy hover:bg-brand-blue gap-1"
+            >
+              {saving ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />Saving…</>
+              ) : (
+                <>
+                  {reviewAllContext.current + 1 < reviewAllContext.total ? "Save" : "Save & Finish"}
+                  <ChevronRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          ) : inlineMode ? (
             <Button
               onClick={async () => {
                 const ok = await saveCurrentStep();

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, Building2, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2, Upload, Eye, CheckCircle2, FileText } from "lucide-react";
+import { UserPlus, User, Building2, ArrowLeft, Mail, Send, ChevronDown, ChevronRight, Search, Loader2, Upload, Eye, CheckCircle2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1546,11 +1546,21 @@ export function ServiceWizardPeopleStep({
   // pending edits before the user leaves the review panel.
   const kycFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [leaving, setLeaving] = useState(false);
+  // B-046 batch 3 — Review-all walk-through state. `reviewAllOrder` is one
+  // role-row id per unique profile (deduped, mirrors the card list); when
+  // null, the wizard runs in single-person mode.
+  const [reviewAllOrder, setReviewAllOrder] = useState<string[] | null>(null);
+  const [reviewAllIndex, setReviewAllIndex] = useState(0);
 
   async function handleExitKycReview() {
     const flush = kycFlushRef.current;
-    if (!flush) {
+    const exitWalk = () => {
       setReviewingRoleId(null);
+      setReviewAllOrder(null);
+      setReviewAllIndex(0);
+    };
+    if (!flush) {
+      exitWalk();
       return;
     }
     setLeaving(true);
@@ -1560,10 +1570,30 @@ export function ServiceWizardPeopleStep({
         toast.error("Couldn't save your changes — please try again.");
         return;
       }
-      setReviewingRoleId(null);
+      exitWalk();
     } finally {
       setLeaving(false);
     }
+  }
+
+  /**
+   * Build an ordered list of role-row IDs (one per unique profile, in card order)
+   * and start the walk on the first person.
+   */
+  function startReviewAll() {
+    const seen = new Set<string>();
+    const order: string[] = [];
+    for (const p of persons) {
+      const profileId = p.client_profiles?.id ?? p.id;
+      if (!seen.has(profileId)) {
+        seen.add(profileId);
+        order.push(p.id);
+      }
+    }
+    if (order.length === 0) return;
+    setReviewAllOrder(order);
+    setReviewAllIndex(0);
+    setReviewingRoleId(order[0]);
   }
 
   // Hide/show outer wizard nav when entering/leaving KYC review
@@ -1621,8 +1651,38 @@ export function ServiceWizardPeopleStep({
         next.add(reviewingPerson.id);
         return next;
       });
+      // Exit single-person review AND end any in-progress review-all walk.
       setReviewingRoleId(null);
+      setReviewAllOrder(null);
+      setReviewAllIndex(0);
     };
+
+    // B-046 batch 3 — review-all walk context (only when reviewAllOrder is set).
+    const reviewAllContext = reviewAllOrder
+      ? {
+          current: reviewAllIndex,
+          total: reviewAllOrder.length,
+          personName: reviewingPerson.client_profiles?.full_name ?? null,
+          onAdvance: () => {
+            const nextIndex = reviewAllIndex + 1;
+            if (nextIndex >= reviewAllOrder.length) {
+              // Defensive — final-step button only fires onAdvance when there's a next.
+              setReviewAllOrder(null);
+              setReviewAllIndex(0);
+              setReviewingRoleId(null);
+              return;
+            }
+            // Mark this person's KYC as completed locally so the card shows 100%.
+            setKycCompletedIds((prev) => {
+              const next = new Set(prev);
+              next.add(reviewingPerson.id);
+              return next;
+            });
+            setReviewAllIndex(nextIndex);
+            setReviewingRoleId(reviewAllOrder[nextIndex]);
+          },
+        }
+      : undefined;
 
     return (
       <div className="space-y-4">
@@ -1677,6 +1737,9 @@ export function ServiceWizardPeopleStep({
 
         {kycRecord.id ? (
           <KycStepWizard
+            // Force a remount when the active person changes — internal state
+            // (currentStep, form) initialises from kycRecord on mount only.
+            key={reviewingPerson.id}
             clientId={profileId}
             kycRecord={kycRecord}
             documents={documents
@@ -1699,6 +1762,7 @@ export function ServiceWizardPeopleStep({
               .map(mapToDocumentRecord)}
             personDocTypes={documentTypes}
             onRegisterFlush={(fn) => { kycFlushRef.current = fn; }}
+            reviewAllContext={reviewAllContext}
           />
         ) : (
           <div className="text-center py-6 rounded-xl border bg-gray-50 space-y-2">
@@ -1728,7 +1792,7 @@ export function ServiceWizardPeopleStep({
         </p>
       </div>
 
-      {/* Top toolbar — Add buttons left. (Review-All button is added in B-046 batch 3.) */}
+      {/* Top toolbar — Add buttons left, Review-All on the right. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
           {ROLE_LIST.map((role) => (
@@ -1744,6 +1808,16 @@ export function ServiceWizardPeopleStep({
             </Button>
           ))}
         </div>
+        {persons.length > 0 && (
+          <Button
+            size="sm"
+            onClick={startReviewAll}
+            className="bg-brand-navy hover:bg-brand-blue gap-1.5"
+          >
+            Review all KYC
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
       {/* Person cards — deduplicated by profile, combined roles */}
