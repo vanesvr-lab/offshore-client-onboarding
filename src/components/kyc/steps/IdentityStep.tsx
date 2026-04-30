@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Sparkles, Loader2, Info, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
 import { ValidatedLabel, FieldWrapper } from "@/components/shared/ValidatedLabel";
 import { CountrySelect } from "@/components/shared/CountrySelect";
@@ -112,7 +111,6 @@ export function IdentityStep({
   kycRecordId,
 }: IdentityStepProps) {
   const validation = useFieldValidation({ showErrorsImmediately });
-  const [prefilling, setPrefilling] = useState(false);
 
   const prefillableDocs = personDocs ?? documents;
   const prefillableDocTypes = personDocTypes ?? documentTypes;
@@ -166,43 +164,6 @@ export function IdentityStep({
     }
   }
 
-  async function handlePrefillClick() {
-    if (!effectiveKycRecordId) {
-      toast.error("Couldn't fill from document — please try again.");
-      return;
-    }
-    setPrefilling(true);
-    try {
-      const payload: Record<string, string> = {};
-      for (const row of prefillable) payload[row.target] = row.value;
-      if (Object.keys(payload).length === 0) {
-        toast.message("All extractable fields are already filled.");
-        setPrefilling(false);
-        return;
-      }
-
-      const res = await fetch("/api/profiles/kyc/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kycRecordId: effectiveKycRecordId, fields: payload }),
-      });
-      if (!res.ok) throw new Error("save failed");
-
-      const patch: Partial<KycRecord> = {};
-      for (const [k, v] of Object.entries(payload)) {
-        (patch as Record<string, unknown>)[k] = v;
-      }
-      onChange(patch);
-
-      const n = Object.keys(payload).length;
-      toast.success(`Filled ${n} field${n === 1 ? "" : "s"} from your uploaded document.`);
-    } catch {
-      toast.error("Couldn't fill from document — please try again.");
-    } finally {
-      setPrefilling(false);
-    }
-  }
-
   // Resolve doc type IDs from DD requirements first; fall back to name lookup
   function resolveDocTypeId(label: string): string | undefined {
     return (
@@ -215,6 +176,55 @@ export function IdentityStep({
   const passportDoc = passportTypeId ? documents.find((d) => d.document_type_id === passportTypeId) : null;
   const addressDoc = addressTypeId ? documents.find((d) => d.document_type_id === addressTypeId) : null;
 
+  // B-046 batch 5 — Auto-trigger prefill on mount, replace clickable CTA with passive banner.
+  type PrefillBannerState = "idle" | "running" | "success" | "error" | "no-source";
+  const [bannerState, setBannerState] = useState<PrefillBannerState>("idle");
+  const prefillFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (prefillFiredRef.current) return;
+    prefillFiredRef.current = true;
+
+    const hasSourceDoc = !!(passportDoc || addressDoc);
+    if (!hasSourceDoc) {
+      setBannerState("no-source");
+      return;
+    }
+    // Source doc exists but nothing left to apply (already filled previously).
+    if (prefillable.length === 0) {
+      if (availableExtracts.length > 0) setBannerState("success");
+      else setBannerState("error"); // doc uploaded but extraction empty — OCR failed
+      return;
+    }
+    if (!effectiveKycRecordId) {
+      setBannerState("error");
+      return;
+    }
+
+    void (async () => {
+      setBannerState("running");
+      try {
+        const payload: Record<string, string> = {};
+        for (const row of prefillable) payload[row.target] = row.value;
+        const res = await fetch("/api/profiles/kyc/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kycRecordId: effectiveKycRecordId, fields: payload }),
+        });
+        if (!res.ok) throw new Error("save failed");
+        const patch: Partial<KycRecord> = {};
+        for (const [k, v] of Object.entries(payload)) {
+          (patch as Record<string, unknown>)[k] = v;
+        }
+        onChange(patch);
+        setBannerState("success");
+      } catch {
+        setBannerState("error");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-6">
       <div>
@@ -222,22 +232,34 @@ export function IdentityStep({
         <p className="text-sm text-gray-500">Please provide your identity information and upload your passport and proof of address.</p>
       </div>
 
-      {prefillable.length > 0 && (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void handlePrefillClick()}
-          disabled={prefilling}
-          className="w-full h-auto py-3 border-2 border-dashed border-brand-blue/60 bg-brand-blue/5 hover:bg-brand-blue/10 text-brand-navy flex flex-col items-center justify-center gap-0.5"
-        >
-          <span className="inline-flex items-center gap-2 text-sm font-medium">
-            {prefilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-brand-blue" />}
-            Fill from uploaded document
-          </span>
-          <span className="text-[11px] text-gray-500 font-normal">
-            Uses values extracted from your passport / ID.
-          </span>
-        </Button>
+      {bannerState === "running" && (
+        <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 flex items-center gap-3">
+          <Loader2 className="h-4 w-4 text-brand-blue shrink-0 animate-spin" />
+          <p className="text-sm text-brand-navy">Reading your document…</p>
+        </div>
+      )}
+      {bannerState === "success" && (
+        <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 flex items-start gap-3">
+          <Sparkles className="h-4 w-4 text-brand-blue shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-brand-navy">Filled from uploaded document</p>
+            <p className="text-xs text-gray-600">Values extracted from your passport / ID.</p>
+          </div>
+        </div>
+      )}
+      {bannerState === "no-source" && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 flex items-center gap-2.5">
+          <Info className="h-4 w-4 text-gray-500 shrink-0" />
+          <p className="text-sm text-gray-700">Upload your passport or ID to auto-fill these fields.</p>
+        </div>
+      )}
+      {bannerState === "error" && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 flex items-start gap-2.5">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800">
+            Couldn&apos;t auto-fill from your document. Please enter values manually.
+          </p>
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

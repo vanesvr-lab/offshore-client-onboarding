@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-046 (Batch 5 — auto-fill banner) (Claude Code)
+
+Replaces the clickable "Fill from uploaded document" CTA in `IdentityStep` with an automatic prefill on mount + a passive indicator banner. Per-field ✨ icons from B-044 are untouched and continue to work alongside the new screen-level banner.
+
+**5.1 — Auto-trigger:**
+- `src/components/kyc/steps/IdentityStep.tsx`: on mount, a `useRef` guard fires the existing `/api/profiles/kyc/save` payload exactly once with all currently `prefillable` fields (empty form fields that have an extracted source value). The endpoint, request shape, and `onChange(patch)` dispatch are unchanged from the old click handler — only the trigger moved from button click to `useEffect`.
+- `prefillFiredRef` ensures we don't re-fire if `prefillable.length` recomputes (e.g. a re-render after upload). The component already remounts when the user navigates away and back via the per-person sub-step wizard, so a fresh attempt is naturally driven by remounts.
+
+**5.2 — Passive banner replaces the clickable CTA:**
+- The dashed `<Button>` with "Fill from uploaded document" copy is gone. In its place, four mutually exclusive banners (state machine: `idle | running | success | error | no-source`):
+  - `running` — blue tint, spinner, "Reading your document…"
+  - `success` — blue tint, sparkle, "Filled from uploaded document / Values extracted from your passport / ID."
+  - `no-source` — grey, info icon, "Upload your passport or ID to auto-fill these fields." (Shown when no passport / proof-of-address has been uploaded yet.)
+  - `error` — amber, warning icon, "Couldn't auto-fill from your document. Please enter values manually."
+- No click target on any banner — pure indicator. Per-field ✨ icons remain the override path.
+
+**5.3 — Other form steps (audit per brief 5.4):**
+- `FinancialStep` and `DeclarationsStep` have no `computePrefillableFields` / `computeAvailableExtracts` wiring today (no extraction fields are mapped to financial / declaration form keys). Per the brief — "If a form has no prefill source today, leave it untouched" — neither was changed.
+
+**5.4 — Cleanup:**
+- Removed dead `Button` import + `prefilling` state + `handlePrefillClick` function from `IdentityStep`.
+- Added `Info` and `AlertTriangle` from `lucide-react` for the new banner states.
+- `npm run build` clean.
+
+---
+
 ### 2026-04-30 — B-046 (Batch 4 — sub-step wizard restructure) (Claude Code)
 
 The brief was extended after the original Batch 4 (layout rework) shipped. The Review KYC view now runs as a sub-step wizard with a persistent shell and a centered three-button bar. Layout content from the previous batch (role toggle, docs panel, contact row, KYC form) is reused — the wizard just re-arranges *when* each piece is shown.
