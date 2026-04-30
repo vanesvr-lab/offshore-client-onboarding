@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -126,6 +126,8 @@ export function ClientServiceDetailClient({
   const [wizardStartStep, setWizardStartStep] = useState(autoWizardStep ?? 0);
   const [wizardIsDirty, setWizardIsDirty] = useState(false);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const [savingFromDialog, setSavingFromDialog] = useState(false);
+  const wizardSaveAndCloseRef = useRef<(() => Promise<boolean>) | null>(null);
   // Track live updates from wizard
   const [livePersons, setLivePersons] = useState<ServicePerson[]>(persons);
   const [liveDocs, setLiveDocs] = useState<ClientServiceDoc[]>(documents);
@@ -166,19 +168,45 @@ export function ClientServiceDetailClient({
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full mx-4 space-y-4">
               <h2 className="font-semibold text-brand-navy text-base">Unsaved changes</h2>
-              <p className="text-sm text-gray-600">You have unsaved changes. Are you sure you want to leave?</p>
-              <div className="flex gap-2 justify-end">
+              <p className="text-sm text-gray-600">You have unsaved changes. What would you like to do?</p>
+              <div className="flex gap-2 justify-end flex-wrap">
+                <button
+                  onClick={() => { setShowUnsavedWarning(false); setWizardMode(false); }}
+                  disabled={savingFromDialog}
+                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 disabled:opacity-50"
+                >
+                  Leave without saving
+                </button>
                 <button
                   onClick={() => setShowUnsavedWarning(false)}
-                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
+                  disabled={savingFromDialog}
+                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Stay
                 </button>
                 <button
-                  onClick={() => { setShowUnsavedWarning(false); setWizardMode(false); }}
-                  className="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700"
+                  onClick={async () => {
+                    if (savingFromDialog) return;
+                    const handler = wizardSaveAndCloseRef.current;
+                    if (!handler) {
+                      // Fallback — no wizard handler registered. Just close.
+                      setShowUnsavedWarning(false);
+                      setWizardMode(false);
+                      return;
+                    }
+                    setSavingFromDialog(true);
+                    try {
+                      const ok = await handler();
+                      if (ok) setShowUnsavedWarning(false);
+                      // On failure: handler shows its own toast. Keep dialog open.
+                    } finally {
+                      setSavingFromDialog(false);
+                    }
+                  }}
+                  disabled={savingFromDialog}
+                  className="px-4 py-2 text-sm rounded-lg bg-brand-blue text-white hover:bg-brand-navy disabled:opacity-50"
                 >
-                  Leave without saving
+                  {savingFromDialog ? "Saving…" : "Save & Close"}
                 </button>
               </div>
             </div>
@@ -218,6 +246,7 @@ export function ClientServiceDetailClient({
           documentTypes={documentTypes}
           startStep={wizardStartStep}
           onDirtyChange={setWizardIsDirty}
+          saveAndCloseRef={wizardSaveAndCloseRef}
           onClose={(updatedDetails, updatedPersons, updatedDocs) => {
             if (updatedDetails) setLiveServiceDetails(updatedDetails);
             if (updatedPersons) setLivePersons(updatedPersons);

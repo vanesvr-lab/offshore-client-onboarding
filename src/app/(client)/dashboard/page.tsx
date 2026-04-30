@@ -169,9 +169,16 @@ export default async function DashboardPage() {
   const allComplete = serviceCards.every((s) => s.overallPct === 100);
   const userName = session.user.name ?? session.user.email ?? "there";
 
+  // First name for new welcome message — split on first space, only if name looks
+  // like a real name (not an email) and is non-empty
+  const rawName = session.user.name?.trim() ?? "";
+  const looksLikeEmail = rawName.includes("@");
+  const firstName = rawName && !looksLikeEmail ? (rawName.split(/\s+/)[0] ?? null) : null;
+
   return (
     <DashboardClient
       userName={userName}
+      firstName={firstName}
       services={serviceCards}
       allComplete={allComplete}
     />

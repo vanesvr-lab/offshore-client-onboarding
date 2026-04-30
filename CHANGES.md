@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-046 (Batch 1): Dashboard welcome + Save & Close (Claude Code)
+
+**1.1 — Dashboard greeting reworked when info is missing:**
+- `src/app/(client)/dashboard/page.tsx`: derives `firstName` from `session.user.name` (split on first space; null if name looks like an email).
+- `src/components/client/DashboardClient.tsx`: when `!allComplete`, replaces the plain "Welcome {userName}" heading with an amber info card:
+  > **Welcome, {firstName}.** Your application is missing some information — click **Review** below to complete it.
+  Falls back to "Welcome back." if no first name. A small bouncing `ArrowDown` icon underneath visually points at the service cards. When all sections are complete the original greeting copy is preserved.
+- "Missing info" detection reuses the existing `allComplete` calculation (sum of section completions per service), so logic isn't duplicated.
+
+**1.2 — "Save & Close" button on the unsaved-changes dialog:**
+- `src/components/client/ServiceWizard.tsx`: added `saveAndCloseRef?: MutableRefObject<(() => Promise<boolean>) | null>` prop. `handleSaveAndClose` now returns a boolean. A `useEffect` re-publishes the latest closure to the ref every render, with cleanup that clears the ref on unmount.
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx`: dialog now has three buttons (left → right): **Leave without saving · Stay · Save & Close** (primary blue). Save & Close calls `wizardSaveAndCloseRef.current()`; on success it closes both the dialog and the wizard (the wizard's `onClose` already clears `wizardMode`); on failure the dialog stays open so the user can retry. A `savingFromDialog` flag disables all three buttons during save.
+
+`npm run build` clean (lint + types).
+
+---
+
 ### 2026-04-22 — B-045: RLS default-deny on every public table (Claude Code)
 
 > ⚠️ **MIGRATION NOT YET APPLIED.** The SQL file exists at

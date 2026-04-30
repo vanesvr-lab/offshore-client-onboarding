@@ -23,6 +23,9 @@ interface Props {
   startStep?: number;
   onClose: (updatedDetails?: Record<string, unknown>, updatedPersons?: ServicePerson[], updatedDocs?: ClientServiceDoc[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  // Lets the parent trigger save+close (e.g. from the unsaved-changes dialog).
+  // Resolves true on success, false on save failure.
+  saveAndCloseRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
 }
 
 // Maps step indices to the section names in service_fields
@@ -63,6 +66,7 @@ export function ServiceWizard({
   startStep = 0,
   onClose,
   onDirtyChange,
+  saveAndCloseRef,
 }: Props) {
   const [currentStep, setCurrentStep] = useState(startStep);
   const originalDetails = useRef<Record<string, unknown>>(service.service_details ?? {});
@@ -170,15 +174,29 @@ export function ServiceWizard({
     setCurrentStep((s) => Math.max(s - 1, 0));
   }
 
-  async function handleSaveAndClose() {
+  async function handleSaveAndClose(): Promise<boolean> {
     if (currentStep < 3) {
       const ok = await saveServiceDetails();
-      if (!ok) return;
+      if (!ok) return false;
     }
     originalDetails.current = serviceDetails; // clear dirty
     toast.success("Progress saved", { position: "top-right" });
     onClose(serviceDetails, persons, documents);
+    return true;
   }
+
+  // Expose save+close to the parent (used by the unsaved-changes dialog's
+  // "Save & Close" button). Re-assigned every render so the closure reflects
+  // current state.
+  useEffect(() => {
+    if (!saveAndCloseRef) return;
+    saveAndCloseRef.current = handleSaveAndClose;
+    return () => {
+      if (saveAndCloseRef.current === handleSaveAndClose) {
+        saveAndCloseRef.current = null;
+      }
+    };
+  });
 
   async function handleSubmit() {
     const ok = await saveServiceDetails();

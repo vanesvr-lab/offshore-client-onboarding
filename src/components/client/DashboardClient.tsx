@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getClientStatusLabel } from "@/lib/utils/clientLabels";
 
@@ -22,6 +22,7 @@ type ServiceCardRow = {
 
 interface Props {
   userName: string;
+  firstName: string | null;
   services: ServiceCardRow[];
   allComplete: boolean;
 }
@@ -141,17 +142,43 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
   );
 }
 
-export function DashboardClient({ userName, services, allComplete }: Props) {
+export function DashboardClient({ userName, firstName, services, allComplete }: Props) {
+  if (allComplete) {
+    return (
+      <div className="space-y-6">
+        {/* Greeting — all complete */}
+        <div>
+          <h1 className="text-2xl font-bold text-brand-navy">Welcome {userName}</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            All sections complete! Your application is under review.
+          </p>
+        </div>
+
+        {/* Service cards */}
+        <div className="space-y-4">
+          {services.map((svc) => (
+            <ServiceCard key={svc.id} svc={svc} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Missing-info path — point user at the Review CTA on the cards below
+  const greetingLead = firstName ? `Welcome, ${firstName}.` : "Welcome back.";
+
   return (
-    <div className="space-y-6">
-      {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-brand-navy">Welcome {userName}</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {allComplete
-            ? "All sections complete! Your application is under review."
-            : "Please provide the missing information to complete your application."}
+    <div className="space-y-4">
+      {/* Greeting card with downward visual cue */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+        <p className="text-sm text-amber-900">
+          <span className="font-semibold text-brand-navy">{greetingLead}</span>{" "}
+          Your application is missing some information — click{" "}
+          <span className="font-semibold">Review</span> below to complete it.
         </p>
+        <div className="flex justify-center mt-2 -mb-1 text-amber-500">
+          <ArrowDown className="h-4 w-4 animate-bounce" />
+        </div>
       </div>
 
       {/* Service cards */}
