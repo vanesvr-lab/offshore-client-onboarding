@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-046 (Batch 2): People & KYC Add buttons + tabbed Add modal (Claude Code)
+
+**Important schema note for the brief reader:** the brief described `kyc_records` and `application_persons`. The live dashboard flow (`/services/[id]`) uses the newer data model: `client_profiles` + `profile_service_roles` (no `kyc_records` table). The legacy `kyc_records` model is still used by the admin People view (`PersonsManager.tsx`) and the older `/apply/[templateId]/details` route. Per brief scope ("admin out of scope; gate shared components"), all Batch 2 work was applied to `ServiceWizardPeopleStep.tsx` (the actual client-facing People step), not `PersonsManager.tsx`. Admin layouts unchanged.
+
+**2.1 — Add buttons moved to top toolbar:**
+- `src/components/client/ServiceWizardPeopleStep.tsx`: the row of `Add Director / Add Shareholder / Add UBO` buttons now sits **above** the person list. Buttons are grouped left; the right side is reserved for the "Review all KYC" button (added in Batch 3, intentionally hidden in Batch 2). Empty state copy updated to "No people added yet. Use the buttons above to get started."
+
+**2.2 — Tabbed Add modal:**
+- Replaced the inline `AddPersonModal` (search + create-new combined) with a proper two-tab modal:
+  - **Tab A — Select existing person:** lists every tenant `client_profiles` row with role chips aggregated across all services they appear in (e.g. `Director`, `Shareholder 50%`). Click a row to attach the new role. Profiles already attached as the *same* role on *this* service are disabled and surface the inline message `{Name} is already a {Role} on this application.`
+  - **Tab B — Add new person:** minimal form — Type radio (hidden when role is UBO, forces individual), Full name (required), Email (required), Phone (optional).
+  - UBO tab A filters out `record_type === 'organisation'` profiles entirely.
+- API change — `GET /api/services/[id]/available-profiles`: returns **all** tenant profiles now (not just unlinked), each with a `roles` array `[{service_id, role, shareholding_percentage}]` plus `phone` and `record_type`. The "is this profile already linked here as this role?" check has moved into the modal where it belongs (using `currentPersons`). The dead `ServicePersonsManager.tsx` (no callers) still references the old shape but is unused, so left untouched.
+- API change — `POST /api/services/[id]/persons`: accepts an optional `phone` and persists it onto the new `client_profiles` row.
+
+**2.3 — Auto-open Review KYC after add:**
+- After a successful add (existing or new), `handleAdded` now also calls `setReviewingRoleId(person.id)` so the wizard immediately drops the user into that person's KYC review — no extra click required.
+
+**2.4 — Notes:**
+- Director warning ("At least one director is required") is now suppressed when there are zero people, since the empty-state copy already directs the user to add someone.
+- Shareholding % is **not** captured in the new modal; it stays where it is today (the OwnershipStructure component below the list). This matches the brief's Batch 4 directive ("No inline % capture, Shareholder % stays editable wherever it is today").
+
+`npm run build` clean.
+
+---
+
 ### 2026-04-30 — B-046 (Batch 1): Dashboard welcome + Save & Close (Claude Code)
 
 **1.1 — Dashboard greeting reworked when info is missing:**

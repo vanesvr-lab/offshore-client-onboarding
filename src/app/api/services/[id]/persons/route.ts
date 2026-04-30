@@ -35,6 +35,7 @@ export async function POST(
     role: string;
     full_name?: string;
     email?: string;
+    phone?: string;
     record_type?: "individual" | "organisation";
     shareholding_percentage?: number;
   };
@@ -70,6 +71,7 @@ export async function POST(
         is_representative: false,
         full_name: body.full_name,
         email: body.email ?? null,
+        phone: body.phone ?? null,
         due_diligence_level: "sdd",
       })
       .select("id")

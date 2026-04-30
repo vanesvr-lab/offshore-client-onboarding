@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2, Upload, Eye, CheckCircle2, FileText } from "lucide-react";
+import { UserPlus, User, Building2, ArrowLeft, Mail, Send, ChevronDown, Search, Loader2, Upload, Eye, CheckCircle2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -618,6 +618,33 @@ interface AvailableProfile {
   id: string;
   full_name: string | null;
   email: string | null;
+  phone: string | null;
+  record_type: "individual" | "organisation";
+  roles: { service_id: string; role: string; shareholding_percentage: number | null }[];
+}
+
+const ROLE_CHIP_TONE: Record<string, string> = {
+  director: "bg-blue-50 text-blue-700 border-blue-200",
+  shareholder: "bg-purple-50 text-purple-700 border-purple-200",
+  ubo: "bg-amber-50 text-amber-800 border-amber-200",
+  primary_client: "bg-gray-100 text-gray-700 border-gray-200",
+  contact: "bg-gray-100 text-gray-700 border-gray-200",
+};
+
+/** Aggregate distinct role chips (e.g. "Director", "Shareholder 50%") across services. */
+function aggregateRoleChips(
+  roles: AvailableProfile["roles"]
+): { key: string; role: string; label: string }[] {
+  const seen = new Map<string, { role: string; label: string }>();
+  for (const r of roles) {
+    const baseLabel = ROLE_LABELS[r.role as ServicePersonRole] ?? r.role;
+    const label = r.role === "shareholder" && r.shareholding_percentage != null
+      ? `${baseLabel} ${r.shareholding_percentage}%`
+      : baseLabel;
+    const key = `${r.role}::${r.shareholding_percentage ?? ""}`;
+    if (!seen.has(key)) seen.set(key, { role: r.role, label });
+  }
+  return Array.from(seen.entries()).map(([key, v]) => ({ key, role: v.role, label: v.label }));
 }
 
 function AddPersonModal({
@@ -634,286 +661,348 @@ function AddPersonModal({
   onAdded: (person: ServicePerson) => void;
 }) {
   const roleTitle = ROLE_LABELS[role];
-  const [availableProfiles, setAvailableProfiles] = useState<AvailableProfile[] | null>(null);
+  const [tab, setTab] = useState<"existing" | "new">("existing");
+  const [profiles, setProfiles] = useState<AvailableProfile[] | null>(null);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // New-person form
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
   const [recordType, setRecordType] = useState<"individual" | "organisation">("individual");
-  const [shareholding, setShareholding] = useState("");
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetch(`/api/services/${serviceId}/available-profiles`)
       .then((r) => r.json() as Promise<AvailableProfile[]>)
-      .then((data) => setAvailableProfiles(data))
-      .catch(() => setAvailableProfiles([]));
+      .then((data) => setProfiles(data))
+      .catch(() => setProfiles([]));
   }, [serviceId]);
 
-  // Deduplicate linked profiles from currentPersons
-  const linkedMap = useMemo(() => {
-    const map = new Map<string, { profile: NonNullable<ServicePerson["client_profiles"]>; roles: string[] }>();
+  // Profiles already linked to THIS service for THIS role — used to disable rows + show inline message.
+  const sameRoleOnThisServiceByProfile = useMemo(() => {
+    const set = new Set<string>();
     for (const p of currentPersons) {
-      if (!p.client_profiles) continue;
-      const entry = map.get(p.client_profiles.id);
-      if (entry) {
-        entry.roles.push(p.role);
-      } else {
-        map.set(p.client_profiles.id, { profile: p.client_profiles, roles: [p.role] });
-      }
+      if (p.client_profiles?.id && p.role === role) set.add(p.client_profiles.id);
     }
-    return map;
-  }, [currentPersons]);
+    return set;
+  }, [currentPersons, role]);
 
-  const linkedProfiles = Array.from(linkedMap.values());
-  const searchLower = search.toLowerCase();
+  const visibleProfiles = useMemo(() => {
+    const all = profiles ?? [];
+    const filtered = role === "ubo"
+      ? all.filter((p) => p.record_type === "individual")
+      : all;
+    if (!search) return filtered;
+    const q = search.toLowerCase();
+    return filtered.filter(
+      (p) =>
+        (p.full_name?.toLowerCase().includes(q) ?? false) ||
+        (p.email?.toLowerCase().includes(q) ?? false)
+    );
+  }, [profiles, role, search]);
 
-  const filteredLinked = linkedProfiles.filter(
-    ({ profile }) =>
-      !search ||
-      (profile.full_name?.toLowerCase().includes(searchLower) ?? false) ||
-      (profile.email?.toLowerCase().includes(searchLower) ?? false)
-  );
-  const filteredAvailable = (availableProfiles ?? []).filter(
-    (p) =>
-      !search ||
-      (p.full_name?.toLowerCase().includes(searchLower) ?? false) ||
-      (p.email?.toLowerCase().includes(searchLower) ?? false)
-  );
-
-  const isCreatingNew = selected === null;
-
-  async function handleConfirm() {
-    const body: {
-      role: string;
-      client_profile_id?: string;
-      full_name?: string;
-      email?: string;
-      record_type?: string;
-      shareholding_percentage?: number;
-    } = { role };
-
-    const pct = shareholding ? parseFloat(shareholding) : undefined;
-    if (pct !== undefined) body.shareholding_percentage = pct;
-
-    if (!isCreatingNew) {
-      body.client_profile_id = selected!;
-    } else {
-      if (!newName.trim()) { toast.error("Name is required"); return; }
-      body.full_name = newName.trim();
-      if (newEmail.trim()) body.email = newEmail.trim();
-      body.record_type = recordType;
+  async function attachExisting(p: AvailableProfile) {
+    if (sameRoleOnThisServiceByProfile.has(p.id)) {
+      toast.error(`${p.full_name ?? "This profile"} is already a ${roleTitle} on this application.`);
+      return;
     }
-
-    setLoading(true);
+    setSubmitting(true);
     try {
       const res = await fetch(`/api/services/${serviceId}/persons`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ role, client_profile_id: p.id }),
       });
-      const data = (await res.json()) as { id?: string; profileId?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to add");
-
-      const profileData = !isCreatingNew
-        ? (() => {
-            const p = (availableProfiles ?? []).find((pr) => pr.id === selected);
-            return {
-              id: p?.id ?? selected ?? "",
-              full_name: p?.full_name ?? "",
-              email: p?.email ?? null,
-              due_diligence_level: "cdd",
-              record_type: null as string | null,
-              client_profile_kyc: null,
-            };
-          })()
-        : {
-            id: data.profileId ?? "",
-            full_name: newName.trim(),
-            email: newEmail.trim() || null,
-            due_diligence_level: "cdd",
-            record_type: recordType as string | null,
-            client_profile_kyc: null,
-          };
+      const data = (await res.json()) as { id?: string; error?: string };
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to add");
 
       onAdded({
-        id: data.id ?? "",
+        id: data.id,
         role,
-        shareholding_percentage: pct ?? null,
+        shareholding_percentage: null,
         can_manage: false,
         invite_sent_at: null,
         invite_sent_by_name: null,
-        client_profiles: profileData,
+        client_profiles: {
+          id: p.id,
+          full_name: p.full_name ?? "",
+          email: p.email,
+          due_diligence_level: "cdd",
+          record_type: p.record_type,
+          client_profile_kyc: null,
+        },
       });
       toast.success(`${roleTitle} added`);
       onClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to add person");
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
-  const canSubmit = (isCreatingNew ? newName.trim().length > 0 : true) && !loading;
+  async function createNew() {
+    if (!newName.trim()) { toast.error("Full name is required"); return; }
+    if (!newEmail.trim()) { toast.error("Email is required"); return; }
+
+    const finalRecordType = role === "ubo" ? "individual" : recordType;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/services/${serviceId}/persons`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role,
+          full_name: newName.trim(),
+          email: newEmail.trim(),
+          phone: newPhone.trim() || undefined,
+          record_type: finalRecordType,
+        }),
+      });
+      const data = (await res.json()) as { id?: string; profileId?: string; error?: string };
+      if (!res.ok || !data.id) throw new Error(data.error ?? "Failed to add");
+
+      onAdded({
+        id: data.id,
+        role,
+        shareholding_percentage: null,
+        can_manage: false,
+        invite_sent_at: null,
+        invite_sent_by_name: null,
+        client_profiles: {
+          id: data.profileId ?? "",
+          full_name: newName.trim(),
+          email: newEmail.trim() || null,
+          due_diligence_level: "cdd",
+          record_type: finalRecordType,
+          client_profile_kyc: null,
+        },
+      });
+      toast.success(`${roleTitle} added`);
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to add person");
+      setSubmitting(false);
+    }
+  }
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md z-[100]">
+      <DialogContent className="max-w-md z-[100] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-brand-navy">Add {roleTitle}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 pt-1">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or email…"
-              className="text-sm pl-8"
-            />
-          </div>
 
-          {/* Profile list */}
-          {availableProfiles === null ? (
-            <p className="text-sm text-gray-400 text-center py-3">Loading…</p>
-          ) : (
-            <div className="max-h-[14rem] overflow-y-auto space-y-1">
-              {/* Linked (disabled) */}
-              {filteredLinked.map(({ profile, roles }) => (
-                <div
-                  key={profile.id}
-                  className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-gray-50 opacity-60 cursor-not-allowed"
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">{profile.full_name ?? "Unnamed"}</p>
-                      {profile.email && <p className="text-xs text-gray-400">{profile.email}</p>}
-                    </div>
-                  </div>
-                  <div className="flex gap-1 ml-2">
-                    {roles.map((r) => (
-                      <span key={r} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">
-                        {ROLE_LABELS[r as ServicePersonRole] ?? r}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {/* Available (selectable) */}
-              {filteredAvailable.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSelected((prev) => (prev === p.id ? null : p.id))}
-                  className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
-                    selected === p.id
-                      ? "border-brand-navy bg-brand-navy/5"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-brand-navy">{p.full_name ?? "Unnamed"}</p>
-                      {p.email && <p className="text-xs text-gray-400">{p.email}</p>}
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {filteredLinked.length === 0 && filteredAvailable.length === 0 && search && (
-                <p className="text-sm text-gray-400 text-center py-3">
-                  No profiles match &quot;{search}&quot;
-                </p>
-              )}
-            </div>
-          )}
+        {/* Tabs */}
+        <div className="flex border-b -mt-1">
+          <button
+            type="button"
+            onClick={() => setTab("existing")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "existing"
+                ? "border-brand-navy text-brand-navy"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Select existing person
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("new")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "new"
+                ? "border-brand-navy text-brand-navy"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Add new person
+          </button>
+        </div>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-white px-2 text-xs text-gray-400">or create new</span>
-            </div>
-          </div>
-
-          {/* Create new */}
-          <div className="space-y-3">
-            <div className="flex gap-4">
-              {(["individual", "organisation"] as const).map((type) => (
-                <label key={type} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    value={type}
-                    checked={recordType === type && isCreatingNew}
-                    onChange={() => { setRecordType(type); setSelected(null); }}
-                    className="h-3.5 w-3.5 accent-brand-navy"
-                  />
-                  <span className="text-sm text-gray-700">
-                    {type === "individual" ? "Individual" : "Corporation"}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="space-y-2">
-              <div className="space-y-1">
-                <Label className="text-sm">
-                  {recordType === "individual" ? "Full name" : "Corporation name"}{" "}
-                  <span className="text-red-400">*</span>
-                </Label>
-                <Input
-                  value={newName}
-                  onChange={(e) => { setNewName(e.target.value); setSelected(null); }}
-                  placeholder={recordType === "individual" ? "As on passport" : "Legal entity name"}
-                  className="text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm text-gray-600">
-                  Email address{" "}
-                  <span className="text-gray-400 font-normal">(optional)</span>
-                </Label>
-                <Input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => { setNewEmail(e.target.value); setSelected(null); }}
-                  placeholder="email@example.com"
-                  className="text-sm"
-                />
-              </div>
-            </div>
-          </div>
-
-          {role === "shareholder" && (
-            <div className="space-y-1.5">
-              <Label className="text-sm">Shareholding %</Label>
+        {tab === "existing" ? (
+          <div className="space-y-2 pt-1">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
               <Input
-                type="number"
-                min="0"
-                max="100"
-                value={shareholding}
-                onChange={(e) => setShareholding(e.target.value)}
-                placeholder="e.g. 25"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or email…"
+                className="text-sm pl-8"
+              />
+            </div>
+
+            {profiles === null ? (
+              <p className="text-sm text-gray-400 text-center py-4">Loading…</p>
+            ) : visibleProfiles.length === 0 ? (
+              <div className="text-center py-6 space-y-1">
+                <p className="text-sm text-gray-500">
+                  {role === "ubo"
+                    ? "No existing individual profiles to attach."
+                    : search
+                      ? `No profiles match "${search}".`
+                      : "No existing profiles to attach."}
+                </p>
+                <p className="text-xs text-gray-400">
+                  Switch to <span className="font-medium">Add new person</span> to create one.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-[20rem] overflow-y-auto pr-1">
+                {visibleProfiles.map((p) => {
+                  const chips = aggregateRoleChips(p.roles);
+                  const isAlready = sameRoleOnThisServiceByProfile.has(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => !isAlready && !submitting && void attachExisting(p)}
+                      disabled={isAlready || submitting}
+                      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                        isAlready
+                          ? "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
+                          : "border-gray-200 hover:border-brand-navy"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        {p.record_type === "organisation" ? (
+                          <Building2 className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <User className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-brand-navy truncate">
+                              {p.full_name ?? "Unnamed"}
+                            </p>
+                            <span className="text-[10px] uppercase tracking-wide text-gray-400 shrink-0">
+                              {p.record_type === "organisation" ? "Company" : "Individual"}
+                            </span>
+                          </div>
+                          {p.email && <p className="text-xs text-gray-400 truncate">{p.email}</p>}
+                          {chips.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {chips.map((c) => (
+                                <span
+                                  key={c.key}
+                                  className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${
+                                    ROLE_CHIP_TONE[c.role] ?? "bg-gray-100 text-gray-600 border-gray-200"
+                                  }`}
+                                >
+                                  {c.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {isAlready && (
+                            <p className="text-[11px] text-amber-700 mt-1.5">
+                              {p.full_name ?? "This profile"} is already a {roleTitle} on this application.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3 pt-1">
+            {role !== "ubo" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm">Type</Label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecordType("individual")}
+                    className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                      recordType === "individual"
+                        ? "border-brand-navy bg-brand-navy/5 text-brand-navy font-medium"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    Individual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecordType("organisation")}
+                    className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                      recordType === "organisation"
+                        ? "border-brand-navy bg-brand-navy/5 text-brand-navy font-medium"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    Company
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Full name <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={
+                  role === "ubo" || recordType === "individual"
+                    ? "As it appears on passport"
+                    : "Registered company name"
+                }
+                className="text-sm"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Email <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="email@example.com"
                 className="text-sm"
               />
             </div>
-          )}
 
-          <div className="flex gap-2 justify-end pt-1">
-            <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+            <div className="space-y-1.5">
+              <Label className="text-sm">Phone</Label>
+              <Input
+                type="tel"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="Optional"
+                className="text-sm"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 justify-end pt-2 border-t">
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          {tab === "new" && (
             <Button
-              onClick={() => void handleConfirm()}
-              disabled={!canSubmit}
-              className="bg-brand-navy hover:bg-brand-blue"
+              onClick={() => void createNew()}
+              disabled={submitting || !newName.trim() || !newEmail.trim()}
+              className="bg-brand-navy hover:bg-brand-blue gap-1"
             >
-              {loading ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Adding…</>
+              {submitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Adding…
+                </>
               ) : (
                 `Add ${roleTitle}`
               )}
             </Button>
-          </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -1487,6 +1576,8 @@ export function ServiceWizardPeopleStep({
       const next = [...persons, person];
       setPersons(next);
       onPersonsChange(next);
+      // Auto-open Review KYC for the freshly added person.
+      setReviewingRoleId(person.id);
     },
     [persons, onPersonsChange]
   );
@@ -1637,9 +1728,29 @@ export function ServiceWizardPeopleStep({
         </p>
       </div>
 
+      {/* Top toolbar — Add buttons left. (Review-All button is added in B-046 batch 3.) */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {ROLE_LIST.map((role) => (
+            <Button
+              key={role}
+              size="sm"
+              variant="outline"
+              onClick={() => setAddingRole(role)}
+              className="gap-1.5 border-dashed"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Add {ROLE_LABELS[role]}
+            </Button>
+          ))}
+        </div>
+      </div>
+
       {/* Person cards — deduplicated by profile, combined roles */}
       {persons.length === 0 ? (
-        <p className="text-sm text-gray-400 py-2">No people added yet.</p>
+        <p className="text-sm text-gray-500 py-2">
+          No people added yet. Use the buttons above to get started.
+        </p>
       ) : (
         <div className="space-y-2.5">
           {(() => {
@@ -1688,27 +1799,11 @@ export function ServiceWizardPeopleStep({
       />
 
       {/* Director warning */}
-      {!hasDirector && (
+      {!hasDirector && persons.length > 0 && (
         <p className="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
           At least one director is required.
         </p>
       )}
-
-      {/* Add buttons */}
-      <div className="flex flex-wrap gap-2">
-        {ROLE_LIST.map((role) => (
-          <Button
-            key={role}
-            size="sm"
-            variant="outline"
-            onClick={() => setAddingRole(role)}
-            className="gap-1.5 border-dashed"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Add {ROLE_LABELS[role]}
-          </Button>
-        ))}
-      </div>
 
       {addingRole && (
         <AddPersonModal
