@@ -15,6 +15,42 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-046 (Batch 4 — sub-step wizard restructure) (Claude Code)
+
+The brief was extended after the original Batch 4 (layout rework) shipped. The Review KYC view now runs as a sub-step wizard with a persistent shell and a centered three-button bar. Layout content from the previous batch (role toggle, docs panel, contact row, KYC form) is reused — the wizard just re-arranges *when* each piece is shown.
+
+**4.1 — New `PerPersonReviewWizard` component:**
+- New file: `src/components/client/PerPersonReviewWizard.tsx`. Owns its own form state, doc-upload state, sub-step index, and save-on-transition logic. Replaces the inline Review KYC view rendering inside `ServiceWizardPeopleStep`.
+- 8 sub-step pipeline (skipped where empty): `Identity docs` → `Financial docs` → `Compliance docs` → `Contact details` → `Identity` → `Financial` → `Declarations` (CDD/EDD only) → `Review`. Organisations follow a 3-form variant: `Company details` → `Tax & financial` → `Review`.
+- Doc-category sub-steps with zero document slots are removed from the visible list. Sub-step counter reflects the *visible* count.
+- Persistent shell across all sub-steps: back link + `RoleToggleRow` + KYC progress strip (per-category icons + counts + status legend) + sub-step counter.
+- Helper subtitle ("Upload your KYC documents below — we'll auto-fill the rest…") is shown only on doc-list sub-steps.
+- Centered three-button bar replaces the old top/bottom buttons:
+  - Left: `← Back` (calls `goBack`; saves form on form sub-steps before retreating; calls `onExit` on the first sub-step).
+  - Middle: `Upload later` on doc sub-steps · hidden on contact · `Save & Close` on form sub-steps · `Save & Continue`/`Save & Finish` on the final sub-step in review-all mode.
+  - Right: `Next →` on every sub-step except the last. Disabled on doc sub-steps until all required docs in the category are uploaded.
+- "Back to People" link in the top-left auto-saves form state (when on a form sub-step) before exiting; spinner appears during the save.
+
+**4.2 — Inline org form steps:**
+- The org variant (`Company details`, `Tax & financial`, `Review`) is rendered by inline copies of `KycStepWizard`'s internal `CompanyDetailsStep`, `CorporateTaxStep`, and `OrgReviewStep`. We didn't export these from `KycStepWizard` — the wrapper is meant to be self-contained so we can iterate on the per-person wizard without touching the legacy `/kyc` and `/apply` flows.
+
+**4.3 — Doc upload + verification polling:**
+- Upload flow lives inside `PerPersonReviewWizard` and mirrors `KycDocListPanel`: image compression for >500 KB images, 4.5 MB Vercel limit guard, optimistic local doc state mutation, 25-attempt verification poll.
+- Replacement flow goes through the existing `DocumentDetailDialog` and updates local docs state on `onDocumentReplaced`.
+
+**4.4 — `ServiceWizardPeopleStep` integration:**
+- `src/components/client/ServiceWizardPeopleStep.tsx`: the entire `if (reviewingPerson) { … }` block is replaced with a single `<PerPersonReviewWizard … />`. Dead code removed: inline `KycDocListPanel` (~340 lines), `RoleToggleRow` (~130 lines), `ContactDetailsRow` (~85 lines), `mapToKycRecord`, `mapToDocumentRecord`, `KYC_DOC_CATEGORIES`/`isKycDocCat`, the `kycFlushRef` + `leaving` state, and the `useRef` import. The `KycStepWizard` import is gone too — the new wrapper renders `IdentityStep`/`FinancialStep`/`DeclarationsStep`/`ReviewStep` directly so we don't carry the legacy 4-step navigation.
+- `handleExitKycReview` is now a sync function — saving on exit is the wizard's responsibility, not the parent's.
+
+**4.5 — `ServiceWizardNav` centered group:**
+- `src/components/client/ServiceWizardNav.tsx`: outer wizard nav switched from `justify-between` (Save & Close left, Back/Next right) to `justify-center` with the canonical `[← Back] [Save & Close] [Next →]` order to match the per-person wizard's button bar.
+
+**4.6 — Sanity:**
+- `npm run build` clean.
+- `KycStepWizard` is still imported by `/kyc`, `/apply`, and `PersonsManager` — leaving it untouched.
+
+---
+
 ### 2026-04-30 — B-046 (Batch 4): Review KYC layout rework (Claude Code)
 
 **4.1 — Person card slim-down:**

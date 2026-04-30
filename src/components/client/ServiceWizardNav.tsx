@@ -49,7 +49,16 @@ export function ServiceWizardNav({
   );
 
   return (
-    <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-between gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+    <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-center gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onBack}
+        disabled={currentStep === 0 || saving}
+      >
+        ← Back
+      </Button>
+
       <Button
         variant="outline"
         size="sm"
@@ -60,51 +69,40 @@ export function ServiceWizardNav({
         Save &amp; Close
       </Button>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          disabled={currentStep === 0 || saving}
-        >
-          ← Back
-        </Button>
-
-        {isLast ? (
-          showSubmitTooltip ? (
-            <TooltipProvider>
-              <Tooltip>
-                {/* Disabled buttons don't fire hover; wrap in span so the tooltip still works. */}
-                <TooltipTrigger
-                  render={<span className="inline-block" tabIndex={0} />}
-                >
-                  {submitBtn}
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-medium mb-1">Before submitting, please complete:</p>
-                  <ul className="list-disc pl-4 space-y-0.5">
-                    {submitBlockers.map((b, i) => (
-                      <li key={i}>{b}</li>
-                    ))}
-                  </ul>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            submitBtn
-          )
+      {isLast ? (
+        showSubmitTooltip ? (
+          <TooltipProvider>
+            <Tooltip>
+              {/* Disabled buttons don't fire hover; wrap in span so the tooltip still works. */}
+              <TooltipTrigger
+                render={<span className="inline-block" tabIndex={0} />}
+              >
+                {submitBtn}
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-medium mb-1">Before submitting, please complete:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {submitBlockers.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : (
-          <Button
-            size="sm"
-            onClick={onNext}
-            disabled={saving}
-            className="bg-brand-navy hover:bg-brand-blue"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-            Next →
-          </Button>
-        )}
-      </div>
+          submitBtn
+        )
+      ) : (
+        <Button
+          size="sm"
+          onClick={onNext}
+          disabled={saving}
+          className="bg-brand-navy hover:bg-brand-blue"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+          Next →
+        </Button>
+      )}
     </div>
   );
 }
