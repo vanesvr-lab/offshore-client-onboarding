@@ -156,111 +156,6 @@ const isKycDocCat = (cat: string) => KYC_DOC_CATEGORIES.includes(cat);
 
 // ─── ProfileEditPanel ─────────────────────────────────────────────────────────
 
-function ProfileEditPanel({
-  profileId,
-  email: initialEmail,
-  phone: initialPhone,
-  roles,
-  onRoleRemoved,
-}: {
-  profileId: string;
-  email: string | null;
-  phone: string | null;
-  roles: ServicePerson[];
-  onRoleRemoved: (roleId: string) => void;
-}) {
-  const [editEmail, setEditEmail] = useState(initialEmail ?? "");
-  const [editPhone, setEditPhone] = useState(initialPhone ?? "");
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  function handleEmailChange(v: string) { setEditEmail(v); setDirty(true); }
-  function handlePhoneChange(v: string) { setEditPhone(v); setDirty(true); }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/profiles/${profileId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: editEmail.trim() || null, phone: editPhone.trim() || null }),
-      });
-      if (!res.ok) throw new Error("Save failed");
-      setDirty(false);
-      toast.success("Profile updated", { position: "top-right" });
-    } catch {
-      toast.error("Failed to save profile");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleCancel() {
-    setEditEmail(initialEmail ?? "");
-    setEditPhone(initialPhone ?? "");
-    setDirty(false);
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="space-y-1.5">
-        <div>
-          <label className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Email</label>
-          <Input
-            type="email"
-            value={editEmail}
-            onChange={(e) => handleEmailChange(e.target.value)}
-            placeholder="email@example.com"
-            className="text-sm h-7"
-          />
-        </div>
-        <div>
-          <label className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Phone</label>
-          <Input
-            type="tel"
-            value={editPhone}
-            onChange={(e) => handlePhoneChange(e.target.value)}
-            placeholder="+230 555 0000"
-            className="text-sm h-7"
-          />
-        </div>
-        {dirty && (
-          <div className="flex gap-2 pt-0.5">
-            <Button size="sm" className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue" disabled={saving} onClick={() => void handleSave()}>
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={handleCancel}>Cancel</Button>
-          </div>
-        )}
-      </div>
-
-      <div className="border-t pt-1.5 space-y-0.5">
-        <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Roles</p>
-        {roles.map((r) => (
-          <div key={r.id} className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600"}`}>
-                {ROLE_LABELS[r.role as ServicePersonRole] ?? r.role}
-              </span>
-              {r.shareholding_percentage != null && (
-                <span className="text-xs text-gray-600">{r.shareholding_percentage}%</span>
-              )}
-            </div>
-            {!r.can_manage && (
-              <button
-                onClick={() => void onRoleRemoved(r.id)}
-                className="text-xs text-gray-600 hover:text-red-600 transition-colors"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── KycDocListPanel ──────────────────────────────────────────────────────────
 
 function KycDocListPanel({
@@ -406,35 +301,121 @@ function KycDocListPanel({
 
   const uploadedCount = kycDocTypes.filter((dt) => getUploaded(dt.id)).length;
 
-  // Group docs by category for collapsible sections
+  // B-046 batch 4 — flat list in section order, split into two columns for the
+  // new layout. Section headers render inline within each column wherever the
+  // section's docs fall; if a section spans both columns, the header appears
+  // in both.
   const CATEGORY_LABELS: Record<string, string> = {
     identity: "Identity",
     financial: "Financial",
     compliance: "Compliance",
   };
   const CATEGORY_ORDER = ["identity", "financial", "compliance"];
-  const grouped: Record<string, DocumentType[]> = {};
-  for (const dt of kycDocTypes) {
-    const cat = dt.category || "identity";
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(dt);
+  const flatList: { dt: DocumentType; section: string }[] = [];
+  for (const cat of CATEGORY_ORDER) {
+    for (const dt of kycDocTypes) {
+      const c = dt.category || "identity";
+      if (c === cat) flatList.push({ dt, section: cat });
+    }
+  }
+  const totalDocs = flatList.length;
+  const leftCount = Math.ceil(totalDocs / 2); // odd → left gets the extra
+  const leftItems = flatList.slice(0, leftCount);
+  const rightItems = flatList.slice(leftCount);
+
+  function renderDocRow(dt: DocumentType) {
+    const uploaded = getUploaded(dt.id);
+    const isUploading = uploadingTypeId === dt.id;
+    const aiStatus = uploaded?.verification_status;
+    const adminStatus = uploaded?.admin_status;
+    const isApproved = !!(uploaded && adminStatus === "approved");
+    return (
+      <div key={dt.id} className="flex items-center justify-between gap-2 py-1">
+        <div className="flex items-center gap-2 min-w-0">
+          {!uploaded && <FileText className="h-4 w-4 text-amber-500 shrink-0" />}
+          {uploaded && !isApproved && <FileText className="h-4 w-4 text-gray-500 shrink-0" />}
+          {isApproved && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+          <span className={`text-xs truncate ${
+            !uploaded ? "text-amber-700"
+            : isApproved ? "text-green-700 font-medium"
+            : "text-gray-700"
+          }`}>
+            {dt.name}
+          </span>
+          {uploaded && (
+            <DocumentStatusBadge
+              aiStatus={aiStatus}
+              adminStatus={adminStatus}
+              compact
+              className="shrink-0"
+            />
+          )}
+        </div>
+        <div className="shrink-0">
+          {uploaded ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0"
+              onClick={() => setDetailDoc({
+                id: uploaded.id,
+                file_name: uploaded.file_name,
+                mime_type: uploaded.mime_type,
+                uploaded_at: uploaded.uploaded_at,
+                document_type_id: uploaded.document_type_id,
+                verification_status: uploaded.verification_status,
+                verification_result: uploaded.verification_result,
+                admin_status: uploaded.admin_status,
+                document_types: uploaded.document_types,
+              })}
+            >
+              <Eye className="h-3.5 w-3.5 text-gray-600" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+              disabled={isUploading}
+              onClick={() => {
+                setPendingUploadTypeId(dt.id);
+                uploadInputRef.current?.click();
+              }}
+            >
+              {isUploading
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <><Upload className="h-3 w-3" />Upload</>
+              }
+            </Button>
+          )}
+        </div>
+      </div>
+    );
   }
 
-  // Initialize open state per category — open if any pending uploads
-  const initialOpen: Record<string, boolean> = {};
-  for (const cat of Object.keys(grouped)) {
-    const uploadedInCat = grouped[cat].filter((dt) => getUploaded(dt.id)).length;
-    initialOpen[cat] = uploadedInCat < grouped[cat].length;
-  }
-  const [openCategories, setOpenCategories] = useState(initialOpen);
-
-  function toggleCategory(cat: string) {
-    setOpenCategories((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  function renderColumn(items: { dt: DocumentType; section: string }[]) {
+    let currentSection: string | null = null;
+    const out: JSX.Element[] = [];
+    for (const item of items) {
+      if (item.section !== currentSection) {
+        currentSection = item.section;
+        out.push(
+          <p
+            key={`hdr-${item.section}-${item.dt.id}`}
+            className="text-[11px] font-semibold uppercase tracking-wide text-gray-700 mt-2 first:mt-0 pb-1 border-b border-gray-100"
+          >
+            {CATEGORY_LABELS[item.section] ?? item.section}
+          </p>
+        );
+      }
+      out.push(renderDocRow(item.dt));
+    }
+    return out;
   }
 
   return (
     <>
-      <div className="space-y-1">
+      <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide flex items-center gap-1">
             <FileText className="h-3 w-3" />
@@ -445,112 +426,13 @@ function KycDocListPanel({
           </p>
           <DocumentStatusLegend />
         </div>
-        <div className="overflow-y-auto space-y-1" style={{ maxHeight: 240 }}>
-          {CATEGORY_ORDER.filter((cat) => grouped[cat]?.length > 0).map((cat) => {
-            const cats = grouped[cat];
-            const uploadedInCat = cats.filter((dt) => getUploaded(dt.id)).length;
-            const isOpen = openCategories[cat] ?? true;
-            const allUploaded = uploadedInCat === cats.length;
-
-            return (
-              <div key={cat} className="border rounded-md bg-gray-50/50">
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(cat)}
-                  className="w-full flex items-center justify-between px-2.5 py-1 hover:bg-gray-100 rounded-md"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <ChevronDown className={`h-3 w-3 text-gray-500 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
-                      {CATEGORY_LABELS[cat] ?? cat}
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-medium ${allUploaded ? "text-green-600" : "text-amber-600"}`}>
-                    {uploadedInCat}/{cats.length}
-                  </span>
-                </button>
-
-                {isOpen && (
-                  <div className="px-2.5 pb-1 space-y-0">
-                    {cats.map((dt) => {
-                      const uploaded = getUploaded(dt.id);
-                      const isUploading = uploadingTypeId === dt.id;
-                      const aiStatus = uploaded?.verification_status;
-                      const adminStatus = uploaded?.admin_status;
-                      // Green only when admin has approved. Uploaded-but-unreviewed = neutral.
-                      const isApproved = uploaded && adminStatus === "approved";
-
-                      return (
-                        <div key={dt.id} className="py-0.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {!uploaded && <FileText className="h-4 w-4 text-amber-500 shrink-0" />}
-                              {uploaded && !isApproved && <FileText className="h-4 w-4 text-gray-500 shrink-0" />}
-                              {isApproved && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
-                              <span className={`text-xs truncate ${
-                                !uploaded ? "text-amber-700"
-                                : isApproved ? "text-green-700 font-medium"
-                                : "text-gray-700"
-                              }`}>
-                                {dt.name}
-                              </span>
-                              {uploaded && (
-                                <DocumentStatusBadge
-                                  aiStatus={aiStatus}
-                                  adminStatus={adminStatus}
-                                  compact
-                                  className="shrink-0"
-                                />
-                              )}
-                            </div>
-                            <div className="shrink-0">
-                              {uploaded ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => setDetailDoc({
-                                    id: uploaded.id,
-                                    file_name: uploaded.file_name,
-                                    mime_type: uploaded.mime_type,
-                                    uploaded_at: uploaded.uploaded_at,
-                                    document_type_id: uploaded.document_type_id,
-                                    verification_status: uploaded.verification_status,
-                                    verification_result: uploaded.verification_result,
-                                    admin_status: uploaded.admin_status,
-                                    document_types: uploaded.document_types,
-                                  })}
-                                >
-                                  <Eye className="h-3.5 w-3.5 text-gray-600" />
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-[10px] gap-1 border-amber-300 text-amber-700 hover:bg-amber-50"
-                                  disabled={isUploading}
-                                  onClick={() => {
-                                    setPendingUploadTypeId(dt.id);
-                                    uploadInputRef.current?.click();
-                                  }}
-                                >
-                                  {isUploading
-                                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                                    : <><Upload className="h-3 w-3" />Upload</>
-                                  }
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+          <div className="overflow-y-auto pr-1 max-h-[420px]">
+            {leftItems.length > 0 ? renderColumn(leftItems) : null}
+          </div>
+          <div className="overflow-y-auto pr-1 max-h-[420px]">
+            {rightItems.length > 0 ? renderColumn(rightItems) : null}
+          </div>
         </div>
       </div>
 
@@ -728,6 +610,7 @@ function AddPersonModal({
           id: p.id,
           full_name: p.full_name ?? "",
           email: p.email,
+          phone: p.phone,
           due_diligence_level: "cdd",
           record_type: p.record_type,
           client_profile_kyc: null,
@@ -774,6 +657,7 @@ function AddPersonModal({
           id: data.profileId ?? "",
           full_name: newName.trim(),
           email: newEmail.trim() || null,
+          phone: newPhone.trim() || null,
           due_diligence_level: "cdd",
           record_type: finalRecordType,
           client_profile_kyc: null,
@@ -1263,26 +1147,23 @@ function PersonCard({
   kycPct,
   onReviewKyc,
   allRoleRows,
-  onRoleRemoved,
-  onRoleAdded,
 }: {
   person: ServicePerson;
   serviceId: string;
   kycPct: number;
   onReviewKyc: () => void;
   allRoleRows: ServicePerson[];
+  // B-046 batch 4 — these props remain on the parent's call signature but the
+  // bottom Roles section was removed from the card, so they're no longer used here.
+  // Toggling roles now happens in the Review KYC top row.
   onRoleRemoved: (roleId: string) => void;
   onRoleAdded: (person: ServicePerson) => void;
 }) {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
   const inviteSentByName = person.invite_sent_by_name ?? null;
-  const [addingRoleInCard, setAddingRoleInCard] = useState<ServicePersonRole | null>(null);
-  const [shareholdingInput, setShareholdingInput] = useState("");
-  const [addRoleLoading, setAddRoleLoading] = useState(false);
 
   const currentRoles = allRoleRows.map((r) => r.role as ServicePersonRole);
-  const availableRolesToAdd = ROLE_LIST.filter((r) => !currentRoles.includes(r));
   const combinedRoleLabels = currentRoles.map((r) => ROLE_LABELS[r] ?? r).join(", ");
 
   const kycColor =
@@ -1294,65 +1175,9 @@ function PersonCard({
     ? new Date(inviteSentAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
     : null;
 
-  async function handleRemoveRole(roleId: string) {
-    const isLast = allRoleRows.length === 1;
-    const msg = isLast
-      ? "This is the last role for this person. Remove them from the service entirely?"
-      : "Remove this role?";
-    if (!confirm(msg)) return;
-    const res = await fetch(`/api/services/${serviceId}/persons/${roleId}`, { method: "DELETE" });
-    if (res.ok) {
-      onRoleRemoved(roleId);
-      toast.success("Role removed");
-    } else {
-      toast.error("Failed to remove role");
-    }
-  }
-
-  async function handleAddRole() {
-    if (!addingRoleInCard) return;
-    const profileId = person.client_profiles?.id;
-    if (!profileId) return;
-    const pct = shareholdingInput ? parseFloat(shareholdingInput) : undefined;
-    const body: Record<string, unknown> = {
-      role: addingRoleInCard,
-      client_profile_id: profileId,
-    };
-    if (pct !== undefined) body.shareholding_percentage = pct;
-
-    setAddRoleLoading(true);
-    try {
-      const res = await fetch(`/api/services/${serviceId}/persons`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to add role");
-      onRoleAdded({
-        id: data.id ?? "",
-        role: addingRoleInCard,
-        shareholding_percentage: pct ?? null,
-        can_manage: false,
-        invite_sent_at: null,
-        invite_sent_by_name: null,
-        client_profiles: person.client_profiles,
-      });
-      toast.success(`${ROLE_LABELS[addingRoleInCard]} added`);
-      setAddingRoleInCard(null);
-      setShareholdingInput("");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to add role");
-    } finally {
-      setAddRoleLoading(false);
-    }
-  }
-
-  const profileType = (person.client_profiles?.record_type as string | null) ?? "individual";
-
   return (
     <div className="border rounded-xl bg-white px-4 py-3.5 space-y-3">
-      {/* Header row */}
+      {/* Header row — avatar, name, role chips, email */}
       <div className="flex items-center gap-2.5 flex-wrap">
         <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
           <User className="h-4 w-4 text-gray-500" />
@@ -1367,9 +1192,6 @@ function PersonCard({
                 {ROLE_LABELS[r] ?? r}
               </span>
             ))}
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 capitalize">
-              {profileType === "organisation" ? "Corporation" : "Individual"}
-            </span>
           </div>
           {person.client_profiles?.email && (
             <p className="text-xs text-gray-400">{person.client_profiles.email}</p>
@@ -1390,7 +1212,7 @@ function PersonCard({
         </span>
       </div>
 
-      {/* Action buttons */}
+      {/* Action row: Review KYC + Last request sent / Request KYC */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button
           size="sm"
@@ -1419,90 +1241,6 @@ function PersonCard({
         )}
       </div>
 
-      {/* Roles section */}
-      <div className="border-t pt-2.5 space-y-1.5">
-        <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">Roles</p>
-        {allRoleRows.map((row) => (
-          <div key={row.id} className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                  ROLE_COLORS[row.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600"
-                }`}
-              >
-                {ROLE_LABELS[row.role as ServicePersonRole] ?? row.role}
-              </span>
-              {row.shareholding_percentage != null && (
-                <span className="text-xs text-gray-400">{row.shareholding_percentage}%</span>
-              )}
-            </div>
-            {!row.can_manage && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void handleRemoveRole(row.id)}
-                className="h-6 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
-              >
-                Remove
-              </Button>
-            )}
-          </div>
-        ))}
-
-        {/* Add role */}
-        {availableRolesToAdd.length > 0 && (
-          <div className="pt-1">
-            {addingRoleInCard === null ? (
-              <select
-                className="text-xs border rounded-md px-2 py-1 text-gray-600 bg-white cursor-pointer"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) setAddingRoleInCard(e.target.value as ServicePersonRole);
-                }}
-              >
-                <option value="">+ Add role…</option>
-                {availableRolesToAdd.map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-500">
-                  {addingRoleInCard === "shareholder" ? "Shareholder %:" : `${ROLE_LABELS[addingRoleInCard]}:`}
-                </span>
-                {addingRoleInCard === "shareholder" && (
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={shareholdingInput}
-                    onChange={(e) => setShareholdingInput(e.target.value)}
-                    placeholder="% share"
-                    className="h-7 w-20 text-xs px-2"
-                  />
-                )}
-                <Button
-                  size="sm"
-                  onClick={() => void handleAddRole()}
-                  disabled={addRoleLoading}
-                  className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
-                >
-                  {addRoleLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => { setAddingRoleInCard(null); setShareholdingInput(""); }}
-                  className="h-7 px-2 text-xs"
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {showInviteDialog && (
         <InviteDialog
           person={person}
@@ -1511,6 +1249,225 @@ function PersonCard({
           onClose={() => setShowInviteDialog(false)}
           onSent={(sentAt) => setInviteSentAt(sentAt)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── RoleToggleRow (B-046 batch 4) ────────────────────────────────────────────
+
+const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; inactive: string }> = {
+  director: {
+    active: "bg-blue-100 text-blue-700 border-blue-300",
+    inactive: "bg-transparent text-blue-600/70 border-blue-200 hover:bg-blue-50",
+  },
+  shareholder: {
+    active: "bg-purple-100 text-purple-700 border-purple-300",
+    inactive: "bg-transparent text-purple-600/70 border-purple-200 hover:bg-purple-50",
+  },
+  ubo: {
+    active: "bg-amber-100 text-amber-800 border-amber-300",
+    inactive: "bg-transparent text-amber-700/70 border-amber-200 hover:bg-amber-50",
+  },
+};
+
+function RoleToggleRow({
+  serviceId,
+  profileId,
+  profileName,
+  profileRoleRows,
+  isIndividual,
+  onRoleRemoved,
+  onRoleAdded,
+}: {
+  serviceId: string;
+  profileId: string;
+  profileName: string;
+  profileRoleRows: ServicePerson[];
+  isIndividual: boolean;
+  onRoleRemoved: (roleId: string) => void;
+  onRoleAdded: (person: ServicePerson) => void;
+}) {
+  const [pending, setPending] = useState<Set<ServicePersonRole>>(new Set());
+
+  function rowFor(role: ServicePersonRole): ServicePerson | undefined {
+    return profileRoleRows.find((r) => r.role === role);
+  }
+
+  // UBO is hidden entirely for organisations.
+  const visibleRoles: ServicePersonRole[] = isIndividual
+    ? ["director", "shareholder", "ubo"]
+    : ["director", "shareholder"];
+
+  async function toggle(role: ServicePersonRole) {
+    if (pending.has(role)) return;
+    const existing = rowFor(role);
+    setPending((prev) => new Set(prev).add(role));
+
+    try {
+      if (existing) {
+        // Removing — confirm if it would leave 0 roles.
+        const remainingAfter = profileRoleRows.filter((r) => r.id !== existing.id);
+        if (remainingAfter.length === 0) {
+          const ok = confirm(`${profileName} will have no role on this application. Continue?`);
+          if (!ok) return;
+        }
+        // Optimistic remove
+        onRoleRemoved(existing.id);
+        const res = await fetch(`/api/services/${serviceId}/persons/${existing.id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) {
+          // Rollback by re-adding
+          onRoleAdded(existing);
+          toast.error(`Failed to remove ${ROLE_LABELS[role]} role`);
+        }
+      } else {
+        // Adding — optimistic temp row, replaced with real id after API success.
+        const tempId = `temp-${role}-${Date.now()}`;
+        const tempPerson: ServicePerson = {
+          id: tempId,
+          role,
+          shareholding_percentage: null,
+          can_manage: false,
+          invite_sent_at: null,
+          invite_sent_by_name: null,
+          client_profiles: profileRoleRows[0]?.client_profiles ?? null,
+        };
+        onRoleAdded(tempPerson);
+        const res = await fetch(`/api/services/${serviceId}/persons`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role, client_profile_id: profileId }),
+        });
+        const data = (await res.json()) as { id?: string; error?: string };
+        if (!res.ok || !data.id) {
+          // Rollback
+          onRoleRemoved(tempId);
+          toast.error(data.error ?? `Failed to add ${ROLE_LABELS[role]} role`);
+        } else {
+          // Swap temp with real — remove temp, add real
+          onRoleRemoved(tempId);
+          onRoleAdded({ ...tempPerson, id: data.id });
+        }
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Role update failed");
+    } finally {
+      setPending((prev) => {
+        const next = new Set(prev);
+        next.delete(role);
+        return next;
+      });
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {visibleRoles.map((role) => {
+        const active = !!rowFor(role);
+        const tone = ROLE_TOGGLE_TONE[role];
+        const busy = pending.has(role);
+        return (
+          <button
+            key={role}
+            type="button"
+            onClick={() => void toggle(role)}
+            disabled={busy}
+            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+              active ? tone.active : tone.inactive
+            }`}
+          >
+            {ROLE_LABELS[role]}
+            {active && <CheckCircle2 className="h-3 w-3" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ContactDetailsRow (B-046 batch 4) ────────────────────────────────────────
+
+function ContactDetailsRow({
+  profileId,
+  initialEmail,
+  initialPhone,
+}: {
+  profileId: string;
+  initialEmail: string | null;
+  initialPhone: string | null;
+}) {
+  const [email, setEmail] = useState(initialEmail ?? "");
+  const [phone, setPhone] = useState(initialPhone ?? "");
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/profiles/${profileId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() || null, phone: phone.trim() || null }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setDirty(false);
+      toast.success("Contact details saved", { position: "top-right" });
+    } catch {
+      toast.error("Failed to save contact details");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function onCancel() {
+    setEmail(initialEmail ?? "");
+    setPhone(initialPhone ?? "");
+    setDirty(false);
+  }
+
+  return (
+    <div className="border rounded-xl bg-white p-4 space-y-2">
+      <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide">
+        Contact Details
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Email</Label>
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setDirty(true); }}
+            placeholder="email@example.com"
+            className="text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Phone</Label>
+          <Input
+            type="tel"
+            value={phone}
+            onChange={(e) => { setPhone(e.target.value); setDirty(true); }}
+            placeholder="+230 555 0000"
+            className="text-sm"
+          />
+        </div>
+      </div>
+      {dirty && (
+        <div className="flex gap-2 justify-end pt-1">
+          <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving} className="h-7 px-3 text-xs">
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => void save()}
+            disabled={saving}
+            className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save contact details"}
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -1639,9 +1596,8 @@ export function ServiceWizardPeopleStep({
   if (reviewingPerson) {
     const kycRecord = mapToKycRecord(reviewingPerson);
     const ddLevel = (reviewingPerson.client_profiles?.due_diligence_level as DueDiligenceLevel) ?? "cdd";
-    const roleLabel = ROLE_LABELS[reviewingPerson.role as ServicePersonRole] ?? reviewingPerson.role;
-    const roleColor = ROLE_COLORS[reviewingPerson.role as ServicePersonRole] ?? "bg-gray-100 text-gray-600";
     const profileId = reviewingPerson.client_profiles?.id ?? "";
+    const isIndividual = (reviewingPerson.client_profiles?.record_type ?? "individual") !== "organisation";
     // All role rows for this profile
     const profileRoleRows = persons.filter((p) => p.client_profiles?.id === profileId);
 
@@ -1686,54 +1642,58 @@ export function ServiceWizardPeopleStep({
 
     return (
       <div className="space-y-4">
-        {/* Back + header */}
-        <div>
+        {/* Back + new top row (name + clickable role chips) */}
+        <div className="space-y-2">
           <button
             onClick={() => void handleExitKycReview()}
             disabled={leaving}
-            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold mb-3 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold disabled:opacity-60"
           >
             {leaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
             {leaving ? "Saving…" : "Back to People"}
           </button>
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-brand-navy">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-base font-semibold text-brand-navy">
               {reviewingPerson.client_profiles?.full_name ?? "Unknown"}
             </h3>
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${roleColor}`}>
-              {roleLabel}
-            </span>
+            <RoleToggleRow
+              serviceId={serviceId}
+              profileId={profileId}
+              profileName={reviewingPerson.client_profiles?.full_name ?? "This person"}
+              profileRoleRows={profileRoleRows}
+              isIndividual={isIndividual}
+              onRoleRemoved={handleRoleRemoved}
+              onRoleAdded={handleRoleAdded}
+            />
           </div>
+          <p className="text-sm text-gray-600">
+            Upload your KYC documents below — we&apos;ll auto-fill the rest of the form from them.
+          </p>
         </div>
 
-        {/* Split top section: Profile (left) + KYC Docs (right) */}
-        <div className="grid grid-cols-2 gap-8 border rounded-xl bg-white p-4">
-          <div>
-            <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wide mb-2">Profile</p>
-            <ProfileEditPanel
-              profileId={profileId}
-              email={reviewingPerson.client_profiles?.email ?? null}
-              phone={null}
-              roles={profileRoleRows}
-              onRoleRemoved={handleRoleRemoved}
-            />
-          </div>
-          <div>
-            <KycDocListPanel
-              profileId={profileId}
-              serviceId={serviceId}
-              documents={documents}
-              documentTypes={documentTypes}
-              requirements={requirements}
-              dueDiligenceLevel={ddLevel}
-              onDocUploaded={(doc) => {
-                const next = [...documents.filter((d) => !(d.document_type_id === doc.document_type_id && d.client_profile_id === doc.client_profile_id)), doc];
-                // bubble up through the wizard chain — not strictly needed but kept for parity
-                void next;
-              }}
-            />
-          </div>
+        {/* KYC documents — full-width two-column panel */}
+        <div className="border rounded-xl bg-white p-4">
+          <KycDocListPanel
+            profileId={profileId}
+            serviceId={serviceId}
+            documents={documents}
+            documentTypes={documentTypes}
+            requirements={requirements}
+            dueDiligenceLevel={ddLevel}
+            onDocUploaded={(doc) => {
+              const next = [...documents.filter((d) => !(d.document_type_id === doc.document_type_id && d.client_profile_id === doc.client_profile_id)), doc];
+              // bubble up through the wizard chain — not strictly needed but kept for parity
+              void next;
+            }}
+          />
         </div>
+
+        {/* Contact details — single row, two inputs */}
+        <ContactDetailsRow
+          profileId={profileId}
+          initialEmail={reviewingPerson.client_profiles?.email ?? null}
+          initialPhone={reviewingPerson.client_profiles?.phone ?? null}
+        />
 
         {kycRecord.id ? (
           <KycStepWizard

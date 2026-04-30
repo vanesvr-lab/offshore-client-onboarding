@@ -15,6 +15,35 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-046 (Batch 4): Review KYC layout rework (Claude Code)
+
+**4.1 — Person card slim-down:**
+- `src/components/client/ServiceWizardPeopleStep.tsx::PersonCard`: removed the bottom "Roles" section (per-role list with Remove/Add-role select). The card keeps avatar, name, role chips (top), email, KYC progress bar, "Review KYC" button, and the "Last request sent on …" indicator. Type chip ("Individual"/"Corporation") removed too — record type is reflected in the role chip palette.
+- The unused `addingRoleInCard` / `shareholdingInput` / `addRoleLoading` state and `handleAddRole` / `handleRemoveRole` handlers were stripped from the card. `onRoleRemoved` / `onRoleAdded` props remain on the type so parent call sites are untouched, but the card no longer invokes them — toggling roles now lives in the Review KYC top row.
+
+**4.2 — Review KYC top row redesign:**
+- New `RoleToggleRow` component renders three click-to-toggle chips on the right of the person's name: `Director` (blue), `Shareholder` (purple), `UBO` (amber). Active = filled, inactive = outlined and muted; the active chip also shows a `CheckCircle2` so the toggle state is unambiguous.
+- UBO chip is hidden entirely when `record_type !== 'individual'`.
+- Toggling is optimistic: state updates locally first, then API call (`POST /api/services/[id]/persons` to add, `DELETE /api/services/[id]/persons/[roleId]` to remove). On API failure the optimistic change is rolled back via the parent's `handleRoleRemoved` / `handleRoleAdded` callbacks and a toast is shown. While a chip is in flight it's disabled to prevent double-clicks.
+- Removing the last role surfaces a `confirm("{Name} will have no role on this application. Continue?")` per spec; no inline % capture (Shareholder % stays on the OwnershipStructure component below the list).
+- Helper text under the top row: "Upload your KYC documents below — we'll auto-fill the rest of the form from them."
+
+**4.3 — KYC documents panel rework:**
+- The Profile + Roles split block is gone — the Review KYC view's top panel is now a full-width KYC documents card.
+- `KycDocListPanel` rewritten to a two-column grid. A flat list of doc types is built in section order (Identity → Financial → Compliance) and split by count; the left column gets the extra when the count is odd. Section headers render inline within each column wherever the section's docs fall — if a section spans both columns the header appears in both. Each column has its own `overflow-y-auto` scroller (`max-h-[420px]`). Collapsible category accordions removed.
+- Heading row keeps the existing legend + "X of Y uploaded" copy.
+
+**4.4 — Contact Details + Identity below docs panel:**
+- New `ContactDetailsRow` component (single row, two inputs: Email, Phone) with a Save / Cancel pair that PATCHes `/api/profiles/[id]` on dirty. `ContactDetailsRow` lives between the docs panel and the wizard's Identity step.
+- `IdentityStep` (inside `KycStepWizard`) is unchanged — `showContactFields={false}` continues to suppress the email/phone inputs there since they now live in `ContactDetailsRow` above.
+- `ServicePerson.client_profiles` type extended with `phone: string | null`; the page query (`src/app/(client)/services/[id]/page.tsx`) and the `AddPersonModal` `onAdded` payload were updated to include phone. The legacy `ProfileEditPanel` component was deleted.
+
+**4.5 — Sanity:**
+- Admin Review KYC view (`AdminKycDocListPanel` in `admin/services/[id]/ServiceDetailClient.tsx`) is a separate component and was **not** touched. Admin layout unchanged per brief scope.
+- `npm run build` clean. No new types, no new `any`s.
+
+---
+
 ### 2026-04-30 — B-046 (Batch 3): Review All KYC walk-through (Claude Code)
 
 **3.1 — "Review all KYC" button:**

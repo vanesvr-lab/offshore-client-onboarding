@@ -47,6 +47,7 @@ export type ServicePerson = {
     id: string;
     full_name: string;
     email: string | null;
+    phone: string | null;
     due_diligence_level: string;
     record_type: string | null;
     client_profile_kyc: Record<string, unknown> | null;
@@ -111,7 +112,7 @@ export default async function ClientServiceDetailPage({
       .select(`
         id, role, shareholding_percentage, can_manage, invite_sent_at, invite_sent_by,
         client_profiles!inner(
-          id, full_name, email, due_diligence_level, record_type,
+          id, full_name, email, phone, due_diligence_level, record_type,
           client_profile_kyc(*)
         )
       `)
