@@ -188,41 +188,61 @@ export default function BusinessDetailsPage({
   return (
     <WizardLayout currentStep={1}>
       <div className="space-y-6 max-w-3xl">
-        {/* Primary Contact */}
+        {/* B-047 §1.1 / §8 — Primary Contact: top-aligned labels with red required *,
+            content-aware widths, semantic input types + autocomplete attributes. */}
         <Card>
           <CardHeader>
             <CardTitle className="text-brand-navy">Primary Contact</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Full name *</Label>
+                <Label className="text-sm font-medium text-gray-900">
+                  Full name <span className="text-red-600" aria-hidden="true">*</span>
+                </Label>
                 <Input
                   value={form.contact_name}
                   onChange={(e) => updateField("contact_name", e.target.value)}
+                  autoComplete="name"
+                  aria-required="true"
+                  className="h-11 md:w-80"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Role / title</Label>
+                <Label className="text-sm font-medium text-gray-900">Role / title</Label>
                 <Input
                   value={form.contact_title}
                   onChange={(e) => updateField("contact_title", e.target.value)}
+                  autoComplete="organization-title"
+                  placeholder="e.g. CEO, Director"
+                  className="h-11 md:w-64"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Email *</Label>
+                <Label className="text-sm font-medium text-gray-900">
+                  Email <span className="text-red-600" aria-hidden="true">*</span>
+                </Label>
                 <Input
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   value={form.contact_email}
                   onChange={(e) => updateField("contact_email", e.target.value)}
+                  placeholder="you@example.com"
+                  aria-required="true"
+                  className="h-11 md:w-80"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Phone</Label>
+                <Label className="text-sm font-medium text-gray-900">Phone</Label>
                 <Input
                   type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={form.contact_phone}
                   onChange={(e) => updateField("contact_phone", e.target.value)}
+                  placeholder="+230 555 0000"
+                  className="h-11 md:w-48"
                 />
               </div>
             </div>
@@ -269,49 +289,61 @@ export default function BusinessDetailsPage({
             <CardTitle className="text-brand-navy text-base">Business Information</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2 space-y-1.5">
-                <Label className="text-sm">Business / Entity name</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 space-y-1.5">
+                <Label className="text-sm font-medium text-gray-900">Business / Entity name</Label>
                 <Input
                   value={form.business_name}
                   onChange={(e) => updateField("business_name", e.target.value)}
                   placeholder="Proposed entity name"
+                  autoComplete="organization"
+                  className="h-11 md:w-96"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Business type</Label>
+                <Label className="text-sm font-medium text-gray-900">Business type</Label>
                 <Input
                   value={form.business_type}
                   onChange={(e) => updateField("business_type", e.target.value)}
                   placeholder="e.g. GBC, AC"
+                  className="h-11 md:w-48"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-sm">Country of incorporation</Label>
+                <Label className="text-sm font-medium text-gray-900">Country of incorporation</Label>
                 <Input
                   value={form.business_country}
                   onChange={(e) => updateField("business_country", e.target.value)}
                   placeholder="e.g. Mauritius"
+                  autoComplete="country-name"
+                  className="h-11 md:w-60"
                 />
               </div>
-              <div className="col-span-2 space-y-1.5">
-                <Label className="text-sm">Registered address</Label>
+              <div className="md:col-span-2 space-y-1.5">
+                <Label className="text-sm font-medium text-gray-900">Registered address</Label>
                 <Input
                   value={form.business_address}
                   onChange={(e) => updateField("business_address", e.target.value)}
                   placeholder="Registered business address"
+                  autoComplete="street-address"
+                  className="h-11"
                 />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <div className="flex justify-between">
-          <Button variant="outline" onClick={() => saveProgress(false)} disabled={saving}>
+        {/* B-047 §4 — three-tier buttons: Save progress = secondary, Next = primary brand-navy 44pt. */}
+        <div className="flex items-center justify-between">
+          <Button
+            onClick={() => saveProgress(false)}
+            disabled={saving}
+            className="h-11 px-5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+          >
             Save progress
           </Button>
           <Button
-            className="bg-brand-navy hover:bg-brand-blue"
+            className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90"
             onClick={() => saveProgress(true)}
             disabled={saving}
           >

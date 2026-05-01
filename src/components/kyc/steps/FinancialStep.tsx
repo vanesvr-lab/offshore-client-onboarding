@@ -5,6 +5,7 @@ import { ValidatedLabel, FieldWrapper } from "@/components/shared/ValidatedLabel
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { formWidths } from "@/lib/form-widths";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 
 interface FinancialStepProps {
@@ -91,11 +92,14 @@ export function FinancialStep({
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Financial Profile</h2>
-        <p className="text-sm text-gray-500">Help us understand the source of your funds and financial background. This is required for regulatory compliance.</p>
+        <p className="text-sm text-gray-600">
+          Help us understand the source of your funds and financial background.
+          This is required for regulatory compliance.
+        </p>
       </div>
 
       {/* Work / Professional Details — occupation always; work address/phone/email for CDD+/EDD */}
-      <div>
+      <section>
         <h3 className="text-sm font-semibold text-brand-navy mb-3">Work / Professional Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
@@ -109,7 +113,9 @@ export function FinancialStep({
                 onChange={(e) => onChange({ occupation: e.target.value })}
                 onBlur={() => validation.markTouched("occupation")}
                 placeholder="Your profession or job title"
-                className="text-sm"
+                aria-required="true"
+                autoComplete="organization-title"
+                className={`text-sm ${formWidths.fullName}`}
               />
             </FieldWrapper>
           </div>
@@ -123,8 +129,9 @@ export function FinancialStep({
                     onChange={(e) => onChange({ work_address: e.target.value })}
                     onBlur={() => validation.markTouched("work_address")}
                     rows={2}
+                    autoComplete="street-address"
                     placeholder="Business / employer address"
-                    className="text-sm resize-none"
+                    className="text-sm resize-none max-w-2xl"
                   />
                 </FieldWrapper>
               </div>
@@ -133,26 +140,33 @@ export function FinancialStep({
                 <Input
                   value={(form.work_phone ?? "") as string}
                   onChange={(e) => onChange({ work_phone: e.target.value })}
-                  className="text-sm"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="+230 555 0000"
+                  className={`text-sm ${formWidths.phone}`}
                 />
               </div>
               <div className="space-y-1">
                 <ValidatedLabel state={validation.getFieldState("work_email", (form.work_email ?? "") as string)}>Work email</ValidatedLabel>
                 <Input
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   value={(form.work_email ?? "") as string}
                   onChange={(e) => onChange({ work_email: e.target.value })}
-                  className="text-sm"
+                  placeholder="name@company.com"
+                  className={`text-sm ${formWidths.email}`}
                 />
               </div>
             </>
           )}
         </div>
-      </div>
+      </section>
 
       {showSourceOfFunds && (
         <>
-          <div className="space-y-1">
+          <div className="space-y-1 max-w-2xl">
             <ValidatedLabel
               state={validation.getFieldState("source_of_funds_description", (form.source_of_funds_description ?? "") as string, true)}
               required
@@ -166,9 +180,12 @@ export function FinancialStep({
                 onBlur={() => validation.markTouched("source_of_funds_description")}
                 rows={3}
                 placeholder={isCdd ? "Describe in detail where your funds come from — salary, business income, investments, inheritance, etc." : "Brief description of where your funds come from"}
-                className="text-sm resize-none"
+                className={`text-sm resize-none ${formWidths.longFormTextareaMin}`}
               />
             </FieldWrapper>
+            <p className="text-xs text-gray-600">
+              Be specific about employer, business name, asset type — your jurisdiction&apos;s regulator may verify these later.
+            </p>
           </div>
 
           {!hideDocumentUploads && (
@@ -231,9 +248,9 @@ export function FinancialStep({
 
       {showSourceOfWealth && (
         <>
-          <div className="border-t pt-4">
+          <div className="border-t pt-6">
             <h3 className="text-sm font-semibold text-brand-navy mb-3">Source of Wealth</h3>
-            <div className="space-y-1">
+            <div className="space-y-1 max-w-2xl">
               <ValidatedLabel state={validation.getFieldState("source_of_wealth_description", (form.source_of_wealth_description ?? "") as string, true)} required>
                 Source of wealth description
               </ValidatedLabel>
@@ -244,7 +261,7 @@ export function FinancialStep({
                   onBlur={() => validation.markTouched("source_of_wealth_description")}
                   rows={3}
                   placeholder="Explain how you accumulated your overall wealth — business sale, inheritance, investment returns, etc."
-                  className="text-sm resize-none"
+                  className={`text-sm resize-none ${formWidths.longFormTextareaMin}`}
                 />
               </FieldWrapper>
             </div>
@@ -294,9 +311,13 @@ export function FinancialStep({
             <Input
               value={(form.tax_identification_number ?? "") as string}
               onChange={(e) => onChange({ tax_identification_number: e.target.value })}
-              className="text-sm"
-              placeholder="TIN / tax ID from your country of tax residence"
+              className={`text-sm ${formWidths.identifier}`}
+              placeholder="e.g. NI number, SSN, TIN"
+              autoComplete="off"
             />
+            <p className="text-xs text-gray-600">
+              Your jurisdiction&apos;s tax identifier (e.g. NI number, SSN, TIN).
+            </p>
           </div>
 
           {!hideDocumentUploads && (

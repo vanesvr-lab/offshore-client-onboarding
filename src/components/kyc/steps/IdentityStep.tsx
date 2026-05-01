@@ -9,6 +9,7 @@ import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { formWidths } from "@/lib/form-widths";
 import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import type { PrefillableField } from "@/lib/kyc/computePrefillable";
 import { FieldPrefillIcon } from "@/components/kyc/FieldPrefillIcon";
@@ -48,6 +49,10 @@ function Field({
   validation,
   prefillFrom,
   onPrefillField,
+  widthClass,
+  autoComplete,
+  inputMode,
+  helperText,
 }: {
   label: string;
   fieldKey: keyof KycRecord;
@@ -64,6 +69,14 @@ function Field({
     sourceDocLabel: string,
     fieldLabel: string,
   ) => Promise<void>;
+  /** Tailwind width class from `formWidths` — applied to the input itself. */
+  widthClass?: string;
+  /** HTML autocomplete value (`autofill-support`). */
+  autoComplete?: string;
+  /** inputMode hint for the mobile keyboard (`input-type-keyboard`). */
+  inputMode?: "text" | "email" | "tel" | "numeric" | "decimal" | "url";
+  /** Persistent helper text shown under the input (replaced by error when present). */
+  helperText?: string;
 }) {
   const value = (form[fieldKey] ?? "") as string;
   const state = validation.getFieldState(fieldKey as string, value, required);
@@ -83,13 +96,19 @@ function Field({
       <FieldWrapper state={state}>
         <Input
           type={type}
+          inputMode={inputMode}
+          autoComplete={autoComplete}
           value={value}
           placeholder={placeholder}
+          aria-required={required || undefined}
           onChange={(e) => onChange({ [fieldKey]: e.target.value } as Partial<KycRecord>)}
           onBlur={() => validation.markTouched(fieldKey as string)}
-          className="text-sm"
+          className={`text-sm ${widthClass ?? ""}`.trim()}
         />
       </FieldWrapper>
+      {helperText && state !== "error" && (
+        <p className="text-xs text-gray-600">{helperText}</p>
+      )}
     </div>
   );
 }
@@ -271,10 +290,21 @@ export function IdentityStep({
           required
           validation={validation}
           placeholder="As it appears on your passport"
+          autoComplete="name"
+          widthClass={formWidths.fullName}
           prefillFrom={availableByTarget.get("full_name")}
           onPrefillField={handleFieldPrefill}
         />
-        <Field label="Aliases / other names" fieldKey="aliases" form={form} onChange={onChange} validation={validation} placeholder="Maiden name, nicknames, etc." />
+        <Field
+          label="Aliases / other names"
+          fieldKey="aliases"
+          form={form}
+          onChange={onChange}
+          validation={validation}
+          placeholder="Maiden name, nicknames, etc."
+          autoComplete="off"
+          widthClass={formWidths.fullName}
+        />
         <Field
           label="Date of birth"
           fieldKey="date_of_birth"
@@ -283,6 +313,8 @@ export function IdentityStep({
           type="date"
           required
           validation={validation}
+          autoComplete="bday"
+          widthClass={formWidths.date}
           prefillFrom={availableByTarget.get("date_of_birth")}
           onPrefillField={handleFieldPrefill}
         />
@@ -301,12 +333,14 @@ export function IdentityStep({
             )}
           </ValidatedLabel>
           <FieldWrapper state={validation.getFieldState("nationality", (form.nationality ?? "") as string, true)}>
-            <CountrySelect
-              value={(form.nationality ?? "") as string}
-              onChange={(v) => onChange({ nationality: v })}
-              placeholder="Select nationality..."
-              onBlur={() => validation.markTouched("nationality")}
-            />
+            <div className={formWidths.country}>
+              <CountrySelect
+                value={(form.nationality ?? "") as string}
+                onChange={(v) => onChange({ nationality: v })}
+                placeholder="Select nationality..."
+                onBlur={() => validation.markTouched("nationality")}
+              />
+            </div>
           </FieldWrapper>
         </div>
         <div className="space-y-1">
@@ -324,12 +358,14 @@ export function IdentityStep({
             )}
           </ValidatedLabel>
           <FieldWrapper state={validation.getFieldState("passport_country", (form.passport_country ?? "") as string, true)}>
-            <CountrySelect
-              value={(form.passport_country ?? "") as string}
-              onChange={(v) => onChange({ passport_country: v })}
-              placeholder="Country that issued your passport..."
-              onBlur={() => validation.markTouched("passport_country")}
-            />
+            <div className={formWidths.country}>
+              <CountrySelect
+                value={(form.passport_country ?? "") as string}
+                onChange={(v) => onChange({ passport_country: v })}
+                placeholder="Country that issued your passport..."
+                onBlur={() => validation.markTouched("passport_country")}
+              />
+            </div>
           </FieldWrapper>
         </div>
         <Field
@@ -339,6 +375,8 @@ export function IdentityStep({
           onChange={onChange}
           required
           validation={validation}
+          autoComplete="off"
+          widthClass={formWidths.identifier}
           prefillFrom={availableByTarget.get("passport_number")}
           onPrefillField={handleFieldPrefill}
         />
@@ -350,6 +388,7 @@ export function IdentityStep({
           type="date"
           required
           validation={validation}
+          widthClass={formWidths.date}
           prefillFrom={availableByTarget.get("passport_expiry")}
           onPrefillField={handleFieldPrefill}
         />
@@ -373,30 +412,29 @@ export function IdentityStep({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <div className="space-y-1">
-            <ValidatedLabel state={validation.getFieldState("address", (form.address ?? "") as string, true)} required>
-              Residential address
-              {availableByTarget.get("address") && (
-                <FieldPrefillIcon
-                  prefillFrom={availableByTarget.get("address")!}
-                  fieldLabel="Residential address"
-                  onFill={handleFieldPrefill}
-                />
-              )}
-            </ValidatedLabel>
-            <FieldWrapper state={validation.getFieldState("address", (form.address ?? "") as string, true)}>
-              <Textarea
-                value={(form.address ?? "") as string}
-                onChange={(e) => onChange({ address: e.target.value })}
-                onBlur={() => validation.markTouched("address")}
-                rows={2}
-                placeholder="Full residential address including country"
-                className="text-sm resize-none"
+      <div>
+        <div className="space-y-1">
+          <ValidatedLabel state={validation.getFieldState("address", (form.address ?? "") as string, true)} required>
+            Residential address
+            {availableByTarget.get("address") && (
+              <FieldPrefillIcon
+                prefillFrom={availableByTarget.get("address")!}
+                fieldLabel="Residential address"
+                onFill={handleFieldPrefill}
               />
-            </FieldWrapper>
-          </div>
+            )}
+          </ValidatedLabel>
+          <FieldWrapper state={validation.getFieldState("address", (form.address ?? "") as string, true)}>
+            <Textarea
+              value={(form.address ?? "") as string}
+              onChange={(e) => onChange({ address: e.target.value })}
+              onBlur={() => validation.markTouched("address")}
+              rows={2}
+              autoComplete="street-address"
+              placeholder="Full residential address including country"
+              className="text-sm resize-none max-w-2xl"
+            />
+          </FieldWrapper>
         </div>
       </div>
 
@@ -419,9 +457,30 @@ export function IdentityStep({
       )}
 
       {showContactFields && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Email address" fieldKey="email" form={form} onChange={onChange} type="email" required validation={validation} />
-          <Field label="Phone number" fieldKey="phone" form={form} onChange={onChange} type="tel" validation={validation} />
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_192px] gap-4">
+          <Field
+            label="Email address"
+            fieldKey="email"
+            form={form}
+            onChange={onChange}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            widthClass={formWidths.email}
+            required
+            validation={validation}
+          />
+          <Field
+            label="Phone number"
+            fieldKey="phone"
+            form={form}
+            onChange={onChange}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            widthClass={formWidths.phone}
+            validation={validation}
+          />
         </div>
       )}
     </div>

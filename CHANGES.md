@@ -15,6 +15,44 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-047 (Batch 5 — apply system to existing client forms) (Claude Code)
+
+Refactors every client-facing form to use the Batch 1 patterns (FormField wrapper for new pages, formWidths for inline width tokens, validation lib for inline-on-blur, semantic input types + autocomplete attributes, top-aligned labels with red required asterisks).
+
+**5.1 — Login (`/login`):**
+- Migrated to `<FormField>` wrapper per input. Adds inline validation on blur (email format, required), error renders below field with `role="alert"`. Sign-in button bumped to h-11 brand-navy primary with explicit `aria-busy` while running. Helper subtitle moved from gray-500 → gray-600 for contrast. Bottom link "Register" now `text-brand-navy` (within tier system).
+
+**5.2 — Register (`/register`):**
+- Same FormField migration with per-field validation (`validateField()` per blur). Errors clear on next change. Helper text under password ("At least 8 characters."). Autocomplete: `name`, `organization`, `email`, `new-password`. Submit primary brand-navy 44pt with spinner.
+
+**5.3 — Outer wizard step 1 (`/apply/[templateId]/details`):**
+- Primary Contact section: red-600 required asterisks (was red-400), top-aligned labels (`text-sm font-medium text-gray-900`), content-aware widths (Full name `md:w-80`, Role/title `md:w-64`, Email `md:w-80`, Phone `md:w-48`), inputs `h-11`. Autocomplete: `name`, `organization-title`, `email`, `tel`. Semantic types: `email` + `inputMode="email"`, `tel` + `inputMode="tel"`.
+- Business Information (admin-completed muted card): same labels + widths, `autoComplete="organization" / "country-name" / "street-address"`.
+- Bottom buttons: Save progress = secondary outline 44pt, Next: Upload Documents = primary brand-navy 44pt.
+
+**5.4 — Add Person modal (`ServiceWizardPeopleStep.tsx`):**
+- Top-aligned labels with red-600 required asterisks. Inputs `h-11` for touch parity with the rest of the system. Autocomplete: switches between `name` (individual) and `organization` (company); `email` + `inputMode="email"`; `tel` + `inputMode="tel"`. Persistent helper text under email: "Used to invite this person to complete their KYC."
+
+**5.5 — IdentityStep (`src/components/kyc/steps/IdentityStep.tsx`):**
+- Local `Field` extended with `widthClass`, `autoComplete`, `inputMode`, `helperText`. Applied widths: Full name `fullName`, Aliases `fullName`, Date of birth `date`, Country selects `country`, Passport number `identifier`, Passport expiry `date`, Email `email`, Phone `phone`. Autocomplete: `name`, `bday`, `street-address`, `email`, `tel`. The address Textarea now `max-w-2xl` (no longer edge-to-edge on wide screens). Email + phone row uses the dedicated `md:grid-cols-[1fr_192px]` template.
+
+**5.6 — FinancialStep (`src/components/kyc/steps/FinancialStep.tsx`):**
+- Occupation, work address, work phone, work email all get the width system (`fullName`, `phone`, `email`) plus autocomplete (`organization-title`, `street-address`, `tel`, `email`). Source-of-funds and source-of-wealth textareas now `max-w-2xl` + `min-h-[120px]`. Persistent helper under SoF describing what to include. Tax ID input narrowed to `identifier` width with the same helper line as Declarations. Section headings `text-sm font-semibold text-brand-navy`; outer description text bumped gray-500 → gray-600 for contrast.
+
+**5.7 — DeclarationsStep:**
+- Already covered in Batch 2 (YesNoToggle + width system + helper text).
+
+**5.8 — ReviewStep (`src/components/kyc/steps/ReviewStep.tsx`):**
+- Already follows the right rhythm (`space-y-6` between sections, 1.5px row padding, bordered review panels are summary cards not form-on-form). No changes needed.
+
+**5.9 — Contact Details sub-step (`PerPersonReviewWizard.tsx`):**
+- Email `md:w-80`, phone `md:w-48`, both inputs `h-11`. Top-aligned labels (`text-sm font-medium text-gray-900`). Save button bumped from `h-7 text-xs` → `h-11 text-sm font-semibold`, primary brand-navy.
+
+**Build:**
+- `npm run build` clean — type check + lint pass.
+
+---
+
 ### 2026-04-30 — B-047 (Batch 4 — button hierarchy + placement audit) (Claude Code)
 
 Rolls a three-tier button system across every client wizard / dialog so each screen has exactly one Primary, one or more Secondaries, and Back / Cancel as quiet tertiaries. All buttons now meet the 44pt touch-target rule.

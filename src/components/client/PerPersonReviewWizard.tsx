@@ -1172,41 +1172,46 @@ function ContactDetailsSubStep({
   }
 
   return (
-    <div className="border rounded-xl bg-white p-5 space-y-3">
+    <div className="border rounded-xl bg-white p-5 space-y-4">
       <p className="text-sm font-semibold text-brand-navy uppercase tracking-wide">
         Contact Details
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* B-047 §1.1 — content-aware widths: email w-80, phone w-48. */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_192px] gap-4">
         <div className="space-y-1">
-          <Label className="text-sm">Email</Label>
+          <Label className="text-sm font-medium text-gray-900">Email</Label>
           <Input
             type="email"
+            inputMode="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setDirty(true); }}
             placeholder="email@example.com"
-            className="text-sm"
+            className="text-sm h-11 md:w-80"
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-sm">Phone</Label>
+          <Label className="text-sm font-medium text-gray-900">Phone</Label>
           <Input
             type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             value={phone}
             onChange={(e) => { setPhone(e.target.value); setDirty(true); }}
             placeholder="+230 555 0000"
-            className="text-sm"
+            className="text-sm h-11 md:w-48"
           />
         </div>
       </div>
       {dirty && (
         <div className="flex justify-end">
           <Button
-            size="sm"
             onClick={() => void save()}
             disabled={saving}
-            className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+            className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90"
           >
-            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save contact details"}
+            {saving && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {saving ? "Saving…" : "Save contact details"}
           </Button>
         </div>
       )}

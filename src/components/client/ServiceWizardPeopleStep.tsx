@@ -376,9 +376,11 @@ function AddPersonModal({
               </div>
             )}
 
+            {/* B-047 §1.1 / §8 — top-aligned labels with red required *,
+                semantic input types + autocomplete attributes. */}
             <div className="space-y-1.5">
-              <Label className="text-sm">
-                Full name <span className="text-red-400">*</span>
+              <Label className="text-sm font-medium text-gray-900">
+                Full name <span className="text-red-600" aria-hidden="true">*</span>
               </Label>
               <Input
                 value={newName}
@@ -388,32 +390,40 @@ function AddPersonModal({
                     ? "As it appears on passport"
                     : "Registered company name"
                 }
-                className="text-sm"
+                aria-required="true"
+                autoComplete={recordType === "organisation" ? "organization" : "name"}
+                className="text-sm h-11"
                 autoFocus
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm">
-                Email <span className="text-red-400">*</span>
+              <Label className="text-sm font-medium text-gray-900">
+                Email <span className="text-red-600" aria-hidden="true">*</span>
               </Label>
               <Input
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="email@example.com"
-                className="text-sm"
+                aria-required="true"
+                className="text-sm h-11"
               />
+              <p className="text-xs text-gray-600">Used to invite this person to complete their KYC.</p>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm">Phone</Label>
+              <Label className="text-sm font-medium text-gray-900">Phone</Label>
               <Input
                 type="tel"
+                inputMode="tel"
+                autoComplete="tel"
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="Optional"
-                className="text-sm"
+                placeholder="+230 555 0000"
+                className="text-sm h-11"
               />
             </div>
           </div>
