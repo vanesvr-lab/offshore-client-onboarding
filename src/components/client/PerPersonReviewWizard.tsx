@@ -49,14 +49,23 @@ const ROLE_LABELS: Record<ServicePersonRole, string> = {
   ubo: "UBO",
 };
 
-// B-047 — Active state keeps the B-046 role palette (Director blue,
-// Shareholder purple, UBO yellow). Inactive state is the shared neutral
-// outline so the visual affordance is "checkbox-style toggle", not a
-// badge that shifts hue with status.
-const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string }> = {
-  director: { active: "bg-blue-100 text-blue-700 border-blue-300" },
-  shareholder: { active: "bg-purple-100 text-purple-700 border-purple-300" },
-  ubo: { active: "bg-amber-100 text-amber-800 border-amber-300" },
+// B-048 §2 — Rectangular toggle button, lightened palette so the chip reads
+// as a button (rounded-md, 1px border in both states), not a badge. Per-role
+// hue retained for fast scanning (Director blue / Shareholder purple / UBO
+// amber), shifted to the lighter -50 / -200 / -700 shades.
+const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; activeHover: string }> = {
+  director: {
+    active: "bg-blue-50 text-blue-700 border-blue-200",
+    activeHover: "hover:bg-blue-100",
+  },
+  shareholder: {
+    active: "bg-purple-50 text-purple-700 border-purple-200",
+    activeHover: "hover:bg-purple-100",
+  },
+  ubo: {
+    active: "bg-amber-50 text-amber-700 border-amber-200",
+    activeHover: "hover:bg-amber-100",
+  },
 };
 
 const ROLE_INACTIVE_TONE = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
@@ -277,11 +286,12 @@ function RoleToggleRow({
               type="button"
               role="checkbox"
               aria-checked={active}
+              aria-pressed={active}
               aria-label={`Toggle ${ROLE_LABELS[role]} role`}
               onClick={() => void toggle(role)}
               disabled={busy}
-              className={`inline-flex items-center gap-1.5 h-11 px-3 text-sm font-medium rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed ${
-                active ? tone.active : ROLE_INACTIVE_TONE
+              className={`inline-flex items-center gap-2 h-10 px-3 py-2 text-sm font-medium rounded-md border cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed ${
+                active ? `${tone.active} ${tone.activeHover}` : ROLE_INACTIVE_TONE
               }`}
             >
               {busy ? (

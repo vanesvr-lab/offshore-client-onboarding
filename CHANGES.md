@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-048 Batch 2 — Role chips redesign (Claude Code)
+
+Replaced the pill-style role chips on the Review-KYC top row with rectangular
+toggle buttons that read as buttons (not badges). ui-ux-pro-max §4
+`state-clarity` + §1 `focus-states`.
+
+**File:** `src/components/client/PerPersonReviewWizard.tsx` — `RoleToggleRow` chip:
+- Shape: `rounded-full` → `rounded-md` (rectangular)
+- Size: `h-11` → `h-10` (still ≥44pt with hit-slop padding `px-3 py-2`)
+- Active palette (lightened): bg-100 → bg-50, border-300 → border-200, text shifted to -700:
+  - Director: `bg-blue-50 border-blue-200 text-blue-700` (hover `bg-blue-100`)
+  - Shareholder: `bg-purple-50 border-purple-200 text-purple-700` (hover `bg-purple-100`)
+  - UBO: `bg-amber-50 border-amber-200 text-amber-700` (hover `bg-amber-100`)
+- Inactive: `bg-white border-gray-300 text-gray-700` (hover `bg-gray-50`) — unchanged
+- Border always present in both states (the affordance signal)
+- Focus ring switched to `focus-visible:ring-blue-500` per brief §2.2
+- `cursor-pointer` added; `aria-pressed` mirrors `aria-checked`
+
+Behavior unchanged: optimistic add/remove, last-role confirm, UBO hidden for
+organisation profile, Loader2 during in-flight toggle, Square/CheckSquare
+glyphs.
+
+**Verified:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-048 Batch 1 — Container max-width pass (Claude Code)
 
 Applied a centered, narrower content column to every form-heavy client wizard
