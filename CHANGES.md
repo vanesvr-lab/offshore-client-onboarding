@@ -15,6 +15,42 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-049 Batch 2 — Residential address as its own sub-step (Claude Code)
+
+Split address out of the Identity sub-step. Identity now contains only
+passport-derived fields; the new Residential Address sub-step holds the
+structured address fields and auto-fills them from the Proof of Residential
+Address upload.
+
+**⚠ Schema migration required before testing:**
+
+1. Apply `supabase/migrations/007-residential-address-fields.sql` (psql or
+   Supabase SQL editor — adds `address_line_1/2`, `address_city`,
+   `address_state`, `address_postal_code`, `address_country` columns to
+   both `kyc_records` and `client_profile_kyc`).
+2. Hit `POST /api/admin/migrations/seed-residential-address-fields` once as
+   admin to update the Proof of Residential Address doc type's AI extraction
+   schema so the AI fills the structured fields directly.
+
+**Code changes:**
+
+- `supabase/migrations/007-residential-address-fields.sql`: new migration.
+- `src/app/api/admin/migrations/seed-residential-address-fields/route.ts`: admin endpoint reseeding POA's `ai_extraction_fields`.
+- `src/types/index.ts`: `KycRecord` + `ClientProfileKyc` both gain `address_line_1/2`, `address_city`, `address_state`, `address_postal_code`, `address_country`.
+- `src/lib/constants/prefillFields.ts`: whitelist the six structured fields so the prefill helper drops AI extracts into them.
+- `src/components/kyc/steps/ResidentialAddressStep.tsx`: NEW sub-step. Shows the auto-fill banner (running / success / no-source / error), six fields with content-aware widths per the brief, ✨ per-field prefill icons.
+- `src/components/kyc/steps/IdentityStep.tsx`: new `hideAddressFields` prop hides the legacy address textarea + POA upload card. Auto-prefill effect filters address rows + drops POA from the source check when this prop is on.
+- `src/components/kyc/steps/ReviewStep.tsx`: dedicated Residential Address card; falls back to legacy free-text `address` if no structured field is filled.
+- `src/components/client/PerPersonReviewWizard.tsx`: inserts a `form-residential-address` sub-step right after `form-identity`, maps the new fields in `mapToKycRecord`, passes `hideAddressFields=true` to the Identity step.
+- `src/components/client/ServicePersonsManager.tsx`: same `mapToKycRecord` patch (address fields included) so the legacy persons-manager keeps type-checking.
+- `src/app/api/profiles/kyc/save/route.ts`: when the patch touches any structured address field, the legacy free-text `address` column on `client_profiles` is rebuilt from the resulting row so the existing submit validator + admin views stay in sync.
+
+**Build:** `npm run build` clean (lint + type check).
+
+**What's next:** Batch 3 — manual professional details sub-step + defer CV verification until the comparison context (applicant name + declared occupation) is available.
+
+---
+
 ### 2026-05-01 — B-049 Batch 1 — Document scope flag (Claude Code)
 
 Added an explicit `scope: 'person' | 'application'` flag on `document_types`

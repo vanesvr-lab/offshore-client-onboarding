@@ -325,7 +325,15 @@ export interface KycRecord {
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  /** Legacy free-text address — kept in sync with the structured fields below. */
   address: string | null;
+  /** B-049 — structured residential address (POA-sourced). */
+  address_line_1: string | null;
+  address_line_2: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_postal_code: string | null;
+  address_country: string | null;
   // Individual-only
   aliases: string | null;
   work_address: string | null;
@@ -598,6 +606,13 @@ export interface ClientProfileKyc {
   passport_expiry: string | null;
   occupation: string | null;
   tax_identification_number: string | null;
+  // B-049 — structured residential address (POA-sourced)
+  address_line_1: string | null;
+  address_line_2: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  address_postal_code: string | null;
+  address_country: string | null;
   // Financial
   source_of_funds_description: string | null;
   source_of_wealth_description: string | null;

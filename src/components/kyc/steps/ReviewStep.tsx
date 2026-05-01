@@ -92,10 +92,27 @@ export function ReviewStep({
         <SectionRow label="Passport country" value={form.passport_country as string} />
         <SectionRow label="Passport number" value={form.passport_number as string} />
         <SectionRow label="Passport expiry" value={form.passport_expiry as string} />
-        <SectionRow label="Residential address" value={form.address as string} />
         <SectionRow label="Email" value={form.email as string} />
         <SectionRow label="Phone" value={form.phone as string} />
         <SectionRow label="Occupation" value={form.occupation as string} />
+      </div>
+
+      {/* B-049 §2 — Residential Address (separate sub-step). Falls back to the
+          legacy `address` text if the structured fields haven't been filled. */}
+      <div className="rounded-lg border bg-white p-4 space-y-1">
+        <h3 className="text-sm font-semibold text-brand-navy mb-2">Residential Address</h3>
+        {form.address_line_1 || form.address_city || form.address_country ? (
+          <>
+            <SectionRow label="Address line 1" value={form.address_line_1 as string} />
+            <SectionRow label="Address line 2" value={form.address_line_2 as string} />
+            <SectionRow label="City" value={form.address_city as string} />
+            <SectionRow label="State / Region" value={form.address_state as string} />
+            <SectionRow label="Postal code" value={form.address_postal_code as string} />
+            <SectionRow label="Country" value={form.address_country as string} />
+          </>
+        ) : (
+          <SectionRow label="Residential address" value={form.address as string} />
+        )}
       </div>
 
       {/* Financial Section */}

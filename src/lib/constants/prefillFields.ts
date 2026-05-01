@@ -6,6 +6,13 @@ export const KYC_PREFILLABLE_FIELDS = [
   "passport_number",
   "passport_expiry",
   "address",
+  // B-049 — structured residential-address fields filled from POA extraction.
+  "address_line_1",
+  "address_line_2",
+  "address_city",
+  "address_state",
+  "address_postal_code",
+  "address_country",
   "occupation",
   "tax_identification_number",
   "jurisdiction_tax_residence",

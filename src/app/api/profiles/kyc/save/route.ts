@@ -40,6 +40,20 @@ export async function POST(request: Request) {
   const cleanedFields: Record<string, unknown> = {};
   const profileUpdates: Record<string, unknown> = {};
 
+  // B-049 — track whether any structured residential-address field is in
+  // this patch. If so, we re-derive the legacy `address` column from the
+  // resulting row so the submit validator (which still reads `address`)
+  // stays in sync with what the wizard collected.
+  const STRUCTURED_ADDRESS_FIELDS = [
+    "address_line_1",
+    "address_line_2",
+    "address_city",
+    "address_state",
+    "address_postal_code",
+    "address_country",
+  ];
+  let structuredAddressTouched = false;
+
   for (const [key, value] of Object.entries(fields)) {
     if (EXCLUDED_FIELDS.includes(key)) continue;
     if (PROFILE_FIELDS.includes(key)) {
@@ -48,6 +62,7 @@ export async function POST(request: Request) {
       }
       continue;
     }
+    if (STRUCTURED_ADDRESS_FIELDS.includes(key)) structuredAddressTouched = true;
     if (DATE_FIELDS.includes(key) && (value === "" || value === null)) {
       cleanedFields[key] = null;
     } else if (BOOLEAN_FIELDS.includes(key) && value === "") {
@@ -69,6 +84,27 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Keep the legacy `address` text on client_profiles in sync with the
+  // structured fields whenever they're written. This means the existing
+  // submit validator + admin views that read the single-line address keep
+  // working without changes.
+  if (structuredAddressTouched && updated) {
+    const u = updated as Record<string, unknown>;
+    const parts = [
+      u.address_line_1,
+      u.address_line_2,
+      u.address_city,
+      u.address_state,
+      u.address_postal_code,
+      u.address_country,
+    ]
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .filter((v) => v.length > 0);
+    if (parts.length > 0) {
+      profileUpdates["address"] = parts.join(", ");
+    }
+  }
 
   // Update email/phone on client_profiles if provided
   if (Object.keys(profileUpdates).length > 0) {

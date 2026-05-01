@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { IdentityStep } from "@/components/kyc/steps/IdentityStep";
+import { ResidentialAddressStep } from "@/components/kyc/steps/ResidentialAddressStep";
 import { FinancialStep } from "@/components/kyc/steps/FinancialStep";
 import { DeclarationsStep } from "@/components/kyc/steps/DeclarationsStep";
 import { ReviewStep } from "@/components/kyc/steps/ReviewStep";
@@ -106,6 +107,7 @@ type SubStep =
   | { id: string; kind: "doc-list"; category: KycDocCategory; label: string }
   | { id: "contact"; kind: "contact"; label: "Contact details" }
   | { id: "form-identity"; kind: "form-identity"; label: "Identity" }
+  | { id: "form-residential-address"; kind: "form-residential-address"; label: "Residential Address" }
   | { id: "form-financial"; kind: "form-financial"; label: "Financial info" }
   | { id: "form-declarations"; kind: "form-declarations"; label: "Declarations" }
   | { id: "form-review"; kind: "form-review"; label: "Review & save" }
@@ -152,6 +154,12 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
     email: profile?.email ?? null,
     phone: profile?.phone ?? null,
     address: (kyc.address as string | null) ?? null,
+    address_line_1: (kyc.address_line_1 as string | null) ?? null,
+    address_line_2: (kyc.address_line_2 as string | null) ?? null,
+    address_city: (kyc.address_city as string | null) ?? null,
+    address_state: (kyc.address_state as string | null) ?? null,
+    address_postal_code: (kyc.address_postal_code as string | null) ?? null,
+    address_country: (kyc.address_country as string | null) ?? null,
     aliases: (kyc.aliases as string | null) ?? null,
     work_address: null,
     work_phone: null,
@@ -609,6 +617,7 @@ export function PerPersonReviewWizard({
     out.push({ id: "contact", kind: "contact", label: "Contact details" });
     if (isIndividual) {
       out.push({ id: "form-identity", kind: "form-identity", label: "Identity" });
+      out.push({ id: "form-residential-address", kind: "form-residential-address", label: "Residential Address" });
       out.push({ id: "form-financial", kind: "form-financial", label: "Financial info" });
       if (isCdd) out.push({ id: "form-declarations", kind: "form-declarations", label: "Declarations" });
       out.push({ id: "form-review", kind: "form-review", label: "Review & save" });
@@ -914,6 +923,23 @@ export function PerPersonReviewWizard({
             onDocumentUploaded={() => { /* docs uploaded inside form steps are unused here */ }}
             showContactFields={false}
             hideDocumentUploads={true}
+            hideAddressFields={true}
+            showErrorsImmediately
+            personDocs={personDocsAsRecords}
+            personDocTypes={documentTypes}
+            kycRecordId={kycRecordId}
+          />
+        );
+      case "form-residential-address":
+        return (
+          <ResidentialAddressStep
+            clientId={profileId}
+            kycRecord={initialKycRecord}
+            documents={personDocsAsRecords}
+            documentTypes={documentTypes}
+            requirements={requirements}
+            form={form}
+            onChange={handleFormChange}
             showErrorsImmediately
             personDocs={personDocsAsRecords}
             personDocTypes={documentTypes}

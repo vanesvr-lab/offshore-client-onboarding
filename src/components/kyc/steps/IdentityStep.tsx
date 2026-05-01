@@ -36,6 +36,12 @@ interface IdentityStepProps {
   personDocTypes?: DocumentType[];
   /** B-042 — KYC record id posted to /api/profiles/kyc/save when the user clicks the prefill button. */
   kycRecordId?: string | null;
+  /**
+   * B-049 §2.2 — when true, hide the residential-address textarea + the POA
+   * upload card. Used by PerPersonReviewWizard which renders address fields
+   * in its own dedicated Residential Address sub-step.
+   */
+  hideAddressFields?: boolean;
 }
 
 function Field({
@@ -128,6 +134,7 @@ export function IdentityStep({
   personDocs,
   personDocTypes,
   kycRecordId,
+  hideAddressFields = false,
 }: IdentityStepProps) {
   const validation = useFieldValidation({ showErrorsImmediately });
 
@@ -204,14 +211,33 @@ export function IdentityStep({
     if (prefillFiredRef.current) return;
     prefillFiredRef.current = true;
 
-    const hasSourceDoc = !!(passportDoc || addressDoc);
+    // B-049 §2.2 — when address is its own sub-step, this step only handles
+    // passport-derived fields. Drop address rows so we don't double-fill +
+    // ignore POA when computing whether a source doc is uploaded.
+    const ADDRESS_KEYS = new Set([
+      "address",
+      "address_line_1",
+      "address_line_2",
+      "address_city",
+      "address_state",
+      "address_postal_code",
+      "address_country",
+    ]);
+    const filteredPrefillable = hideAddressFields
+      ? prefillable.filter((row) => !ADDRESS_KEYS.has(row.target))
+      : prefillable;
+    const filteredAvailable = hideAddressFields
+      ? availableExtracts.filter((row) => !ADDRESS_KEYS.has(row.target))
+      : availableExtracts;
+
+    const hasSourceDoc = hideAddressFields ? !!passportDoc : !!(passportDoc || addressDoc);
     if (!hasSourceDoc) {
       setBannerState("no-source");
       return;
     }
     // Source doc exists but nothing left to apply (already filled previously).
-    if (prefillable.length === 0) {
-      if (availableExtracts.length > 0) setBannerState("success");
+    if (filteredPrefillable.length === 0) {
+      if (filteredAvailable.length > 0) setBannerState("success");
       else setBannerState("error"); // doc uploaded but extraction empty — OCR failed
       return;
     }
@@ -224,7 +250,7 @@ export function IdentityStep({
       setBannerState("running");
       try {
         const payload: Record<string, string> = {};
-        for (const row of prefillable) payload[row.target] = row.value;
+        for (const row of filteredPrefillable) payload[row.target] = row.value;
         const res = await fetch("/api/profiles/kyc/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -412,34 +438,36 @@ export function IdentityStep({
         </div>
       )}
 
-      <div>
-        <div className="space-y-1">
-          <ValidatedLabel state={validation.getFieldState("address", (form.address ?? "") as string, true)} required>
-            Residential address
-            {availableByTarget.get("address") && (
-              <FieldPrefillIcon
-                prefillFrom={availableByTarget.get("address")!}
-                fieldLabel="Residential address"
-                onFill={handleFieldPrefill}
+      {!hideAddressFields && (
+        <div>
+          <div className="space-y-1">
+            <ValidatedLabel state={validation.getFieldState("address", (form.address ?? "") as string, true)} required>
+              Residential address
+              {availableByTarget.get("address") && (
+                <FieldPrefillIcon
+                  prefillFrom={availableByTarget.get("address")!}
+                  fieldLabel="Residential address"
+                  onFill={handleFieldPrefill}
+                />
+              )}
+            </ValidatedLabel>
+            <FieldWrapper state={validation.getFieldState("address", (form.address ?? "") as string, true)}>
+              <Textarea
+                value={(form.address ?? "") as string}
+                onChange={(e) => onChange({ address: e.target.value })}
+                onBlur={() => validation.markTouched("address")}
+                rows={2}
+                autoComplete="street-address"
+                placeholder="Full residential address including country"
+                className="text-sm resize-none max-w-2xl"
               />
-            )}
-          </ValidatedLabel>
-          <FieldWrapper state={validation.getFieldState("address", (form.address ?? "") as string, true)}>
-            <Textarea
-              value={(form.address ?? "") as string}
-              onChange={(e) => onChange({ address: e.target.value })}
-              onBlur={() => validation.markTouched("address")}
-              rows={2}
-              autoComplete="street-address"
-              placeholder="Full residential address including country"
-              className="text-sm resize-none max-w-2xl"
-            />
-          </FieldWrapper>
+            </FieldWrapper>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Proof of address upload */}
-      {!hideDocumentUploads && (
+      {!hideAddressFields && !hideDocumentUploads && (
         <div className="rounded-lg border bg-gray-50 p-4 space-y-3">
           <h3 className="text-sm font-medium text-brand-navy">Proof of Residential Address</h3>
           <p className="text-xs text-gray-500">Upload a utility bill, bank statement, or government correspondence dated within the last 3 months.</p>
