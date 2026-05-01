@@ -15,6 +15,44 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 7 — Resend KYC invite (Claude Code)
+
+**§7.1 — Resend invite.** The "Last request sent on …" stamp on the
+person card is gone; the action button is now always visible and switches
+label between `✉ Request KYC` (first send) and `✉ Resend invite` (any
+subsequent send).
+
+- Client UI: 24h rate limit, button disabled within the cooldown window
+  with a tooltip "Already sent today. You can resend after {date+24h, in
+  user's local time}." Tooltip outside the cooldown window shows "Last
+  sent on {date} by {sender}." for context.
+- Server: 24h check enforced on POST to `/api/services/[id]/persons/[roleId]/send-invite`.
+  Returns 429 with `{ error, retry_after }` if a non-admin caller tries
+  to resend within the cooldown. Admins are exempt (override path).
+- Toast wording switches: first send = "Email sent", resend = "Invite
+  resent to {email}." Dialog title reflects the same.
+
+**Note on the brief's `kyc_records.last_request_sent_at`:** this codebase
+tracks per-service invite timestamps on `profile_service_roles.invite_sent_at`
+(updated by the existing send-invite route). That field is the analog of
+the brief's `last_request_sent_at` and is what the cooldown reads from on
+both client and server.
+
+**Code changes:**
+
+- `src/components/client/ServiceWizardPeopleStep.tsx`:
+    - New `ResendInviteButton` component renders the always-visible
+      button with dynamic label, tooltip, and 24h disabled state.
+    - `InviteDialog` accepts `isResend` so the title + success toast
+      reflect the action ("Resend invite to … " / "Invite resent to …").
+- `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts` —
+  24h server-side cooldown check (returns 429 with `retry_after` ISO
+  timestamp) for non-admin callers.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-050 Batch 6 — Completion %, Save & Close, View Summary (Claude Code)
 
 **§6.1 — Completion percentage on the person card** was already wired in

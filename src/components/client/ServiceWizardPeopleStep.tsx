@@ -606,12 +606,14 @@ function InviteDialog({
   person,
   serviceId,
   combinedRoleLabels,
+  isResend = false,
   onClose,
   onSent,
 }: {
   person: ServicePerson;
   serviceId: string;
   combinedRoleLabels: string;
+  isResend?: boolean;
   onClose: () => void;
   onSent: (sentAt: string) => void;
 }) {
@@ -634,7 +636,10 @@ function InviteDialog({
       const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to send");
       onSent(data.invite_sent_at ?? new Date().toISOString());
-      toast.success("Email Sent", { position: "top-right" });
+      toast.success(
+        isResend ? `Invite resent to ${email.trim()}.` : "Email sent",
+        { position: "top-right" }
+      );
       onClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to send", { position: "top-right" });
@@ -649,7 +654,9 @@ function InviteDialog({
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-sm z-[100]">
         <DialogHeader>
-          <DialogTitle className="text-brand-navy">Request KYC from {personName}</DialogTitle>
+          <DialogTitle className="text-brand-navy">
+            {isResend ? `Resend invite to ${personName}` : `Request KYC from ${personName}`}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 pt-1">
           <p className="text-xs text-gray-500">
@@ -779,7 +786,8 @@ function PersonCard({
         </span>
       </div>
 
-      {/* Action row: Review KYC + View Summary + Request/Resend invite. B-050 §6.3 */}
+      {/* Action row: Review KYC + View Summary + Request/Resend invite.
+          B-050 §6.3 (View Summary) + §7.1 (Resend invite). */}
       <div className="flex items-center gap-2 flex-wrap">
         <Button
           size="sm"
@@ -800,22 +808,12 @@ function PersonCard({
           View Summary
         </Button>
 
-        {inviteSentAt ? (
-          <span className="text-[11px] text-green-600 flex items-center gap-1">
-            <Mail className="h-3 w-3" />
-            Last request sent on {sentDate}{inviteSentByName ? ` by ${inviteSentByName}` : ""}
-          </span>
-        ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setShowInviteDialog(true)}
-            className="h-7 px-3 text-xs gap-1.5 text-gray-500 hover:text-brand-navy"
-          >
-            <Mail className="h-3 w-3" />
-            Request KYC
-          </Button>
-        )}
+        <ResendInviteButton
+          inviteSentAt={inviteSentAt}
+          inviteSentByName={inviteSentByName}
+          sentDate={sentDate}
+          onClick={() => setShowInviteDialog(true)}
+        />
       </div>
 
       {showInviteDialog && (
@@ -823,11 +821,65 @@ function PersonCard({
           person={person}
           serviceId={serviceId}
           combinedRoleLabels={combinedRoleLabels}
+          isResend={!!inviteSentAt}
           onClose={() => setShowInviteDialog(false)}
           onSent={(sentAt) => setInviteSentAt(sentAt)}
         />
       )}
     </div>
+  );
+}
+
+// ─── ResendInviteButton ──────────────────────────────────────────────────────
+
+function ResendInviteButton({
+  inviteSentAt,
+  inviteSentByName,
+  sentDate,
+  onClick,
+}: {
+  inviteSentAt: string | null;
+  inviteSentByName: string | null;
+  sentDate: string | null;
+  onClick: () => void;
+}) {
+  // 24h rate limit. The server enforces it too.
+  const lastSent = inviteSentAt ? new Date(inviteSentAt).getTime() : null;
+  const now = Date.now();
+  const cooldownEnds = lastSent ? lastSent + 24 * 60 * 60 * 1000 : null;
+  const isCoolingDown = cooldownEnds != null && now < cooldownEnds;
+  const cooldownReadable = cooldownEnds
+    ? new Date(cooldownEnds).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  const isResend = !!inviteSentAt;
+  const label = isResend ? "Resend invite" : "Request KYC";
+  const tooltip = isCoolingDown
+    ? `Already sent today. You can resend after ${cooldownReadable}.`
+    : isResend
+    ? sentDate
+      ? `Last sent on ${sentDate}${inviteSentByName ? ` by ${inviteSentByName}` : ""}.`
+      : "Send another invite to this person."
+    : "Send the KYC invite email to this person.";
+
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={onClick}
+      disabled={isCoolingDown}
+      title={tooltip}
+      aria-label={label}
+      className="h-7 px-3 text-xs gap-1.5 text-gray-600 hover:text-brand-navy disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <Mail className="h-3 w-3" />
+      {label}
+    </Button>
   );
 }
 

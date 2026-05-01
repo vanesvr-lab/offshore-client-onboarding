@@ -90,6 +90,27 @@ export async function POST(
     return NextResponse.json({ error: "Person not found on this service" }, { status: 404 });
   }
 
+  // B-050 §7.1 — 24h server-side rate limit on resends. Defends against the
+  // client tooltip alone. Admins are exempt (they may need to override).
+  const lastSentAt = (roleRow as unknown as { invite_sent_at: string | null }).invite_sent_at;
+  if (!isAdmin && lastSentAt) {
+    const lastMs = new Date(lastSentAt).getTime();
+    if (!Number.isNaN(lastMs)) {
+      const cooldownMs = 24 * 60 * 60 * 1000;
+      const elapsed = Date.now() - lastMs;
+      if (elapsed < cooldownMs) {
+        const retryAfter = new Date(lastMs + cooldownMs).toISOString();
+        return NextResponse.json(
+          {
+            error: "Already sent in the last 24 hours. Please wait before resending.",
+            retry_after: retryAfter,
+          },
+          { status: 429 }
+        );
+      }
+    }
+  }
+
   const profile = (roleRow.client_profiles as unknown as { id: string; full_name: string | null; email: string | null } | null);
   const roleLabel = roleToLabel((roleRow as unknown as { role: string }).role ?? "");
   if (!profile?.email) {
