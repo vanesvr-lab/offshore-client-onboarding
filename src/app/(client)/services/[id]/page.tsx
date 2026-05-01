@@ -122,7 +122,7 @@ export default async function ClientServiceDetailPage({
     // DD requirements for KYC wizards
     supabase
       .from("due_diligence_requirements")
-      .select("*, document_types(id, name, category)")
+      .select("*, document_types(id, name, category, scope)")
       .eq("tenant_id", tenantId)
       .order("sort_order"),
 

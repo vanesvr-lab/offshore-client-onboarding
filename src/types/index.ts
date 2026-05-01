@@ -1,6 +1,12 @@
 export type UserRole = "client" | "admin";
 export type ClientUserRole = "owner" | "member";
 export type DueDiligenceLevel = "sdd" | "cdd" | "edd";
+/**
+ * B-049 — controls where the wizard renders a document type:
+ *   'person'      → uploaded for each Director / Shareholder / UBO inside the per-person KYC wizard
+ *   'application' → uploaded once for the entity inside Step 5 of the outer wizard (Documents)
+ */
+export type DocumentScope = 'person' | 'application';
 
 export interface DueDiligenceRequirement {
   id: string;
@@ -13,7 +19,13 @@ export interface DueDiligenceRequirement {
   document_type_id: string | null;
   applies_to: "individual" | "organisation" | "both";
   sort_order: number;
-  document_types?: { id: string; name: string; category?: string | null } | null;
+  document_types?: {
+    id: string;
+    name: string;
+    category?: string | null;
+    /** B-049 — joined for the wizard's scope filter. */
+    scope?: DocumentScope;
+  } | null;
 }
 
 export interface DueDiligenceSettings {
@@ -281,6 +293,13 @@ export interface DocumentType {
   name: string;
   category: 'identity' | 'corporate' | 'financial' | 'compliance' | 'additional';
   applies_to: 'individual' | 'organisation' | 'both';
+  /**
+   * B-049 — controls where the wizard renders this doc:
+   *   'person'      → inside the per-person KYC wizard (one upload per Director / Shareholder / UBO)
+   *   'application' → in Step 5 of the outer wizard (uploaded once for the entity)
+   * Defaults to 'person' for any unflagged doc.
+   */
+  scope?: DocumentScope;
   description: string | null;
   validity_period_days: number | null;
   ai_verification_rules: Record<string, unknown> | null;

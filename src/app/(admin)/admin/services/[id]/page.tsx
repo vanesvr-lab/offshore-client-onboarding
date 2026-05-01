@@ -164,7 +164,7 @@ export default async function ServiceDetailPage({
     // DD requirements for risk/compliance section
     supabase
       .from("due_diligence_requirements")
-      .select("*, document_types(id, name)")
+      .select("*, document_types(id, name, category, scope)")
       .eq("tenant_id", tenantId)
       .order("sort_order"),
 

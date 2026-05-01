@@ -157,13 +157,19 @@ export function ServiceWizardDocumentsStep({
   requiredDocTypes: allRequiredDocTypes = [],
   submitBlockers = [],
 }: Props) {
-  // Show only corporate/service-level docs — KYC docs (passport, address, etc.) belong in the People step
-  const isServiceDoc = (cat: string) => cat === "corporate" || cat === "additional";
-  const requiredDocTypes = allRequiredDocTypes.filter((dt) => isServiceDoc(dt.category));
+  // B-049 §1.2 — caller already pre-filtered to application-scope requirements;
+  // accept whatever doc types are passed in.
+  const requiredDocTypes = allRequiredDocTypes;
+  const requiredNames = new Set(requiredDocTypes.map((dt) => dt.name));
 
+  // Display only docs that match a required application-scope doc type.
+  // Per-person KYC docs go through the People step's wizard and must not
+  // appear here even when the same `documents` array is passed in.
   const [documents, setDocuments] = useState<ClientServiceDoc[]>(
-    // Only show corporate/additional docs in this step
-    initialDocuments.filter((d) => isServiceDoc(d.document_types?.category ?? ""))
+    initialDocuments.filter((d) => {
+      const name = d.document_types?.name;
+      return name ? requiredNames.has(name) : false;
+    })
   );
 
   function handleUploaded(doc: ClientServiceDoc, docTypeId: string) {

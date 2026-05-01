@@ -70,14 +70,35 @@ const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; activeHover:
 
 const ROLE_INACTIVE_TONE = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
 
-const KYC_DOC_CATEGORIES = ["identity", "financial", "compliance"] as const;
-type KycDocCategory = (typeof KYC_DOC_CATEGORIES)[number];
+/**
+ * B-049 §1.2 — Doc sub-steps are derived from the document_types that have
+ * scope='person' on this template. We label by category but accept any
+ * category string, so adding a new doc category in admin / seed data is
+ * picked up automatically without a code change.
+ */
+type KycDocCategory = string;
 
-const CATEGORY_LABELS: Record<KycDocCategory, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   identity: "Identity",
   financial: "Financial",
   compliance: "Compliance",
+  additional: "Additional",
+  professional: "Professional",
+  tax: "Tax",
+  adverse_media: "Adverse Media",
+  wealth: "Wealth",
 };
+
+function categoryLabel(cat: string): string {
+  return (
+    CATEGORY_LABELS[cat] ??
+    cat
+      .split(/[_\s]+/)
+      .filter(Boolean)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+      .join(" ")
+  );
+}
 
 // ─── Sub-step types ───────────────────────────────────────────────────────────
 
@@ -519,43 +540,69 @@ export function PerPersonReviewWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [requirements, dueDiligenceLevel]
   );
+  // B-049 §1.2 — bucket per-person doc types by category, only including
+  // doc types whose `scope` is 'person'. The set of categories is dynamic so
+  // adding a new category in admin / seed data automatically grows the list
+  // of sub-steps. Order is preserved to keep a predictable wizard sequence.
+  const PERSON_CATEGORY_ORDER = [
+    "identity",
+    "financial",
+    "compliance",
+    "professional",
+    "tax",
+    "adverse_media",
+    "wealth",
+    "additional",
+  ] as const;
+
   const docTypesByCategory = useMemo(() => {
     const eligible = ddReqDocTypeIds.length > 0
       ? documentTypes.filter((dt) => ddReqDocTypeIds.includes(dt.id))
       : documentTypes;
-    const out: Record<KycDocCategory, DocumentType[]> = { identity: [], financial: [], compliance: [] };
-    for (const dt of eligible) {
-      const cat = (dt.category || "identity") as string;
-      if ((KYC_DOC_CATEGORIES as readonly string[]).includes(cat)) {
-        out[cat as KycDocCategory].push(dt);
-      }
+    const personOnly = eligible.filter((dt) => (dt.scope ?? "person") === "person");
+    const out: Record<string, DocumentType[]> = {};
+    for (const dt of personOnly) {
+      const cat = (dt.category || "additional") as string;
+      if (!out[cat]) out[cat] = [];
+      out[cat].push(dt);
     }
     return out;
   }, [documentTypes, ddReqDocTypeIds]);
+
+  const personCategories = useMemo<string[]>(() => {
+    const present = Object.keys(docTypesByCategory).filter((c) => docTypesByCategory[c].length > 0);
+    const ordered = PERSON_CATEGORY_ORDER.filter((c) => present.includes(c));
+    const extras = present.filter((c) => !PERSON_CATEGORY_ORDER.includes(c as typeof PERSON_CATEGORY_ORDER[number]));
+    return [...ordered, ...extras];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docTypesByCategory]);
 
   function getUploaded(dtId: string): ClientServiceDoc | undefined {
     return profileDocs.find((d) => d.document_type_id === dtId);
   }
 
-  function uploadedCountFor(cat: KycDocCategory): number {
-    return docTypesByCategory[cat].filter((dt) => !!getUploaded(dt.id)).length;
+  function uploadedCountFor(cat: string): number {
+    return (docTypesByCategory[cat] ?? []).filter((dt) => !!getUploaded(dt.id)).length;
   }
 
-  const totalUploaded = KYC_DOC_CATEGORIES.reduce((acc, c) => acc + uploadedCountFor(c), 0);
-  const totalDocsRequired = KYC_DOC_CATEGORIES.reduce((acc, c) => acc + docTypesByCategory[c].length, 0);
+  const totalUploaded = personCategories.reduce((acc, c) => acc + uploadedCountFor(c), 0);
+  const totalDocsRequired = personCategories.reduce(
+    (acc, c) => acc + (docTypesByCategory[c]?.length ?? 0),
+    0
+  );
 
   // ── Sub-step computation ──────────────────────────────────────────────────
   const isCdd = !isIndividual ? false : dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
 
   const subSteps: SubStep[] = useMemo(() => {
     const out: SubStep[] = [];
-    for (const cat of KYC_DOC_CATEGORIES) {
-      if (docTypesByCategory[cat].length > 0) {
+    for (const cat of personCategories) {
+      if ((docTypesByCategory[cat] ?? []).length > 0) {
         out.push({
           id: `docs-${cat}`,
           kind: "doc-list",
           category: cat,
-          label: `${CATEGORY_LABELS[cat]} documents`,
+          label: `${categoryLabel(cat)} documents`,
         });
       }
     }
@@ -571,7 +618,7 @@ export function PerPersonReviewWizard({
       out.push({ id: "form-org-review", kind: "form-org-review", label: "Review & save" });
     }
     return out;
-  }, [docTypesByCategory, isIndividual, isCdd]);
+  }, [docTypesByCategory, personCategories, isIndividual, isCdd]);
 
   const [subStepIndex, setSubStepIndex] = useState(0);
   // Snap back to a valid sub-step if the visible list shrinks (e.g. role flip on org).
@@ -739,20 +786,20 @@ export function PerPersonReviewWizard({
   }
 
   // ── Doc sub-step gating (Next disabled until all docs uploaded) ───────────
-  function isDocCategoryComplete(cat: KycDocCategory): boolean {
-    return docTypesByCategory[cat].every((dt) => !!getUploaded(dt.id));
+  function isDocCategoryComplete(cat: string): boolean {
+    return (docTypesByCategory[cat] ?? []).every((dt) => !!getUploaded(dt.id));
   }
   const docCategory = currentSubStep.kind === "doc-list" ? currentSubStep.category : null;
   const docNextDisabled = docCategory ? !isDocCategoryComplete(docCategory) : false;
 
   // ── Sub-step content render ───────────────────────────────────────────────
-  function renderDocCategoryContent(cat: KycDocCategory) {
-    const items = docTypesByCategory[cat];
+  function renderDocCategoryContent(cat: string) {
+    const items = docTypesByCategory[cat] ?? [];
     return (
       <div className="border rounded-xl bg-white">
         <div className="px-5 py-3 border-b flex items-center justify-between">
           <p className="text-sm font-semibold text-brand-navy uppercase tracking-wide">
-            {CATEGORY_LABELS[cat]} Documents
+            {categoryLabel(cat)} Documents
           </p>
           <span className={`text-xs font-medium ${
             isDocCategoryComplete(cat) ? "text-green-600" : "text-amber-600"
@@ -941,9 +988,9 @@ export function PerPersonReviewWizard({
   const middleLabel = middleButtonLabel();
 
   // ── Progress strip ────────────────────────────────────────────────────────
-  function categoryIcon(cat: KycDocCategory) {
+  function categoryIcon(cat: string) {
     const cnt = uploadedCountFor(cat);
-    const total = docTypesByCategory[cat].length;
+    const total = (docTypesByCategory[cat] ?? []).length;
     if (total === 0) return null;
     if (cnt === 0) return <span className="text-gray-300">○</span>;
     if (cnt < total) return <span className="text-amber-500">◔</span>;
@@ -1025,14 +1072,14 @@ export function PerPersonReviewWizard({
             </span>
           </p>
           <div className="flex items-center gap-4 text-xs text-gray-600">
-            {KYC_DOC_CATEGORIES.map((cat) => {
-              const total = docTypesByCategory[cat].length;
+            {personCategories.map((cat) => {
+              const total = (docTypesByCategory[cat] ?? []).length;
               if (total === 0) return null;
               return (
                 <span key={cat} className="inline-flex items-center gap-1.5">
                   {categoryIcon(cat)}
                   <span className="font-medium uppercase tracking-wide text-[10px] text-gray-700">
-                    {CATEGORY_LABELS[cat]}
+                    {categoryLabel(cat)}
                   </span>
                   <span className="tabular-nums">
                     ({uploadedCountFor(cat)}/{total})

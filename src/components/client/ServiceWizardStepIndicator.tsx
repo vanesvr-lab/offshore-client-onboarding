@@ -1,14 +1,17 @@
 "use client";
 
-const STEP_LABELS = ["Company Setup", "Financial", "Banking", "People & KYC", "Documents"];
+const DEFAULT_STEP_LABELS = ["Company Setup", "Financial", "Banking", "People & KYC", "Documents"];
 
 interface Props {
   currentStep: number;       // 0-indexed
   completedSteps: number[];  // indices of completed steps
   onStepClick: (step: number) => void;
+  /** B-049 — caller may pass a shorter label set when the Documents step is hidden. */
+  labels?: string[];
 }
 
-export function ServiceWizardStepIndicator({ currentStep, completedSteps, onStepClick }: Props) {
+export function ServiceWizardStepIndicator({ currentStep, completedSteps, onStepClick, labels }: Props) {
+  const STEP_LABELS = labels ?? DEFAULT_STEP_LABELS;
   return (
     <div className="space-y-3 mb-6">
       {/* Dots + arrows row */}

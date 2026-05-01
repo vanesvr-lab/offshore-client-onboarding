@@ -15,6 +15,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-049 Batch 1 — Document scope flag (Claude Code)
+
+Added an explicit `scope: 'person' | 'application'` flag on `document_types`
+so the wizard can route each doc to the right place. Replaces the old implicit
+"category in (corporate, additional)" heuristic that conflated entity type
+with wizard placement.
+
+**⚠ Schema migration required before testing:**
+
+1. Apply `supabase/migrations/006-document-scope-flag.sql` (psql or Supabase
+   SQL editor — adds the column + a sensible default).
+2. Hit `POST /api/admin/migrations/seed-document-scope` once as an admin to
+   backfill scope values (any doc with `applies_to='organisation'` becomes
+   `scope='application'`; everything else stays `scope='person'`). The
+   endpoint is idempotent and returns the resulting per-type assignments.
+
+**Code changes:**
+
+- `supabase/migrations/006-document-scope-flag.sql`: new migration, idempotent.
+- `src/app/api/admin/migrations/seed-document-scope/route.ts`: admin-only
+  backfill endpoint; returns the final scope mapping for sanity checks.
+- `src/types/index.ts`: new `DocumentScope` union; `DocumentType.scope` (optional, defaults to 'person'); join shape on `DueDiligenceRequirement.document_types` exposes `scope`.
+- `src/app/(client)/services/[id]/page.tsx` + `src/app/(admin)/admin/services/[id]/page.tsx`: the DD-requirements query now selects `document_types(id, name, category, scope)` so the wizard can filter by scope.
+- `src/components/client/ServiceWizard.tsx`: derives `applicationScopeRequirements` from `document_types.scope === 'application'`. When that set is empty the Documents step is omitted entirely (totalSteps drops from 5 to 4) and the indicator's labels collapse — wizard navigates People & KYC → Submit. Application-scope docs feed Step 5 directly via the pre-filtered list.
+- `src/components/client/ServiceWizardStepIndicator.tsx`: accepts a `labels` prop so the step indicator shrinks when there are no application docs.
+- `src/components/client/ServiceWizardDocumentsStep.tsx`: trusts the pre-filtered `requiredDocTypes` list instead of re-filtering by category, and only displays uploaded docs whose type matches that list.
+- `src/components/client/PerPersonReviewWizard.tsx`: per-person doc sub-steps are now derived dynamically from doc types where `scope === 'person'`, grouped by category. Adds support for new categories (Professional, Tax, Adverse Media, Wealth, etc.) without code changes — they just appear as new sub-steps once seed data adds them.
+
+**Build:** `npm run build` clean (lint + type check, no new warnings).
+
+**What's next:** Batch 2 — split Identity sub-step into passport-only + new
+Residential Address sub-step, with POA-driven prefill.
+
+---
+
 ### 2026-05-01 — B-048 Batch 6 — Pre-delivery verification (Claude Code)
 
 Final pass against the brief's checklist before handoff.

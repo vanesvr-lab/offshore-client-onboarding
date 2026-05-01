@@ -104,6 +104,22 @@ export function ServiceWizard({
   const step1Fields = getFieldsForStep(1, serviceFields);
   const step2Fields = getFieldsForStep(2, serviceFields);
 
+  // B-049 §1.3 — Documents step is application-scope docs only. If the
+  // template has none, skip the step entirely so the wizard collapses to 4.
+  const applicationScopeRequirements = requirements.filter(
+    (r) =>
+      r.requirement_type === "document" &&
+      r.document_type_id &&
+      // Default scope is 'person'. We treat 'application' (and only that) as
+      // belonging to the outer Documents step.
+      r.document_types?.scope === "application"
+  );
+  const hasApplicationDocs = applicationScopeRequirements.length > 0;
+  const totalSteps = hasApplicationDocs ? 5 : 4;
+  const wizardStepLabels = hasApplicationDocs
+    ? ["Company Setup", "Financial", "Banking", "People & KYC", "Documents"]
+    : ["Company Setup", "Financial", "Banking", "People & KYC"];
+
   // Determine which steps are "complete" for the step indicator
   const completedSteps: number[] = [];
   if (isStepFieldsComplete(step0Fields, serviceDetails)) completedSteps.push(0);
@@ -115,7 +131,7 @@ export function ServiceWizard({
     return kyc && (kyc.kyc_journey_completed === true);
   });
   if (hasDirector && (persons.length === 0 || allKycDone)) completedSteps.push(3);
-  if (documents.length > 0) completedSteps.push(4);
+  if (hasApplicationDocs && documents.length > 0) completedSteps.push(4);
 
   const canSubmit =
     completedSteps.includes(0) &&
@@ -124,11 +140,10 @@ export function ServiceWizard({
     completedSteps.includes(3);
 
   // B-043 — human-readable reasons why Submit is disabled. Same labels as the step indicator.
-  const WIZARD_STEP_LABELS = ["Company Setup", "Financial", "Banking", "People & KYC"];
   const submitBlockers: string[] = [];
-  if (!completedSteps.includes(0)) submitBlockers.push(`${WIZARD_STEP_LABELS[0]} — required fields are incomplete`);
-  if (!completedSteps.includes(1)) submitBlockers.push(`${WIZARD_STEP_LABELS[1]} — required fields are incomplete`);
-  if (!completedSteps.includes(2)) submitBlockers.push(`${WIZARD_STEP_LABELS[2]} — required fields are incomplete`);
+  if (!completedSteps.includes(0)) submitBlockers.push(`${wizardStepLabels[0]} — required fields are incomplete`);
+  if (!completedSteps.includes(1)) submitBlockers.push(`${wizardStepLabels[1]} — required fields are incomplete`);
+  if (!completedSteps.includes(2)) submitBlockers.push(`${wizardStepLabels[2]} — required fields are incomplete`);
   if (!completedSteps.includes(3)) {
     if (!hasDirector) {
       submitBlockers.push("At least one director must be added in the People step");
@@ -163,7 +178,7 @@ export function ServiceWizard({
       if (!ok) return;
       toast.success("Saved", { position: "top-right" });
     }
-    setCurrentStep((s) => Math.min(s + 1, 4));
+    setCurrentStep((s) => Math.min(s + 1, totalSteps - 1));
   }
 
   async function handleBack() {
@@ -256,6 +271,7 @@ export function ServiceWizard({
         currentStep={currentStep}
         completedSteps={completedSteps}
         onStepClick={(s) => setCurrentStep(s)}
+        labels={wizardStepLabels}
       />
 
       {/* Step content */}
@@ -292,19 +308,17 @@ export function ServiceWizard({
             onNavVisibilityChange={setHideWizardNav}
           />
         )}
-        {currentStep === 4 && (
+        {currentStep === 4 && hasApplicationDocs && (
           <ServiceWizardDocumentsStep
             serviceId={serviceId}
             documents={documents}
             onDocumentsChange={setDocuments}
             submitBlockers={submitBlockers}
-            requiredDocTypes={requirements
-              .filter((r) => r.requirement_type === "document" && r.document_type_id)
-              .map((r) => ({
-                id: r.document_type_id!,
-                name: r.label,
-                category: r.document_types?.category ?? "",
-              }))}
+            requiredDocTypes={applicationScopeRequirements.map((r) => ({
+              id: r.document_type_id!,
+              name: r.label,
+              category: r.document_types?.category ?? "",
+            }))}
           />
         )}
       </div>
@@ -313,7 +327,7 @@ export function ServiceWizard({
       {!hideWizardNav && (
         <ServiceWizardNav
           currentStep={currentStep}
-          totalSteps={5}
+          totalSteps={totalSteps}
           saving={saving}
           canSubmit={canSubmit}
           submitBlockers={submitBlockers}
