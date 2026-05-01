@@ -144,7 +144,7 @@ export default function RegisterPage() {
         <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
         <p className="text-sm text-gray-600 mt-1">The intelligent portal for client due diligence and compliance</p>
       </div>
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Create your account</CardTitle>
           <CardDescription>Start your onboarding application</CardDescription>

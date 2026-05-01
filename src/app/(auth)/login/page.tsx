@@ -86,7 +86,7 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
         <p className="text-sm text-gray-600 mt-1">The intelligent portal for client due diligence and compliance</p>
       </div>
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Sign in to your account</CardTitle>
           <CardDescription>Enter your credentials to access the portal</CardDescription>

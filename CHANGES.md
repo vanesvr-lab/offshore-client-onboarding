@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-048 Batch 5 — Login / Register / Dashboard CTA polish (Claude Code)
+
+Tightened the entry-point pages to match the wizard polish.
+
+**Files:**
+
+- `src/app/(auth)/login/page.tsx` — Card `max-w-md` → `max-w-sm` (384px). The form has only two inputs + one CTA, doesn't need the wider container. Inputs already `w-full h-11`, primary "Sign in" button already `w-full h-11 brand-navy`, autocomplete + semantic input types already in place.
+- `src/app/(auth)/register/page.tsx` — same `max-w-md` → `max-w-sm`. Form has four inputs + one CTA; still readable, more focused.
+- `src/components/client/DashboardClient.tsx` — service-card actions row:
+  - was `flex items-center justify-between` with "Show sections" left and `h-8 text-xs` Review on the right (≈700px gap inside max-w-4xl, button felt small)
+  - now `flex items-center gap-3 flex-wrap`: Review pill is the primary action (`h-10 px-4 text-sm font-semibold`, brand-navy), grouped immediately after the progress bar, with "Show sections" as a small tertiary control sitting next to it instead of pinned across the row.
+
+Application detail (`/applications/[id]`) is at `max-w-3xl` from Batch 1; its action banners (Re-upload Documents, Back to Dashboard) already sit grouped inside their own banner / on the bottom row — no edge-pinning to fix.
+
+**Verified:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-048 Batch 4 — Field-width audit (Claude Code)
 
 Walked every client wizard page after the container narrowed. Tightened

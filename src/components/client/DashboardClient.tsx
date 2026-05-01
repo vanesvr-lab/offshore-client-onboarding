@@ -78,11 +78,22 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
           </span>
         </div>
 
-        {/* Actions row */}
-        <div className="flex items-center justify-between">
+        {/* B-048 §5.2 — Review CTA grouped with the card content (not
+            edge-pinned). The collapse toggle is a small tertiary control;
+            Review is the primary action and sized to the brand 44pt CTA
+            standard so it reads as "the thing to do". */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <Button
+            size="sm"
+            onClick={() => router.push(`/services/${svc.id}?startWizard=true`)}
+            className="bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 h-10 px-4 text-sm gap-1.5"
+          >
+            Review and Complete
+            <ArrowRight className="h-4 w-4" />
+          </Button>
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
           >
             {expanded ? (
               <><ChevronUp className="h-3.5 w-3.5" /> Hide sections</>
@@ -90,15 +101,6 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
               <><ChevronDown className="h-3.5 w-3.5" /> Show sections</>
             )}
           </button>
-
-          <Button
-            size="sm"
-            onClick={() => router.push(`/services/${svc.id}?startWizard=true`)}
-            className="bg-brand-navy hover:bg-brand-blue h-8 px-3 text-xs gap-1"
-          >
-            Review and Complete
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
         </div>
       </div>
 
