@@ -12,8 +12,10 @@ const steps = [
 ];
 
 export function WizardLayout({ currentStep, children }: WizardLayoutProps) {
+  // B-048 §1 (ui-ux-pro-max container-width) — narrow centered column for
+  // form-heavy wizard pages so content sits in foveal vision on desktop.
   return (
-    <div>
+    <div className="mx-auto w-full max-w-2xl">
       {/* Step indicator */}
       <nav className="mb-8">
         <ol className="flex items-center">

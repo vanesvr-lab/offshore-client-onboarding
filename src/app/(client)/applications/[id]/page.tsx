@@ -83,7 +83,7 @@ export default async function ApplicationStatusPage({
   const typedLinks = (docLinks ?? []) as unknown as DocLinkRow[];
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">

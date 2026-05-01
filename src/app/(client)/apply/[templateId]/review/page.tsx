@@ -205,7 +205,7 @@ export default function ReviewPage({
 
   return (
     <WizardLayout currentStep={3}>
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         {/* Primary Contact */}
         <Card>
           <CardHeader>

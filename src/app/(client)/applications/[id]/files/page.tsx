@@ -46,7 +46,7 @@ export default async function ClientFilesPage({
     : undefined;
 
   return (
-    <div className="max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
       <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-6">
         <Link href="/dashboard" className="hover:text-brand-blue">Dashboard</Link>
         <span>/</span>

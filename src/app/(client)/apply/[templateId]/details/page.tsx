@@ -187,7 +187,7 @@ export default function BusinessDetailsPage({
 
   return (
     <WizardLayout currentStep={1}>
-      <div className="space-y-6 max-w-3xl">
+      <div className="space-y-6">
         {/* B-047 §1.1 / §8 — Primary Contact: top-aligned labels with red required *,
             content-aware widths, semantic input types + autocomplete attributes. */}
         <Card>

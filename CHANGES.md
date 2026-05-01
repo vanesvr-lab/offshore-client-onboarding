@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-048 Batch 1 — Container max-width pass (Claude Code)
+
+Applied a centered, narrower content column to every form-heavy client wizard
+page so content sits in foveal vision on desktop instead of stretching
+edge-to-edge. ui-ux-pro-max §5 `container-width` + `mobile-first`.
+
+**Files:**
+- `src/components/client/WizardLayout.tsx` — outer wrapper now `mx-auto w-full max-w-2xl`. This narrows all three apply pages (`/apply/[templateId]/details`, `/documents`, `/review`) in one place.
+- `src/app/(client)/apply/[templateId]/details/page.tsx` — dropped redundant `max-w-3xl` (WizardLayout now constrains).
+- `src/app/(client)/apply/[templateId]/documents/page.tsx` — dropped redundant `max-w-3xl`.
+- `src/app/(client)/apply/[templateId]/review/page.tsx` — dropped redundant `max-w-3xl`.
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx` — both wizard-mode and landing branches now wrap in `mx-auto w-full max-w-2xl`. The per-person KYC wizard (B-046) lives inside this — narrowing here also narrows the in-shell KYC wizard.
+- `src/app/(client)/applications/[id]/page.tsx` — `max-w-5xl` → `mx-auto w-full max-w-3xl` (mixed timeline + status panel content, not pure form). Three-column status grid still fits inside this.
+- `src/app/(client)/applications/[id]/files/page.tsx` — added `mx-auto` to the existing `max-w-4xl` (data-heavy file list, kept wider).
+- `src/components/client/DashboardClient.tsx` — both branches wrapped in `mx-auto w-full max-w-4xl` (dashboard kept wider per brief — service cards are not pure form).
+- `src/app/(client)/kyc/KycPageClient.tsx` — already used `max-w-2xl mx-auto`, no change.
+
+**Untouched (intentional):**
+- `(client)/layout.tsx` global `<main>` padding — modifying this would also push the dashboard / data pages around and the brief explicitly scopes Batch 1 to wizard / form pages.
+- `/apply` template selector — data-heavy 3-column card grid; brief excludes data-heavy pages.
+- All admin routes — admin scope is out per brief preamble.
+
+**Verified:** `npm run build` clean (lint + type check, no warnings).
+
+---
+
 ### 2026-04-30 — B-047 (Batch 6 — pre-delivery verification + contrast fixes) (Claude Code)
 
 Audited the brief checklist end-to-end and fixed everything that didn't pass on first read.

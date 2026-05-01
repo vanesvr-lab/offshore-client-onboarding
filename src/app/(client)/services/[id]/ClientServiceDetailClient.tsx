@@ -162,7 +162,7 @@ export function ClientServiceDetailClient({
     };
 
     return (
-      <div>
+      <div className="mx-auto w-full max-w-2xl">
         {/* B-047 §4 — Unsaved changes dialog. One Primary (Save & Close = brand-navy);
             "Leave without saving" is destructive-tertiary (text only); "Stay" is the
             secondary outline. */}
@@ -262,7 +262,7 @@ export function ClientServiceDetailClient({
 
   // ─── Landing page ──────────────────────────────────────────────────────────
   return (
-    <div>
+    <div className="mx-auto w-full max-w-2xl">
       {/* B-047 §4.4 — back-navigation: gray-600 link, smaller chevron. */}
       <Link
         href="/dashboard"

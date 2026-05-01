@@ -145,7 +145,7 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
 export function DashboardClient({ userName, firstName, services, allComplete }: Props) {
   if (allComplete) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-4xl space-y-6">
         {/* Greeting — all complete */}
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Welcome {userName}</h1>
@@ -168,7 +168,7 @@ export function DashboardClient({ userName, firstName, services, allComplete }: 
   const greetingLead = firstName ? `Welcome, ${firstName}.` : "Welcome back.";
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-4xl space-y-4">
       {/* Greeting card with downward visual cue */}
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
         <p className="text-sm text-amber-900">

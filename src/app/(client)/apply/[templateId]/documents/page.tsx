@@ -88,7 +88,7 @@ export default function DocumentsPage({
 
   return (
     <WizardLayout currentStep={2}>
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         {/* Linked documents */}
         <Card>
           <CardHeader>
