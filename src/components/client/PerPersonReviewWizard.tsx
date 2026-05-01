@@ -968,27 +968,31 @@ export function PerPersonReviewWizard({
         </button>
 
         {reviewAllContext && (
-          <div className="flex items-center justify-between rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">
-            <p className="text-sm">
+          <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">
+            {/* B-048 §3.2 — single tight line, middot separator, all left-aligned. */}
+            <p className="text-sm flex items-center gap-2 flex-wrap">
               <span className="text-gray-500">
                 Reviewing person {reviewAllContext.current + 1} of {reviewAllContext.total}
               </span>
               {reviewAllContext.personName && (
                 <>
-                  {" "}—{" "}
+                  <span className="text-gray-400" aria-hidden="true">—</span>
                   <span className="font-semibold text-brand-navy">{reviewAllContext.personName}</span>
                 </>
               )}
+              <span className="text-gray-400" aria-hidden="true">·</span>
+              <span className="text-xs text-gray-500">
+                {reviewAllContext.current + 1 < reviewAllContext.total
+                  ? `${reviewAllContext.total - reviewAllContext.current - 1} remaining`
+                  : "Last person"}
+              </span>
             </p>
-            <span className="text-xs text-gray-400">
-              {reviewAllContext.current + 1 < reviewAllContext.total
-                ? `${reviewAllContext.total - reviewAllContext.current - 1} remaining`
-                : "Last person"}
-            </span>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        {/* B-048 §3.1 — stack roles under the name to remove the wide
+            justify-between gap that opened up after the container narrowed. */}
+        <div className="flex flex-col gap-2">
           <h3 className="text-base font-semibold text-brand-navy">{profileName}</h3>
           <RoleToggleRow
             serviceId={serviceId}

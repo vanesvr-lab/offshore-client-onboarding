@@ -38,11 +38,16 @@ export function ServiceWizardStepIndicator({ currentStep, completedSteps, onStep
           );
         })}
       </div>
-      {/* Label + step counter */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-brand-navy">{STEP_LABELS[currentStep]}</p>
-        <p className="text-xs text-gray-400">Step {currentStep + 1} of {STEP_LABELS.length}</p>
-      </div>
+      {/* B-048 §3.3 — combined into a single tight line so the narrowed
+          container doesn't open a wide gap between the section label and the
+          step counter. */}
+      <p className="text-sm flex items-center gap-2 flex-wrap">
+        <span className="font-semibold text-brand-navy">{STEP_LABELS[currentStep]}</span>
+        <span className="text-gray-300" aria-hidden="true">·</span>
+        <span className="text-xs text-gray-500">
+          Step {currentStep + 1} of {STEP_LABELS.length}
+        </span>
+      </p>
     </div>
   );
 }

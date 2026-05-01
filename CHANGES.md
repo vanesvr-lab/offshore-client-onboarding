@@ -15,6 +15,37 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-048 Batch 3 — Stretch-row + name/roles layout (Claude Code)
+
+After Batch 1 narrowed the container, several `justify-between` rows opened
+up oversized horizontal gaps. Tightened the worst offenders. ui-ux-pro-max
+§6 `whitespace-balance`.
+
+**Changes:**
+- `src/components/client/PerPersonReviewWizard.tsx` — name + role chips:
+  - was `flex items-center justify-between gap-3 flex-wrap` (chips floated right)
+  - now `flex flex-col gap-2` (name on top, "Roles: …" stacked underneath)
+- `src/components/client/PerPersonReviewWizard.tsx` — review-all banner:
+  - was two side-by-side blocks ("Reviewing person N of M — Name" left, "K remaining" right)
+  - now one tight inline run: `Reviewing person 1 of 4 — Bruce Banner · 3 remaining`
+- `src/components/kyc/KycStepWizard.tsx` — same banner pattern (used in older single-person flow), same fix applied.
+- `src/components/client/ServiceWizardStepIndicator.tsx` — step label and counter:
+  - was `<p>Section</p> ··· <p>Step X of Y</p>` justify-between
+  - now `Section · Step X of Y` single-line with middot separator, matching the brief's pattern.
+
+**Audited but kept as-is** (gap is small inside the narrowed container, or
+both sides are part of a card-internal row, per brief rule "≤80px gap →
+keep"):
+- `PersonsManager.tsx` person-card accordion header (icons + name vs compliance score + delete — small gap, both sides functional)
+- `ServiceWizardPeopleStep.tsx` "Add role" toolbar with "Review All" button (action button right is fine; row already wraps)
+- All `IndividualKycForm.tsx` / `OrganisationKycForm.tsx` review rows (label vs value rows — narrow, content-tight)
+- `DashboardClient.tsx` service-card header (name vs status badge — tight, intentional)
+- Card-internal rows in `DocumentDetailDialog`, `StageTaskList`, `CompletionChecklist`, `ApplicationStatusPanel`, `OnboardingBanner` (all small fixed-width content on each side)
+
+**Verified:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-048 Batch 2 — Role chips redesign (Claude Code)
 
 Replaced the pill-style role chips on the Review-KYC top row with rectangular

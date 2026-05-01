@@ -431,23 +431,29 @@ export function KycStepWizard({
 
   return (
     <div className="space-y-6">
-      {/* B-046 — review-all walk-through header */}
+      {/* B-046 — review-all walk-through header.
+          B-048 §3.2 — collapsed into a single tight line with a middot
+          separator so the narrowed (max-w-2xl) container doesn't open a
+          big horizontal gap. */}
       {reviewAllContext && (
-        <div className="flex items-center justify-between rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">
-          <p className="text-sm">
-            <span className="text-gray-500">Reviewing person {reviewAllContext.current + 1} of {reviewAllContext.total}</span>
+        <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">
+          <p className="text-sm flex items-center gap-2 flex-wrap">
+            <span className="text-gray-500">
+              Reviewing person {reviewAllContext.current + 1} of {reviewAllContext.total}
+            </span>
             {reviewAllContext.personName && (
               <>
-                {" "}—{" "}
+                <span className="text-gray-400" aria-hidden="true">—</span>
                 <span className="font-semibold text-brand-navy">{reviewAllContext.personName}</span>
               </>
             )}
+            <span className="text-gray-400" aria-hidden="true">·</span>
+            <span className="text-xs text-gray-500">
+              {reviewAllContext.current + 1 < reviewAllContext.total
+                ? `${reviewAllContext.total - reviewAllContext.current - 1} remaining`
+                : "Last person"}
+            </span>
           </p>
-          <span className="text-xs text-gray-400">
-            {reviewAllContext.current + 1 < reviewAllContext.total
-              ? `${reviewAllContext.total - reviewAllContext.current - 1} remaining`
-              : "Last person"}
-          </span>
         </div>
       )}
 
