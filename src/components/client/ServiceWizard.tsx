@@ -8,6 +8,8 @@ import { ServiceWizardStep } from "./ServiceWizardStep";
 import { ServiceWizardPeopleStep } from "./ServiceWizardPeopleStep";
 import { ServiceWizardDocumentsStep } from "./ServiceWizardDocumentsStep";
 import { SubmitValidationDialog } from "./SubmitValidationDialog";
+import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
+import { useAutosave } from "@/lib/hooks/useAutosave";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { DueDiligenceRequirement, DocumentType } from "@/types";
 import type { ClientServiceRecord, ClientServiceDoc, ServicePerson } from "@/app/(client)/services/[id]/page";
@@ -23,6 +25,10 @@ interface Props {
   startStep?: number;
   onClose: (updatedDetails?: Record<string, unknown>, updatedPersons?: ServicePerson[], updatedDocs?: ClientServiceDoc[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  /** B-050 §4.1 — bubbles up `true` when the most recent save attempt
+   * exhausted retries. The parent uses this to reword the unsaved-changes
+   * dialog and disable "Leave without saving" until the save succeeds. */
+  onSaveFailedChange?: (failed: boolean) => void;
   // Lets the parent trigger save+close (e.g. from the unsaved-changes dialog).
   // Resolves true on success, false on save failure.
   saveAndCloseRef?: React.MutableRefObject<(() => Promise<boolean>) | null>;
@@ -66,6 +72,7 @@ export function ServiceWizard({
   startStep = 0,
   onClose,
   onDirtyChange,
+  onSaveFailedChange,
   saveAndCloseRef,
 }: Props) {
   const [currentStep, setCurrentStep] = useState(startStep);
@@ -75,7 +82,13 @@ export function ServiceWizard({
   );
   const [persons, setPersons] = useState<ServicePerson[]>(initialPersons);
   const [documents, setDocuments] = useState<ClientServiceDoc[]>(initialDocuments);
-  const [saving, setSaving] = useState(false);
+  const autosave = useAutosave();
+  const saving = autosave.state === "saving" || autosave.state === "retrying";
+
+  // Bubble up failed-state changes so the parent can adapt the unsaved-changes dialog.
+  useEffect(() => {
+    onSaveFailedChange?.(autosave.state === "failed");
+  }, [autosave.state, onSaveFailedChange]);
   const [hideWizardNav, setHideWizardNav] = useState(false);
   const [validationPhase, setValidationPhase] = useState<"loading" | "valid" | "invalid" | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -153,22 +166,19 @@ export function ServiceWizard({
   }
 
   async function saveServiceDetails(): Promise<boolean> {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/services/${serviceId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ service_details: serviceDetails }),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      return true;
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to save", { position: "top-right" });
-      return false;
-    } finally {
-      setSaving(false);
-    }
+    return autosave.save(async () => {
+      try {
+        const res = await fetch(`/api/services/${serviceId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ service_details: serviceDetails }),
+        });
+        if (!res.ok) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    });
   }
 
   async function handleNext() {
@@ -266,13 +276,23 @@ export function ServiceWizard({
           onGoBack={() => setValidationPhase(null)}
         />
       )}
-      {/* Step indicator */}
-      <ServiceWizardStepIndicator
-        currentStep={currentStep}
-        completedSteps={completedSteps}
-        onStepClick={(s) => setCurrentStep(s)}
-        labels={wizardStepLabels}
-      />
+      {/* Step indicator + autosave indicator */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <ServiceWizardStepIndicator
+            currentStep={currentStep}
+            completedSteps={completedSteps}
+            onStepClick={(s) => setCurrentStep(s)}
+            labels={wizardStepLabels}
+          />
+        </div>
+        <div className="pt-1 shrink-0">
+          <AutosaveIndicator
+            state={autosave.state}
+            onRetry={() => void autosave.retry()}
+          />
+        </div>
+      </div>
 
       {/* Step content */}
       <div className="flex-1 pb-28">

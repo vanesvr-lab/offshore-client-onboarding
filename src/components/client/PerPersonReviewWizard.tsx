@@ -27,7 +27,9 @@ import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { DocumentStatusLegend } from "@/components/shared/DocumentStatusLegend";
+import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { compressIfImage } from "@/lib/imageCompression";
+import { useAutosave } from "@/lib/hooks/useAutosave";
 import { DD_LEVEL_INCLUDES } from "@/lib/utils/dueDiligenceConstants";
 import type {
   KycRecord,
@@ -646,30 +648,26 @@ export function PerPersonReviewWizard({
   const isFirstSubStep = subStepIndex === 0;
 
   // ── Save helpers ──────────────────────────────────────────────────────────
-  const [saving, setSaving] = useState(false);
+  const autosave = useAutosave();
+  const saving = autosave.state === "saving" || autosave.state === "retrying";
   const formRef = useRef(form);
   formRef.current = form;
   const saveKycForm = useCallback(async (): Promise<boolean> => {
     if (!kycRecordId) return true; // no record yet — nothing to save server-side
-    setSaving(true);
-    try {
-      const res = await fetch("/api/profiles/kyc/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kycRecordId, fields: formRef.current }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Save failed");
+    return autosave.save(async () => {
+      try {
+        const res = await fetch("/api/profiles/kyc/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kycRecordId, fields: formRef.current }),
+        });
+        if (!res.ok) return false;
+        return true;
+      } catch {
+        return false;
       }
-      return true;
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }, [kycRecordId]);
+    });
+  }, [kycRecordId, autosave]);
 
   // ── Doc upload handler (mirrors KycDocListPanel) ──────────────────────────
   const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);
@@ -856,7 +854,10 @@ export function PerPersonReviewWizard({
   async function handleBackLinkClick() {
     if (currentSubStep.kind.startsWith("form-")) {
       const ok = await saveKycForm();
-      if (!ok) return;
+      if (!ok) {
+        toast.error("Couldn't save — check your connection and try again before leaving.");
+        return;
+      }
     }
     onExit();
   }
@@ -1101,14 +1102,20 @@ export function PerPersonReviewWizard({
       {/* Persistent shell — top row */}
       <div className="space-y-2">
         {/* B-047 §4.4 — back-navigation demoted to gray-600 link, smaller chevron. */}
-        <button
-          onClick={() => void handleBackLinkClick()}
-          disabled={saving}
-          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 font-medium disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeft className="h-3.5 w-3.5" />}
-          {saving ? "Saving…" : "Back to People"}
-        </button>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <button
+            onClick={() => void handleBackLinkClick()}
+            disabled={saving}
+            className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 font-medium disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeft className="h-3.5 w-3.5" />}
+            {saving ? "Saving…" : "Back to People"}
+          </button>
+          <AutosaveIndicator
+            state={autosave.state}
+            onRetry={() => void autosave.retry()}
+          />
+        </div>
 
         {reviewAllContext && (
           <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">

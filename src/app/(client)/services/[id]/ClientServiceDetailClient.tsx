@@ -125,6 +125,7 @@ export function ClientServiceDetailClient({
   const [wizardMode, setWizardMode] = useState(autoWizardStep != null);
   const [wizardStartStep, setWizardStartStep] = useState(autoWizardStep ?? 0);
   const [wizardIsDirty, setWizardIsDirty] = useState(false);
+  const [wizardSaveFailed, setWizardSaveFailed] = useState(false);
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [savingFromDialog, setSavingFromDialog] = useState(false);
   const wizardSaveAndCloseRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -170,12 +171,17 @@ export function ClientServiceDetailClient({
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 space-y-4">
               <h2 className="font-semibold text-brand-navy text-base">Unsaved changes</h2>
-              <p className="text-sm text-gray-600">You have unsaved changes. What would you like to do?</p>
+              <p className="text-sm text-gray-600">
+                {wizardSaveFailed
+                  ? "You have unsaved changes that haven't been saved to the server. Try Save & Close, or check your connection."
+                  : "You have unsaved changes. What would you like to do?"}
+              </p>
               <div className="flex gap-2 justify-end flex-wrap">
                 <button
                   onClick={() => { setShowUnsavedWarning(false); setWizardMode(false); }}
-                  disabled={savingFromDialog}
-                  className="h-11 px-3 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+                  disabled={savingFromDialog || wizardSaveFailed}
+                  title={wizardSaveFailed ? "Can't leave — your latest save failed. Use Save & Close." : undefined}
+                  className="h-11 px-3 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Leave without saving
                 </button>
@@ -248,6 +254,7 @@ export function ClientServiceDetailClient({
           documentTypes={documentTypes}
           startStep={wizardStartStep}
           onDirtyChange={setWizardIsDirty}
+          onSaveFailedChange={setWizardSaveFailed}
           saveAndCloseRef={wizardSaveAndCloseRef}
           onClose={(updatedDetails, updatedPersons, updatedDocs) => {
             if (updatedDetails) setLiveServiceDetails(updatedDetails);

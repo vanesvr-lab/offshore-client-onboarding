@@ -15,6 +15,47 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 4 — Autosave reliability feedback (Claude Code)
+
+Wraps both wizards' on-navigation save handlers in a state machine with
+visible feedback and exponential-backoff retries (1s / 3s / 9s, 3 attempts
+max). After all retries fail, the user sees a clickable red "Couldn't save
+— retry" indicator, the unsaved-changes dialog disables "Leave without
+saving", and the dialog message switches to "You have unsaved changes that
+haven't been saved to the server. Try Save & Close, or check your
+connection."
+
+**New code:**
+
+- `src/lib/hooks/useAutosave.ts` — `useAutosave()` hook returning
+  `{ state, save, retry, reset }`. State: `idle | saving | saved | failed
+  | retrying`. `save(handler)` runs `handler`, retries with [1000, 3000,
+  9000] ms backoff on failure, falls into `saved` (auto-fades after 2s)
+  or `failed`.
+- `src/components/shared/AutosaveIndicator.tsx` — small `<span>` that
+  renders the state with appropriate colour + icon, becomes a `<button>`
+  in `failed` state so the user can tap to retry.
+
+**Wired into:**
+
+- `src/components/client/PerPersonReviewWizard.tsx` — `saveKycForm` now
+  routes through `autosave.save(...)`. The `Back to People` link is
+  blocked while saving and the indicator renders next to it on the same
+  row. On hard failure, `handleBackLinkClick` toasts a clearer message
+  before bailing out.
+- `src/components/client/ServiceWizard.tsx` — `saveServiceDetails` now
+  routes through `autosave.save(...)`. New `onSaveFailedChange` prop
+  bubbles the failed-state up to the parent. Indicator renders to the
+  right of the step indicator.
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx` —
+  consumes `onSaveFailedChange` (`wizardSaveFailed` state). The unsaved-
+  changes dialog now reads its message from that flag and disables the
+  "Leave without saving" button when the most recent save failed.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-050 Batch 3 — Tax ID dedup + Add Person modal optionalisation (Claude Code)
 
 **§3.1 — Tax ID duplicate.** `tax_identification_number` rendered in two
