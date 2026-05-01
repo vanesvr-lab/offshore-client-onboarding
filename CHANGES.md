@@ -15,6 +15,27 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-047 (Batch 2 — Declarations Yes/No placement) (Claude Code)
+
+Lands the agreed design decision: Yes/No answers go directly under the question, no edge-to-edge gap. Replaces the cramped right-pinned radio pair with a 44pt segmented pill.
+
+**2.1 — `<YesNoToggle>` segmented pill:**
+- `src/components/shared/YesNoToggle.tsx` (new): two side-by-side pill buttons, ~120px wide × 44px tall (h-11), 8px gap between (`touch-spacing`). Selected = filled `bg-brand-navy text-white border-brand-navy`. Unselected = `bg-white border-gray-300 text-gray-700 hover:bg-gray-50`. Focus ring 2px brand-navy. `role="radiogroup"` + `aria-label` on wrapper, `role="radio"` + `aria-checked` per pill. Keyboard: arrow keys flip selection (and move focus), space/enter selects, single tab stop into the group per WAI-ARIA radiogroup pattern. **No red used for "No"** (`color-not-only`).
+
+**2.2 — DeclarationsStep restructure:**
+- `src/components/kyc/steps/DeclarationsStep.tsx`: removed the bordered `<Card>` wrappers around PEP and Legal-Issues blocks (kills card-on-card). Each question is now a vertically stacked block: 16px title (`text-base font-semibold text-gray-900`) + red `*` for required, 14px description (`text-sm text-gray-600`), then `<YesNoToggle>` directly below. 32–40px gap between questions (`space-y-10` on container, `space-y-3` inside each block).
+- Removed the inline `YesNoRadio` sub-component — now using the shared `<YesNoToggle>`.
+- PEP details / legal-issues details Textareas now constrained to `max-w-2xl` + `min-h-[120px]` from `formWidths.longFormTextareaMin`. Persistent helper text under tax ID instead of placeholder-as-helper.
+
+**2.3 — Tax ID + EDD text fields:**
+- Tax ID input now uses `formWidths.identifier` (`md:w-56`) instead of full-width. Persistent helper line: "Your jurisdiction's tax identifier (e.g. NI number, SSN, TIN)." Added `inputMode="text"` and `autoComplete="off"`.
+- EDD textareas (`relationship_history`, `geographic_risk_assessment`) constrained to `max-w-2xl` + `min-h-[120px]` so long text remains readable on wide screens.
+
+**Build:**
+- `npm run build` clean.
+
+---
+
 ### 2026-04-30 — B-047 (Batch 1 — form design system foundations) (Claude Code)
 
 Token / utility / shared-component pass — establishes the patterns later batches reuse. **No user-facing visual changes in this batch.**
