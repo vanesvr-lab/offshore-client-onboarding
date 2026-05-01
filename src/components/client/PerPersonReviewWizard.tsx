@@ -1234,8 +1234,9 @@ export function PerPersonReviewWizard({
         {currentSubStep.kind.startsWith("form-") && renderFormContent()}
       </div>
 
-      {/* B-047 §4 — Centered three-tier button bar (44pt). One Primary per screen. */}
-      <div className="pt-2 flex items-center justify-center gap-3">
+      {/* B-047 §4 — Centered button bar (44pt). One Primary per screen.
+          B-050 §6.2 — doc sub-steps now also surface a "Save & Close" button. */}
+      <div className="pt-2 flex items-center justify-center gap-3 flex-wrap">
         <Button
           onClick={() => void goBack()}
           disabled={saving}
@@ -1245,6 +1246,17 @@ export function PerPersonReviewWizard({
           <ChevronLeft className="h-4 w-4" />
           Back
         </Button>
+
+        {/* Doc-list extra: "Save & Close" exits the wizard / walk entirely. */}
+        {currentSubStep.kind === "doc-list" && (
+          <Button
+            onClick={() => onComplete()}
+            disabled={saving}
+            className="h-11 px-5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+          >
+            Save & Close
+          </Button>
+        )}
 
         {showMiddleButton && (
           <Button

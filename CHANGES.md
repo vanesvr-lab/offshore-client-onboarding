@@ -15,6 +15,51 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 6 — Completion %, Save & Close, View Summary (Claude Code)
+
+**§6.1 — Completion percentage on the person card** was already wired in
+B-050 Batch 5 alongside the chip strip — the new `computePersonCompletion`
+helper is the single source of truth. The card now shows a green check on
+the avatar at 100% (existing kycPct bar continues to render the
+percentage). `calcKycPct` (which only counted free-text KYC fields and
+ignored documents entirely) is gone; the new formula is
+`(required_docs_uploaded + required_form_fields_filled) /
+(required_docs_total + required_form_fields_total)`.
+
+**§6.2 — Save & Close on every per-person KYC sub-step.** The doc-list
+sub-steps now surface a `Save & Close` button between Back and the Upload-
+later button, matching the form sub-steps. Clicking it calls `onComplete`,
+which exits the wizard back to the People & KYC list (or out of the
+review-all walk in walk mode — same as the form sub-step's existing
+behaviour). Form sub-steps already had this button.
+
+**§6.3 — View Summary button on the person card.** Each card now renders
+a tertiary `View Summary` button between `Review KYC` and the Request /
+Resend invite. Clicking it opens a modal containing the same `<ReviewStep>`
+in read-only display mode, with a tooltip "See everything you've entered
+so far." The dialog has Close + "Open Review KYC to edit" actions; the
+ReviewStep's jump-to-edit links bridge into the wizard automatically.
+
+**Code changes:**
+
+- `src/components/client/PerPersonReviewWizard.tsx` — extra Save & Close
+  button when `currentSubStep.kind === "doc-list"`. `onComplete` is the
+  same exit handler that was previously only wired for form sub-step
+  Save & Close.
+- `src/components/client/ServiceWizardPeopleStep.tsx`:
+    - `PersonCard`: new `isComplete` + `onViewSummary` props. Avatar
+      gets a green `<CheckCircle2>` overlay at 100%. Action row gets
+      `View Summary` between Review KYC and Request/Resend.
+    - New `viewingSummaryRoleId` state + `<ViewSummaryDialog>`
+      component, plus a local `mapToReviewKycRecord(person)` helper
+      mirroring the one in `PerPersonReviewWizard`.
+    - `ViewSummaryDialog` renders `<ReviewStep>` read-only with a
+      Close button and an "Open Review KYC to edit" escape hatch.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-050 Batch 5 — Review jump-to-edit + person nav chips (Claude Code)
 
 **§5.1 — Jump-to-edit links on the Review screens.** The per-person
