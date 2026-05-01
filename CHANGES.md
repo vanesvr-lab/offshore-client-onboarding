@@ -15,6 +15,46 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-048 Batch 4 — Field-width audit (Claude Code)
+
+Walked every client wizard page after the container narrowed. Tightened
+the dynamic service form (which drives the apply step 1 service-specific
+fields) and lifted the `formWidths` cap on long text fields to 448px
+(`max-w-md`) so they don't fight the new `max-w-2xl` page width.
+
+**Files:**
+
+- `src/lib/form-widths.ts`:
+  - `email`: `md:w-80` (320px) → `w-full md:max-w-md` (up to 448px) per B-048 §4.1.
+  - `fullName`: `md:w-80` → `w-full md:max-w-md` (matches the table).
+  - All other widths kept (postal w-24, phone w-48, date w-40, country w-60, state w-52, city w-64, currency w-32, identifier w-56, longFormTextareaMin min-h-[120px]).
+
+- `src/components/shared/DynamicServiceForm.tsx` — content-aware widths on the template-driven fields powering /apply step 1:
+  - `text` / `date` / `number`:
+    - `date` → `w-full md:w-40`
+    - `number` → `w-full md:w-32`
+    - `text` with `full_width` → `w-full md:max-w-md`
+    - `text` (col-span-1) → fills its half-grid cell as before.
+  - `textarea` (col-span-2): explicit `w-full min-h-[120px]` per brief §4.1.
+  - `select` trigger: `w-full md:max-w-md` when `full_width`, else `w-full md:w-60`.
+  - `text_array` inputs (e.g. "Proposed company names" — 3 stacked options): each `w-full md:max-w-md` per brief §4.2.
+  - `multi_select_country` (e.g. "Countries of operations"): wrapper `w-full md:max-w-md` per brief §4.2.
+
+**Verified per page** (against the brief table):
+
+- `/apply/[templateId]/details` Primary Contact card: name `md:w-80`, role `md:w-64`, email `md:w-80`, phone `md:w-48` (already correct from B-047, untouched).
+- `/apply/[templateId]/details` service-specific fields (DynamicServiceForm): now content-cap'd as above.
+- `/apply/[templateId]/details` Business Information card (admin-completed, muted): kept at existing widths — section is read-only-by-design and visually separated.
+- `/apply/[templateId]/documents`: upload tiles inherit container width; with max-w-2xl that's already comfortable, no change needed.
+- `/apply/[templateId]/review`: read-only summary, no inputs to width.
+- IdentityStep — already on the formWidths system; `email` + `fullName` automatically pick up the new max-w-md cap.
+- FinancialStep / DeclarationsStep / KycStepWizard contact step: already wired through formWidths (work_phone, work_email, occupation, tax_identification_number all match the brief table).
+- ContactDetailsSubStep in PerPersonReviewWizard: email `md:w-80` + phone `md:w-48` row already correct (B-047).
+
+**Verified:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-048 Batch 3 — Stretch-row + name/roles layout (Claude Code)
 
 After Batch 1 narrowed the container, several `justify-between` rows opened

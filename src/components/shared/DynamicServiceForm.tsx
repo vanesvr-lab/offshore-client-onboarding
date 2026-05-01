@@ -89,7 +89,16 @@ export function DynamicServiceForm({
     switch (field.type) {
       case "text":
       case "date":
-      case "number":
+      case "number": {
+        // B-048 §4 — content-aware widths inside the narrowed container.
+        // - date / number stay narrow (160 / 128 px target via formWidths-style caps)
+        // - long text / full-width text capped at max-w-md (448px) so it never
+        //   stretches across the entire 2-col-span row.
+        const inputWidth =
+          field.type === "date" ? "w-full md:w-40"
+          : field.type === "number" ? "w-full md:w-32"
+          : field.full_width ? "w-full md:max-w-md"
+          : "w-full";
         return (
           <div key={field.key} className={`space-y-1.5 ${field.full_width ? "col-span-2" : ""}`}>
             <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
@@ -108,9 +117,11 @@ export function DynamicServiceForm({
               onChange={(e) => onChange(field.key, e.target.value)}
               placeholder={field.placeholder}
               readOnly={readOnly}
+              className={inputWidth}
             />
           </div>
         );
+      }
 
       case "textarea":
         return (
@@ -120,12 +131,14 @@ export function DynamicServiceForm({
               {field.required && " *"}
               {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
+            {/* B-048 §4 — long-form textarea fills the container, min-h 120 */}
             <Textarea
               value={(val as string) ?? ""}
               onChange={(e) => onChange(field.key, e.target.value)}
               rows={3}
               placeholder={field.placeholder}
               readOnly={readOnly}
+              className="w-full min-h-[120px]"
             />
           </div>
         );
@@ -133,6 +146,9 @@ export function DynamicServiceForm({
       case "select": {
         const isOther = (val as string) === "Other";
         const otherKey = `${field.key}_other`;
+        // B-048 §4 — select dropdowns capped to a sensible content width so
+        // they don't span the full col-span-2 row.
+        const selectWidth = field.full_width ? "w-full md:max-w-md" : "w-full md:w-60";
         return (
           <div key={field.key} className={`space-y-1.5 ${field.full_width ? "col-span-2" : ""}`}>
             <Label className={`text-sm flex items-center gap-1 ${isEmptyRequired(field) ? "text-red-600" : ""}`}>
@@ -145,7 +161,7 @@ export function DynamicServiceForm({
               onValueChange={(v) => onChange(field.key, v ?? "")}
               disabled={readOnly}
             >
-              <SelectTrigger>
+              <SelectTrigger className={selectWidth}>
                 <SelectValue placeholder={`Select ${field.label.toLowerCase()}…`} />
               </SelectTrigger>
               <SelectContent>
@@ -209,6 +225,8 @@ export function DynamicServiceForm({
               {field.label}
               {field.required && " *"}
             </Label>
+            {/* B-048 §4 — each option capped at max-w-md so the column of
+                inputs stays compact (e.g. proposed company names). */}
             <div className="space-y-2">
               {padded.map((v: string, i: number) => (
                 <Input
@@ -221,6 +239,7 @@ export function DynamicServiceForm({
                     onChange(field.key, next);
                   }}
                   readOnly={readOnly}
+                  className="w-full md:max-w-md"
                 />
               ))}
             </div>
@@ -237,12 +256,16 @@ export function DynamicServiceForm({
               {field.required && " *"}
               {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
-            <MultiSelectCountry
-              value={arr}
-              onChange={(countries) => onChange(field.key, countries)}
-              disabled={readOnly}
-              placeholder={field.placeholder ?? "Search countries…"}
-            />
+            {/* B-048 §4 — capped at max-w-md so the chip area doesn't sprawl
+                across the full container width. */}
+            <div className="w-full md:max-w-md">
+              <MultiSelectCountry
+                value={arr}
+                onChange={(countries) => onChange(field.key, countries)}
+                disabled={readOnly}
+                placeholder={field.placeholder ?? "Search countries…"}
+              />
+            </div>
           </div>
         );
       }

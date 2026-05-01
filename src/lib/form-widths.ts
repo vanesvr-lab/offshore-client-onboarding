@@ -29,10 +29,10 @@ export const formWidths = {
   currency: "md:w-32",
   /** Tax ID, passport number, NI number */
   identifier: "md:w-56",
-  /** Email address */
-  email: "md:w-80",
-  /** Full name (first + last) */
-  fullName: "md:w-80",
+  /** Email address — up to 448px (B-048 §4.1) */
+  email: "w-full md:max-w-md",
+  /** Full name (first + last) — up to 448px (B-048 §4.1) */
+  fullName: "w-full md:max-w-md",
   /** Address line 1, descriptive text — full width */
   full: "w-full",
   /** Long-form text area minimum height */
