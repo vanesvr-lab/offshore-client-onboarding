@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-047 (Batch 3 — Role-chip toggle redesign) (Claude Code)
+
+Replaces the B-046 status-style role chips (`[Director ✓]`) with explicit checkbox-style toggles prefixed by "Roles:" so the affordance reads as **a control**, not as a status badge. Toggle behaviour, optimistic update, last-role confirmation, and per-role palette are all preserved from B-046.
+
+**3.1 — `RoleToggleRow` reskin in `src/components/client/PerPersonReviewWizard.tsx`:**
+- Outer wrapper now starts with a `Roles:` prefix label (gray-600, 14px font-medium, vertically centered with the chips), followed by an inline-flex group of pill buttons.
+- Each pill: `h-11` (44pt touch target), `px-3` horizontal padding, `gap-2` between chips (`touch-spacing`), `rounded-full`, focus ring 2px brand-navy with offset.
+- Inside the chip: `<CheckSquare>` (filled) when selected / `<Square>` (outlined gray-400) when unselected, 6px gap, role label. Label is **identical in both states** — does not flip to "Add Director" / "Remove Director" (visually noisy, confusing for keyboard nav).
+- Active state keeps the B-046 role palette (Director blue, Shareholder purple, UBO yellow). Inactive state is a single neutral outline (`bg-white border-gray-300 text-gray-700 hover:bg-gray-50`) so the visual difference reads as "checked / unchecked" not "different status colour".
+- Loading: while a toggle is in flight, the chip's icon swaps to a spinner (no layout shift) and the button is disabled.
+- A11y: `role="checkbox"` + `aria-checked` per chip; `aria-label="Toggle Director role"` etc.; keyboard tab to chip, space toggles via the standard button activation. (`aria-pressed` removed — invalid attribute for `role="checkbox"` per WAI-ARIA, `aria-checked` already conveys state.)
+
+**3.2 — Preserved from B-046:**
+- UBO chip hidden when `record_type !== 'individual'` (org persons only have Director / Shareholder).
+- Last-role removal still triggers `confirm("… will have no role on this application. Continue?")`.
+- Optimistic update + rollback on save failure unchanged.
+- The bottom Roles list that B-046 removed is **not** reintroduced — top row is the only place to see/edit roles.
+
+**Build:**
+- `npm run build` clean — 1 ESLint warning (`aria-pressed not supported by role checkbox`) caught and fixed before commit.
+
+---
+
 ### 2026-04-30 — B-047 (Batch 2 — Declarations Yes/No placement) (Claude Code)
 
 Lands the agreed design decision: Yes/No answers go directly under the question, no edge-to-edge gap. Replaces the cramped right-pinned radio pair with a 44pt segmented pill.

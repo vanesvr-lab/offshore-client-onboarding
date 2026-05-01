@@ -7,9 +7,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  CheckSquare,
   Eye,
   FileText,
   Loader2,
+  Square,
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,20 +49,17 @@ const ROLE_LABELS: Record<ServicePersonRole, string> = {
   ubo: "UBO",
 };
 
-const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; inactive: string }> = {
-  director: {
-    active: "bg-blue-100 text-blue-700 border-blue-300",
-    inactive: "bg-transparent text-blue-600/70 border-blue-200 hover:bg-blue-50",
-  },
-  shareholder: {
-    active: "bg-purple-100 text-purple-700 border-purple-300",
-    inactive: "bg-transparent text-purple-600/70 border-purple-200 hover:bg-purple-50",
-  },
-  ubo: {
-    active: "bg-amber-100 text-amber-800 border-amber-300",
-    inactive: "bg-transparent text-amber-700/70 border-amber-200 hover:bg-amber-50",
-  },
+// B-047 — Active state keeps the B-046 role palette (Director blue,
+// Shareholder purple, UBO yellow). Inactive state is the shared neutral
+// outline so the visual affordance is "checkbox-style toggle", not a
+// badge that shifts hue with status.
+const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string }> = {
+  director: { active: "bg-blue-100 text-blue-700 border-blue-300" },
+  shareholder: { active: "bg-purple-100 text-purple-700 border-purple-300" },
+  ubo: { active: "bg-amber-100 text-amber-800 border-amber-300" },
 };
+
+const ROLE_INACTIVE_TONE = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
 
 const KYC_DOC_CATEGORIES = ["identity", "financial", "compliance"] as const;
 type KycDocCategory = (typeof KYC_DOC_CATEGORIES)[number];
@@ -265,26 +264,38 @@ function RoleToggleRow({
   }
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {visibleRoles.map((role) => {
-        const active = !!rowFor(role);
-        const tone = ROLE_TOGGLE_TONE[role];
-        const busy = pending.has(role);
-        return (
-          <button
-            key={role}
-            type="button"
-            onClick={() => void toggle(role)}
-            disabled={busy}
-            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-              active ? tone.active : tone.inactive
-            }`}
-          >
-            {ROLE_LABELS[role]}
-            {active && <CheckCircle2 className="h-3 w-3" />}
-          </button>
-        );
-      })}
+    <div className="inline-flex items-center gap-3 flex-wrap">
+      <span className="text-sm font-medium text-gray-600 select-none">Roles:</span>
+      <div className="inline-flex items-center gap-2 flex-wrap">
+        {visibleRoles.map((role) => {
+          const active = !!rowFor(role);
+          const tone = ROLE_TOGGLE_TONE[role];
+          const busy = pending.has(role);
+          return (
+            <button
+              key={role}
+              type="button"
+              role="checkbox"
+              aria-checked={active}
+              aria-label={`Toggle ${ROLE_LABELS[role]} role`}
+              onClick={() => void toggle(role)}
+              disabled={busy}
+              className={`inline-flex items-center gap-1.5 h-11 px-3 text-sm font-medium rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed ${
+                active ? tone.active : ROLE_INACTIVE_TONE
+              }`}
+            >
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : active ? (
+                <CheckSquare className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Square className="h-4 w-4 text-gray-400" aria-hidden="true" />
+              )}
+              <span>{ROLE_LABELS[role]}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
