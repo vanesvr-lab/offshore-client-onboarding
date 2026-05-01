@@ -11,6 +11,7 @@ import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog"
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { VerificationResult } from "@/types";
 import {
   Select,
@@ -279,7 +280,7 @@ export function DocumentUploadWidget({
                     ))}
                   </div>
                   {vr.confidence_score > 0 && (
-                    <p className="text-gray-400 mt-1">Confidence: {vr.confidence_score}%</p>
+                    <p className="text-gray-400 mt-1">Confidence: {normalizeConfidence(vr.confidence_score)}%</p>
                   )}
                 </div>
               )}

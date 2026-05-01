@@ -15,6 +15,45 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 2 — Confidence display fix + 2.2 obsoleted by B-049 (Claude Code)
+
+**§2.1 — Confidence percentage cap.** The AI prompt schema returns
+`confidence_score` in the 0-100 range, but four display sites were
+`Math.round(confidence * 100)` on top of that, producing 3000–5500%
+displays. Centralised the math in a single helper and used it everywhere.
+
+**§2.2 — Skipped (obsoleted by B-049 Batch 3).** B-049 reworked the
+verification timing so context-dependent doc types (CV, source-of-funds
+evidence, employer letter, etc.) are flagged `ai_deferred=true` on the
+document_types table. The upload route now skips the immediate AI run for
+those, and the wizard re-fires AI via `/api/documents/{id}/verify-with-context`
+on the form-financial / form-declarations save once the comparison context
+exists. Net effect: "applicant name not provided" / "context missing" flags
+should not surface on the client UI any more, so the §2.2 stop-gap (render
+context-missing failures as Pending instead of Flagged) is no longer
+needed.
+
+**Code changes:**
+
+- `src/lib/ai/confidence.ts` — new `normalizeConfidence(raw)` helper.
+  Clamps to 0-100, rounds to int, defensively rescales any value in the
+  fractional 0-1 range. Plus `formatConfidence(raw)` for `42%` strings.
+- `src/components/admin/DocumentViewer.tsx` — confidence bar + label use
+  `normalizeConfidence(result.confidence_score)`. Color thresholds
+  (`>=75` / `>=50`) now run on the normalised value.
+- `src/components/admin/DocumentStatusRow.tsx` — drop the `* 100`,
+  call the helper.
+- `src/components/admin/ExtractedFieldsPanel.tsx` — same.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — same.
+- `src/components/shared/DocumentDetailDialog.tsx` — same.
+- `src/components/shared/DocumentUploadWidget.tsx` — defensive clamp on
+  the already-correctly-scaled value.
+- `src/components/client/DocumentUploadStep.tsx` — same.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-050 Batch 1 — Upload button + uploaded-row affordance (Claude Code)
 
 Replaces the amber outlined "Upload" button (which read as a status badge

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { VerificationResult } from "@/types";
 
 interface ExtractedFieldsPanelProps {
@@ -32,7 +33,7 @@ export function ExtractedFieldsPanel({ verificationResult }: ExtractedFieldsPane
         )}
         AI extracted data
         {confidence_score !== undefined && (
-          <span className="ml-1 text-gray-400">({Math.round(confidence_score * 100)}% confidence)</span>
+          <span className="ml-1 text-gray-400">({normalizeConfidence(confidence_score)}% confidence)</span>
         )}
       </button>
 

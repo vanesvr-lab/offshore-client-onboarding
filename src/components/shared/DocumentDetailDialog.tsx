@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { compressIfImage } from "@/lib/imageCompression";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { DocumentUpdateRequest } from "@/app/(admin)/admin/services/[id]/page";
 import type { VerificationResult } from "@/types";
 
@@ -340,7 +341,7 @@ export function DocumentDetailDialog({
                   <div className="flex items-center gap-3 flex-wrap mb-2">
                     {confidence !== undefined && (
                       <span className="text-sm font-medium text-gray-700">
-                        Confidence: {Math.round(confidence * 100)}%
+                        Confidence: {normalizeConfidence(confidence)}%
                       </span>
                     )}
                     {ruleResults.length > 0 && (

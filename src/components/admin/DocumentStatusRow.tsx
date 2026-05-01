@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { ExtractedFieldsPanel } from "@/components/admin/ExtractedFieldsPanel";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { DocumentRecord, DocumentType, VerificationResult } from "@/types";
 
 type DocumentWithType = DocumentRecord & {
@@ -227,7 +228,7 @@ export function DocumentStatusRow({
         ) : (
           <>
             {confidence !== undefined && (
-              <span className="text-xs text-gray-400">{Math.round(confidence * 100)}%</span>
+              <span className="text-xs text-gray-400">{normalizeConfidence(confidence)}%</span>
             )}
             {flags.length > 0 && (
               <span className="text-xs text-amber-600">{flags.length} flag{flags.length > 1 ? "s" : ""}</span>

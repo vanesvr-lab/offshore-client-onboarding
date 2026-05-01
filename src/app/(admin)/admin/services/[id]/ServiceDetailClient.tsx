@@ -30,6 +30,7 @@ import { AuditTrail } from "@/components/admin/AuditTrail";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { VerificationResult, VerificationStatus } from "@/types";
 import {
   calcSectionCompletion,
@@ -1576,7 +1577,7 @@ function RichDocumentCard({
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-xs text-gray-400 font-medium">AI:</span>
             {confidence !== undefined && (
-              <span className="text-xs font-medium text-gray-700">{Math.round(confidence * 100)}% confidence</span>
+              <span className="text-xs font-medium text-gray-700">{normalizeConfidence(confidence)}% confidence</span>
             )}
             {ruleResults.length > 0 && (
               <span className={`text-xs font-medium ${passedRules === ruleResults.length ? "text-green-600" : "text-red-600"}`}>

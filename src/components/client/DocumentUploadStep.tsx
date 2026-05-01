@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ACCEPTED_FILE_TYPES, MAX_FILE_SIZE } from "@/lib/utils/constants";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { DocumentRequirement, DocumentUpload } from "@/types";
 
 interface DocumentUploadStepProps {
@@ -238,7 +239,7 @@ export function DocumentUploadStep({
           {upload.verification_result &&
             upload.verification_result.confidence_score > 0 && (
               <p className="text-xs text-gray-400">
-                AI confidence: {upload.verification_result.confidence_score}%
+                AI confidence: {normalizeConfidence(upload.verification_result.confidence_score)}%
               </p>
             )}
         </div>

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronUp, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { DocumentUpload, VerificationResult } from "@/types";
 
 interface DocumentViewerProps {
@@ -69,18 +70,23 @@ export function DocumentViewer({ upload, signedUrl }: DocumentViewerProps) {
           </CardHeader>
           {result ? (
             <CardContent className="space-y-4 text-sm">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">Confidence score</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${result.confidence_score >= 75 ? "bg-green-500" : result.confidence_score >= 50 ? "bg-amber-500" : "bg-red-500"}`}
-                      style={{ width: `${result.confidence_score}%` }}
-                    />
+              {(() => {
+                const conf = normalizeConfidence(result.confidence_score);
+                return (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Confidence score</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full ${conf >= 75 ? "bg-green-500" : conf >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${conf}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium">{conf}%</span>
+                    </div>
                   </div>
-                  <span className="text-xs font-medium">{result.confidence_score}%</span>
-                </div>
-              </div>
+                );
+              })()}
               {Object.keys(result.extracted_fields).length > 0 && (
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Extracted fields</p>
