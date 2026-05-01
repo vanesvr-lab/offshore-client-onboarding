@@ -11,9 +11,13 @@ interface Props {
   result: ValidationResult | null;
   onConfirmSubmit: () => void;
   onGoBack: () => void;
+  /** B-050 §5.1 — when supplied, each "invalid" issue becomes a clickable
+   * jump-to-edit link. Closes the dialog and navigates to the relevant
+   * wizard step. */
+  onJumpToSection?: (section: string) => void;
 }
 
-export function SubmitValidationDialog({ phase, result, onConfirmSubmit, onGoBack }: Props) {
+export function SubmitValidationDialog({ phase, result, onConfirmSubmit, onGoBack, onJumpToSection }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
@@ -64,15 +68,34 @@ export function SubmitValidationDialog({ phase, result, onConfirmSubmit, onGoBac
               Please fix the issues below before submitting.
             </p>
             <ul className="space-y-2 max-h-60 overflow-y-auto">
-              {result.issues.map((issue, i) => (
-                <li key={i} className="flex gap-2 text-sm">
-                  <XCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium text-gray-700">{issue.section}: </span>
-                    <span className="text-gray-600">{issue.message}</span>
-                  </div>
-                </li>
-              ))}
+              {result.issues.map((issue, i) => {
+                const canJump = !!onJumpToSection;
+                return (
+                  <li key={i} className="text-sm">
+                    {canJump ? (
+                      <button
+                        type="button"
+                        onClick={() => onJumpToSection?.(issue.section)}
+                        className="flex gap-2 w-full text-left rounded-md p-1 -m-1 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-red-500"
+                      >
+                        <XCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-medium text-blue-700 underline decoration-dotted underline-offset-2">{issue.section}: </span>
+                          <span className="text-gray-600">{issue.message}</span>
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="flex gap-2">
+                        <XCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-medium text-gray-700">{issue.section}: </span>
+                          <span className="text-gray-600">{issue.message}</span>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             <Button
               className="w-full bg-brand-navy hover:bg-brand-blue"

@@ -1,7 +1,15 @@
 "use client";
 
-import { CheckCircle2, XCircle, FileText } from "lucide-react";
+import { CheckCircle2, XCircle, FileText, Pencil } from "lucide-react";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
+
+/** B-050 §5.1 — sub-step kinds the per-person review can jump back to. */
+export type ReviewJumpTarget =
+  | { kind: "form-identity" }
+  | { kind: "form-residential-address" }
+  | { kind: "form-financial" }
+  | { kind: "form-declarations" }
+  | { kind: "doc-list"; category: string };
 
 interface ReviewStepProps {
   kycRecord: KycRecord;
@@ -10,6 +18,9 @@ interface ReviewStepProps {
   dueDiligenceLevel: DueDiligenceLevel;
   requirements: DueDiligenceRequirement[];
   form: Partial<KycRecord>;
+  /** B-050 §5.1 — when provided, section headers + missing items become clickable
+   * jump-to-edit links that navigate to the relevant sub-step. */
+  onJumpTo?: (target: ReviewJumpTarget) => void;
 }
 
 function SectionRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -43,12 +54,38 @@ function BoolRow({ label, value }: { label: string; value: boolean | null | unde
   );
 }
 
+function SectionHeader({
+  title,
+  onEdit,
+}: {
+  title: string;
+  onEdit?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-2">
+      <h3 className="text-sm font-semibold text-brand-navy">{title}</h3>
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500 rounded"
+          aria-label={`Edit ${title}`}
+        >
+          <Pencil className="h-3 w-3" aria-hidden="true" />
+          Edit
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ReviewStep({
   documents,
   documentTypes,
   dueDiligenceLevel,
   requirements,
   form,
+  onJumpTo,
 }: ReviewStepProps) {
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
   const isEdd = dueDiligenceLevel === "edd";
@@ -57,7 +94,12 @@ export function ReviewStep({
   const documentReqs = requirements.filter((r) => r.requirement_type === "document" && r.document_type_id);
   const docStatuses = documentReqs.map((req) => {
     const uploaded = documents.some((d) => d.document_type_id === req.document_type_id && d.is_active !== false);
-    return { name: req.label, uploaded };
+    const docType = documentTypes.find((dt) => dt.id === req.document_type_id);
+    return {
+      name: req.label,
+      uploaded,
+      category: docType?.category ?? "additional",
+    };
   });
 
   // If no requirements available, fall back to level-based static list
@@ -69,7 +111,7 @@ export function ReviewStep({
     fallbackDocNames.forEach((name) => {
       const docType = documentTypes.find((dt) => dt.name === name);
       const uploaded = docType ? documents.some((d) => d.document_type_id === docType.id) : false;
-      docStatuses.push({ name, uploaded });
+      docStatuses.push({ name, uploaded, category: docType?.category ?? "additional" });
     });
   }
 
@@ -84,7 +126,10 @@ export function ReviewStep({
 
       {/* Identity Section */}
       <div className="rounded-lg border bg-white p-4 space-y-1">
-        <h3 className="text-sm font-semibold text-brand-navy mb-2">Your Identity</h3>
+        <SectionHeader
+          title="Your Identity"
+          onEdit={onJumpTo ? () => onJumpTo({ kind: "form-identity" }) : undefined}
+        />
         <SectionRow label="Full legal name" value={form.full_name as string} />
         <SectionRow label="Aliases / other names" value={form.aliases as string} />
         <SectionRow label="Date of birth" value={form.date_of_birth as string} />
@@ -100,7 +145,10 @@ export function ReviewStep({
       {/* B-049 §2 — Residential Address (separate sub-step). Falls back to the
           legacy `address` text if the structured fields haven't been filled. */}
       <div className="rounded-lg border bg-white p-4 space-y-1">
-        <h3 className="text-sm font-semibold text-brand-navy mb-2">Residential Address</h3>
+        <SectionHeader
+          title="Residential Address"
+          onEdit={onJumpTo ? () => onJumpTo({ kind: "form-residential-address" }) : undefined}
+        />
         {form.address_line_1 || form.address_city || form.address_country ? (
           <>
             <SectionRow label="Address line 1" value={form.address_line_1 as string} />
@@ -117,7 +165,10 @@ export function ReviewStep({
 
       {/* Financial / Professional Section */}
       <div className="rounded-lg border bg-white p-4 space-y-1">
-        <h3 className="text-sm font-semibold text-brand-navy mb-2">Professional & Financial</h3>
+        <SectionHeader
+          title="Professional & Financial"
+          onEdit={onJumpTo ? () => onJumpTo({ kind: "form-financial" }) : undefined}
+        />
         <SectionRow label="Current employer" value={form.employer as string} />
         <SectionRow
           label="Years in current role"
@@ -153,7 +204,10 @@ export function ReviewStep({
       {/* Declarations Section (CDD/EDD only) */}
       {isCdd && (
         <div className="rounded-lg border bg-white p-4 space-y-1">
-          <h3 className="text-sm font-semibold text-brand-navy mb-2">Declarations</h3>
+          <SectionHeader
+            title="Declarations"
+            onEdit={onJumpTo ? () => onJumpTo({ kind: "form-declarations" }) : undefined}
+          />
           <BoolRow label="Politically exposed person" value={form.is_pep as boolean | null} />
           {form.is_pep && (
             <SectionRow label="PEP details" value={form.pep_details as string} />
@@ -176,18 +230,36 @@ export function ReviewStep({
       <div className="rounded-lg border bg-white p-4">
         <h3 className="text-sm font-semibold text-brand-navy mb-3">Documents</h3>
         <div className="space-y-2">
-          {docStatuses.map(({ name, uploaded }) => (
-            <div key={name} className="flex items-center gap-2">
-              {uploaded ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-              )}
-              <FileText className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-              <span className={`text-xs ${uploaded ? "text-gray-700" : "text-red-500"}`}>{name}</span>
-              {!uploaded && <span className="text-xs text-red-400 italic ml-auto">Missing</span>}
-            </div>
-          ))}
+          {docStatuses.map(({ name, uploaded, category }) => {
+            const canJump = !uploaded && !!onJumpTo;
+            const Tag: keyof JSX.IntrinsicElements = canJump ? "button" : "div";
+            const baseClasses = "flex items-center gap-2 w-full text-left";
+            const interactiveClasses = canJump
+              ? " hover:bg-red-50 rounded px-1 -mx-1 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-red-500"
+              : "";
+            return (
+              <Tag
+                key={name}
+                {...(canJump
+                  ? {
+                      type: "button" as const,
+                      onClick: () => onJumpTo?.({ kind: "doc-list", category }),
+                      "aria-label": `Edit — upload ${name}`,
+                    }
+                  : {})}
+                className={baseClasses + interactiveClasses}
+              >
+                {uploaded ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                )}
+                <FileText className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                <span className={`text-xs ${uploaded ? "text-gray-700" : "text-red-500"}`}>{name}</span>
+                {!uploaded && <span className="text-xs text-red-400 italic ml-auto">Missing</span>}
+              </Tag>
+            );
+          })}
         </div>
       </div>
 
@@ -196,9 +268,24 @@ export function ReviewStep({
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
           <p className="text-sm font-medium text-red-700 mb-1">Before submitting, please upload:</p>
           <ul className="list-disc list-inside space-y-0.5">
-            {missingDocs.map(({ name }) => (
-              <li key={name} className="text-xs text-red-600">{name}</li>
-            ))}
+            {missingDocs.map(({ name, category }) => {
+              const canJump = !!onJumpTo;
+              return (
+                <li key={name} className="text-xs text-red-600">
+                  {canJump ? (
+                    <button
+                      type="button"
+                      onClick={() => onJumpTo?.({ kind: "doc-list", category })}
+                      className="underline hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-red-500 rounded"
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    name
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

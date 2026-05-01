@@ -274,6 +274,20 @@ export function ServiceWizard({
           result={validationResult}
           onConfirmSubmit={handleConfirmSubmit}
           onGoBack={() => setValidationPhase(null)}
+          onJumpToSection={(section) => {
+            const map: Record<string, number> = {
+              "Company Setup": 0,
+              "Financial": 1,
+              "Banking": 2,
+              "People & KYC": 3,
+              "Documents": 4,
+            };
+            const target = map[section];
+            if (target != null) {
+              setValidationPhase(null);
+              setCurrentStep(target);
+            }
+          }}
         />
       )}
       {/* Step indicator + autosave indicator */}

@@ -15,6 +15,66 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 5 — Review jump-to-edit + person nav chips (Claude Code)
+
+**§5.1 — Jump-to-edit links on the Review screens.** The per-person
+Review sub-step now exposes inline "Edit" links on every section header
+(Identity, Residential Address, Professional & Financial, Declarations).
+Each missing document row in the Documents section becomes a clickable
+button — clicking jumps to the relevant doc-list sub-step. Each item in
+the bottom "Before submitting, please upload" warning is also a link.
+After a fix the user continues forward through the wizard normally
+(option B per the brief — they don't bounce back to Review).
+
+The outer SubmitValidationDialog also gets jump-to-section: each issue
+in the "X issues need attention" list is now a clickable button that
+closes the dialog and navigates to the relevant wizard step.
+
+**§5.2 — Person navigation chip strip.** In Review-All-KYC mode, the old
+"Reviewing person 1 of 4 — Bruce Banner — 3 remaining" banner is replaced
+by a horizontally-scrollable chip strip with one chip per person, ← / →
+arrows, completion dots (out of 10), green check on 100%, and active-
+chip highlight. Clicking a chip jumps the wizard to that person at
+sub-step 1 after a silent best-effort save of the current sub-step.
+
+**New code:**
+
+- `src/lib/utils/personCompletion.ts` — `computePersonCompletion()`
+  returns `{ docsFilled, docsTotal, fieldsFilled, fieldsTotal, percentage,
+  isComplete }`. Single source of truth for per-person KYC completion
+  used by both the chip strip (B-050 §5.2) and the person card progress
+  bar (B-050 §6.1). Fields tracked match the Review step's "Missing"
+  warnings (Identity / Residential / Professional / Declarations
+  depending on DD level).
+- `ReviewJumpTarget` type exported from `ReviewStep.tsx` for the
+  jump-to-edit callback contract.
+- `PersonChipStrip` component (in-file, bottom of `PerPersonReviewWizard.tsx`)
+  — chips, arrows, dots, focus ring.
+
+**Wired into:**
+
+- `src/components/kyc/steps/ReviewStep.tsx` — new `onJumpTo` prop;
+  section headers + missing items render as buttons when set.
+- `src/components/client/PerPersonReviewWizard.tsx` — `reviewAllContext`
+  gains optional `chips` + `onJumpToPerson`. When `chips` is present, the
+  legacy banner is replaced by `<PersonChipStrip>`. ReviewStep is
+  rendered with an `onJumpTo` that maps target → `setSubStepIndex`.
+- `src/components/client/ServiceWizardPeopleStep.tsx` — pre-computes
+  the chip data via `computePersonCompletion` for every person in the
+  Review-all walk, plus an `onJumpToPerson` that switches the active
+  role row + index. Replaces the old `calcKycPct` heuristic on the
+  person cards with the new helper, and shows a green check overlay on
+  the avatar at 100%.
+- `src/components/client/SubmitValidationDialog.tsx` — issues list
+  becomes clickable when `onJumpToSection` is provided.
+- `src/components/client/ServiceWizard.tsx` — wires the section→step
+  map (`Company Setup`/0, `Financial`/1, `Banking`/2, `People & KYC`/3,
+  `Documents`/4) into `onJumpToSection`.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-050 Batch 4 — Autosave reliability feedback (Claude Code)
 
 Wraps both wizards' on-navigation save handlers in a state machine with

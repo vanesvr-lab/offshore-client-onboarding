@@ -502,6 +502,17 @@ interface Props {
     total: number;
     personName?: string | null;
     onAdvance: () => void;
+    /** B-050 §5.2 — chip strip data. When provided, the in-shell banner is
+     * replaced with a per-person chip strip + arrows. */
+    chips?: {
+      id: string;
+      name: string;
+      completionPct: number;
+      isComplete: boolean;
+    }[];
+    /** Called when the user clicks a chip / arrow. Saves the current sub-step
+     * silently first (no dialog) — see brief §5.2. */
+    onJumpToPerson?: (index: number) => void;
   };
 }
 
@@ -1058,6 +1069,15 @@ export function PerPersonReviewWizard({
             dueDiligenceLevel={dueDiligenceLevel}
             requirements={requirements}
             form={form}
+            onJumpTo={(target) => {
+              const idx = subSteps.findIndex((s) => {
+                if (target.kind === "doc-list" && s.kind === "doc-list") {
+                  return s.category === target.category;
+                }
+                return s.kind === target.kind;
+              });
+              if (idx >= 0) setSubStepIndex(idx);
+            }}
           />
         );
       case "form-org-details":
@@ -1117,7 +1137,19 @@ export function PerPersonReviewWizard({
           />
         </div>
 
-        {reviewAllContext && (
+        {reviewAllContext && reviewAllContext.chips && reviewAllContext.onJumpToPerson ? (
+          <PersonChipStrip
+            chips={reviewAllContext.chips}
+            current={reviewAllContext.current}
+            onJump={async (idx) => {
+              if (idx === reviewAllContext.current) return;
+              if (currentSubStep.kind.startsWith("form-")) {
+                await saveKycForm(); // best-effort silent save before jump
+              }
+              reviewAllContext.onJumpToPerson?.(idx);
+            }}
+          />
+        ) : reviewAllContext ? (
           <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-2">
             {/* B-048 §3.2 — single tight line, middot separator, all left-aligned. */}
             <p className="text-sm flex items-center gap-2 flex-wrap">
@@ -1138,7 +1170,7 @@ export function PerPersonReviewWizard({
               </span>
             </p>
           </div>
-        )}
+        ) : null}
 
         {/* B-048 §3.1 — stack roles under the name to remove the wide
             justify-between gap that opened up after the container narrowed. */}
@@ -1379,6 +1411,96 @@ function ContactDetailsSubStep({
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── PersonChipStrip ─────────────────────────────────────────────────────────
+
+function PersonChipStrip({
+  chips,
+  current,
+  onJump,
+}: {
+  chips: { id: string; name: string; completionPct: number; isComplete: boolean }[];
+  current: number;
+  onJump: (index: number) => void;
+}) {
+  const canPrev = current > 0;
+  const canNext = current < chips.length - 1;
+  return (
+    <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => canPrev && onJump(current - 1)}
+          disabled={!canPrev}
+          className="h-9 w-9 inline-flex items-center justify-center rounded-md text-gray-600 hover:bg-white hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500"
+          aria-label="Previous person"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <div className="flex-1 overflow-x-auto">
+          <div className="inline-flex items-center gap-2 min-w-full">
+            {chips.map((chip, i) => {
+              const isActive = i === current;
+              const dotsTotal = 10;
+              const filledDots = Math.round((chip.completionPct / 100) * dotsTotal);
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => onJump(i)}
+                  aria-current={isActive ? "step" : undefined}
+                  aria-label={`${chip.name} — ${chip.isComplete ? "complete" : `${chip.completionPct}% complete`}`}
+                  className={`inline-flex items-center gap-2 h-9 px-3 rounded-md text-sm font-medium border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500 shrink-0 ${
+                    isActive
+                      ? "bg-brand-navy text-white border-brand-navy"
+                      : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className="truncate max-w-[12rem]">{chip.name}</span>
+                  {chip.isComplete ? (
+                    <CheckCircle2
+                      className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-green-500"}`}
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span
+                      className={`flex items-center gap-[2px] shrink-0 ${isActive ? "text-white/80" : "text-gray-400"}`}
+                      aria-hidden="true"
+                    >
+                      {Array.from({ length: dotsTotal }).map((_, d) => (
+                        <span
+                          key={d}
+                          className={`inline-block h-1.5 w-1.5 rounded-full ${
+                            d < filledDots
+                              ? isActive
+                                ? "bg-white"
+                                : "bg-amber-500"
+                              : isActive
+                                ? "bg-white/30"
+                                : "bg-gray-300"
+                          }`}
+                        />
+                      ))}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => canNext && onJump(current + 1)}
+          disabled={!canNext}
+          className="h-9 w-9 inline-flex items-center justify-center rounded-md text-gray-600 hover:bg-white hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500"
+          aria-label="Next person"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

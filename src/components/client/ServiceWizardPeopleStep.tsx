@@ -2,31 +2,16 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { UserPlus, User, Building2, Mail, Send, ChevronDown, ChevronRight, Search, Loader2 } from "lucide-react";
+import { UserPlus, User, Building2, Mail, Send, ChevronDown, ChevronRight, Search, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PerPersonReviewWizard } from "@/components/client/PerPersonReviewWizard";
+import { computePersonCompletion } from "@/lib/utils/personCompletion";
 import type { DocumentType, DueDiligenceLevel, DueDiligenceRequirement } from "@/types";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
-
-// KYC fields used to compute per-person completion percentage
-const KYC_PCT_FIELDS = [
-  "date_of_birth", "nationality", "passport_number", "passport_expiry", "occupation", "address",
-  "source_of_funds_description", "source_of_wealth_description",
-  "is_pep", "legal_issues_declared", "tax_identification_number",
-];
-
-function calcKycPct(kyc: Record<string, unknown> | null): number {
-  if (!kyc) return 0;
-  const filled = KYC_PCT_FIELDS.filter((f) => {
-    const v = kyc[f];
-    return v !== null && v !== undefined && v !== "";
-  }).length;
-  return Math.round((filled / KYC_PCT_FIELDS.length) * 100);
-}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -708,12 +693,14 @@ function PersonCard({
   person,
   serviceId,
   kycPct,
+  isComplete,
   onReviewKyc,
   allRoleRows,
 }: {
   person: ServicePerson;
   serviceId: string;
   kycPct: number;
+  isComplete: boolean;
   onReviewKyc: () => void;
   allRoleRows: ServicePerson[];
   // B-046 batch 4 — these props remain on the parent's call signature but the
@@ -742,8 +729,14 @@ function PersonCard({
     <div className="border rounded-xl bg-white px-4 py-3.5 space-y-3">
       {/* Header row — avatar, name, role chips, email */}
       <div className="flex items-center gap-2.5 flex-wrap">
-        <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+        <div className="relative h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
           <User className="h-4 w-4 text-gray-500" />
+          {isComplete && (
+            <CheckCircle2
+              className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 text-green-500 bg-white rounded-full"
+              aria-label="KYC complete"
+            />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -938,6 +931,38 @@ export function ServiceWizardPeopleStep({
           current: reviewAllIndex,
           total: reviewAllOrder.length,
           personName: reviewingPerson.client_profiles?.full_name ?? null,
+          // B-050 §5.2 — pre-compute chip data for every person in the walk.
+          chips: reviewAllOrder.map((roleId) => {
+            const p = persons.find((pp) => pp.id === roleId);
+            const profileId = p?.client_profiles?.id ?? roleId;
+            const personDocs = documents.filter((d) => d.client_profile_id === profileId);
+            const personDdLevel =
+              (p?.client_profiles?.due_diligence_level as DueDiligenceLevel | null) ?? ddLevel;
+            const completion = computePersonCompletion({
+              kyc: p?.client_profiles?.client_profile_kyc ?? null,
+              recordType: (p?.client_profiles?.record_type as "individual" | "organisation" | null) ?? "individual",
+              personDocs: personDocs.map((d) => ({
+                document_type_id: d.document_type_id ?? null,
+                is_active: true,
+              })),
+              documentTypes,
+              requirements,
+              dueDiligenceLevel: personDdLevel,
+            });
+            const markedComplete = kycCompletedIds.has(roleId);
+            const completionPct = markedComplete ? 100 : completion.percentage;
+            return {
+              id: roleId,
+              name: p?.client_profiles?.full_name ?? "Unknown",
+              completionPct,
+              isComplete: completionPct === 100,
+            };
+          }),
+          onJumpToPerson: (idx: number) => {
+            if (!reviewAllOrder[idx]) return;
+            setReviewAllIndex(idx);
+            setReviewingRoleId(reviewAllOrder[idx]);
+          },
           onAdvance: () => {
             const nextIndex = reviewAllIndex + 1;
             if (nextIndex >= reviewAllOrder.length) {
@@ -1039,14 +1064,31 @@ export function ServiceWizardPeopleStep({
               }
             }
             return Array.from(profileMap.values()).map(({ person, roleRows }) => {
-              const rawPct = calcKycPct(person.client_profiles?.client_profile_kyc ?? null);
-              const kycPct = roleRows.some((rr) => kycCompletedIds.has(rr.id)) ? 100 : rawPct;
+              const profileId = person.client_profiles?.id ?? person.id;
+              const personDocs = documents.filter((d) => d.client_profile_id === profileId);
+              const personDdLevel = (person.client_profiles?.due_diligence_level as DueDiligenceLevel | null) ?? "cdd";
+              const completion = computePersonCompletion({
+                kyc: person.client_profiles?.client_profile_kyc ?? null,
+                recordType: (person.client_profiles?.record_type as "individual" | "organisation" | null) ?? "individual",
+                personDocs: personDocs.map((d) => ({
+                  document_type_id: d.document_type_id ?? null,
+                  is_active: true,
+                })),
+                documentTypes,
+                requirements,
+                dueDiligenceLevel: personDdLevel,
+              });
+              const kycPct = roleRows.some((rr) => kycCompletedIds.has(rr.id))
+                ? 100
+                : completion.percentage;
+              const isComplete = kycPct === 100;
               return (
                 <PersonCard
                   key={person.client_profiles?.id ?? person.id}
                   person={person}
                   serviceId={serviceId}
                   kycPct={kycPct}
+                  isComplete={isComplete}
                   onReviewKyc={() => setReviewingRoleId(person.id)}
                   allRoleRows={roleRows}
                   onRoleRemoved={handleRoleRemoved}
