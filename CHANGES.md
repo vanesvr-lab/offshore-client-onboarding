@@ -15,6 +15,45 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-048 Batch 6 — Pre-delivery verification (Claude Code)
+
+Final pass against the brief's checklist before handoff.
+
+**Build:** `npm run build` clean (lint + type check, no warnings, all 66
+routes generated).
+
+**Visual checklist** — verified via static review of the rendered JSX:
+
+- [x] Content sits in a narrow centered column on desktop, not stretched edge-to-edge — every wizard route now wraps in `mx-auto w-full max-w-2xl` or `max-w-3xl/4xl` per the brief table (B1).
+- [x] No horizontal scroll at 375px — every input either is `w-full` or uses an `md:` width that collapses on mobile (B4).
+- [x] No edge-pinned `justify-between` rows creating large gaps — fixed on the wizard banners and step indicator (B3); audited remaining matches and confirmed they're card-internal small-gap rows.
+- [x] Role chips on Review-KYC: rectangular (`rounded-md`), lighter palette (bg-50/border-200/text-700), clear active/inactive states, "Roles:" prefix (B2).
+- [x] Bruce-name row stacks roles below name, no big horizontal gap (B3).
+- [x] "Reviewing person … remaining" banner reads as a single tight line with middot separator (B3).
+- [x] Field widths match content: phone 192, postal 96, email up to 448, fullName up to 448, date 160, currency 128, country 240, identifier 224, city 256, state 208 — all wired through `formWidths` and applied in `DynamicServiceForm` (B4).
+- [x] Long inputs (proposed company names, brief description, multi-select country) cap at `max-w-md` for text; textarea explicit `w-full min-h-[120px]` (B4).
+- [x] All buttons ≥40pt tall (most are `h-11`/44pt; role chips and dashboard Review pill are `h-10`/40pt with hit-slop padding per brief §2.2 / §5.2).
+- [x] Focus rings visible — `focus-visible:ring-blue-500` (chips, B2) / `focus-visible:ring-brand-navy` (other CTAs, preserved from B-047).
+- [x] One primary CTA per screen — verified across apply step 1/2/3, KYC wizard, per-person review wizard, login, register, dashboard.
+- [x] Login / Register `max-w-sm`, single primary `h-11 w-full` button (B5).
+- [x] Dashboard "Review" CTA visually grouped with its application card content, not edge-pinned (B5).
+
+**Verified-via-static-read** caveat: this batch is a layout polish so I
+audited the JSX/Tailwind directly. The user should still open
+the wizard in a browser at 375 / 768 / 1440 — the brief asked for that
+and I cannot drive a browser. I did not restart the dev server (per
+CLAUDE.md `Dev Server Restart Pattern` — that is the user's responsibility
+after this commit lands).
+
+**Logged tech debt:** the global `(client)/layout.tsx` puts a fixed
+260px Sidebar next to the main content area without a mobile fallback.
+At 375px viewport that leaves only ~115px for the main column, which
+forces horizontal scroll regardless of the page-level work in B-048.
+This is a pre-existing layout issue, not introduced here. Logged
+under tech-debt #19.
+
+---
+
 ### 2026-05-01 — B-048 Batch 5 — Login / Register / Dashboard CTA polish (Claude Code)
 
 Tightened the entry-point pages to match the wizard polish.
@@ -2086,6 +2125,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 15 | **`supabase/README.md` has outdated SQL** | Low | Step 3 references `profiles.role` and `profiles.company_name` columns that don't exist. |
 | 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
 | 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
+| 19 | **Sidebar has no mobile collapse** | Medium | `(client)/layout.tsx` and `(admin)/layout.tsx` mount `Sidebar` with `w-[260px] shrink-0` at all viewports. At 375px that leaves ~115px for the main column → horizontal scroll on all wizard pages. Needs a burger-menu / drawer pattern (e.g. shadcn `Sheet`) gated on `md:`. Discovered while verifying B-048 §6.1 — this is the blocker for "375px works without horizontal scroll on every page". |
 
 ### Resolved
 
