@@ -667,7 +667,7 @@ function InviteDialog({
           </p>
 
           <div className="space-y-1.5">
-            <Label className="text-sm">Email address <span className="text-red-400">*</span></Label>
+            <Label className="text-sm font-medium text-gray-900">Email address <span className="text-red-600" aria-hidden="true">*</span></Label>
             <Input
               type="email"
               value={email}

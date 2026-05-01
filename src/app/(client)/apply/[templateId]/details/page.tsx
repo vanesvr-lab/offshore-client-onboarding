@@ -271,15 +271,15 @@ export default function BusinessDetailsPage({
             {currentAppId && clientId ? (
               <PersonsManager applicationId={currentAppId} clientId={clientId} />
             ) : (
-              <p className="text-sm text-gray-400">Save your details first to add persons.</p>
+              <p className="text-sm text-gray-600">Save your details first to add persons.</p>
             )}
           </CardContent>
         </Card>
 
         {/* Admin-completed section — shown at bottom, muted */}
         <div className="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-          <Info className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-gray-500">
+          <Info className="h-4 w-4 text-gray-500 shrink-0 mt-0.5" aria-hidden="true" />
+          <p className="text-sm text-gray-700">
             The following business details will be completed by the admin team after your submission.
           </p>
         </div>

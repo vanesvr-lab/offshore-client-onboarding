@@ -24,7 +24,7 @@ export function ValidatedLabel({ htmlFor, label, required, state, className = ""
     >
       <span>{label ?? children}</span>
       {required && (
-        <span className={state === "error" ? "text-red-400" : "text-gray-400"}>*</span>
+        <span className="text-red-600" aria-hidden="true">*</span>
       )}
       {state === "filled" && (
         <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
@@ -45,7 +45,13 @@ export function FieldWrapper({ state, children, className = "" }: FieldWrapperPr
     <div className={`space-y-1.5 ${className}`}>
       {children}
       {state === "error" && (
-        <p className="text-xs text-red-500">This field is required</p>
+        <p
+          role="alert"
+          aria-live="polite"
+          className="text-xs text-red-600"
+        >
+          This field is required.
+        </p>
       )}
     </div>
   );

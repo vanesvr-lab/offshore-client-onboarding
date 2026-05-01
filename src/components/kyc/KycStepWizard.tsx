@@ -82,8 +82,8 @@ function OrgField({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-sm">
-        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      <Label className="text-sm font-medium text-gray-900">
+        {label}{required && <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>}
       </Label>
       {type === "textarea" ? (
         <Textarea
@@ -117,7 +117,7 @@ function CompanyDetailsStep({
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Company Details</h2>
-        <p className="text-sm text-gray-500">Provide information about the company entity.</p>
+        <p className="text-sm text-gray-600">Provide information about the company entity.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <OrgField label="Company name" fieldKey="full_name" form={form} onChange={onChange} required placeholder="Legal entity name" />
@@ -156,7 +156,7 @@ function CorporateTaxStep({
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Tax / Financial</h2>
-        <p className="text-sm text-gray-500">Provide tax residency and financial details.</p>
+        <p className="text-sm text-gray-600">Provide tax residency and financial details.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <OrgField label="Tax residency jurisdiction" fieldKey="jurisdiction_tax_residence" form={form} onChange={onChange} placeholder="e.g. Mauritius" />
@@ -187,7 +187,7 @@ function OrgReviewStep({ form }: { form: Partial<KycRecord> }) {
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Review & Submit</h2>
-        <p className="text-sm text-gray-500">Review the information below before submitting.</p>
+        <p className="text-sm text-gray-600">Review the information below before submitting.</p>
       </div>
       <div className="divide-y divide-gray-100">
         {rows.map(({ label, value }) => (

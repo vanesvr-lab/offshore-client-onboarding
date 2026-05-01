@@ -79,7 +79,7 @@ export function ReviewStep({
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Review & Submit</h2>
-        <p className="text-sm text-gray-500">Review your information below. Once submitted, our compliance team will review your profile.</p>
+        <p className="text-sm text-gray-600">Review your information below. Once submitted, our compliance team will review your profile.</p>
       </div>
 
       {/* Identity Section */}

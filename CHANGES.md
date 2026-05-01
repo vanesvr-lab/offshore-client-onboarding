@@ -15,6 +15,48 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-047 (Batch 6 — pre-delivery verification + contrast fixes) (Claude Code)
+
+Audited the brief checklist end-to-end and fixed everything that didn't pass on first read.
+
+**Forms — pass items:**
+- Required fields: red `*` after label everywhere it's `required`. After this batch every asterisk uses red-600 (was red-400 in several spots — sub-WCAG-AA on white). `aria-required="true"` on every required input across the touched files.
+- Top-aligned labels — no placeholder-as-label anywhere. Verified across login, register, apply step 1, IdentityStep, FinancialStep, DeclarationsStep, AddPersonModal, ContactDetails sub-step, KycStepWizard org steps, PerPersonReviewWizard org steps.
+- Field widths match content (Batch 5 wired the formWidths system across every form).
+- Errors render below the field: `text-red-600`, `role="alert"`, `aria-live="polite"`. Both `<FormField>` (new) and the existing `<FieldWrapper>` now use this exact pattern. Generic "This field is required." → message is from FieldWrapper for legacy call sites; FormField passes per-field validator messages from `lib/validation.ts`.
+- Inline validation triggers on blur (`useFieldValidation.markTouched` is called from `onBlur`, not `onChange`).
+- No card-on-card nesting in client forms — DeclarationsStep ripped its bordered cards in Batch 2; ReviewStep's bordered summary panels are read-only summary cards (acceptable per §1.3).
+- Spacing rhythm 16/24/48: confirmed in DeclarationsStep `space-y-10`, FinancialStep `space-y-6` between sections, IdentityStep `space-y-6`, etc.
+- Semantic `type=` + `autocomplete=` on every input (Batch 5).
+
+**Buttons — pass items:**
+- All buttons ≥44pt (`h-11`) tall, ≥8px gap between (`gap-2` / `gap-3`). Audited in ServiceWizardNav, KycStepWizard, PerPersonReviewWizard, AddPersonModal, unsaved-changes dialog, login, register, apply step 1.
+- One Primary per screen — verified.
+- Back is text-link tertiary — verified.
+
+**Specific design decisions — pass items:**
+- Yes/No declarations stack below question (B2).
+- Role chips: "Roles:" prefix + `<CheckSquare>`/`<Square>` icons, label unchanged across states (B3).
+- Top-left "Back to …" links demoted to gray-600 (B4).
+
+**Accessibility — pass items:**
+- Focus rings: `Input` primitive already wires `focus-visible:border-brand-navy focus-visible:ring-2 focus-visible:ring-brand-navy/20`. Buttons use `focus-visible:ring-3 focus-visible:ring-ring/50`. Custom YesNoToggle / role chips set `focus-visible:ring-2 focus-visible:ring-brand-navy focus-visible:ring-offset-2`.
+- All icon-only interactive elements (role chips, back links with chevron, YesNoToggle) carry an `aria-label`.
+- Color is never the only signal (errors carry text + `role="alert"`; success uses `<CheckSquare>` + label; the YesNoToggle uses textual "Yes"/"No" labels).
+
+**Fixes applied during this batch:**
+- `src/components/shared/ValidatedLabel.tsx`: required asterisk red-400 → red-600 (`color-contrast`); helper-error text red-500 → red-600 with `role="alert"` + `aria-live="polite"`. Asterisk now `aria-hidden="true"` since the same info is conveyed by `aria-required` on the input.
+- `src/components/kyc/KycStepWizard.tsx` (`OrgField`): label `text-sm` → `text-sm font-medium text-gray-900`; asterisk red-400 → red-600 + `aria-hidden`.
+- `src/components/client/PerPersonReviewWizard.tsx` (`OrgField`): same upgrades. Org-step descriptions gray-500 → gray-600.
+- `src/components/client/ServiceWizardPeopleStep.tsx`: residual "Email address *" label red-400 → red-600 + `text-sm font-medium text-gray-900`.
+- `src/app/(client)/apply/[templateId]/details/page.tsx`: empty-state placeholder gray-400 → gray-600; admin-info banner intro gray-500 → gray-700.
+- `src/components/kyc/steps/IdentityStep.tsx`, `KycStepWizard.tsx`, `PerPersonReviewWizard.tsx` (org steps), `ReviewStep.tsx`: step / page intro descriptions gray-500 → gray-600 (`contrast-readability`).
+
+**Build:**
+- `npm run build` clean — exit 0, no lint warnings, no type errors.
+
+---
+
 ### 2026-04-30 — B-047 (Batch 5 — apply system to existing client forms) (Claude Code)
 
 Refactors every client-facing form to use the Batch 1 patterns (FormField wrapper for new pages, formWidths for inline width tokens, validation lib for inline-on-blur, semantic input types + autocomplete attributes, top-aligned labels with red required asterisks).

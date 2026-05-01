@@ -248,7 +248,7 @@ export function IdentityStep({
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">Your Identity</h2>
-        <p className="text-sm text-gray-500">Please provide your identity information and upload your passport and proof of address.</p>
+        <p className="text-sm text-gray-600">Please provide your identity information and upload your passport and proof of address.</p>
       </div>
 
       {bannerState === "running" && (
