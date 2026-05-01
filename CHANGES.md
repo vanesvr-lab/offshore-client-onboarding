@@ -15,6 +15,49 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-049 Batch 3 — Manual professional details + deferred CV verification (Claude Code)
+
+Replaces the brittle "AI runs at upload time before context exists, flags
+'name not provided'" pattern with two changes:
+
+1. The Financial / Professional Details sub-step now collects structured,
+   manual-entry fields (employer, years in role, total years experience,
+   industry, source-of-funds dropdown).
+2. Document types whose AI verification depends on cross-form context are
+   flagged `ai_deferred=true`. The upload route skips the immediate AI run
+   for those; the wizard's per-person Save & Continue handler re-fires AI
+   via a new `/api/documents/[id]/verify-with-context` endpoint with the
+   full context built fresh from `client_profile_kyc`.
+
+**⚠ Schema migration required before testing:**
+
+1. Apply `supabase/migrations/008-professional-details-and-deferred-ai.sql`
+   (psql or Supabase SQL editor — adds `employer`, `years_in_role`,
+   `years_total_experience`, `industry`, `source_of_funds_type`,
+   `source_of_funds_other` to both KYC tables, plus `ai_deferred` boolean
+   on `document_types`).
+2. Hit `POST /api/admin/migrations/seed-deferred-ai-doc-types` once as
+   admin to flip `ai_deferred=true` on the context-dependent doc types
+   (CV, source-of-funds evidence, source-of-wealth evidence, bank
+   reference, employer letter, adverse media report). Idempotent.
+
+**Code changes:**
+
+- `supabase/migrations/008-professional-details-and-deferred-ai.sql`: new migration.
+- `src/app/api/admin/migrations/seed-deferred-ai-doc-types/route.ts`: admin endpoint flipping `ai_deferred` on the brief's list of doc types.
+- `src/types/index.ts`: `KycRecord` + `ClientProfileKyc` gain the six professional-details columns; `DocumentType.ai_deferred?: boolean`.
+- `src/lib/ai/verifyDocument.ts`: new exported `VerificationContext` interface — applicant + declared-* fields. Prompt now renders any non-empty context line in stable order so the AI can compare against name, occupation, employer, declared sources, etc. Old `{ contact_name, business_name, ubo_data }` shape still satisfies the type.
+- `src/app/api/services/[id]/documents/upload/route.ts`: skips the fire-and-forget AI run when `ai_deferred=true`. Doc lands in `verification_status='pending'` until the wizard re-triggers it.
+- `src/app/api/documents/[id]/verify-with-context/route.ts`: new POST endpoint. Builds the rich context from `client_profile_kyc` (or `services + client_profiles` for application-scope docs), runs `verifyDocument`, persists `verification_status` + `verification_result`. 45s timeout; failure persists `manual_review`.
+- `src/components/kyc/steps/FinancialStep.tsx`: Professional Details section now has manual-entry fields (occupation, employer, years_in_role, years_total_experience, industry dropdown). Source of funds becomes a required dropdown with "Other → free text" reveal; the legacy textarea remains as optional supporting context.
+- `src/components/kyc/steps/ReviewStep.tsx`: Financial section renders the new structured fields and a sensible "Other — {text}" rendering for source of funds.
+- `src/components/client/PerPersonReviewWizard.tsx`: new `triggerDeferredVerifications()` helper finds every `verification_status='pending'` doc whose type has `ai_deferred=true` and POSTs to `/api/documents/{id}/verify-with-context` in parallel; refreshes local doc state from the server. Fired after the user saves on `form-financial` (professional details + source of funds) and `form-declarations` (source of wealth) — the two checkpoints where context becomes complete enough to evaluate the deferred docs.
+- `src/components/client/ServicePersonsManager.tsx`: same `mapToKycRecord` patch (new fields).
+
+**Build:** `npm run build` clean (lint + type check).
+
+---
+
 ### 2026-05-01 — B-049 Batch 2 — Residential address as its own sub-step (Claude Code)
 
 Split address out of the Identity sub-step. Identity now contains only

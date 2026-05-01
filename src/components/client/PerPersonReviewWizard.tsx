@@ -170,6 +170,12 @@ function mapToKycRecord(person: ServicePerson): KycRecord {
     passport_number: (kyc.passport_number as string | null) ?? null,
     passport_expiry: (kyc.passport_expiry as string | null) ?? null,
     occupation: (kyc.occupation as string | null) ?? null,
+    employer: (kyc.employer as string | null) ?? null,
+    years_in_role: (kyc.years_in_role as number | null) ?? null,
+    years_total_experience: (kyc.years_total_experience as number | null) ?? null,
+    industry: (kyc.industry as string | null) ?? null,
+    source_of_funds_type: (kyc.source_of_funds_type as string | null) ?? null,
+    source_of_funds_other: (kyc.source_of_funds_other as string | null) ?? null,
     legal_issues_declared: (kyc.legal_issues_declared as boolean | null) ?? null,
     legal_issues_details: (kyc.legal_issues_details as string | null) ?? null,
     tax_identification_number: (kyc.tax_identification_number as string | null) ?? null,
@@ -734,12 +740,67 @@ export function PerPersonReviewWizard({
     }
   }
 
+  // ── Deferred AI verification ──────────────────────────────────────────────
+  // B-049 §3.2 — context-dependent doc types (CV, source-of-funds evidence,
+  // bank reference, employer letter, adverse media) skip AI on upload. Once
+  // the wizard collects the cross-form context (name, occupation, employer,
+  // declared sources, …) we re-trigger AI on every still-pending matching
+  // doc. Fired after the form-financial sub-step (professional details +
+  // source of funds) and after form-declarations (source of wealth).
+  const docTypesById = useMemo(() => {
+    const m = new Map<string, DocumentType>();
+    for (const dt of documentTypes) m.set(dt.id, dt);
+    return m;
+  }, [documentTypes]);
+
+  async function triggerDeferredVerifications() {
+    const pending = profileDocs.filter((d) => {
+      if (d.verification_status !== "pending") return false;
+      const dt = d.document_type_id ? docTypesById.get(d.document_type_id) : null;
+      return dt?.ai_deferred === true;
+    });
+    if (pending.length === 0) return;
+    // Fire all in parallel; on completion, refresh local doc state from the
+    // server so the UI reflects the new verification_status.
+    const results = await Promise.allSettled(
+      pending.map((d) =>
+        fetch(`/api/documents/${d.id}/verify-with-context`, { method: "POST" })
+      )
+    );
+    // Best-effort refresh of any docs that got a 200 — pull the document row
+    // and patch local state. Errors are silent here; AI failures fall back to
+    // 'manual_review' on the server side.
+    for (let i = 0; i < pending.length; i++) {
+      const r = results[i];
+      if (r.status !== "fulfilled" || !r.value.ok) continue;
+      try {
+        const fresh = await fetch(`/api/documents/${pending[i].id}`);
+        if (!fresh.ok) continue;
+        const data = (await fresh.json()) as { document?: ClientServiceDoc };
+        if (!data.document) continue;
+        setLocalDocs((prev) => {
+          const without = prev.filter((d) => d.id !== pending[i].id);
+          return [...without, data.document as ClientServiceDoc];
+        });
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   // ── Sub-step transitions ──────────────────────────────────────────────────
   async function goNext() {
     // Save form data on form sub-steps before advancing
     if (currentSubStep.kind.startsWith("form-")) {
       const ok = await saveKycForm();
       if (!ok) return;
+    }
+    // Re-run deferred AI verifications once cross-form context is in place.
+    if (
+      currentSubStep.kind === "form-financial" ||
+      currentSubStep.kind === "form-declarations"
+    ) {
+      void triggerDeferredVerifications();
     }
     if (isLastSubStep) {
       // Either single-mode "Save & Close" or review-all "Save & Finish"
@@ -755,6 +816,12 @@ export function PerPersonReviewWizard({
     if (currentSubStep.kind.startsWith("form-")) {
       const ok = await saveKycForm();
       if (!ok) return;
+    }
+    if (
+      currentSubStep.kind === "form-financial" ||
+      currentSubStep.kind === "form-declarations"
+    ) {
+      void triggerDeferredVerifications();
     }
     if (reviewAllContext && isLastSubStep) {
       // Review-all final sub-step: advance the walk OR finish.

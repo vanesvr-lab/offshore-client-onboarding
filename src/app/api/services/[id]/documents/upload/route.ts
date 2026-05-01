@@ -77,12 +77,16 @@ export async function POST(
   const { data: docTypeRow } = await supabase
     .from("document_types")
     .select(
-      "name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields"
+      "name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields, ai_deferred"
     )
     .eq("id", documentTypeId)
     .maybeSingle();
 
   const aiEnabled = docTypeRow?.ai_enabled !== false;
+  // B-049 §3.2 — context-dependent doc types defer the AI run. The wizard's
+  // per-person Save & Continue handler re-triggers AI via
+  // /api/documents/[id]/verify-with-context with full cross-form context.
+  const aiDeferred = docTypeRow?.ai_deferred === true;
   const initialVerificationStatus = aiEnabled ? "pending" : "not_run";
 
   // Upsert documents row (one per document type per profile per service)
@@ -150,6 +154,13 @@ export async function POST(
 
   // If AI is disabled on this doc type, skip the background job entirely.
   if (!aiEnabled) {
+    return NextResponse.json({ document: doc });
+  }
+
+  // B-049 §3.2 — defer the AI run until cross-form context is available.
+  // We leave verification_status='pending' so the wizard can show "Pending
+  // verification" and re-trigger AI via the verify-with-context endpoint.
+  if (aiDeferred) {
     return NextResponse.json({ document: doc });
   }
 

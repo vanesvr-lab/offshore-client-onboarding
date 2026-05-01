@@ -98,31 +98,140 @@ export function FinancialStep({
         </p>
       </div>
 
-      {/* Work / Professional Details — occupation always; work address/phone/email for CDD+/EDD */}
+      {/* B-049 §3.1 — Manual Professional Details (no CV prefill).
+          Required: occupation, employer, years_in_role, years_total_experience, industry.
+          Optional: work address / phone / email (CDD+/EDD only). */}
       <section>
-        <h3 className="text-sm font-semibold text-brand-navy mb-3">Work / Professional Details</h3>
+        <h3 className="text-sm font-semibold text-brand-navy mb-3">Professional Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
             <ValidatedLabel
               state={validation.getFieldState("occupation", (form.occupation ?? "") as string, true)}
               required
-            >Occupation</ValidatedLabel>
+            >Current occupation / job title</ValidatedLabel>
             <FieldWrapper state={validation.getFieldState("occupation", (form.occupation ?? "") as string, true)}>
               <Input
                 value={(form.occupation ?? "") as string}
                 onChange={(e) => onChange({ occupation: e.target.value })}
                 onBlur={() => validation.markTouched("occupation")}
-                placeholder="Your profession or job title"
+                placeholder="e.g. Head of Compliance"
                 aria-required="true"
                 autoComplete="organization-title"
                 className={`text-sm ${formWidths.fullName}`}
               />
             </FieldWrapper>
           </div>
+          <div className="space-y-1">
+            <ValidatedLabel
+              state={validation.getFieldState("employer", (form.employer ?? "") as string, true)}
+              required
+            >Current employer</ValidatedLabel>
+            <FieldWrapper state={validation.getFieldState("employer", (form.employer ?? "") as string, true)}>
+              <Input
+                value={(form.employer ?? "") as string}
+                onChange={(e) => onChange({ employer: e.target.value })}
+                onBlur={() => validation.markTouched("employer")}
+                placeholder="e.g. Stark Industries Holdings"
+                aria-required="true"
+                autoComplete="organization"
+                className={`text-sm ${formWidths.fullName}`}
+              />
+            </FieldWrapper>
+          </div>
+          <div className="space-y-1">
+            <ValidatedLabel
+              state={validation.getFieldState("years_in_role", String(form.years_in_role ?? ""), true)}
+              required
+            >Years in current role</ValidatedLabel>
+            <FieldWrapper state={validation.getFieldState("years_in_role", String(form.years_in_role ?? ""), true)}>
+              <Input
+                type="number"
+                min="0"
+                max="80"
+                step="1"
+                inputMode="numeric"
+                value={form.years_in_role == null ? "" : String(form.years_in_role)}
+                onChange={(e) =>
+                  onChange({
+                    years_in_role: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+                onBlur={() => validation.markTouched("years_in_role")}
+                aria-required="true"
+                placeholder="e.g. 7"
+                className="text-sm md:w-32"
+              />
+            </FieldWrapper>
+          </div>
+          <div className="space-y-1">
+            <ValidatedLabel
+              state={validation.getFieldState(
+                "years_total_experience",
+                String(form.years_total_experience ?? ""),
+                true
+              )}
+              required
+            >Total years of professional experience</ValidatedLabel>
+            <FieldWrapper
+              state={validation.getFieldState(
+                "years_total_experience",
+                String(form.years_total_experience ?? ""),
+                true
+              )}
+            >
+              <Input
+                type="number"
+                min="0"
+                max="80"
+                step="1"
+                inputMode="numeric"
+                value={form.years_total_experience == null ? "" : String(form.years_total_experience)}
+                onChange={(e) =>
+                  onChange({
+                    years_total_experience: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+                onBlur={() => validation.markTouched("years_total_experience")}
+                aria-required="true"
+                placeholder="e.g. 15"
+                className="text-sm md:w-32"
+              />
+            </FieldWrapper>
+          </div>
+          <div className="space-y-1">
+            <ValidatedLabel
+              state={validation.getFieldState("industry", (form.industry ?? "") as string, true)}
+              required
+            >Industry</ValidatedLabel>
+            <FieldWrapper state={validation.getFieldState("industry", (form.industry ?? "") as string, true)}>
+              <select
+                value={(form.industry ?? "") as string}
+                onChange={(e) => onChange({ industry: e.target.value || null })}
+                onBlur={() => validation.markTouched("industry")}
+                aria-required="true"
+                className={`w-full border rounded-md px-3 py-2 text-sm bg-white ${formWidths.country}`}
+              >
+                <option value="">Select industry…</option>
+                <option>Banking & Financial Services</option>
+                <option>Investment Management</option>
+                <option>Legal Services</option>
+                <option>Accounting & Audit</option>
+                <option>Real Estate</option>
+                <option>Technology</option>
+                <option>Manufacturing</option>
+                <option>Energy & Resources</option>
+                <option>Retail & Consumer</option>
+                <option>Healthcare</option>
+                <option>Government / Public Sector</option>
+                <option>Non-profit</option>
+                <option>Other</option>
+              </select>
+            </FieldWrapper>
+          </div>
           {showWorkDetails && (
             <>
               <div className="md:col-span-2 space-y-1">
-                <ValidatedLabel state={validation.getFieldState("work_address", (form.work_address ?? "") as string)} >Work address</ValidatedLabel>
+                <ValidatedLabel state={validation.getFieldState("work_address", (form.work_address ?? "") as string)}>Work address</ValidatedLabel>
                 <FieldWrapper state={validation.getFieldState("work_address", (form.work_address ?? "") as string)}>
                   <Textarea
                     value={(form.work_address ?? "") as string}
@@ -166,26 +275,92 @@ export function FinancialStep({
 
       {showSourceOfFunds && (
         <>
-          <div className="space-y-1 max-w-2xl">
-            <ValidatedLabel
-              state={validation.getFieldState("source_of_funds_description", (form.source_of_funds_description ?? "") as string, true)}
-              required
-            >
-              Source of funds
-            </ValidatedLabel>
-            <FieldWrapper state={validation.getFieldState("source_of_funds_description", (form.source_of_funds_description ?? "") as string, true)}>
-              <Textarea
-                value={(form.source_of_funds_description ?? "") as string}
-                onChange={(e) => onChange({ source_of_funds_description: e.target.value })}
-                onBlur={() => validation.markTouched("source_of_funds_description")}
-                rows={3}
-                placeholder={isCdd ? "Describe in detail where your funds come from — salary, business income, investments, inheritance, etc." : "Brief description of where your funds come from"}
-                className={`text-sm resize-none ${formWidths.longFormTextareaMin}`}
-              />
-            </FieldWrapper>
-            <p className="text-xs text-gray-600">
-              Be specific about employer, business name, asset type — your jurisdiction&apos;s regulator may verify these later.
-            </p>
+          {/* B-049 §3.1 — Source of funds is a required dropdown; the legacy
+              free-text description stays as supporting detail. */}
+          <div className="space-y-3 max-w-2xl">
+            <div className="space-y-1">
+              <ValidatedLabel
+                state={validation.getFieldState(
+                  "source_of_funds_type",
+                  (form.source_of_funds_type ?? "") as string,
+                  true
+                )}
+                required
+              >
+                Source of funds
+              </ValidatedLabel>
+              <FieldWrapper
+                state={validation.getFieldState(
+                  "source_of_funds_type",
+                  (form.source_of_funds_type ?? "") as string,
+                  true
+                )}
+              >
+                <select
+                  value={(form.source_of_funds_type ?? "") as string}
+                  onChange={(e) => onChange({ source_of_funds_type: e.target.value || null })}
+                  onBlur={() => validation.markTouched("source_of_funds_type")}
+                  aria-required="true"
+                  className={`w-full border rounded-md px-3 py-2 text-sm bg-white ${formWidths.country}`}
+                >
+                  <option value="">Select…</option>
+                  <option value="salary">Salary</option>
+                  <option value="investments">Investments</option>
+                  <option value="inheritance">Inheritance</option>
+                  <option value="business_sale">Business sale</option>
+                  <option value="other">Other</option>
+                </select>
+              </FieldWrapper>
+            </div>
+
+            {form.source_of_funds_type === "other" && (
+              <div className="space-y-1">
+                <ValidatedLabel
+                  state={validation.getFieldState(
+                    "source_of_funds_other",
+                    (form.source_of_funds_other ?? "") as string,
+                    true
+                  )}
+                  required
+                >
+                  Please specify
+                </ValidatedLabel>
+                <FieldWrapper
+                  state={validation.getFieldState(
+                    "source_of_funds_other",
+                    (form.source_of_funds_other ?? "") as string,
+                    true
+                  )}
+                >
+                  <Input
+                    value={(form.source_of_funds_other ?? "") as string}
+                    onChange={(e) => onChange({ source_of_funds_other: e.target.value })}
+                    onBlur={() => validation.markTouched("source_of_funds_other")}
+                    aria-required="true"
+                    placeholder="Describe your source of funds"
+                    className="text-sm"
+                  />
+                </FieldWrapper>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <ValidatedLabel
+                state={validation.getFieldState("source_of_funds_description", (form.source_of_funds_description ?? "") as string)}
+              >
+                Additional context <span className="text-gray-400 font-normal">(optional)</span>
+              </ValidatedLabel>
+              <FieldWrapper state={validation.getFieldState("source_of_funds_description", (form.source_of_funds_description ?? "") as string)}>
+                <Textarea
+                  value={(form.source_of_funds_description ?? "") as string}
+                  onChange={(e) => onChange({ source_of_funds_description: e.target.value })}
+                  onBlur={() => validation.markTouched("source_of_funds_description")}
+                  rows={3}
+                  placeholder="Anything else regulators should know — employer / business / asset names, jurisdictions, etc."
+                  className={`text-sm resize-none ${formWidths.longFormTextareaMin}`}
+                />
+              </FieldWrapper>
+            </div>
           </div>
 
           {!hideDocumentUploads && (

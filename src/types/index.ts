@@ -311,6 +311,12 @@ export interface DocumentType {
   ai_extraction_enabled?: boolean;
   /** B-033 — list of fields the AI should extract; some map to a KYC prefill column. */
   ai_extraction_fields?: AiExtractionField[];
+  /**
+   * B-049 §3.2 — when true, the upload route does NOT auto-trigger AI
+   * verification. The wizard re-runs AI once cross-form context (applicant
+   * name, declared occupation, declared employer, …) is available.
+   */
+  ai_deferred?: boolean;
   is_active: boolean;
   sort_order: number;
   created_at: string;
@@ -345,6 +351,13 @@ export interface KycRecord {
   passport_number: string | null;
   passport_expiry: string | null;
   occupation: string | null;
+  // B-049 §3.1 — manual professional details (no CV prefill)
+  employer: string | null;
+  years_in_role: number | null;
+  years_total_experience: number | null;
+  industry: string | null;
+  source_of_funds_type: string | null;
+  source_of_funds_other: string | null;
   legal_issues_declared: boolean | null;
   legal_issues_details: string | null;
   tax_identification_number: string | null;
@@ -605,6 +618,13 @@ export interface ClientProfileKyc {
   passport_number: string | null;
   passport_expiry: string | null;
   occupation: string | null;
+  // B-049 §3.1 — manual professional details (no CV prefill)
+  employer: string | null;
+  years_in_role: number | null;
+  years_total_experience: number | null;
+  industry: string | null;
+  source_of_funds_type: string | null;
+  source_of_funds_other: string | null;
   tax_identification_number: string | null;
   // B-049 — structured residential address (POA-sourced)
   address_line_1: string | null;

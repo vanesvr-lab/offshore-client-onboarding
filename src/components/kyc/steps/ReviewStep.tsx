@@ -115,10 +115,29 @@ export function ReviewStep({
         )}
       </div>
 
-      {/* Financial Section */}
+      {/* Financial / Professional Section */}
       <div className="rounded-lg border bg-white p-4 space-y-1">
-        <h3 className="text-sm font-semibold text-brand-navy mb-2">Financial Profile</h3>
-        <SectionRow label="Source of funds" value={form.source_of_funds_description as string} />
+        <h3 className="text-sm font-semibold text-brand-navy mb-2">Professional & Financial</h3>
+        <SectionRow label="Current employer" value={form.employer as string} />
+        <SectionRow
+          label="Years in current role"
+          value={form.years_in_role == null ? null : String(form.years_in_role)}
+        />
+        <SectionRow
+          label="Total years of experience"
+          value={form.years_total_experience == null ? null : String(form.years_total_experience)}
+        />
+        <SectionRow label="Industry" value={form.industry as string} />
+        <SectionRow
+          label="Source of funds"
+          value={
+            (form.source_of_funds_type as string | null)
+              ? form.source_of_funds_type === "other"
+                ? `Other — ${(form.source_of_funds_other as string) ?? ""}`
+                : (form.source_of_funds_type as string)
+              : (form.source_of_funds_description as string)
+          }
+        />
         {isCdd && (
           <>
             <SectionRow label="Work address" value={form.work_address as string} />

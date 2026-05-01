@@ -20,15 +20,46 @@ function getAnthropic(): Anthropic {
   return _anthropic;
 }
 
+/**
+ * B-049 §3.4 — Verification context schema.
+ *
+ * Anything a verification rule might want to compare the document against
+ * lives here. Person-level docs (passport, POA, CV, source-of-funds
+ * evidence, etc.) build this from `client_profile_kyc` for the active
+ * profile. Application-level docs build it from `services` + the primary
+ * client profile.
+ *
+ * Add new keys as new rules need them — keep them all string-or-null so the
+ * prompt rendering is trivial.
+ */
+export interface VerificationContext {
+  // Application-wide
+  contact_name: string | null;
+  business_name: string | null;
+  ubo_data: unknown;
+  // Per-person identity
+  applicant_full_name?: string | null;
+  applicant_dob?: string | null;
+  applicant_nationality?: string | null;
+  applicant_passport_number?: string | null;
+  applicant_residential_address?: string | null;
+  // Per-person professional
+  declared_occupation?: string | null;
+  declared_employer?: string | null;
+  declared_years_in_role?: number | null;
+  declared_years_total_experience?: number | null;
+  declared_industry?: string | null;
+  // Per-person financial declarations
+  declared_source_of_funds?: string | null;
+  declared_source_of_funds_other?: string | null;
+  declared_source_of_wealth?: string | null;
+}
+
 interface VerifyParams {
   fileBuffer: Buffer;
   mimeType: string;
   rules: VerificationRules;
-  applicationContext: {
-    contact_name: string | null;
-    business_name: string | null;
-    ubo_data: unknown;
-  };
+  applicationContext: VerificationContext;
   /** Optional document type used to filter relevant knowledge base entries */
   documentType?: string | null;
   /** Plain English rules typed by admin in Settings > Verification Rules */
@@ -167,14 +198,43 @@ Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
       }\nReturn extracted_fields as a flat object keyed by the field "key" values.\nFor date-typed fields, return them in ISO format (YYYY-MM-DD) if possible.`
     : `Do not extract any fields. Set extracted_fields to {}.`;
 
+  // B-049 §3.4 — Render any context field that's set so verification rules
+  // can compare against them. Order is stable so prompt-cache stays warm.
+  const ctx = applicationContext;
+  const contextLines: string[] = [];
+  const push = (label: string, value: unknown) => {
+    if (value === undefined || value === null || value === "") return;
+    contextLines.push(`- ${label}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
+  };
+  push("Applicant name", ctx.applicant_full_name ?? ctx.contact_name);
+  push("Date of birth", ctx.applicant_dob);
+  push("Nationality", ctx.applicant_nationality);
+  push("Passport number", ctx.applicant_passport_number);
+  push("Residential address", ctx.applicant_residential_address);
+  push("Declared occupation", ctx.declared_occupation);
+  push("Declared employer", ctx.declared_employer);
+  push("Years in current role", ctx.declared_years_in_role);
+  push("Total years professional experience", ctx.declared_years_total_experience);
+  push("Industry", ctx.declared_industry);
+  push("Declared source of funds", ctx.declared_source_of_funds);
+  if (ctx.declared_source_of_funds === "other") {
+    push("Source of funds (free text)", ctx.declared_source_of_funds_other);
+  }
+  push("Declared source of wealth", ctx.declared_source_of_wealth);
+  push("Company name", ctx.business_name);
+  if (ctx.ubo_data && (Array.isArray(ctx.ubo_data) ? ctx.ubo_data.length > 0 : true)) {
+    push("UBOs", ctx.ubo_data);
+  }
+  const contextBlock =
+    contextLines.length > 0
+      ? `Application context:\n${contextLines.join("\n")}`
+      : "Application context: not provided";
+
   const userPrompt = `Verify this document.
 
 Expected document type: ${documentType || rules.document_type_expected || "any"}
 
-Application context:
-- Applicant name: ${applicationContext.contact_name || "not provided"}
-- Company name: ${applicationContext.business_name || "not provided"}
-- UBOs: ${JSON.stringify(applicationContext.ubo_data)}
+${contextBlock}
 
 ${rulesSection}
 
