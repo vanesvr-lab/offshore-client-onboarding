@@ -15,6 +15,31 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-047 (Batch 1 — form design system foundations) (Claude Code)
+
+Token / utility / shared-component pass — establishes the patterns later batches reuse. **No user-facing visual changes in this batch.**
+
+**1.1 — Field-width system:**
+- `src/lib/form-widths.ts` (new): exports `formWidths` constants (postal `md:w-24`, phone `md:w-48`, date `md:w-40`, country `md:w-60`, state `md:w-52`, city `md:w-64`, currency `md:w-32`, identifier `md:w-56`, email `md:w-80`, fullName `md:w-80`, full, longFormTextareaMin). Also `twoColRowClass`, `evenTwoColRowClass`, and vertical-rhythm helpers (`sectionSpacing`, `groupSpacing`, `fieldSpacing`).
+
+**1.2 — Universal `<FormField>` wrapper:**
+- `src/components/shared/FormField.tsx` (new): top-aligned label (14px font-medium text-gray-900 mb-1.5), red `*` after label for required, `aria-required` on input. Helper text (12px gray-600) below the field, replaced by error (12px red-600) when present, with `role="alert"` + `aria-live="polite"`. Render-prop child receives `{ id, "aria-invalid", "aria-describedby", "aria-required" }` so it composes with any input primitive (Input, Textarea, CountrySelect, custom).
+- Existing `ValidatedLabel` / `FieldWrapper` left intact for backward compat — Batch 5 migrates forms over to FormField as it touches them.
+
+**1.3 — Section grouping (kill card-on-card):**
+- Documented as the canonical pattern in `form-widths.ts` rhythm helpers; Batch 2 + 5 will rip nested Card containers as they touch each form. No code change in this batch.
+
+**1.4 — Validation utilities:**
+- `src/lib/validation.ts` (new): `isRequired`, `isEmail`, `isPhone`, `isISODate`, `isMinLength`, `isMaxLength`, plus `runAll` for chaining. Each returns `{ valid: true } | { valid: false, message }` with messages following §8 `error-clarity` (state cause + how to fix, e.g. "Enter a valid email like name@example.com" not "Invalid email").
+
+**1.5 — Loading + success affordances:**
+- `src/components/shared/AsyncButton.tsx` (new): wraps the project's `<Button>` primitive. Disables on click, shows `<Loader2>` spinner + `loadingLabel` ("Saving…") while the async handler runs, holds disabled state ≥200ms even on instant responses (anti-flash), then optionally flashes a green check + `successLabel` ("Saved") for 600ms before reverting. Pass-through props for variant/size/className. Reverts cleanly on error so upstream toast handles messaging.
+
+**Build:**
+- `npm run build` clean — type check + lint pass, no warnings.
+
+---
+
 ### 2026-04-30 — B-046 (Batch 5 — auto-fill banner) (Claude Code)
 
 Replaces the clickable "Fill from uploaded document" CTA in `IdentityStep` with an automatic prefill on mount + a passive indicator banner. Per-field ✨ icons from B-044 are untouched and continue to work alongside the new screen-level banner.
