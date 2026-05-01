@@ -947,12 +947,13 @@ export function PerPersonReviewWizard({
     <div className="space-y-4">
       {/* Persistent shell — top row */}
       <div className="space-y-2">
+        {/* B-047 §4.4 — back-navigation demoted to gray-600 link, smaller chevron. */}
         <button
           onClick={() => void handleBackLinkClick()}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold disabled:opacity-60"
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 font-medium disabled:opacity-60"
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeft className="h-3.5 w-3.5" />}
           {saving ? "Saving…" : "Back to People"}
         </button>
 
@@ -1037,14 +1038,13 @@ export function PerPersonReviewWizard({
         {currentSubStep.kind.startsWith("form-") && renderFormContent()}
       </div>
 
-      {/* Centered three-button bar */}
+      {/* B-047 §4 — Centered three-tier button bar (44pt). One Primary per screen. */}
       <div className="pt-2 flex items-center justify-center gap-3">
         <Button
-          variant="outline"
-          size="sm"
           onClick={() => void goBack()}
           disabled={saving}
-          className="gap-1"
+          className="h-11 px-3 bg-transparent border-0 text-gray-600 font-medium hover:text-gray-900 hover:bg-transparent gap-1"
+          aria-label="Back to previous sub-step"
         >
           <ChevronLeft className="h-4 w-4" />
           Back
@@ -1052,12 +1052,11 @@ export function PerPersonReviewWizard({
 
         {showMiddleButton && (
           <Button
-            variant="outline"
-            size="sm"
             onClick={() => void goNextWithMiddle()}
             disabled={saving}
+            className="h-11 px-5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
             {middleLabel}
             {reviewAllContext && isLastSubStep && (
               <ChevronRight className="h-4 w-4 ml-1" />
@@ -1067,12 +1066,11 @@ export function PerPersonReviewWizard({
 
         {!isLastSubStep && (
           <Button
-            size="sm"
             onClick={() => void goNext()}
             disabled={saving || docNextDisabled}
-            className="bg-brand-navy hover:bg-brand-blue gap-1"
+            className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Next
             <ChevronRight className="h-4 w-4" />
           </Button>

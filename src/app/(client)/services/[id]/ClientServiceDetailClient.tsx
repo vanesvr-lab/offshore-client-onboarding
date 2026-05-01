@@ -163,24 +163,26 @@ export function ClientServiceDetailClient({
 
     return (
       <div>
-        {/* Unsaved changes warning dialog */}
+        {/* B-047 §4 — Unsaved changes dialog. One Primary (Save & Close = brand-navy);
+            "Leave without saving" is destructive-tertiary (text only); "Stay" is the
+            secondary outline. */}
         {showUnsavedWarning && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4 space-y-4">
               <h2 className="font-semibold text-brand-navy text-base">Unsaved changes</h2>
               <p className="text-sm text-gray-600">You have unsaved changes. What would you like to do?</p>
               <div className="flex gap-2 justify-end flex-wrap">
                 <button
                   onClick={() => { setShowUnsavedWarning(false); setWizardMode(false); }}
                   disabled={savingFromDialog}
-                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 disabled:opacity-50"
+                  className="h-11 px-3 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Leave without saving
                 </button>
                 <button
                   onClick={() => setShowUnsavedWarning(false)}
                   disabled={savingFromDialog}
-                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                  className="h-11 px-5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Stay
                 </button>
@@ -204,7 +206,7 @@ export function ClientServiceDetailClient({
                     }
                   }}
                   disabled={savingFromDialog}
-                  className="px-4 py-2 text-sm rounded-lg bg-brand-blue text-white hover:bg-brand-navy disabled:opacity-50"
+                  className="h-11 px-5 text-sm font-semibold rounded-lg bg-brand-navy text-white hover:bg-brand-navy/90 disabled:opacity-50"
                 >
                   {savingFromDialog ? "Saving…" : "Save & Close"}
                 </button>
@@ -213,7 +215,7 @@ export function ClientServiceDetailClient({
           </div>
         )}
 
-        {/* Back to landing */}
+        {/* B-047 §4.4 — back-navigation demoted to gray-600 link, smaller chevron. */}
         <button
           onClick={() => {
             if (wizardIsDirty) {
@@ -222,9 +224,9 @@ export function ClientServiceDetailClient({
               setWizardMode(false);
             }
           }}
-          className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold mb-4"
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 font-medium mb-4"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-3.5 w-3.5" />
           Back to Dashboard
         </button>
 
@@ -261,12 +263,12 @@ export function ClientServiceDetailClient({
   // ─── Landing page ──────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Back */}
+      {/* B-047 §4.4 — back-navigation: gray-600 link, smaller chevron. */}
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-navy mb-4"
+        className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 font-medium mb-4"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className="h-3.5 w-3.5" />
         Back to dashboard
       </Link>
 

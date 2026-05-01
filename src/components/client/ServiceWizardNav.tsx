@@ -22,6 +22,15 @@ interface Props {
   submitBlockers?: string[];
 }
 
+// B-047 — Three-tier button system across the client portal.
+//   primary   = bg-brand-navy text-white, h-11, font-semibold (Next, Submit, Confirm)
+//   secondary = bg-white border-gray-300 text-gray-700, h-11        (Save & Close)
+//   tertiary  = text-gray-600 link-style, no border, no fill, h-11   (Back)
+// One Primary per screen.
+const PRIMARY = "h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90";
+const SECONDARY = "h-11 px-5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50";
+const TERTIARY = "h-11 px-3 bg-transparent border-0 text-gray-600 font-medium hover:text-gray-900 hover:bg-transparent";
+
 export function ServiceWizardNav({
   currentStep,
   totalSteps,
@@ -38,34 +47,32 @@ export function ServiceWizardNav({
 
   const submitBtn = (
     <Button
-      size="sm"
       onClick={onSubmit}
       disabled={!canSubmit || saving}
-      className="bg-green-600 hover:bg-green-700 text-white"
+      className={PRIMARY}
     >
-      {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-      Submit ✓
+      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+      Submit
     </Button>
   );
 
   return (
     <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-center gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
       <Button
-        variant="outline"
-        size="sm"
         onClick={onBack}
         disabled={currentStep === 0 || saving}
+        className={TERTIARY}
+        aria-label="Back to previous step"
       >
         ← Back
       </Button>
 
       <Button
-        variant="outline"
-        size="sm"
         onClick={onSaveAndClose}
         disabled={saving}
+        className={SECONDARY}
       >
-        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+        {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
         Save &amp; Close
       </Button>
 
@@ -94,12 +101,11 @@ export function ServiceWizardNav({
         )
       ) : (
         <Button
-          size="sm"
           onClick={onNext}
           disabled={saving}
-          className="bg-brand-navy hover:bg-brand-blue"
+          className={PRIMARY}
         >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
           Next →
         </Button>
       )}

@@ -220,8 +220,13 @@ export default async function ApplicationStatusPage({
             </CardContent>
           </Card>
 
-          <Link href="/dashboard">
-            <Button variant="outline">← Back to Dashboard</Button>
+          {/* B-047 §4.4 — back-navigation: gray-600 link, no border. */}
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1 h-11 px-3 text-sm text-gray-600 hover:text-gray-900 font-medium"
+          >
+            <span aria-hidden="true">←</span>
+            Back to Dashboard
           </Link>
         </div>
 

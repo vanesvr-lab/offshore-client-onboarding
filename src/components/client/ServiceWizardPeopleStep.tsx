@@ -419,19 +419,24 @@ function AddPersonModal({
           </div>
         )}
 
+        {/* B-047 §4 — Cancel = tertiary text link, Add = primary brand-navy 44pt. */}
         <div className="flex gap-2 justify-end pt-2 border-t">
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
+          <Button
+            onClick={onClose}
+            disabled={submitting}
+            className="h-11 px-3 bg-transparent border-0 text-gray-600 font-medium hover:text-gray-900 hover:bg-transparent"
+          >
             Cancel
           </Button>
           {tab === "new" && (
             <Button
               onClick={() => void createNew()}
               disabled={submitting || !newName.trim() || !newEmail.trim()}
-              className="bg-brand-navy hover:bg-brand-blue gap-1"
+              className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Adding…
                 </>
               ) : (

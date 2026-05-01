@@ -15,6 +15,35 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-04-30 — B-047 (Batch 4 — button hierarchy + placement audit) (Claude Code)
+
+Rolls a three-tier button system across every client wizard / dialog so each screen has exactly one Primary, one or more Secondaries, and Back / Cancel as quiet tertiaries. All buttons now meet the 44pt touch-target rule.
+
+**4.1 — Three-tier button system (applied as raw className strings, no new component):**
+- **Primary** — `h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90`. Used for: Next, Save & Continue, Submit, Submit for Review, Save & Close (in unsaved-changes dialog), Save & Finish, Add {role}.
+- **Secondary** — `h-11 px-5 bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50`. Used for: Save & Close (wizard nav), middle button in per-person centered group, "Stay" in unsaved-changes dialog.
+- **Tertiary** — `h-11 px-3 bg-transparent border-0 text-gray-600 font-medium hover:text-gray-900 hover:bg-transparent`. Used for: Back, Cancel, "Leave without saving".
+
+**4.2 — Files updated:**
+- `src/components/client/ServiceWizardNav.tsx`: Submit was green (off-brand) → primary brand-navy; Save & Close → secondary; Back → tertiary text-link. Submit ✓ glyph removed (icon = decoration; text alone is the affordance per `color-not-only`). Sizes default → h-11.
+- `src/components/kyc/KycStepWizard.tsx`: navigation rebuilt with the three-tier classes. Back is now tertiary; Save & Continue / Submit for Review / Save & Close / Save & Finish / Save are all primary. All bumped from default size to h-11.
+- `src/components/client/PerPersonReviewWizard.tsx`: centered three-button bar bumped from `size="sm"` (h-7) → h-11 with the tier classes. Centered group from B-046 stays — only colors / weights / sizes change.
+- `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx`: unsaved-changes dialog reworked — `Save & Close` is now the single primary (was bg-brand-blue → now brand-navy), Stay = secondary outline, "Leave without saving" = tertiary text. All buttons h-11. Top-left "Back to Dashboard" demoted from blue-600 + h-4 chevron → gray-600 + h-3.5 chevron.
+- `src/components/client/ServiceWizardPeopleStep.tsx` (Add-person modal): Cancel → tertiary text link, Add → primary brand-navy 44pt. Loader spinner bumped 3.5px → 4px to match h-11.
+- `src/app/(client)/applications/[id]/page.tsx`: "← Back to Dashboard" button → gray-600 link.
+- `src/app/(client)/apply/[templateId]/review/page.tsx`: "Back to Documents" → tertiary text-link; "Submit Application" → 44pt primary.
+
+**4.3 — Loading states:**
+- All async-firing primary buttons show spinner + label change while running. The §1.5 anti-flash hold (≥200ms) and success-flash patterns are available via the `<AsyncButton>` from Batch 1 — Batch 5 migrates the more complex submit handlers (`handleSubmit` chains in the wizards) over to it; for this batch, the existing spinner+disabled patterns stay in place but are visually consistent now.
+
+**4.4 — Top-left back-navigation demoted:**
+- "Back to People" (PerPersonReviewWizard), "Back to Dashboard" (ClientServiceDetailClient + applications/[id]), "Back to dashboard" (service landing) all now share the same recipe: `text-gray-600 hover:text-gray-900 font-medium`, `h-3.5 w-3.5` chevron icon, `gap-1`. They no longer compete with the page heading.
+
+**Build:**
+- `npm run build` clean.
+
+---
+
 ### 2026-04-30 — B-047 (Batch 3 — Role-chip toggle redesign) (Claude Code)
 
 Replaces the B-046 status-style role chips (`[Director ✓]`) with explicit checkbox-style toggles prefixed by "Roles:" so the affordance reads as **a control**, not as a status badge. Toggle behaviour, optimistic update, last-role confirmation, and per-role palette are all preserved from B-046.

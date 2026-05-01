@@ -532,7 +532,8 @@ export function KycStepWizard({
       {/* Spacer reserves room at the bottom of the page so fixed nav never covers final fields */}
       {fixedNav && <div aria-hidden className="h-28" />}
 
-      {/* Navigation */}
+      {/* B-047 §4 — three-tier button hierarchy. Back = tertiary (text link),
+          primary action (Submit / Save & Continue) = brand-navy 44pt. */}
       <div className={
         fixedNav
           ? "fixed bottom-6 left-[260px] right-0 z-40 bg-white border-t border-x rounded-t-lg shadow-[0_-2px_8px_rgba(0,0,0,0.04)] px-6 py-3 flex items-center justify-between"
@@ -541,10 +542,10 @@ export function KycStepWizard({
             : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between"
       }>
         <Button
-          variant="outline"
           onClick={handleBack}
           disabled={currentStep === 0 || saving}
-          className="gap-1"
+          className="h-11 px-3 bg-transparent border-0 text-gray-600 font-medium hover:text-gray-900 hover:bg-transparent gap-1"
+          aria-label="Back to previous step"
         >
           <ChevronLeft className="h-4 w-4" />
           Back
@@ -563,7 +564,7 @@ export function KycStepWizard({
                 }
               }}
               disabled={saving}
-              className="bg-brand-navy hover:bg-brand-blue gap-1"
+              className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
             >
               {saving ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />Saving…</>
@@ -581,31 +582,31 @@ export function KycStepWizard({
                 if (ok) onComplete();
               }}
               disabled={saving}
-              className="bg-brand-navy hover:bg-brand-blue gap-1"
+              className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
             >
               {saving ? <><Loader2 className="h-4 w-4 animate-spin" />Saving…</> : "Save & Close"}
             </Button>
           ) : (
-          <Button
-            onClick={handleSubmit}
-            disabled={submitting || saving}
-            className="bg-brand-navy hover:bg-brand-blue gap-1"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Submitting…
-              </>
-            ) : (
-              "Submit for Review"
-            )}
-          </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting || saving}
+              className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Submitting…
+                </>
+              ) : (
+                "Submit for Review"
+              )}
+            </Button>
           )
         ) : (
           <Button
             onClick={handleNext}
             disabled={saving}
-            className="bg-brand-navy hover:bg-brand-blue gap-1"
+            className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
           >
             {saving ? (
               <>

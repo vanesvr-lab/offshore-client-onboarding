@@ -297,17 +297,18 @@ export default function ReviewPage({
         {/* Blockers */}
         <BlockersList blockers={blockers} />
 
-        <div className="flex justify-between">
+        {/* B-047 §4 — Back = tertiary, Submit = primary brand-navy 44pt. */}
+        <div className="flex items-center justify-between">
           <Button
-            variant="outline"
             onClick={() =>
               router.push(`/apply/${params.templateId}/documents?applicationId=${applicationId}`)
             }
+            className="h-11 px-3 bg-transparent border-0 text-gray-600 font-medium hover:text-gray-900 hover:bg-transparent"
           >
-            Back to Documents
+            ← Back to Documents
           </Button>
           <Button
-            className="bg-brand-navy hover:bg-brand-blue"
+            className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90"
             onClick={handleSubmit}
             disabled={blockers.length > 0 || submitting}
             title={blockers.length > 0 ? "Resolve all blockers before submitting" : ""}
