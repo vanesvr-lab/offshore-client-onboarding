@@ -481,20 +481,6 @@ export function FinancialStep({
             />
           )}
 
-          <div className="space-y-1">
-            <ValidatedLabel state={validation.getFieldState("tax_identification_number", (form.tax_identification_number ?? "") as string)}>Tax identification number</ValidatedLabel>
-            <Input
-              value={(form.tax_identification_number ?? "") as string}
-              onChange={(e) => onChange({ tax_identification_number: e.target.value })}
-              className={`text-sm ${formWidths.identifier}`}
-              placeholder="e.g. NI number, SSN, TIN"
-              autoComplete="off"
-            />
-            <p className="text-xs text-gray-600">
-              Your jurisdiction&apos;s tax identifier (e.g. NI number, SSN, TIN).
-            </p>
-          </div>
-
           {!hideDocumentUploads && (
             <InlineUpload
               label="Tax Residency Certificate"

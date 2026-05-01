@@ -15,6 +15,38 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 3 — Tax ID dedup + Add Person modal optionalisation (Claude Code)
+
+**§3.1 — Tax ID duplicate.** `tax_identification_number` rendered in two
+sub-steps for CDD/EDD users: Financial *and* Declarations. Compliance
+scoring (`complianceScoring.ts`) and pending-actions classification
+(`pendingActions.ts`) both treat it as a Declaration field, so the
+duplicate has been removed from `FinancialStep`. Declaration is now the
+single source of truth for that field. (SDD users have no Declarations
+step and so don't render the tax ID at all — that matches the existing
+SDD requirement set, which doesn't require it.)
+
+**§3.2 — Add Person modal.** In `ServiceWizardPeopleStep`'s "Add new
+person" tab: Email is now optional (no red asterisk, no validation toast,
+no `aria-required`, no disabled-button gate). Phone was already optional
+visually but kept its `aria-required`-free input. Helper text under email
+now reads "Optional. Required only if you want to invite this person to
+complete their KYC themselves." Server-side API already accepts both
+optionally — no change needed.
+
+**Code changes:**
+
+- `src/components/kyc/steps/FinancialStep.tsx` — removed the
+  `tax_identification_number` block.
+- `src/components/client/ServiceWizardPeopleStep.tsx` — Email block: no
+  red asterisk, no `aria-required`, helper text updated. `createNew()`
+  drops the "Email is required" toast and POSTs `email: ... || undefined`.
+  The Add button's disabled gate drops `!newEmail.trim()`.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-050 Batch 2 — Confidence display fix + 2.2 obsoleted by B-049 (Claude Code)
 
 **§2.1 — Confidence percentage cap.** The AI prompt schema returns

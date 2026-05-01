@@ -178,7 +178,6 @@ function AddPersonModal({
 
   async function createNew() {
     if (!newName.trim()) { toast.error("Full name is required"); return; }
-    if (!newEmail.trim()) { toast.error("Email is required"); return; }
 
     const finalRecordType = role === "ubo" ? "individual" : recordType;
 
@@ -190,7 +189,7 @@ function AddPersonModal({
         body: JSON.stringify({
           role,
           full_name: newName.trim(),
-          email: newEmail.trim(),
+          email: newEmail.trim() || undefined,
           phone: newPhone.trim() || undefined,
           record_type: finalRecordType,
         }),
@@ -398,9 +397,7 @@ function AddPersonModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-gray-900">
-                Email <span className="text-red-600" aria-hidden="true">*</span>
-              </Label>
+              <Label className="text-sm font-medium text-gray-900">Email</Label>
               <Input
                 type="email"
                 inputMode="email"
@@ -408,10 +405,9 @@ function AddPersonModal({
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="email@example.com"
-                aria-required="true"
                 className="text-sm h-11"
               />
-              <p className="text-xs text-gray-600">Used to invite this person to complete their KYC.</p>
+              <p className="text-xs text-gray-600">Optional. Required only if you want to invite this person to complete their KYC themselves.</p>
             </div>
 
             <div className="space-y-1.5">
@@ -441,7 +437,7 @@ function AddPersonModal({
           {tab === "new" && (
             <Button
               onClick={() => void createNew()}
-              disabled={submitting || !newName.trim() || !newEmail.trim()}
+              disabled={submitting || !newName.trim()}
               className="h-11 px-5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 gap-1"
             >
               {submitting ? (
