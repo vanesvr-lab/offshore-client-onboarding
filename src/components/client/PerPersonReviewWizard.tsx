@@ -912,33 +912,36 @@ export function PerPersonReviewWizard({
                     />
                   )}
                 </div>
-                <div className="shrink-0">
+                <div className="shrink-0 flex items-center gap-3">
                   {uploaded ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs gap-1"
-                      onClick={() => setDetailDoc({
-                        id: uploaded.id,
-                        file_name: uploaded.file_name,
-                        mime_type: uploaded.mime_type,
-                        uploaded_at: uploaded.uploaded_at,
-                        document_type_id: uploaded.document_type_id,
-                        verification_status: uploaded.verification_status,
-                        verification_result: uploaded.verification_result,
-                        admin_status: uploaded.admin_status,
-                        document_types: uploaded.document_types,
-                      })}
-                      title="View document"
-                    >
-                      <Eye className="h-3.5 w-3.5 text-gray-600" />
-                      View
-                    </Button>
+                    <>
+                      <span className="text-sm text-green-700 font-medium hidden sm:inline">Uploaded</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-9 px-3 text-sm gap-1.5 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
+                        onClick={() => setDetailDoc({
+                          id: uploaded.id,
+                          file_name: uploaded.file_name,
+                          mime_type: uploaded.mime_type,
+                          uploaded_at: uploaded.uploaded_at,
+                          document_type_id: uploaded.document_type_id,
+                          verification_status: uploaded.verification_status,
+                          verification_result: uploaded.verification_result,
+                          admin_status: uploaded.admin_status,
+                          document_types: uploaded.document_types,
+                        })}
+                        title="View document"
+                        aria-label="View document"
+                      >
+                        <Eye className="h-4 w-4 text-gray-600" />
+                        View
+                      </Button>
+                    </>
                   ) : (
                     <Button
                       size="sm"
-                      variant="outline"
-                      className="h-7 px-3 text-xs gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
+                      className="h-10 px-4 py-2 text-sm font-medium gap-2 rounded-md bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 shadow-none"
                       disabled={isUploading}
                       onClick={() => {
                         setPendingUploadTypeId(dt.id);
@@ -946,8 +949,8 @@ export function PerPersonReviewWizard({
                       }}
                     >
                       {isUploading
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <><Upload className="h-3.5 w-3.5" />Upload</>
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <><Upload className="h-4 w-4" />Upload</>
                       }
                     </Button>
                   )}

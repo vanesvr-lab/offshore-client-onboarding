@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-01 — B-050 Batch 1 — Upload button + uploaded-row affordance (Claude Code)
+
+Replaces the amber outlined "Upload" button (which read as a status badge
+rather than a CTA) with a clear blue button affordance, and adds an
+"Uploaded" success label next to the View button on uploaded doc rows in the
+per-person KYC wizard.
+
+**Code changes:**
+
+- `src/components/client/PerPersonReviewWizard.tsx` — `renderDocCategoryContent`
+  doc rows: Upload button is now `bg-blue-50 border-blue-200 text-blue-700
+  hover:bg-blue-100 rounded-md h-10 px-4 py-2 text-sm font-medium` with a
+  `focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500`
+  ring (replacing the amber outlined style). Uploaded rows now render a green
+  "Uploaded" text label (`text-sm text-green-700 font-medium`) to the left of
+  the View button (hidden below `sm:` to avoid wrapping on mobile). View
+  button keeps the `<Eye />` icon + "View" text and gets a `View document`
+  tooltip + aria-label.
+
+**Build:** `npm run build` clean.
+
+---
+
 ### 2026-05-01 — B-049 Batch 3 — Manual professional details + deferred CV verification (Claude Code)
 
 Replaces the brittle "AI runs at upload time before context exists, flags
