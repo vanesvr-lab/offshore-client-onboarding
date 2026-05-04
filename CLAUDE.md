@@ -165,6 +165,7 @@ src/lib/supabase/admin.ts    — service role, bypasses RLS (admin portal pages)
 - **Anthropic SDK** — PDF content block type is `Anthropic.DocumentBlockParam` (not `RequestDocumentBlock`)
 - **Supabase join type inference** — joined relations come back as arrays. Cast via `unknown` first: `data as unknown as MyType[]`
 - **`auth.uid()` in DB triggers** — works in Supabase because JWT context is set. Used in audit log triggers to capture actor.
+- **Mobile-first**: client portal targets 375px minimum. Use `flex-col sm:flex-row` and `grid-cols-1 sm:grid-cols-N` patterns. Sidebar is a drawer below `md:` (state lives in `ClientShell`, opened from the burger in `Header`).
 
 ## Audit Logging
 

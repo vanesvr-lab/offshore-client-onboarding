@@ -15,6 +15,73 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-052 Batch 5 — Mobile regression test + docs (Claude Code)
+
+Final batch: Playwright regression guard, CLAUDE.md gotcha, tech-debt
+table updated.
+
+- `tests/e2e/mobile-no-horizontal-scroll.spec.ts`: 4 tests at 375 ×
+  667 across `/dashboard`, `/apply`, `/applications/test-app-id`,
+  `/services/test-service-id`. Asserts
+  `documentElement.scrollWidth ≤ clientWidth + 1` (1px sub-pixel
+  tolerance). All `**/api/**` calls stubbed with empty 200 so the
+  test doesn't depend on a DB. `playwright --list` now shows 11
+  tests in 6 files.
+- `CLAUDE.md` "Key Gotchas": added the mobile-first one-liner
+  describing the `flex-col sm:flex-row` / `grid-cols-1 sm:grid-cols-N`
+  pattern and the drawer-below-`md:` rule.
+- Tech-debt #19 (Sidebar has no mobile collapse) → **Resolved** with
+  a per-route summary.
+- Tech-debt #20 (Admin sidebar not yet mobile-friendly) → **Open
+  Low**. The `Sidebar` component already supports `mobileOpen` /
+  `onMobileOpenChange` props, so a future `AdminShell` mirror of
+  `ClientShell` is the only missing piece.
+
+### 2026-05-04 — B-052 — Mobile-friendly client portal (Claude Code)
+
+Rollup of all 5 sub-batches. Resolves tech-debt #19. Every client
+route now fits a 375px viewport without horizontal scroll, has
+≥44pt touch targets on the formerly-tiny icon buttons, and the
+document upload widget gains a native camera capture path on mobile.
+
+- **B1 (Sidebar drawer)**: extracted `SidebarContent`; desktop renders
+  the inline `<aside>`, mobile uses `<Sheet side="left">`. Burger in
+  `Header`. New `ClientShell` owns the open state and route-change
+  auto-close. `(client)/layout.tsx` now reads as `<ClientShell>{children}`.
+- **B2 (Wizard reflow)**: `review/page.tsx` got two unprefixed
+  `grid-cols-2` swapped to `grid-cols-1 sm:grid-cols-2`. All three
+  wizard footers stack via `flex-col-reverse sm:flex-row` so the
+  primary action sits above the secondary on mobile.
+  `WizardLayout` shows a slim "Step X of 3 — Label" + progress bar
+  below `sm:`, full numbered stepper at `sm:` and up.
+- **B3 (Camera + touch)**: `DocumentUploadWidget` gets a hidden
+  `<input capture="environment">` and a "Take photo" button
+  (`md:hidden`). Image is run through `compressIfImage` before
+  upload. Compact-mode icon buttons get `min-h-[44px] min-w-[44px]
+  md:min-h-0 md:min-w-0`. `applications/[id]/page.tsx` 3-col layout
+  → `grid-cols-1 md:grid-cols-3` + `md:col-span-2`. `UBOForm` row →
+  `grid-cols-1 sm:grid-cols-2`.
+- **B4 (KYC fill)**: `KycStepWizard` `fixedNav` was hardcoded
+  `left-[260px]` — switched to `left-0 md:left-[260px]`. Verification
+  code input gets `inputMode="numeric"` and `autoComplete="one-time-code"`.
+  Sticky bottom Submit on `/kyc/fill/[token]` so the CTA is always
+  reachable; wrapper gets `pb-32 sm:pb-8` so it never covers the
+  last field.
+- **B5 (Verify + docs)**: 4-route regression spec at 375px,
+  CLAUDE.md gotcha, tech-debt updates.
+
+**Things to flag:**
+- No DB migrations.
+- No new dependencies — `Sheet`, `react-dropzone`, and
+  `browser-image-compression` were all already installed.
+- Admin portal intentionally untouched (per brief scope).
+- The new Playwright spec lives alongside the existing E2E tests
+  and is gated by the `run-e2e` PR label like the others.
+
+`npm run build` green, `npm test` 155/155 green.
+
+---
+
 ### 2026-05-04 — B-052 Batch 4 — KYC fill flow mobile-first (Claude Code)
 
 The KYC invite flow is the page most likely to be opened on a phone
@@ -2932,7 +2999,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 15 | **`supabase/README.md` has outdated SQL** | Low | Step 3 references `profiles.role` and `profiles.company_name` columns that don't exist. |
 | 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
 | 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
-| 19 | **Sidebar has no mobile collapse** | Medium | `(client)/layout.tsx` and `(admin)/layout.tsx` mount `Sidebar` with `w-[260px] shrink-0` at all viewports. At 375px that leaves ~115px for the main column → horizontal scroll on all wizard pages. Needs a burger-menu / drawer pattern (e.g. shadcn `Sheet`) gated on `md:`. Discovered while verifying B-048 §6.1 — this is the blocker for "375px works without horizontal scroll on every page". |
+| 20 | **Admin sidebar not yet mobile-friendly** | Low | B-052 made the *client* sidebar a drawer below `md:` but kept the admin layout (`src/app/(admin)/layout.tsx`) with the inline 260px sidebar. Admins use desktop today so this is deferred. When admin-on-mobile becomes a need, lift the same `mobileOpen` state into an `AdminShell` and reuse the existing `Sidebar` mobile branch (which already supports `mobileOpen` / `onMobileOpenChange` props). |
 
 ### Resolved
 
@@ -2940,5 +3007,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 |---|------|----------|-------|
 | 9 (partial) | AI assistant messages hardcoded | 2026-04-07 | Still hardcoded in `ApplicationStatusPanel`, but the new Knowledge Base feeds the real document verification AI prompts so the AI now has actual regulatory context. The status-panel chat is separately a UI placeholder. |
 | 14 | No tests | 2026-05-04 | B-051: Vitest + Playwright + MSW. 155 unit/integration tests pass; 7 Playwright specs scaffolded for the client onboarding wizard, KYC invite flow, autosave retry, and KYC resend rate limit. CI gates `lint`/`build`/`test` on every push and PR; E2E job gated by `run-e2e` label or main-branch push. |
+| 19 | Sidebar has no mobile collapse | 2026-05-04 | B-052: client `Sidebar` now renders inside a `Sheet` drawer below `md:` (state in new `ClientShell`, opened from a burger button in `Header`). Wizard pages, KYC fill, dashboard, applications/[id], and services/[id] all reflow cleanly at 375px. Document upload gains a native camera capture path on mobile. Admin sidebar deferred — see #20. |
 | 16 | Shell `ANTHROPIC_API_KEY=""` overrode `.env.local` | 2026-04-19 | B-031: `package.json` `dev` script now prefixes `unset ANTHROPIC_API_KEY &&` so `.env.local` always wins. |
 
