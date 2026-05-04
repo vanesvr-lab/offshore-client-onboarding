@@ -57,7 +57,7 @@ export function ServiceWizardNav({
   );
 
   return (
-    <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-center gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+    <div className="fixed bottom-0 md:bottom-6 left-0 md:left-[260px] right-0 bg-white border-t md:border-x md:rounded-t-lg px-4 md:px-6 py-3 flex items-center justify-center gap-2 md:gap-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] flex-wrap">
       <Button
         onClick={onBack}
         disabled={currentStep === 0 || saving}

@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-053 — Mobile/desktop polish fixes (Claude Code)
+
+Two B-052 follow-up fixes from real-device QA. Both CSS-only,
+single commit.
+
+- `ServiceWizardNav` (`src/components/client/ServiceWizardNav.tsx`):
+  fixed footer bar was hardcoded to `left-[260px] bottom-6`, which on
+  mobile pushed the bar 260px past the screen edge. Now
+  `left-0 md:left-[260px]` and `bottom-0 md:bottom-6`, with
+  edge-to-edge layout (`md:border-x`, `md:rounded-t-lg`,
+  `px-4 md:px-6`, `gap-2 md:gap-3`) and `flex-wrap` so 3 buttons
+  gracefully wrap on narrow viewports. Same family of fix as the
+  B-052 §4 KycStepWizard change — this file was missed. ServiceWizard
+  consumer already had `pb-28` on its scrollable area, which clears
+  both the floating desktop bar and the flush mobile bar; left as-is.
+- `PerPersonReviewWizard` (`src/components/client/PerPersonReviewWizard.tsx`
+  line 1209): KYC progress strip's inner row had no `flex-wrap`,
+  causing the `DocumentStatusLegend` to overflow the card boundary
+  at desktop widths and stack vertically outside the right edge.
+  Added `flex-wrap` and split the gap into `gap-x-4 gap-y-2` so
+  wrapped rows look intentional.
+
+`npm run build` green; all 155 vitest tests still pass.
+
+---
+
 ### 2026-05-04 — B-052 Batch 5 — Mobile regression test + docs (Claude Code)
 
 Final batch: Playwright regression guard, CLAUDE.md gotcha, tech-debt

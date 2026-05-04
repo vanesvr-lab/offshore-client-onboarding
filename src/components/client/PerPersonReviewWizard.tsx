@@ -1206,7 +1206,7 @@ export function PerPersonReviewWizard({
               · {totalUploaded} of {totalDocsRequired} uploaded
             </span>
           </p>
-          <div className="flex items-center gap-4 text-xs text-gray-600">
+          <div className="flex items-center gap-x-4 gap-y-2 text-xs text-gray-600 flex-wrap">
             {personCategories.map((cat) => {
               const total = (docTypesByCategory[cat] ?? []).length;
               if (total === 0) return null;
