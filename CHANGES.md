@@ -15,6 +15,34 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-052 Batch 2 — Wizard step pages mobile reflow (Claude Code)
+
+Removed every fixed 2-column grid and horizontal-only button row that
+broke at 375px on the wizard surface.
+
+- `src/app/(client)/apply/[templateId]/review/page.tsx`:
+  - Line 86 (per-person KYC progress card): `grid grid-cols-2 gap-3`
+    → `grid grid-cols-1 sm:grid-cols-2 gap-3`.
+  - Line 214 (Primary Contact card): `grid grid-cols-2 gap-4` →
+    `grid grid-cols-1 sm:grid-cols-2 gap-4`.
+  - Footer button row: `flex items-center justify-between` →
+    `flex flex-col-reverse sm:flex-row items-stretch sm:items-center
+    justify-between gap-2` so Submit lands above Back on mobile (the
+    primary action is what the thumb naturally hits).
+- `src/app/(client)/apply/[templateId]/details/page.tsx`: same
+  flex-col-reverse footer treatment for Save progress / Next.
+- `src/app/(client)/apply/[templateId]/documents/page.tsx`: same
+  flex-col-reverse footer treatment for Back / Proceed to Review.
+- `src/components/client/WizardLayout.tsx`: full stepper hidden below
+  `sm:`. Replaced with a slim "Step X of 3 — Label" line + 1.5px
+  progress bar so the indicator stays visible without horizontal
+  scroll. Full numbered stepper still renders at `sm:` and above.
+- Details page already used `grid-cols-1 md:grid-cols-2` for its
+  field rows (no change). Documents page has no grid (no change).
+- `npm run build` green.
+
+---
+
 ### 2026-05-04 — B-052 Batch 1 — Client sidebar mobile drawer (Claude Code)
 
 Critical unblocker for tech-debt #19. Below `md:` the client sidebar

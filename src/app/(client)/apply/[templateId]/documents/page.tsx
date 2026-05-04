@@ -163,7 +163,7 @@ export default function DocumentsPage({
           </Card>
         )}
 
-        <div className="flex justify-between">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2">
           <Button
             variant="outline"
             onClick={() =>

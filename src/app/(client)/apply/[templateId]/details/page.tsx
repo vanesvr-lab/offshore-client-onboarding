@@ -333,8 +333,9 @@ export default function BusinessDetailsPage({
           </CardContent>
         </Card>
 
-        {/* B-047 §4 — three-tier buttons: Save progress = secondary, Next = primary brand-navy 44pt. */}
-        <div className="flex items-center justify-between">
+        {/* B-047 §4 — three-tier buttons: Save progress = secondary, Next = primary brand-navy 44pt.
+            B-052: stacks vertically on mobile, side-by-side from sm: up. */}
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2">
           <Button
             onClick={() => saveProgress(false)}
             disabled={saving}

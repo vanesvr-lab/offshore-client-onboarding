@@ -14,10 +14,31 @@ const steps = [
 export function WizardLayout({ currentStep, children }: WizardLayoutProps) {
   // B-048 §1 (ui-ux-pro-max container-width) — narrow centered column for
   // form-heavy wizard pages so content sits in foveal vision on desktop.
+  // B-052 §2.4 — mobile stepper collapses to "Step X of 3 — Label" + a slim
+  // progress bar so the full stepper doesn't horizontal-scroll at 375px.
+  const current = steps[currentStep - 1];
+  const progressPct = (currentStep / steps.length) * 100;
+
   return (
     <div className="mx-auto w-full max-w-2xl">
-      {/* Step indicator */}
-      <nav className="mb-8">
+      {/* Mobile stepper (below sm:) */}
+      <div className="mb-6 sm:hidden">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium text-brand-navy">
+            Step {currentStep} of {steps.length}
+          </span>
+          <span className="text-gray-500">{current.label}</span>
+        </div>
+        <div className="mt-2 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-brand-navy transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Full stepper (sm: and up) */}
+      <nav className="mb-8 hidden sm:block">
         <ol className="flex items-center">
           {steps.map((step, idx) => (
             <li key={step.num} className="flex items-center">

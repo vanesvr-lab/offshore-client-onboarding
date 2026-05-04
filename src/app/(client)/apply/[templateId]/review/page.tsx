@@ -83,7 +83,7 @@ function PersonProgressRow({ person }: { person: PersonRecord }) {
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <div className="flex justify-between text-[10px] text-gray-400 mb-1">
             <span>KYC fields</span>
@@ -211,7 +211,7 @@ export default function ReviewPage({
           <CardHeader>
             <CardTitle className="text-brand-navy">Primary Contact</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4 text-sm">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <span className="font-medium text-gray-600">Name</span>
               <p>{application.contact_name || "—"}</p>
@@ -297,8 +297,9 @@ export default function ReviewPage({
         {/* Blockers */}
         <BlockersList blockers={blockers} />
 
-        {/* B-047 §4 — Back = tertiary, Submit = primary brand-navy 44pt. */}
-        <div className="flex items-center justify-between">
+        {/* B-047 §4 — Back = tertiary, Submit = primary brand-navy 44pt.
+            B-052: stacks on mobile, side-by-side at sm:. */}
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2">
           <Button
             onClick={() =>
               router.push(`/apply/${params.templateId}/documents?applicationId=${applicationId}`)
