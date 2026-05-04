@@ -539,13 +539,16 @@ export function KycStepWizard({
       {fixedNav && <div aria-hidden className="h-28" />}
 
       {/* B-047 §4 — three-tier button hierarchy. Back = tertiary (text link),
-          primary action (Submit / Save & Continue) = brand-navy 44pt. */}
+          primary action (Submit / Save & Continue) = brand-navy 44pt.
+          B-052 §4.1 — fixedNav must be full-width on mobile (sidebar is a
+          drawer, not a 260px column). md:left-[260px] kicks in once the
+          inline sidebar appears. */}
       <div className={
         fixedNav
-          ? "fixed bottom-6 left-[260px] right-0 z-40 bg-white border-t border-x rounded-t-lg shadow-[0_-2px_8px_rgba(0,0,0,0.04)] px-6 py-3 flex items-center justify-between"
+          ? "fixed bottom-6 left-0 md:left-[260px] right-0 z-40 bg-white border-t border-x rounded-t-lg shadow-[0_-2px_8px_rgba(0,0,0,0.04)] px-4 sm:px-6 py-3 flex items-center justify-between"
           : compact
             ? "flex items-center justify-between pt-4 border-t mt-6"
-            : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-8 -mb-8 flex items-center justify-between"
+            : "sticky bottom-0 bg-white border-t px-4 py-4 -mx-4 md:-mx-8 -mb-4 md:-mb-8 flex items-center justify-between"
       }>
         <Button
           onClick={handleBack}

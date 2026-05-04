@@ -248,6 +248,8 @@ export function KycFillClient({ token }: { token: string }) {
                 placeholder="000000"
                 className="text-center text-2xl tracking-[0.5em] font-mono h-14"
                 maxLength={6}
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && code.length === 6)
                     void verifyCode();
@@ -308,7 +310,9 @@ export function KycFillClient({ token }: { token: string }) {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    // B-052 §4.2 — extra bottom padding so the sticky mobile submit
+    // CTA never covers the last form field.
+    <div className="min-h-screen bg-gray-50 py-8 px-4 pb-32 sm:pb-8">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center">
@@ -468,7 +472,19 @@ export function KycFillClient({ token }: { token: string }) {
           </Card>
         )}
 
-        {/* Submit */}
+        {/* Submit — inline on sm+ so the form ends with a clear action */}
+        <Button
+          onClick={() => void handleSubmit()}
+          disabled={saving}
+          className="hidden sm:flex w-full bg-brand-navy hover:bg-brand-blue h-12 text-base"
+        >
+          {saving ? "Submitting…" : "Submit KYC"}
+        </Button>
+      </div>
+
+      {/* B-052 §4.2 — sticky submit on mobile so a fat-thumbed user can
+          finish without scrolling the whole long form to find the CTA. */}
+      <div className="sm:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.06)] px-4 py-3">
         <Button
           onClick={() => void handleSubmit()}
           disabled={saving}

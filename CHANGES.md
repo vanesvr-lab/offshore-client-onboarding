@@ -15,6 +15,36 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-052 Batch 4 — KYC fill flow mobile-first (Claude Code)
+
+The KYC invite flow is the page most likely to be opened on a phone
+(invitees forward the link from email). Three mobile-specific fixes.
+
+- `src/components/kyc/KycStepWizard.tsx`: the `fixedNav` footer was
+  hardcoded `left-[260px]` — that left a 260px dead band on mobile.
+  Now `left-0 md:left-[260px]` so the nav goes full-width on mobile
+  and only offsets for the desktop sidebar at `md:`. Padding tightens
+  to `px-4 sm:px-6` and the inline (non-fixed) variant uses
+  `-mx-4 md:-mx-8` so it doesn't overflow the smaller mobile main
+  padding (now `p-4`, set in Batch 1).
+- `src/app/kyc/fill/[token]/KycFillClient.tsx`:
+  - Verification code input gets `inputMode="numeric"` and
+    `autoComplete="one-time-code"` so iOS Safari shows the numeric
+    keypad and offers SMS auto-fill.
+  - Sticky bottom Submit CTA on mobile (`sm:hidden fixed inset-x-0
+    bottom-0 z-40 bg-white border-t shadow…`). The inline Submit
+    becomes `hidden sm:flex` so desktop still ends with a clear
+    bottom action and there's no duplicate.
+  - Page wrapper gets `pb-32 sm:pb-8` so the sticky CTA never covers
+    the last form field on mobile.
+- `/kyc/fill/[token]` lives under `src/app/kyc/...` (NOT inside the
+  `(client)` route group) so it doesn't render the client sidebar.
+  Audit confirms the route uses only the root layout — no further
+  changes needed.
+- `npm run build` green.
+
+---
+
 ### 2026-05-04 — B-052 Batch 3 — Camera capture + touch targets + route audit (Claude Code)
 
 Mobile users can now snap a document photo via the OS camera, and
