@@ -15,6 +15,38 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-051 follow-up — CI green; E2E specs deferred (Claude Desktop)
+
+Post-CLI clean-up to land the workflow and stabilise main.
+
+- **Workflow pushed.** `gh auth refresh -s workflow` granted the missing
+  scope; `.github/workflows/test.yml` is now on `origin/main` (commit
+  `71344d1`). The `staged locally but not pushed` note in the Batch 5
+  entry below is now resolved.
+- **Lockfile fixed.** First CI run failed with `npm ci` complaining about
+  missing `@emnapi/core` / `@emnapi/runtime`. Root cause: the lockfile
+  was generated on macOS without Linux-only optional deps. Regenerated
+  with `rm -rf node_modules package-lock.json && npm install
+  --include=optional` (commit `07c5b5d`). 491 lines added, 472 removed.
+  Local `npm test` still 155/155 green.
+- **E2E gated to label only.** Workflow conditional changed from
+  `contains(... 'run-e2e') || github.ref == 'refs/heads/main'` to
+  `contains(... 'run-e2e')` (commit `3091a94`). The rollup entry below
+  describes the original (label-or-main) gating; this is the corrected
+  behaviour and matches the brief.
+- **Why:** the first main-branch run executed E2E and failed (the specs
+  were scaffolded but never run end-to-end against a live dev server in
+  CI). Rather than block main on flaky E2E, we run unit + integration on
+  every push and reserve E2E for opt-in PR runs (label `run-e2e`).
+- **Current CI state on main:** `test` job green in ~1m32s (lint + build
+  + 155 vitest tests). `e2e` correctly skipped.
+- **Follow-up batch (not yet planned):** B-052 — get the 7 Playwright
+  specs passing. Likely work: selector adjustments to match the actual
+  rendered shadcn/base-ui DOM, JWT seeding via `NEXTAUTH_SECRET` parity
+  between `globalSetup` and the dev server, and triage of the failing
+  CI run's `playwright-report` artifact (downloadable from
+  run `25337400563`).
+
 ### 2026-05-04 — B-051 Batch 5 — CI workflow + docs (Claude Code)
 
 Last batch of B-051. Wires up CI and documents the test setup.
