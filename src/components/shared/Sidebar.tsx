@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -17,12 +18,16 @@ import {
   UserCheck,
   Shield,
 } from "lucide-react";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 interface SidebarProps {
   role: "admin" | "client";
   userName?: string | null;
   hasApplications?: boolean;
   isPrimary?: boolean;
+  /** Mobile drawer open state (controlled by parent layout). */
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
 }
 
 const ADMIN_NAV = [
@@ -57,7 +62,7 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+        "flex items-center gap-2.5 rounded-lg px-3 py-3 md:py-2 text-sm transition-colors",
         active
           ? "bg-brand-accent text-brand-dark font-semibold"
           : "text-brand-muted hover:text-white hover:bg-white/5"
@@ -84,7 +89,12 @@ function SectionHeader({ label }: { label: string }) {
   );
 }
 
-export function Sidebar({ role, userName, hasApplications, isPrimary = true }: SidebarProps) {
+function SidebarContent({
+  role,
+  userName,
+  hasApplications,
+  isPrimary = true,
+}: Omit<SidebarProps, "mobileOpen" | "onMobileOpenChange">) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -128,7 +138,7 @@ export function Sidebar({ role, userName, hasApplications, isPrimary = true }: S
       ];
 
   return (
-    <aside className="w-[260px] shrink-0 flex flex-col bg-brand-dark min-h-screen sticky top-0 h-screen overflow-y-auto">
+    <div className="flex h-full flex-col bg-brand-dark">
       {/* Brand */}
       <div className="px-5 py-5 border-b border-white/10">
         <Link href={role === "admin" ? "/admin/dashboard" : "/dashboard"}>
@@ -141,7 +151,7 @@ export function Sidebar({ role, userName, hasApplications, isPrimary = true }: S
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {role === "admin" && (
           <>
             {ADMIN_NAV.map((item) => (
@@ -312,6 +322,53 @@ export function Sidebar({ role, userName, hasApplications, isPrimary = true }: S
           {role === "admin" ? "Administrator" : "Client"}
         </p>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+export function Sidebar({
+  role,
+  userName,
+  hasApplications,
+  isPrimary = true,
+  mobileOpen = false,
+  onMobileOpenChange,
+}: SidebarProps) {
+  const pathname = usePathname();
+
+  // Auto-close the drawer when the user navigates.
+  useEffect(() => {
+    if (mobileOpen && onMobileOpenChange) onMobileOpenChange(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  return (
+    <>
+      {/* Desktop inline sidebar */}
+      <aside className="hidden md:flex w-[260px] shrink-0 sticky top-0 h-screen overflow-hidden">
+        <SidebarContent
+          role={role}
+          userName={userName}
+          hasApplications={hasApplications}
+          isPrimary={isPrimary}
+        />
+      </aside>
+
+      {/* Mobile drawer */}
+      <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
+        <SheetContent
+          side="left"
+          className="w-[280px] sm:max-w-[280px] p-0 md:hidden bg-brand-dark border-r border-white/10"
+          showCloseButton={false}
+        >
+          <SidebarContent
+            role={role}
+            userName={userName}
+            hasApplications={hasApplications}
+            isPrimary={isPrimary}
+          />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

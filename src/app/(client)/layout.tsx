@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Sidebar } from "@/components/shared/Sidebar";
-import { Header } from "@/components/shared/Header";
+import { ClientShell } from "@/components/shared/ClientShell";
 import { getTenantId } from "@/lib/tenant";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -50,21 +49,12 @@ export default async function ClientLayout({ children }: { children: React.React
     : { count: 0 };
 
   return (
-    <div className="flex flex-col min-h-screen bg-sky-50/30">
-      <Header userName={companyName} variant="client" />
-      <div className="flex flex-1 min-h-0">
-        <Sidebar
-          role="client"
-          userName={companyName}
-          hasApplications={(appCount ?? 0) > 0}
-          isPrimary={isPrimary}
-        />
-        <main className="flex-1 min-w-0 overflow-auto">
-          <div className="p-8">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
+    <ClientShell
+      userName={companyName}
+      hasApplications={(appCount ?? 0) > 0}
+      isPrimary={isPrimary}
+    >
+      {children}
+    </ClientShell>
   );
 }

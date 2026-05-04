@@ -15,6 +15,47 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-052 Batch 1 — Client sidebar mobile drawer (Claude Code)
+
+Critical unblocker for tech-debt #19. Below `md:` the client sidebar
+now lives inside a left-side `Sheet` drawer; above `md:` it renders
+inline as before.
+
+- `src/components/shared/Sidebar.tsx`: extracted the sidebar markup
+  into a `SidebarContent` inner component. The exported `Sidebar`
+  renders both the desktop `<aside className="hidden md:flex …">` and
+  a mobile `<Sheet open={mobileOpen}>` with a 280px panel
+  (`md:hidden`). `usePathname()` + `useEffect` auto-close the drawer
+  on route change. NavItem padding bumps to `py-3` on mobile and
+  `md:py-2` on desktop for ≥44pt hit area.
+- `src/components/shared/Header.tsx`: new burger button (Lucide
+  `Menu`, `h-11 w-11`, `aria-label="Open navigation"`) on
+  `md:hidden`, shown only on the client variant. Brand line truncates
+  on mobile, sub-tagline hides below `sm:`. User pill name hides
+  below `sm:`.
+- `src/components/shared/ClientShell.tsx` (new): client component
+  that owns `mobileNavOpen` state, wires `Header.onOpenMobileNav` to
+  `setMobileNavOpen(true)`, passes `mobileOpen` and
+  `onMobileOpenChange` down to `Sidebar`. Wraps `Header` + `Sidebar`
+  + `<main>` and applies `p-4 md:p-8` so mobile gets less main
+  padding.
+- `src/app/(client)/layout.tsx`: server component now hands all the
+  derived props (display name, hasApplications, isPrimary) to
+  `<ClientShell>` and renders children inside it. No more inline
+  Header/Sidebar markup in the layout.
+- Admin sidebar intentionally untouched (per brief scope) — admins
+  use desktop. Tracked as new tech-debt below.
+- `npm run build` green; all 155 tests still pass.
+
+**Note:** The Claude Desktop "Follow-up: B-052" reference below was
+ambiguous — it speculated B-052 would be about Playwright E2E
+selector fixes. The actual B-052 brief
+(`docs/cli-brief-mobile-client-portal-b052.md`) is the mobile rework.
+The E2E selector follow-up remains an open follow-up under the B-051
+umbrella.
+
+---
+
 ### 2026-05-04 — B-051 follow-up — CI green; E2E specs deferred (Claude Desktop)
 
 Post-CLI clean-up to land the workflow and stabilise main.
