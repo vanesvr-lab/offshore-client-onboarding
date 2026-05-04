@@ -183,6 +183,23 @@ npm run build     # Production build + type check
 npm run lint      # ESLint
 ```
 
+## Testing
+
+```bash
+npm test                  # vitest unit + integration
+npm run test:watch        # vitest watch mode
+npm run test:coverage     # vitest with coverage report
+npm run test:e2e          # playwright E2E (uses the webServer config)
+npm run test:e2e:ui       # playwright UI mode
+```
+
+- Unit tests live in `tests/unit/` and cover pure functions in `src/lib/`.
+- API integration tests live in `tests/integration/api/` and import route handlers directly.
+- E2E tests live in `tests/e2e/` and run against the dev server.
+- All external services (Supabase, Anthropic, Resend) are mocked via MSW or Playwright `page.route()` — tests never hit real APIs.
+- Run `npx playwright install --with-deps chromium` once locally before the first E2E run.
+- See `tests/README.md` for fixture conventions and adding new tests.
+
 ## Admin Setup (one-time, already done for Jane Doe)
 
 1. Create user in Supabase Auth dashboard

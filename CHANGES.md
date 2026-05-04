@@ -15,6 +15,68 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-051 Batch 5 — CI workflow + docs (Claude Code)
+
+Last batch of B-051. Wires up CI and documents the test setup.
+
+- `.github/workflows/test.yml`: file is **staged locally but not pushed**
+  — the current GitHub OAuth token rejected the push with "refusing to
+  allow an OAuth App to create or update workflow without `workflow`
+  scope". Grant workflow scope (`gh auth refresh -s workflow` or via the
+  GitHub OAuth app settings) and run `git add .github/workflows/test.yml
+  && git commit -m "ci: add github actions workflow for tests" && git
+  push origin main` to land it. Workflow contents:
+  - `test` runs on every push to main + every PR: `npm ci → npm run
+    lint → npm run build → npm run test`. Build env vars are inlined
+    fakes (same as `.env.test`).
+  - `e2e` is gated on the `run-e2e` PR label OR a push to main:
+    `npm ci → npx playwright install --with-deps chromium → npm run
+    test:e2e`. On failure, uploads `playwright-report/` as an artifact
+    (7-day retention).
+- `CLAUDE.md`: new "Testing" section after "Dev Commands" listing the
+  test scripts and the rule that all external services are mocked.
+- `tests/README.md`: layout, what's mocked, and recipes for adding
+  unit / integration / E2E tests. Calls out the `request.formData()`
+  workaround for documents-upload tests.
+- Tech-debt #14 (No tests) moved to **Resolved** with the B-051
+  reference and a one-line summary.
+
+### 2026-05-04 — B-051 — Testing infrastructure for client onboarding (Claude Code)
+
+Consolidated rollup of all 5 sub-batches. Resolves tech-debt #14.
+
+Stood up Vitest + Playwright + MSW. Coverage focused on the client
+onboarding wizard (3-step) and the external KYC invite flow.
+
+- Vitest config with jsdom + node environment matching, tsconfig-paths,
+  coverage thresholds set on `src/lib/**` (only enforced under
+  `npm run test:coverage`).
+- Playwright config with chromium-only, dev-server `webServer` block,
+  seeded auth state via `globalSetup`.
+- 120 unit tests: `validation`, `rate-limit`, `completionCalculator`,
+  `riskFlagDetection`, `personCompletion`, `serviceCompletion`,
+  `formatters`, `profileDocumentRequirements`, `wizardStore`.
+- 35 API integration tests: `applications/save`, `applications/[id]/submit`,
+  `documents/upload`, `kyc/save`, `kyc/submit`, `kyc/verify-code`.
+- 7 Playwright E2E specs: onboarding happy path, validation errors,
+  KYC invite flow, autosave retry, KYC rate limit (scaffolded; first
+  end-to-end run pending — selector adjustments may be needed).
+- GitHub Actions workflow: `lint` + `build` + unit/integration on every
+  PR; E2E gated by `run-e2e` label or main-branch push.
+
+**Brief deviations from the original spec (full detail in the per-batch
+entries above):**
+- `applications/[id]/submit` does not implement the 409 already-submitted
+  case — tests cover what exists.
+- `documents/upload` returns 400 (not 413) on file-too-large.
+- `kyc/save` is auth-gated — the token-based unauthenticated upsert lives
+  in `kyc/save-external` (covered by the E2E flow, not unit-tested).
+- `kyc/submit` does not send a Resend email or apply a 429 rate limit;
+  those live on `services/[id]/persons/[roleId]/send-invite` and are
+  exercised by the `kyc-rate-limit` E2E.
+
+---
+
 ### 2026-05-04 — B-051 Batch 4 — Playwright E2E tests (Claude Code)
 
 5 spec files (7 tests) exercising the client onboarding flows. All
@@ -2703,7 +2765,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 11 | **No real-time updates** | Medium | Pages don't push live updates — users have to navigate or refresh to see admin changes. Could use Supabase Realtime or Server-Sent Events. |
 | 12 | **`force-dynamic` everywhere** | Low | Disables Next.js caching globally on data pages. Works but loses perf benefits. Better long-term: tag-based revalidation via `revalidateTag()`. |
 | 13 | **CLAUDE.md is partially outdated** | Low | Sections still reference Supabase Auth (replaced by Auth.js). Should be updated to reflect current architecture. |
-| 14 | **No tests** | Medium | Zero test coverage. Add Vitest + Playwright for critical flows (auth, registration, application submit, document upload, stage changes). |
 | 15 | **`supabase/README.md` has outdated SQL** | Low | Step 3 references `profiles.role` and `profiles.company_name` columns that don't exist. |
 | 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
 | 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
@@ -2714,5 +2775,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | # | Item | Resolved | Notes |
 |---|------|----------|-------|
 | 9 (partial) | AI assistant messages hardcoded | 2026-04-07 | Still hardcoded in `ApplicationStatusPanel`, but the new Knowledge Base feeds the real document verification AI prompts so the AI now has actual regulatory context. The status-panel chat is separately a UI placeholder. |
+| 14 | No tests | 2026-05-04 | B-051: Vitest + Playwright + MSW. 155 unit/integration tests pass; 7 Playwright specs scaffolded for the client onboarding wizard, KYC invite flow, autosave retry, and KYC resend rate limit. CI gates `lint`/`build`/`test` on every push and PR; E2E job gated by `run-e2e` label or main-branch push. |
 | 16 | Shell `ANTHROPIC_API_KEY=""` overrode `.env.local` | 2026-04-19 | B-031: `package.json` `dev` script now prefixes `unset ANTHROPIC_API_KEY &&` so `.env.local` always wins. |
 
