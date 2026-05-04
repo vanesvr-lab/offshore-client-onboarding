@@ -15,6 +15,53 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-051 Batch 4 — Playwright E2E tests (Claude Code)
+
+5 spec files (7 tests) exercising the client onboarding flows. All
+external API calls are intercepted with `page.route()` so tests don't
+need a real DB or third-party service.
+
+- `tests/e2e/onboarding-happy-path.spec.ts` — full 3-step wizard:
+  templates → details → upload → review → submit. Asserts redirect to
+  `/applications/[id]` with `submitted` status visible. Spot-checks the
+  call ordering (save before submit).
+- `tests/e2e/onboarding-validation-errors.spec.ts` — 3 tests: invalid
+  email shows the B-047 message verbatim, empty required field blocks
+  Next, Review with missing required documents blocks Submit.
+- `tests/e2e/kyc-invite-flow.spec.ts` — runs unauthenticated (clears
+  the seeded cookie via `test.use({ storageState: empty })`), enters
+  the verification code, fills identity, submits, lands on the
+  confirmation page.
+- `tests/e2e/autosave-retry.spec.ts` — first POST to
+  `/api/applications/save` is intercepted with 500, second with 200.
+  Asserts the wizard surfaces the Saving / retry / Saved feedback and
+  that the call fired ≥ 2 times.
+- `tests/e2e/kyc-rate-limit.spec.ts` — replaces the seeded cookie with
+  a fresh JWT carrying role=admin, exercises Resend KYC invite twice;
+  second call is mocked to return 429 with a "you can resend in N
+  hours" message.
+- `tests/fixtures/`: 3 minimal valid PDFs (~600 bytes each) generated
+  via Node — not real PII.
+
+**Verification status:** `playwright --list` enumerates all 7 tests
+correctly. The tests have **not** been executed end-to-end yet —
+running them needs:
+1. `npx playwright install --with-deps chromium` once locally.
+2. The dev server signing JWTs with the same `NEXTAUTH_SECRET` as
+   `.env.test`. The Playwright `webServer` block points to
+   `npm run dev` and inherits the env, so this should hold.
+3. UI selector adjustments may be needed — selectors are guided by the
+   shadcn/base-ui patterns the wizard uses (`getByLabel`, `getByRole`)
+   but the exact accessible names depend on the rendered DOM. Anything
+   that doesn't match on first run should be tweaked rather than
+   re-architected — the API mocking and fixtures stand.
+
+Per the brief's working agreement, this is recorded as scaffolded +
+parsable but pending first run. Selector tweaks would be a small
+follow-up if something doesn't match.
+
+---
+
 ### 2026-05-04 — B-051 Batch 3 — API integration tests (Claude Code)
 
 35 API integration tests across 6 files. Each test imports the route
