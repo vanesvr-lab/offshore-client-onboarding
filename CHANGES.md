@@ -15,6 +15,70 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-051 Batch 3 — API integration tests (Claude Code)
+
+35 API integration tests across 6 files. Each test imports the route
+handler directly and calls `POST(new Request(...))` — no HTTP server.
+Supabase calls are intercepted by MSW; `auth()` and `next/cache.revalidatePath`
+are mocked at the module level.
+
+- `tests/integration/api/applications-save.test.ts` — 6 tests: 401, 403
+  (no client_users), happy create (auto-derives `GBC-XXXX` reference),
+  happy update, 403 wrong-owner, admin-on-behalf-of-client.
+- `tests/integration/api/applications-submit.test.ts` — 5 tests: 401,
+  404 missing application, 403 wrong-owner, happy submit (asserts
+  `status: "submitted"` payload sent to update + audit_log row), admin
+  override path.
+- `tests/integration/api/documents-upload.test.ts` — 7 tests: 401, 400
+  missing file, 400 wrong MIME, 400 file > 10MB, 403 wrong-owner, happy
+  insert, happy update of existing row.
+- `tests/integration/api/kyc-save.test.ts` — 5 tests: 401, 400 missing
+  id, 404 missing record, full-record completion derivation, empty-string
+  → null normalization for date / boolean fields.
+- `tests/integration/api/kyc-submit.test.ts` — 5 tests: 401, 400, 404,
+  422 (incomplete), 200 (complete). Uses Promise.all-style mocking for
+  the parallel client + records + documents + DD requirements + DD
+  settings reads.
+- `tests/integration/api/kyc-verify-code.test.ts` — 7 tests: 400 missing
+  token / code, 404 invalid token, 410 expired link, 401 wrong code with
+  attempt counter, 429 after 5 attempts, 200 with verified:true on
+  correct code.
+
+**Brief deviations from B-051 §3 (real route behavior, documented for
+the next maintainer):**
+
+- The brief's "applications/[id]/submit → 409 already-submitted" case
+  is not implemented in the current route — it always re-flips status
+  to `submitted`. Tests cover what exists (admin override + ownership);
+  the 409 case is omitted with no test (would need a route change).
+- The brief's "documents/upload → 413 file-too-large" — the actual
+  route returns **400** with the 10MB error message. Tests assert 400.
+- The brief's "kyc/save → token-based unauthenticated upsert" is the
+  `/api/kyc/save-external` route (not `/api/kyc/save`). The
+  `/api/kyc/save` route requires an Auth.js session. Tests cover the
+  authenticated path here; the external token path is exercised through
+  the Playwright KYC invite flow in Batch 4.
+- The brief's "kyc/submit → 409 already-submitted + Resend email + 429
+  rate limit" — the current route does none of those. It returns 200
+  on success and 422 on incomplete. Tests cover what exists; the email
+  + rate limit live on `/api/services/[id]/persons/[roleId]/send-invite`
+  (B-050 §7) which is exercised by the E2E tests in Batch 4.
+
+**Infrastructure changes for integration tests:**
+
+- `tests/msw/handlers/supabase.ts`: handler now inspects the request's
+  `Accept` header for `application/vnd.pgrst.object+json` (set by
+  supabase-js's `.single()` / `.maybeSingle()`) and returns the first
+  array element so tests can supply a single `[{...}]` shape for both
+  list and single queries.
+- `tests/integration/api/documents-upload.test.ts` mocks `request.formData()`
+  via a stub Request — vitest's node environment hangs indefinitely
+  when `Request.formData()` is called on a Request constructed from a
+  `FormData` body. Stubbing `.formData()` directly is reliable and the
+  route handler awaits it the same way regardless of source.
+
+---
+
 ### 2026-05-04 — B-051 Batch 2 — Unit tests (Claude Code)
 
 120 unit tests across 9 files, all passing. No production code touched.
