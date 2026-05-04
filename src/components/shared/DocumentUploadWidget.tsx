@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, Clock, X, Eye, RefreshCw, Paperclip, Camera } from "lucide-react";
+import { compressIfImage } from "@/lib/imageCompression";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
@@ -78,6 +79,16 @@ export function DocumentUploadWidget({
   const [selectedTypeId, setSelectedTypeId] = useState<string>(initialTypeId ?? "");
   const [selectedPersonId, setSelectedPersonId] = useState<string>(kycRecordId ?? "");
   const [replacing, setReplacing] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  // B-052 §3.1 — mobile camera capture path. Uses the same upload pipeline
+  // as the dropzone, with image compression beforehand so big phone-camera
+  // shots don't blow the 10MB cap.
+  async function handleCameraFile(file: File | null | undefined) {
+    if (!file) return;
+    const compressed = await compressIfImage(file);
+    upload(compressed);
+  }
 
   async function pollForVerification(docId: string, maxAttempts = 15): Promise<DocumentRecord | null> {
     for (let i = 0; i < maxAttempts; i++) {
@@ -182,6 +193,8 @@ export function DocumentUploadWidget({
         };
         return (
           <>
+            {/* B-052 §3.2 — text/icon buttons get min-h-[44px] hit area on
+                touch viewports; desktop keeps the tighter rhythm at md:. */}
             <div className="flex items-center gap-2 text-xs flex-wrap">
               <span className="text-gray-600 truncate max-w-[140px]">{current.file_name}</span>
               <DocumentStatusBadge
@@ -191,12 +204,17 @@ export function DocumentUploadWidget({
               />
               <button
                 onClick={() => setDetailOpen(true)}
-                className="text-brand-blue hover:underline flex items-center gap-1"
+                className="text-brand-blue hover:underline inline-flex items-center gap-1 min-h-[44px] md:min-h-0 px-1"
               >
                 <Eye className="h-3 w-3" />
                 View
               </button>
-              <button onClick={() => setReplacing(true)} className="text-gray-400 hover:text-gray-600" title="Replace">
+              <button
+                onClick={() => setReplacing(true)}
+                className="text-gray-400 hover:text-gray-600 inline-flex items-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 justify-center"
+                title="Replace"
+                aria-label="Replace document"
+              >
                 <RefreshCw className="h-3 w-3" />
               </button>
             </div>
@@ -212,22 +230,24 @@ export function DocumentUploadWidget({
 
       return (
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs text-gray-600">
+          <div className="flex items-center gap-2 text-xs text-gray-600 flex-wrap">
             <VerificationIcon status={current.verification_status} />
             <Paperclip className="h-3 w-3 text-gray-400" />
             <span className="truncate max-w-[140px]">{current.file_name}</span>
             <span className="text-gray-400">{formatBytes(current.file_size)}</span>
             <button
               onClick={() => setPreviewOpen(true)}
-              className="text-brand-blue hover:underline"
+              className="text-brand-blue hover:underline inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0"
               title="Preview document"
+              aria-label="Preview document"
             >
               <Eye className="h-3 w-3" />
             </button>
             <button
               onClick={() => setReplacing(true)}
-              className="text-brand-blue hover:underline"
+              className="text-brand-blue hover:underline inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0"
               title="Replace"
+              aria-label="Replace document"
             >
               <RefreshCw className="h-3 w-3" />
             </button>
@@ -327,11 +347,31 @@ export function DocumentUploadWidget({
       );
     }
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Mobile camera path — same hidden input + handler as standalone mode */}
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          ref={cameraInputRef}
+          onChange={(e) => {
+            handleCameraFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => cameraInputRef.current?.click()}
+          disabled={uploading}
+          className="md:hidden inline-flex items-center gap-1.5 text-xs text-brand-blue hover:underline disabled:opacity-50 min-h-[44px] px-1"
+        >
+          <Camera className="h-3 w-3" /> Take photo
+        </button>
         <button
           onClick={open}
           disabled={uploading}
-          className="flex items-center gap-1.5 text-xs text-brand-blue hover:underline disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 text-xs text-brand-blue hover:underline disabled:opacity-50 min-h-[44px] md:min-h-0 px-1"
         >
           <Upload className="h-3 w-3" />
           {uploading ? "Uploading…" : current ? "Replace" : `Upload ${documentTypeName ?? "document"}`}
@@ -420,33 +460,63 @@ export function DocumentUploadWidget({
         </div>
       )}
 
-      {/* Drop zone */}
+      {/* Drop zone + mobile camera button */}
       {(!current || replacing) && (
-        <div
-          {...getRootProps()}
-          className={cn(
-            "rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors cursor-pointer",
-            isDragActive
-              ? "border-brand-blue bg-blue-50"
-              : "border-gray-200 hover:border-brand-blue/50 hover:bg-gray-50"
-          )}
-          onClick={open}
-        >
-          <input {...getInputProps()} />
-          <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-          {uploading ? (
-            <p className="text-sm text-gray-500">Uploading…</p>
-          ) : isDragActive ? (
-            <p className="text-sm text-brand-blue font-medium">Drop file here</p>
-          ) : (
-            <>
-              <p className="text-sm text-gray-600">
-                Drag & drop or{" "}
-                <span className="text-brand-blue font-medium">browse</span>
-              </p>
-              <p className="text-xs text-gray-400 mt-1">PDF, JPEG, PNG, WebP — max 10MB</p>
-            </>
-          )}
+        <div className="space-y-2">
+          {/* B-052 §3.1 — Take photo (mobile only). Hidden file input fires
+              the OS camera; iOS/Android honor capture="environment" hint. */}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            ref={cameraInputRef}
+            onChange={(e) => {
+              handleCameraFile(e.target.files?.[0]);
+              // reset so the same file can be re-selected
+              e.target.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => cameraInputRef.current?.click()}
+            disabled={uploading}
+            className="md:hidden w-full h-11"
+          >
+            <Camera className="h-4 w-4 mr-2" /> Take photo
+          </Button>
+
+          <div
+            {...getRootProps()}
+            className={cn(
+              "rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors cursor-pointer",
+              isDragActive
+                ? "border-brand-blue bg-blue-50"
+                : "border-gray-200 hover:border-brand-blue/50 hover:bg-gray-50"
+            )}
+            onClick={open}
+          >
+            <input {...getInputProps()} />
+            <Upload className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+            {uploading ? (
+              <p className="text-sm text-gray-500">Uploading…</p>
+            ) : isDragActive ? (
+              <p className="text-sm text-brand-blue font-medium">Drop file here</p>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600">
+                  <span className="hidden md:inline">Drag &amp; drop or </span>
+                  <span className="text-brand-blue font-medium">
+                    {/* On mobile this reads "Choose file"; on desktop, "browse" */}
+                    <span className="md:hidden">Choose file</span>
+                    <span className="hidden md:inline">browse</span>
+                  </span>
+                </p>
+                <p className="text-xs text-gray-400 mt-1">PDF, JPEG, PNG, WebP — max 10MB</p>
+              </>
+            )}
+          </div>
         </div>
       )}
 

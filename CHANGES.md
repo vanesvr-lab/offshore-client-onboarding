@@ -15,6 +15,39 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-052 Batch 3 — Camera capture + touch targets + route audit (Claude Code)
+
+Mobile users can now snap a document photo via the OS camera, and
+all the previously sub-44pt icon buttons in the upload widget have
+proper touch hit areas.
+
+- `src/components/shared/DocumentUploadWidget.tsx`:
+  - Imports `Camera` icon, `useRef`, and `compressIfImage`.
+  - Adds a hidden `<input type="file" accept="image/*"
+    capture="environment">` and a `handleCameraFile` that runs the
+    same upload pipeline after browser-side image compression.
+  - Standalone mode: renders a "Take photo" outline button
+    (`md:hidden w-full h-11`) above the dropzone; dropzone label
+    swaps "browse" → "Choose file" on mobile.
+  - Compact + documentDetailMode buttons (Eye/Replace/View): wrapped
+    with `inline-flex items-center justify-center min-h-[44px]
+    min-w-[44px] md:min-h-0 md:min-w-0` so the icon stays visually
+    small but the hit area is 44pt on touch viewports. Buttons get
+    explicit `aria-label` for screen readers.
+  - Compact upload trigger row: also gets a "Take photo"
+    `md:hidden` button using the same camera path.
+- `src/app/(client)/applications/[id]/page.tsx`: the main 3-column
+  layout with sidebar status panel was hardcoded `grid grid-cols-3`
+  + `col-span-2`. Changed to `grid-cols-1 md:grid-cols-3` and
+  `md:col-span-2` so on mobile the timeline stacks above the panel.
+- `src/components/client/UBOForm.tsx`: the 2-col field row at line
+  77 was unprefixed. Changed to `grid-cols-1 sm:grid-cols-2`.
+- Dashboard, services detail, and ClientServiceDetailClient have no
+  unprefixed multi-col grids or fixed tables (audit clean).
+- `npm run build` green.
+
+---
+
 ### 2026-05-04 — B-052 Batch 2 — Wizard step pages mobile reflow (Claude Code)
 
 Removed every fixed 2-column grid and horizontal-only button row that
