@@ -15,6 +15,43 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-051 Batch 1 — Testing infrastructure scaffolding (Claude Code)
+
+Stood up the Vitest + Playwright + MSW test stack — config, env, and
+skeletons only. No tests yet (Batches 2–4 add those).
+
+- `package.json`: added dev-deps (vitest, @vitest/coverage-v8,
+  vite-tsconfig-paths, @testing-library/{react,jest-dom}, jsdom,
+  @playwright/test, msw, dotenv-cli) and `test`, `test:watch`,
+  `test:coverage`, `test:e2e`, `test:e2e:ui` scripts.
+- `vitest.config.ts`: jsdom default, `tests/integration/**` runs in
+  node, tsconfig-paths plugin, coverage on `src/lib/**`,
+  `src/stores/**`, and the onboarding-related API routes; 70%
+  lines/functions threshold on `src/lib/**`.
+- `playwright.config.ts`: chromium-only, dev-server `webServer`, seeded
+  `storageState` from `tests/.auth/user.json`.
+- `tests/setup/vitest.setup.ts`: registers MSW node server, resets the
+  Zustand wizard store between tests, mocks `next/navigation` and
+  `next/headers`.
+- `tests/setup/playwright.global-setup.ts`: signs an Auth.js v5 session
+  JWT with `NEXTAUTH_SECRET` and writes the `authjs.session-token`
+  cookie to `tests/.auth/user.json`.
+- `tests/msw/`: server + per-service handlers for Supabase
+  REST/Storage, Anthropic Messages, and Resend Emails. `mockSupabase()`
+  helper exposed for per-table per-method overrides; defaults to
+  200/empty body and warns on unmatched URLs.
+- `.env.test` committed with fake values (Supabase, Anthropic, Resend,
+  Auth.js).
+- `.gitignore`: adds `playwright-report/`, `test-results/`,
+  `tests/.auth/`.
+- `tsconfig.json`: excludes `tests/**` from the production build so
+  test files don't leak into `npm run build`.
+
+Run `npx playwright install --with-deps chromium` once locally before
+the first E2E run.
+
+---
+
 ### 2026-05-01 — B-050 Batch 7 — Resend KYC invite (Claude Code)
 
 **§7.1 — Resend invite.** The "Last request sent on …" stamp on the
