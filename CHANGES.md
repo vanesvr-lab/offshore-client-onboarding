@@ -15,6 +15,48 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-051 Batch 2 — Unit tests (Claude Code)
+
+120 unit tests across 9 files, all passing. No production code touched.
+
+- `tests/unit/lib/validation.test.ts` — `isRequired`, `isMinLength`,
+  `isMaxLength`, `isEmail`, `isPhone`, `isISODate`, `runAll` covered for
+  happy path, boundary, empty, invalid, label customization.
+- `tests/unit/lib/rate-limit.test.ts` — fake timers + `vi.resetModules`
+  to clear the module-scoped attempts map between tests; covers window
+  fill, reset, per-key isolation, time-window reset.
+- `tests/unit/utils/formatters.test.ts` — every exported formatter,
+  null/undefined/empty + happy path. Date format test uses a noon-UTC
+  ISO string so timezone shift can't move the day.
+- `tests/unit/utils/completionCalculator.test.ts` — individual + organisation
+  paths: empty, fully-filled, partial, missing-required-field cases.
+- `tests/unit/utils/riskFlagDetection.test.ts` — every flag type with
+  fake timers locked to 2026-05-04: PEP/EDD interaction, legal-issues
+  level interaction, high-risk nationality vs passport country, passport
+  expiring (3 months) vs expired; `mergeRiskFlags` dedup + dismissed
+  preservation.
+- `tests/unit/utils/personCompletion.test.ts` — empty/null kyc, full
+  CDD field set, missing one field per section, required-doc
+  upload/missing for individual + organisation.
+- `tests/unit/utils/serviceCompletion.test.ts` — `calcServiceDetails`,
+  `Documents`, `People`, `Kyc`, `Section`, `Overall` completion
+  percentages and RAG status transitions.
+- `tests/unit/utils/profileDocumentRequirements.test.ts` — role/DD
+  union, dedup, soft-delete handling, label preference,
+  `getEffectiveDdLevel` fallback.
+- `tests/unit/stores/wizardStore.test.ts` — initial state, partial
+  merges via `setBusinessDetails`, `reset` returns to defaults.
+
+`vitest.config.ts` got an explicit `resolve.alias["@"]` because
+`vite-tsconfig-paths` v6 didn't resolve the alias inside setup files
+on its own.
+
+Coverage thresholds in `vitest.config.ts` only apply when running
+`npm run test:coverage`; the broader `src/lib/**` 70% target won't be
+met until the API integration tests in Batch 3 land.
+
+---
+
 ### 2026-05-04 — B-051 Batch 1 — Testing infrastructure scaffolding (Claude Code)
 
 Stood up the Vitest + Playwright + MSW test stack — config, env, and

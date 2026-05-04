@@ -7,6 +7,11 @@ loadEnv({ path: resolve(__dirname, ".env.test") });
 
 export default defineConfig({
   plugins: [tsconfigPaths()],
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "./src"),
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",
