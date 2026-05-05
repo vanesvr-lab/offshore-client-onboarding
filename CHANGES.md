@@ -15,6 +15,42 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-061 — Sync useState(prop) patterns so autosaves don't wipe values (Claude Code)
+
+Fixes a class of "data appears saved then disappears 30-60s later"
+bugs caused by two stale-prop state patterns:
+
+- `ServiceWizardPeopleStep.persons` (line 928): now syncs with
+  `initialPersons` prop on every change. Previously useState only
+  used the prop on first mount, so server data fetched via
+  `router.refresh()` (added in B-058 §6.2) never propagated. This
+  made re-entering a person's wizard supply stale `reviewingPerson`
+  data to the wizard.
+- `PerPersonReviewWizard.form` (line 562): now syncs with
+  `initialKycRecord` prop changes, BUT only when the autosave is
+  idle. The guard prevents in-flight user edits from being
+  overwritten by a stale server snapshot during the brief window
+  between user typing and the save completing. The
+  `autosaveStateRef` pattern keeps the sync effect from re-running
+  on every save-state transition — it only fires when
+  `initialKycRecord` itself changes.
+
+Net effect: an edit → save → exit → re-enter cycle no longer
+involves form state initialized from pre-edit data. Subsequent
+autosaves send the user's saved values, not the stale nulls that
+were re-seeded from the prop on remount.
+
+Files:
+- `src/components/client/ServiceWizardPeopleStep.tsx`
+- `src/components/client/PerPersonReviewWizard.tsx`
+
+UI / state only. No DB changes. Values already wiped from the DB
+(e.g., Bruce's address from earlier QA) won't come back — the user
+will need to re-enter them once. Lint: pre-existing warning
+unchanged. Build green. Tests 160/160 passing. Interactive
+verification (the wait-60s-then-re-query repro from the brief) is
+left to the user — CLI can't drive the browser-side autosave path.
+
 ### 2026-05-05 — B-060 — Always show "Pre-fill from uploaded document" button when a doc exists (Claude Code)
 
 B-058 §4 introduced a manual prefill button gated on

@@ -926,6 +926,15 @@ export function ServiceWizardPeopleStep({
 }: Props) {
   const router = useRouter();
   const [persons, setPersons] = useState<ServicePerson[]>(initialPersons);
+
+  // Sync with server-fetched persons after router.refresh(). The
+  // initialPersons prop is the source of truth — local edits via
+  // onPersonsChange already round-trip through the server, so syncing
+  // can't drop unsaved user state.
+  useEffect(() => {
+    setPersons(initialPersons);
+  }, [initialPersons]);
+
   const [addingRole, setAddingRole] = useState<ServicePersonRole | null>(null);
   const [reviewingRoleId, setReviewingRoleId] = useState<string | null>(null);
   // B-046 batch 3 — Review-all walk-through state. `reviewAllOrder` is one
