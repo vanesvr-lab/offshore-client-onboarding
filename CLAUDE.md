@@ -199,20 +199,22 @@ npm run db:status
 If anything shows "Local" without a matching "Remote", a `db:push` is
 pending.
 
-**Adding a new migration:**
+**Adding a new migration (CLI MUST do all of these — do NOT defer to the user):**
 
 1. Create the file: `supabase/migrations/<YYYYMMDDHHMMSS>_<description>.sql`. Use `npx supabase migration new <description>` to auto-generate the timestamp.
 2. Write the SQL. Prefer idempotent (`CREATE … IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`) when possible.
-3. Test locally (if you have a local Supabase running) or in the SQL editor against a non-critical area.
-4. Open a PR. After merge:
-5. **Run `npm run db:push`** from your local machine. This applies the new migration to prod.
-6. Verify with `npm run db:status` — should show no pending.
-7. Add a CHANGES.md note that the migration was pushed.
+3. Commit + push the migration file.
+4. **Run `npm run db:push`** to apply the migration to prod. The Supabase CLI on this machine is already linked (see `supabase/.temp/`); no auth needed.
+5. **Run `npm run db:status`** and confirm every migration shows paired Local + Remote with no drift. If anything is mismatched, STOP and document the mismatch in CHANGES.md before proceeding.
+6. Add a CHANGES.md entry noting the migration filename + that it was pushed.
+
+This is a hard rule, not a suggestion. Migrations that land in the repo without being pushed cause production 500s (B-049 → 006/007/008 incident, fixed in B-054). CLI is responsible for the full migration lifecycle within any brief that touches `supabase/migrations/` — never hand off the push step to the user.
 
 **Why no CI auto-push?** Putting Supabase credentials (DB password or
 service role) in GitHub Actions secrets is a leak risk for a
-compliance product. The deploy ritual is short and the `db:status`
-command makes drift visible immediately.
+compliance product. CLI handles the push locally instead, where
+credentials already exist on the developer's machine and never leave
+it.
 
 ## Testing
 
