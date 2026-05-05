@@ -121,20 +121,27 @@ export function computePersonCompletion(
 ): PersonCompletion {
   const { kyc, recordType, personDocs, documentTypes, requirements, dueDiligenceLevel } = inputs;
 
-  // ── Required documents (scope='person', filtered by DD level inclusion) ──
+  // ── Required documents (must match the visible KYC-docs strip in
+  //    PerPersonReviewWizard so docsTotal here equals the count the user
+  //    sees on screen — B-055 §1.1 fix). The strip filters documentTypes
+  //    by scope='person' AND by the DD-level requirement set, with a
+  //    fallback to "all person-scope docs" when no DD doc requirements
+  //    are configured. ──
   const includedLevels = DD_LEVEL_INCLUDES[dueDiligenceLevel] ?? ["basic", "sdd", "cdd"];
-  const requiredDocTypeIds = new Set(
+  const personScopeDocTypes = documentTypes.filter(
+    (dt) => (dt.scope ?? "person") === "person"
+  );
+  const ddIncludedDocTypeIds = new Set(
     requirements
       .filter((r) => r.requirement_type === "document" && r.document_type_id)
       .filter((r) => includedLevels.includes(r.level as "basic" | "sdd" | "cdd" | "edd"))
       .map((r) => r.document_type_id as string)
   );
-  const personScopeIds = new Set(
-    documentTypes
-      .filter((dt) => (dt.scope ?? "person") === "person")
-      .map((dt) => dt.id)
-  );
-  const docsRequired = Array.from(requiredDocTypeIds).filter((id) => personScopeIds.has(id));
+  const eligibleDocTypes =
+    ddIncludedDocTypeIds.size > 0
+      ? personScopeDocTypes.filter((dt) => ddIncludedDocTypeIds.has(dt.id))
+      : personScopeDocTypes;
+  const docsRequired = eligibleDocTypes.map((dt) => dt.id);
   const docsTotal = docsRequired.length;
   const docsFilled = docsRequired.filter((id) =>
     personDocs.some((d) => d.document_type_id === id && d.is_active !== false)

@@ -193,6 +193,127 @@ describe("computePersonCompletion — individual", () => {
   });
 });
 
+describe("computePersonCompletion — strip parity (B-055 §1.1)", () => {
+  function makeDocType(id: string, category: string): DocumentType {
+    return {
+      id,
+      name: `Doc ${id}`,
+      category,
+      applies_to: "individual",
+      scope: "person",
+      description: null,
+      validity_period_days: null,
+      ai_verification_rules: null,
+      is_active: true,
+      sort_order: 1,
+      created_at: "2026-01-01T00:00:00Z",
+    };
+  }
+
+  function makeRequirement(docTypeId: string, level: "basic" | "sdd" | "cdd" | "edd"): DueDiligenceRequirement {
+    return {
+      id: `req-${docTypeId}`,
+      level,
+      requirement_type: "document",
+      requirement_key: `req-${docTypeId}`,
+      field_key: null,
+      label: `Doc ${docTypeId}`,
+      description: null,
+      document_type_id: docTypeId,
+      applies_to: "individual",
+      sort_order: 1,
+    };
+  }
+
+  it("32 person-scope required docs at this DD level + only 7 uploaded → docsFilled === 7, percentage < 100", () => {
+    const docTypes: DocumentType[] = Array.from({ length: 32 }, (_, i) =>
+      makeDocType(`doc-${i}`, "identity")
+    );
+    const requirements: DueDiligenceRequirement[] = docTypes.map((dt) =>
+      makeRequirement(dt.id, "cdd")
+    );
+    const uploaded = docTypes.slice(0, 7).map((dt) => ({
+      document_type_id: dt.id,
+      is_active: true,
+    }));
+
+    const r = computePersonCompletion({
+      kyc: fullCddKyc(),
+      recordType: "individual",
+      personDocs: uploaded,
+      documentTypes: docTypes,
+      requirements,
+      dueDiligenceLevel: "cdd",
+    });
+
+    expect(r.docsTotal).toBe(32);
+    expect(r.docsFilled).toBe(7);
+    expect(r.percentage).toBeLessThan(100);
+    expect(r.isComplete).toBe(false);
+  });
+
+  it("ALL docs uploaded but a required form field is missing → percentage < 100, isComplete === false", () => {
+    const docTypes: DocumentType[] = Array.from({ length: 5 }, (_, i) =>
+      makeDocType(`doc-${i}`, "identity")
+    );
+    const requirements: DueDiligenceRequirement[] = docTypes.map((dt) =>
+      makeRequirement(dt.id, "cdd")
+    );
+    const allUploaded = docTypes.map((dt) => ({
+      document_type_id: dt.id,
+      is_active: true,
+    }));
+    const partialKyc = fullCddKyc();
+    delete partialKyc.passport_number;
+
+    const r = computePersonCompletion({
+      kyc: partialKyc,
+      recordType: "individual",
+      personDocs: allUploaded,
+      documentTypes: docTypes,
+      requirements,
+      dueDiligenceLevel: "cdd",
+    });
+
+    expect(r.docsFilled).toBe(r.docsTotal);
+    expect(r.fieldsFilled).toBe(r.fieldsTotal - 1);
+    expect(r.percentage).toBeLessThan(100);
+    expect(r.isComplete).toBe(false);
+  });
+
+  it("no DD doc requirements + person-scope doc types present → falls back to all person-scope docs (mirrors strip)", () => {
+    const docTypes: DocumentType[] = Array.from({ length: 32 }, (_, i) =>
+      makeDocType(`doc-${i}`, "identity")
+    );
+    const r = computePersonCompletion({
+      kyc: fullCddKyc(),
+      recordType: "individual",
+      personDocs: [],
+      documentTypes: docTypes,
+      requirements: [],
+      dueDiligenceLevel: "cdd",
+    });
+    expect(r.docsTotal).toBe(32);
+    expect(r.docsFilled).toBe(0);
+    expect(r.percentage).toBeLessThan(100);
+    expect(r.isComplete).toBe(false);
+  });
+
+  it("no required docs at all (docsTotal === 0) AND all form fields filled → percentage === 100 (existing behavior preserved)", () => {
+    const r = computePersonCompletion({
+      kyc: fullCddKyc(),
+      recordType: "individual",
+      personDocs: [],
+      documentTypes: NO_DOC_TYPES,
+      requirements: NO_REQUIREMENTS,
+      dueDiligenceLevel: "cdd",
+    });
+    expect(r.docsTotal).toBe(0);
+    expect(r.percentage).toBe(100);
+    expect(r.isComplete).toBe(true);
+  });
+});
+
 describe("computePersonCompletion — organisation", () => {
   it("empty organisation kyc → 0%", () => {
     const r = computePersonCompletion({

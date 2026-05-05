@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-055 Batch 1 — KYC completion bug + wizard nav state reset (Claude Code)
+
+Two independent bugs surfaced by Bruce Banner (GBC-0002) real-device QA.
+
+- `src/lib/utils/personCompletion.ts` — rewrote the docs-required
+  derivation so `docsTotal` matches the visible KYC-docs strip exactly
+  (start from `documentTypes` filtered by scope='person' and intersect
+  with the DD-level requirement set, with a fallback to all
+  person-scope docs when no DD doc requirements are configured). Old
+  logic could undercount, producing 100% with 25 docs missing.
+- `src/components/client/ServiceWizard.tsx` — `setHideWizardNav(false)`
+  now fires in a `useEffect` keyed on `currentStep`, so the sticky
+  Back / Save & Close / Next footer always reappears after exiting per-
+  person Review KYC, regardless of how the previous step left the
+  state.
+- `tests/unit/utils/personCompletion.test.ts` — 4 new tests cover the
+  32/7 strip parity case, all-docs-but-missing-field, the empty-
+  requirements fallback, and the existing "no docs required"
+  invariant. `npx vitest run tests/unit/utils/personCompletion.test.ts`
+  → 12/12 green.
+
+No DB migrations. Pure logic + UI state fix.
+
 ### 2026-05-04 — B-054 — Adopt Supabase CLI for migration tracking (Claude Code)
 
 Replaces the ad-hoc "paste SQL into Supabase web editor and remember to

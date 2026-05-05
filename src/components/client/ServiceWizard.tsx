@@ -90,6 +90,14 @@ export function ServiceWizard({
     onSaveFailedChange?.(autosave.state === "failed");
   }, [autosave.state, onSaveFailedChange]);
   const [hideWizardNav, setHideWizardNav] = useState(false);
+
+  // B-055 §1.2 — Reset nav visibility on every wizard step change so the
+  // sticky footer can never be left in a hidden state by a child step
+  // (the People step hides it while the user is in per-person Review).
+  useEffect(() => {
+    setHideWizardNav(false);
+  }, [currentStep]);
+
   const [validationPhase, setValidationPhase] = useState<"loading" | "valid" | "invalid" | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
