@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { UserPlus, User, Building2, Mail, Send, ChevronDown, ChevronRight, Search, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PerPersonReviewWizard } from "@/components/client/PerPersonReviewWizard";
 import { ReviewStep } from "@/components/kyc/steps/ReviewStep";
 import { computePersonCompletion } from "@/lib/utils/personCompletion";
@@ -867,19 +869,38 @@ function ResendInviteButton({
       : "Send another invite to this person."
     : "Send the KYC invite email to this person.";
 
-  return (
+  // B-058 §3 — disabled native buttons swallow hover events, so the
+  // 24h cooldown reason was invisible. Wrap in a span (which receives
+  // the hover) and use shadcn Tooltip; the wrapper is keyboard-focusable
+  // only when the button is disabled so screen readers can still announce
+  // the reason.
+  const button = (
     <Button
       size="sm"
       variant="ghost"
       onClick={onClick}
       disabled={isCoolingDown}
-      title={tooltip}
       aria-label={label}
       className="h-7 px-3 text-xs gap-1.5 text-gray-600 hover:text-brand-navy disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <Mail className="h-3 w-3" />
       {label}
     </Button>
+  );
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={<span className="inline-block" tabIndex={isCoolingDown ? 0 : -1} />}
+        >
+          {button}
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-xs max-w-[220px]">{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -903,11 +924,10 @@ export function ServiceWizardPeopleStep({
   documentTypes,
   onNavVisibilityChange,
 }: Props) {
+  const router = useRouter();
   const [persons, setPersons] = useState<ServicePerson[]>(initialPersons);
   const [addingRole, setAddingRole] = useState<ServicePersonRole | null>(null);
   const [reviewingRoleId, setReviewingRoleId] = useState<string | null>(null);
-  // Track which persons have completed KYC in this session (to show 100% locally)
-  const [kycCompletedIds, setKycCompletedIds] = useState<Set<string>>(new Set());
   // B-046 batch 3 — Review-all walk-through state. `reviewAllOrder` is one
   // role-row id per unique profile (deduped, mirrors the card list); when
   // null, the wizard runs in single-person mode.
@@ -921,6 +941,10 @@ export function ServiceWizardPeopleStep({
     setReviewingRoleId(null);
     setReviewAllOrder(null);
     setReviewAllIndex(0);
+    // B-058 §6.2 — re-fetch server-side data so any KYC field saves /
+    // doc uploads from the walk are reflected in the post-walk
+    // computation that powers the PersonCard percentage.
+    router.refresh();
   }
 
   /**
@@ -964,8 +988,11 @@ export function ServiceWizardPeopleStep({
       const next = persons.filter((p) => p.id !== roleId);
       setPersons(next);
       onPersonsChange(next);
+      // B-058 §5 — re-fetch page-level requirements/documentTypes so the
+      // KYC progress strip ("X of N uploaded") reflects the new role set.
+      router.refresh();
     },
-    [persons, onPersonsChange]
+    [persons, onPersonsChange, router]
   );
 
   const handleRoleAdded = useCallback(
@@ -973,8 +1000,9 @@ export function ServiceWizardPeopleStep({
       const next = [...persons, person];
       setPersons(next);
       onPersonsChange(next);
+      router.refresh();
     },
-    [persons, onPersonsChange]
+    [persons, onPersonsChange, router]
   );
 
   // reviewingRoleId is any role ID for the profile being reviewed
@@ -990,15 +1018,13 @@ export function ServiceWizardPeopleStep({
     const profileRoleRows = persons.filter((p) => p.client_profiles?.id === profileId);
 
     const handleKycComplete = () => {
-      setKycCompletedIds((prev) => {
-        const next = new Set(prev);
-        next.add(reviewingPerson.id);
-        return next;
-      });
-      // Exit single-person review AND end any in-progress review-all walk.
+      // B-058 §6.2 — exit the review walk and trust computePersonCompletion
+      // for the post-walk percentage. router.refresh() picks up any saves
+      // / uploads made during the walk.
       setReviewingRoleId(null);
       setReviewAllOrder(null);
       setReviewAllIndex(0);
+      router.refresh();
     };
 
     // B-046 batch 3 — review-all walk context (only when reviewAllOrder is set).
@@ -1025,13 +1051,12 @@ export function ServiceWizardPeopleStep({
               requirements,
               dueDiligenceLevel: personDdLevel,
             });
-            const markedComplete = kycCompletedIds.has(roleId);
-            const completionPct = markedComplete ? 100 : completion.percentage;
+            const completionPct = completion.percentage;
             return {
               id: roleId,
               name: p?.client_profiles?.full_name ?? "Unknown",
               completionPct,
-              isComplete: completionPct === 100,
+              isComplete: completion.isComplete,
             };
           }),
           onJumpToPerson: (idx: number) => {
@@ -1048,12 +1073,6 @@ export function ServiceWizardPeopleStep({
               setReviewingRoleId(null);
               return;
             }
-            // Mark this person's KYC as completed locally so the card shows 100%.
-            setKycCompletedIds((prev) => {
-              const next = new Set(prev);
-              next.add(reviewingPerson.id);
-              return next;
-            });
             setReviewAllIndex(nextIndex);
             setReviewingRoleId(reviewAllOrder[nextIndex]);
           },
@@ -1154,10 +1173,8 @@ export function ServiceWizardPeopleStep({
                 requirements,
                 dueDiligenceLevel: personDdLevel,
               });
-              const kycPct = roleRows.some((rr) => kycCompletedIds.has(rr.id))
-                ? 100
-                : completion.percentage;
-              const isComplete = kycPct === 100;
+              const kycPct = completion.percentage;
+              const isComplete = completion.isComplete;
               return (
                 <PersonCard
                   key={person.client_profiles?.id ?? person.id}

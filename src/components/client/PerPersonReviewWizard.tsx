@@ -676,6 +676,11 @@ export function PerPersonReviewWizard({
     if (subStepIndex > subSteps.length - 1) setSubStepIndex(Math.max(0, subSteps.length - 1));
   }, [subSteps.length, subStepIndex]);
 
+  // B-058 §2.2 — when the user clicks a category badge from a non-docs
+  // sub-step, stash the target category and navigate to docs; the effect
+  // below scrolls to the anchor once that step has rendered.
+  const [pendingDocsCategory, setPendingDocsCategory] = useState<string | null>(null);
+
   const currentSubStep = subSteps[subStepIndex] ?? subSteps[0];
   const isLastSubStep = subStepIndex === subSteps.length - 1;
   const isFirstSubStep = subStepIndex === 0;
@@ -685,6 +690,22 @@ export function PerPersonReviewWizard({
   const reviewSubStepIndex = subSteps.findIndex(
     (s) => s.kind === "form-review" || s.kind === "form-org-review"
   );
+  // B-058 §2 — index of the combined doc-list sub-step. Used by the
+  // category-badge buttons to navigate to the docs step from any other
+  // sub-step before scrolling to the category anchor.
+  const docsSubStepIndex = subSteps.findIndex((s) => s.kind === "doc-list");
+
+  // B-058 §2.2 — once the doc-list sub-step has mounted, scroll to the
+  // pending category anchor (set by a badge click from another sub-step).
+  useEffect(() => {
+    if (currentSubStep.kind === "doc-list" && pendingDocsCategory) {
+      const id = `docs-cat-${pendingDocsCategory}`;
+      requestAnimationFrame(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        setPendingDocsCategory(null);
+      });
+    }
+  }, [currentSubStep.kind, pendingDocsCategory]);
 
   // ── Save helpers ──────────────────────────────────────────────────────────
   const autosave = useAutosave();
@@ -1444,7 +1465,7 @@ export function PerPersonReviewWizard({
             {subSteps.map((s, i) => {
               const isCurrent = i === subStepIndex;
               const isCompleted = i < subStepIndex;
-              const canJump = isCompleted;
+              const isFuture = i > subStepIndex;
               return (
                 <Fragment key={s.id + i}>
                   {i > 0 && (
@@ -1452,14 +1473,13 @@ export function PerPersonReviewWizard({
                   )}
                   <button
                     type="button"
-                    disabled={!canJump}
-                    onClick={canJump ? () => setSubStepIndex(i) : undefined}
+                    onClick={isCurrent ? undefined : () => setSubStepIndex(i)}
                     aria-current={isCurrent ? "step" : undefined}
                     className={cn(
                       "px-1.5 py-0.5 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                      isCurrent && "font-semibold text-brand-navy",
+                      isCurrent && "font-semibold text-brand-navy cursor-default",
                       isCompleted && "text-gray-600 hover:bg-gray-100 cursor-pointer",
-                      !isCurrent && !isCompleted && "text-gray-300 cursor-default"
+                      isFuture && "text-gray-400 hover:bg-gray-50 hover:text-gray-700 cursor-pointer"
                     )}
                   >
                     {subStepBreadcrumbLabel(s.kind)}
@@ -1503,8 +1523,28 @@ export function PerPersonReviewWizard({
             {personCategories.map((cat) => {
               const total = (docTypesByCategory[cat] ?? []).length;
               if (total === 0) return null;
-              const inner = (
-                <>
+              // B-058 §2.3 — badges are always buttons. On the docs step
+              // they scroll to the in-page anchor; on any other sub-step
+              // they navigate to the docs step and the effect above
+              // handles the scroll once it has rendered.
+              const handleClick = () => {
+                if (currentSubStep.kind === "doc-list") {
+                  document
+                    .getElementById(`docs-cat-${cat}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                } else if (docsSubStepIndex >= 0) {
+                  setPendingDocsCategory(cat);
+                  setSubStepIndex(docsSubStepIndex);
+                }
+              };
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={handleClick}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-label={`Jump to ${categoryLabel(cat)} documents`}
+                >
                   {categoryIcon(cat)}
                   <span className="font-medium uppercase tracking-wide text-[10px] text-gray-700">
                     {categoryLabel(cat)}
@@ -1512,28 +1552,7 @@ export function PerPersonReviewWizard({
                   <span className="tabular-nums">
                     ({uploadedCountFor(cat)}/{total})
                   </span>
-                </>
-              );
-              // B-055 §2.2 — on the doc-list sub-step the badges become
-              // anchor jumps to each category's section.
-              return currentSubStep.kind === "doc-list" ? (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => {
-                    document
-                      .getElementById(`docs-cat-${cat}`)
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  aria-label={`Jump to ${categoryLabel(cat)} documents`}
-                >
-                  {inner}
                 </button>
-              ) : (
-                <span key={cat} className="inline-flex items-center gap-1.5">
-                  {inner}
-                </span>
               );
             })}
             <DocumentStatusLegend />

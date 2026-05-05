@@ -15,6 +15,72 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-058 — Free navigation in per-person KYC + Resend tooltip + manual prefill + role/walk refresh (Claude Code)
+
+Six clickability/feedback fixes in the per-person KYC wizard. UI only,
+no DB changes.
+
+- `src/components/client/PerPersonReviewWizard.tsx`
+  - Sub-step breadcrumb (`Contact › Identity › Address › …`) now lets
+    users jump forward as well as backward. Removed the
+    `canJump`/`disabled` gate; future steps render with a hover
+    affordance and a slightly muted text color so they read as
+    clickable. Per-step validation (Submit on Review) is still the
+    gate, so free navigation does not bypass requirements.
+  - KYC Documents category badges (IDENTITY / FINANCIAL / COMPLIANCE …)
+    are always buttons, not just on the doc-list sub-step. Clicking
+    from another sub-step stashes the target category, navigates to
+    the docs step, and a `requestAnimationFrame`-deferred effect
+    scrolls to the in-page anchor once the new step has mounted.
+    Added `docsSubStepIndex` and `pendingDocsCategory` state +
+    effect to coordinate the cross-step navigation.
+
+- `src/components/client/ServiceWizardPeopleStep.tsx`
+  - `ResendInviteButton` swapped the native `title` attribute for a
+    shadcn Tooltip (`@/components/ui/tooltip`) wrapped in an
+    `inline-block` `<span>`. Disabled buttons swallow native hover
+    events, which made the 24h cooldown reason invisible. The
+    wrapper is keyboard-focusable only when the inner button is
+    disabled (`tabIndex={isCoolingDown ? 0 : -1}`) so screen readers
+    can still announce the reason.
+  - `handleRoleAdded` / `handleRoleRemoved` now call
+    `router.refresh()` after the local state mutation so the
+    page-level `requirements` / `documentTypes` / `documents` /
+    `persons` re-fetch and the KYC progress strip
+    ("X of N uploaded") reflects the new role's required-docs count
+    without a manual reload.
+  - Removed the local `kycCompletedIds: Set<string>` optimistic
+    override. Walking the per-person review walk no longer forces
+    `kycPct = 100` on the PersonCard; the card now trusts
+    `computePersonCompletion`'s real `percentage` / `isComplete`.
+    `handleKycComplete`, `handleExitKycReview`, and the review-all
+    `onAdvance` advance no longer add to a local Set; instead
+    `router.refresh()` re-fetches server data so any KYC field
+    saves / doc uploads from the walk are reflected post-walk.
+
+- `src/components/kyc/steps/ResidentialAddressStep.tsx` and
+  `src/components/kyc/steps/IdentityStep.tsx`
+  - Added `handleManualPrefill` + `manualPrefilling` state. The
+    handler reads the existing
+    `verification_result.extracted_fields` (via
+    `availableExtracts` / `filteredAvailable`), PATCHes any matches
+    via `/api/profiles/kyc/save`, and calls `onChange()` with the
+    same payload. No AI re-run.
+  - The error/yellow banner ("Couldn't auto-fill from your
+    document") now renders a "Pre-fill from uploaded document"
+    button when there are extractable values
+    (`availableExtracts.length > 0` / `filteredAvailable.length > 0`).
+    Useful when auto-prefill skipped because the user typed first.
+  - The success/blue banner now renders a compact "Re-apply" button
+    so the user can re-pull values they cleared by accident.
+  - Buttons only appear when there is something to fill — if the AI
+    returned nothing relevant for the sub-step, the buttons are
+    hidden so we don't promise a fill we can't deliver.
+
+Build: green. Lint: one pre-existing warning unchanged. Tests:
+160/160 passing. After CLI finished file edits, dev server restarted
+(`pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`).
+
 ### 2026-05-05 — B-057 — Prefill banner reacts to uploads (single source of truth) (Claude Code)
 
 Real-device QA on the Address sub-step found contradictory banners

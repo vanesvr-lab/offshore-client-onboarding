@@ -7,6 +7,7 @@ import { ValidatedLabel, FieldWrapper } from "@/components/shared/ValidatedLabel
 import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useFieldValidation } from "@/hooks/useFieldValidation";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { formWidths } from "@/lib/form-widths";
 import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import type { PrefillableField } from "@/lib/kyc/computePrefillable";
@@ -191,6 +192,45 @@ export function ResidentialAddressStep({
     effectiveKycRecordId,
   ]);
 
+  // B-058 §4 — manual "Pre-fill from uploaded document" trigger. No AI
+  // re-run; just applies the existing extraction to the form. Uses
+  // `availableExtracts` (not `prefillable`) so it OVERWRITES values the
+  // user typed first — the user clicked the button, intent is explicit.
+  const [manualPrefilling, setManualPrefilling] = useState(false);
+  async function handleManualPrefill() {
+    if (!effectiveKycRecordId) return;
+    if (availableExtracts.length === 0) {
+      toast.info("This document didn't include address details. Please enter them below.");
+      return;
+    }
+    setManualPrefilling(true);
+    try {
+      const payload: Record<string, string> = {};
+      for (const row of availableExtracts) payload[row.target] = row.value;
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: effectiveKycRecordId, fields: payload }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      const patch: Partial<KycRecord> = {};
+      for (const [k, v] of Object.entries(payload)) {
+        (patch as Record<string, unknown>)[k] = v;
+      }
+      onChange(patch);
+      setBannerState("success");
+      toast.success(
+        `Filled ${availableExtracts.length} field${
+          availableExtracts.length === 1 ? "" : "s"
+        } from your proof of address.`
+      );
+    } catch {
+      toast.error("Couldn't fill from document — please try again.");
+    } finally {
+      setManualPrefilling(false);
+    }
+  }
+
   function fieldState(key: keyof KycRecord, required: boolean) {
     return validation.getFieldState(key as string, (form[key] ?? "") as string, required);
   }
@@ -213,10 +253,21 @@ export function ResidentialAddressStep({
       {bannerState === "success" && (
         <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 flex items-start gap-3">
           <Sparkles className="h-4 w-4 text-brand-blue shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-medium text-brand-navy">Filled from uploaded document</p>
             <p className="text-xs text-gray-600">Values extracted from your proof of address.</p>
           </div>
+          {addressDoc && availableExtracts.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleManualPrefill()}
+              disabled={manualPrefilling}
+              className="h-7 text-xs"
+            >
+              Re-apply
+            </Button>
+          )}
         </div>
       )}
       {bannerState === "no-source" && (
@@ -226,11 +277,27 @@ export function ResidentialAddressStep({
         </div>
       )}
       {bannerState === "error" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 flex items-start gap-2.5">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 flex items-center gap-2.5">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" aria-hidden="true" />
+          <p className="flex-1 text-sm text-amber-800">
             Couldn&apos;t auto-fill from your document. Please enter values manually.
           </p>
+          {addressDoc && availableExtracts.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleManualPrefill()}
+              disabled={manualPrefilling}
+              className="h-7 text-xs text-amber-900 hover:bg-amber-100"
+            >
+              {manualPrefilling ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" aria-hidden="true" />
+              ) : (
+                <Sparkles className="h-3 w-3 mr-1" aria-hidden="true" />
+              )}
+              {manualPrefilling ? "Filling…" : "Pre-fill from uploaded document"}
+            </Button>
+          )}
         </div>
       )}
 
