@@ -34,6 +34,7 @@ import { compressIfImage } from "@/lib/imageCompression";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import { DD_LEVEL_INCLUDES } from "@/lib/utils/dueDiligenceConstants";
 import { computeAvailableExtracts } from "@/lib/kyc/computePrefillable";
+import { composeFormState, reconcileOverlay } from "@/lib/utils/formStateOverlay";
 import type {
   KycRecord,
   DocumentRecord,
@@ -579,7 +580,10 @@ export function PerPersonReviewWizard({
   const [overlay, setOverlay] = useState<Partial<KycRecord>>({});
 
   const form = useMemo<Partial<KycRecord>>(
-    () => ({ ...serverFormData, ...overlay }),
+    () => composeFormState(
+      serverFormData as unknown as Record<string, unknown>,
+      overlay as Partial<Record<string, unknown>>,
+    ) as unknown as Partial<KycRecord>,
     [serverFormData, overlay]
   );
 
@@ -590,19 +594,10 @@ export function PerPersonReviewWizard({
   // Reconcile overlay entries whose server value has caught up with the
   // user's edit. Runs on every server-data refresh.
   useEffect(() => {
-    setOverlay((prev) => {
-      let changed = false;
-      const next: Record<string, unknown> = {};
-      const serverRecord = serverFormData as unknown as Record<string, unknown>;
-      for (const [key, overlayValue] of Object.entries(prev)) {
-        if (serverRecord[key] === overlayValue) {
-          changed = true;
-          continue;
-        }
-        next[key] = overlayValue;
-      }
-      return changed ? (next as Partial<KycRecord>) : prev;
-    });
+    setOverlay((prev) => reconcileOverlay(
+      serverFormData as unknown as Record<string, unknown>,
+      prev as Partial<Record<string, unknown>>,
+    ) as Partial<KycRecord>);
   }, [serverFormData]);
 
   // ── Local docs state — mutates as user uploads, drives progress strip ─────

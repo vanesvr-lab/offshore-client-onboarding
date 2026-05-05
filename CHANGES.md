@@ -15,6 +15,44 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-064 — Regression tests for KYC form-state architecture (Claude Code)
+
+Locks in the B-063 architecture so the autosave-wipes-data bug class
+can't quietly regress.
+
+- `src/lib/utils/formStateOverlay.ts`: extracted the `composeFormState`
+  and `reconcileOverlay` helpers from `PerPersonReviewWizard.tsx` so
+  they're independently testable. The wizard now imports them; the
+  inline merge `useMemo` and reconcile `useEffect` were replaced with
+  calls to the helpers (behavior identical, including the same-ref
+  short-circuit when nothing reconciles).
+- `tests/unit/utils/formStateOverlay.test.ts`: 7 tests covering
+  composition (overlay over server), input non-mutation,
+  reconciliation (drops matching keys, preserves diverging ones), and
+  reference-equality semantics for both the no-op and all-reconcile
+  cases.
+- `tests/integration/api/profiles-kyc-save-partial.test.ts`: 6 tests
+  asserting the `POST /api/profiles/kyc/save` partial-payload contract
+  — sending one address field updates only that field on
+  `client_profile_kyc` (plus `updated_at`), never invents nulls for
+  unrelated columns. Includes auth/validation paths (401, 400, 404)
+  and a multi-field address case. This is the structural guarantee
+  that B-063's "send only the overlay" relies on.
+- `tests/e2e/kyc-address-persists.spec.ts`: full user-flow regression
+  skeleton (type address → Save & Close → re-open → 60s wait → values
+  still there; and Save & Close with no edits fires no save). Marked
+  `test.fixme` because the wizard lives inside a server-rendered
+  service detail page, so Playwright's `page.route()` cannot stub the
+  Supabase reads done in the Next dev server's Node process. The spec
+  file documents exactly what infrastructure is needed to lift the
+  fixme (a seeded test DB OR an MSW interceptor inside the dev
+  server). Until then the unit + integration tests carry the
+  regression weight.
+
+Suite: 173 tests passing (was 160 before this batch). No production
+behavior changes — pure tests + a no-op refactor for testability. No
+DB migrations.
+
 ### 2026-05-05 — B-063 — Re-architect KYC form state: server-derived + optimistic overlay (Claude Code)
 
 Structural fix for the autosave-wipes-data bug class that survived
