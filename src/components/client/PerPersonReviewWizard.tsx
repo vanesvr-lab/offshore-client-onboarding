@@ -555,18 +555,55 @@ export function PerPersonReviewWizard({
   const profileId = reviewingPerson.client_profiles?.id ?? "";
   const isIndividual = (reviewingPerson.client_profiles?.record_type ?? "individual") !== "organisation";
   const profileName = reviewingPerson.client_profiles?.full_name ?? "Unknown";
-  const initialKycRecord = useMemo(() => mapToKycRecord(reviewingPerson), [reviewingPerson]);
-  const kycRecordId = initialKycRecord.id;
+  // ── Form state — server-derived + optimistic overlay (B-063) ──────────────
+  // `serverFormData` is recomputed from the server-derived
+  // reviewingPerson on every render — it's the source of truth for what's
+  // in the DB. `overlay` holds the user's in-flight edits (fields they've
+  // changed but the server may not yet reflect, OR for which a save is in
+  // flight). `form` is the merged view shown to the inner steps.
+  //
+  // When server data refreshes (post-save router.refresh) and the server
+  // value for an overlay field equals the overlay value, that field is
+  // reconciled out of overlay — the edit has landed.
+  //
+  // `saveKycForm` sends ONLY the overlay (fields the user actually
+  // touched), so a stale or empty overlay can never wipe other fields in
+  // the DB. This is the structural fix for the autosave-wipes-data bug
+  // class (B-061/B-062).
+  const serverFormData = useMemo(
+    () => mapToKycRecord(reviewingPerson),
+    [reviewingPerson]
+  );
+  const kycRecordId = serverFormData.id;
 
-  // ── Form state (synced once, then user-owned) ─────────────────────────────
-  // Form state initializes from `initialKycRecord` on mount and is only
-  // mutated by user edits via `handleFormChange`. Fresh server data is
-  // pulled in via a key-based remount (see ServiceWizardPeopleStep where
-  // <PerPersonReviewWizard> keys on kyc.updated_at) — not a sync effect.
-  const [form, setForm] = useState<Partial<KycRecord>>(initialKycRecord);
+  const [overlay, setOverlay] = useState<Partial<KycRecord>>({});
+
+  const form = useMemo<Partial<KycRecord>>(
+    () => ({ ...serverFormData, ...overlay }),
+    [serverFormData, overlay]
+  );
+
   const handleFormChange = useCallback((fields: Partial<KycRecord>) => {
-    setForm((prev) => ({ ...prev, ...fields }));
+    setOverlay((prev) => ({ ...prev, ...fields }));
   }, []);
+
+  // Reconcile overlay entries whose server value has caught up with the
+  // user's edit. Runs on every server-data refresh.
+  useEffect(() => {
+    setOverlay((prev) => {
+      let changed = false;
+      const next: Record<string, unknown> = {};
+      const serverRecord = serverFormData as unknown as Record<string, unknown>;
+      for (const [key, overlayValue] of Object.entries(prev)) {
+        if (serverRecord[key] === overlayValue) {
+          changed = true;
+          continue;
+        }
+        next[key] = overlayValue;
+      }
+      return changed ? (next as Partial<KycRecord>) : prev;
+    });
+  }, [serverFormData]);
 
   // ── Local docs state — mutates as user uploads, drives progress strip ─────
   const [localDocs, setLocalDocs] = useState<ClientServiceDoc[]>(initialDocuments);
@@ -714,16 +751,18 @@ export function PerPersonReviewWizard({
   // ── Save helpers ──────────────────────────────────────────────────────────
   const autosave = useAutosave();
   const saving = autosave.state === "saving" || autosave.state === "retrying";
-  const formRef = useRef(form);
-  formRef.current = form;
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
   const saveKycForm = useCallback(async (): Promise<boolean> => {
     if (!kycRecordId) return true; // no record yet — nothing to save server-side
+    const pending = overlayRef.current;
+    if (Object.keys(pending).length === 0) return true; // nothing dirty — no-op success
     return autosave.save(async () => {
       try {
         const res = await fetch("/api/profiles/kyc/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kycRecordId, fields: formRef.current }),
+          body: JSON.stringify({ kycRecordId, fields: pending }),
         });
         if (!res.ok) return false;
         return true;
@@ -1243,7 +1282,7 @@ export function PerPersonReviewWizard({
             />
             <IdentityStep
               clientId={profileId}
-              kycRecord={initialKycRecord}
+              kycRecord={serverFormData}
               documents={personDocsAsRecords}
               documentTypes={documentTypes}
               requirements={requirements}
@@ -1275,7 +1314,7 @@ export function PerPersonReviewWizard({
             />
             <ResidentialAddressStep
               clientId={profileId}
-              kycRecord={initialKycRecord}
+              kycRecord={serverFormData}
               documents={personDocsAsRecords}
               documentTypes={documentTypes}
               requirements={requirements}
@@ -1292,7 +1331,7 @@ export function PerPersonReviewWizard({
         return (
           <FinancialStep
             clientId={profileId}
-            kycRecord={initialKycRecord}
+            kycRecord={serverFormData}
             documents={personDocsAsRecords}
             documentTypes={documentTypes}
             dueDiligenceLevel={dueDiligenceLevel}
@@ -1308,7 +1347,7 @@ export function PerPersonReviewWizard({
         return (
           <DeclarationsStep
             clientId={profileId}
-            kycRecord={initialKycRecord}
+            kycRecord={serverFormData}
             documents={personDocsAsRecords}
             documentTypes={documentTypes}
             dueDiligenceLevel={dueDiligenceLevel}
@@ -1323,7 +1362,7 @@ export function PerPersonReviewWizard({
       case "form-review":
         return (
           <ReviewStep
-            kycRecord={initialKycRecord}
+            kycRecord={serverFormData}
             documents={personDocsAsRecords}
             documentTypes={documentTypes}
             dueDiligenceLevel={dueDiligenceLevel}

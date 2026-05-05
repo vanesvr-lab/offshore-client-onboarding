@@ -15,6 +15,69 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-063 — Re-architect KYC form state: server-derived + optimistic overlay (Claude Code)
+
+Structural fix for the autosave-wipes-data bug class that survived
+B-061 and B-062. Real reproduction: user typed Bruce's address,
+clicked Save & Close (DB had values briefly), DB nulled within ~74s.
+
+Root cause was that `PerPersonReviewWizard` maintained a local
+`useState<Partial<KycRecord>>(initialKycRecord)` initialized from
+props on mount, and `saveKycForm` sent the **entire** form snapshot
+on every save. Any path that reset `form` to stale data turned the
+next save into a multi-field overwrite that wiped fields the user
+had previously saved.
+
+New architecture in `PerPersonReviewWizard.tsx`:
+
+- `serverFormData = useMemo(() => mapToKycRecord(reviewingPerson))`
+  — source of truth, recomputed from the server-derived prop on
+  every render.
+- `overlay = useState<Partial<KycRecord>>({})` — user's in-flight
+  edits.
+- `form = { ...serverFormData, ...overlay }` — merged view passed
+  to inner steps. Computed, never stale, always reflects the
+  latest server data plus the user's pending edits.
+- `handleFormChange` updates only the overlay.
+- `saveKycForm` sends ONLY the overlay (the fields the user
+  actually touched), not the full form. Empty overlay = no-op
+  save (no network call, no chance of wiping).
+- A reconciliation `useEffect` drops overlay entries when the
+  server data catches up to the user's edit (post-save +
+  router.refresh). Strict equality check, so still-pending or
+  diverged values stay in overlay.
+- Removed `formRef` (replaced by `overlayRef`) and the now-stale
+  `initialKycRecord` alias (5 step props now read
+  `kycRecord={serverFormData}`, same definition).
+
+Net effect: stale state can no longer wipe DB values because there
+is nothing to wipe with. The save payload structurally cannot
+include fields the user didn't edit, so multi-field wipes become
+impossible.
+
+Inner step components (`IdentityStep`, `ResidentialAddressStep`,
+`FinancialStep`, `DeclarationsStep`, `ReviewStep`,
+`CompanyDetailsStep`, `CorporateTaxStep`) are unchanged — they
+still receive `form` and `onChange` props with the same shape.
+
+Supersedes the form-side concerns of B-061/B-062. The persons
+sync useEffect from B-061 §1 stays. The kyc.updated_at remount
+key from B-062 stays as a safety net for inner-step state that
+should reset on data refresh (banners, prefill UI).
+
+Files:
+- `src/components/client/PerPersonReviewWizard.tsx`
+
+UI / state architecture only. No DB or API changes — the route
+handler at `/api/profiles/kyc/save` already merges field-by-field,
+so partial payloads are backward-compatible. Lint: pre-existing
+warning unchanged. Build green. Tests 160/160 passing.
+
+Hard-refresh prod tabs after deploy — stale browser cache will
+still run the old (pre-B-063) bundle. Fields wiped from earlier
+sessions (Bruce's address, etc.) are not coming back; re-enter
+once after this lands.
+
 ### 2026-05-05 — B-062 — Fix form-state wipe introduced by B-061 (Claude Code)
 
 B-061's form-sync useEffect was overwriting `PerPersonReviewWizard`'s
