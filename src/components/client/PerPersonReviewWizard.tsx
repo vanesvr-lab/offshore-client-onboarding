@@ -559,25 +559,14 @@ export function PerPersonReviewWizard({
   const kycRecordId = initialKycRecord.id;
 
   // ── Form state (synced once, then user-owned) ─────────────────────────────
+  // Form state initializes from `initialKycRecord` on mount and is only
+  // mutated by user edits via `handleFormChange`. Fresh server data is
+  // pulled in via a key-based remount (see ServiceWizardPeopleStep where
+  // <PerPersonReviewWizard> keys on kyc.updated_at) — not a sync effect.
   const [form, setForm] = useState<Partial<KycRecord>>(initialKycRecord);
   const handleFormChange = useCallback((fields: Partial<KycRecord>) => {
     setForm((prev) => ({ ...prev, ...fields }));
   }, []);
-
-  // Sync form from the latest server-derived initialKycRecord, but only
-  // when no save is in-flight — otherwise user edits in `form` are
-  // fresher than the server snapshot and a sync would discard them.
-  // autosaveStateRef is wired below the `useAutosave()` declaration so
-  // this effect can read the latest state without taking it as a dep.
-  useEffect(() => {
-    if (
-      autosaveStateRef.current === "saving" ||
-      autosaveStateRef.current === "retrying"
-    ) {
-      return;
-    }
-    setForm(initialKycRecord);
-  }, [initialKycRecord]);
 
   // ── Local docs state — mutates as user uploads, drives progress strip ─────
   const [localDocs, setLocalDocs] = useState<ClientServiceDoc[]>(initialDocuments);
@@ -725,12 +714,6 @@ export function PerPersonReviewWizard({
   // ── Save helpers ──────────────────────────────────────────────────────────
   const autosave = useAutosave();
   const saving = autosave.state === "saving" || autosave.state === "retrying";
-  // Mirror autosave.state into a ref so the prop-sync effect above can
-  // skip mid-save without becoming a dependency of the sync effect.
-  const autosaveStateRef = useRef(autosave.state);
-  useEffect(() => {
-    autosaveStateRef.current = autosave.state;
-  }, [autosave.state]);
   const formRef = useRef(form);
   formRef.current = form;
   const saveKycForm = useCallback(async (): Promise<boolean> => {

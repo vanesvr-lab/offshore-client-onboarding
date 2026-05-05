@@ -1090,7 +1090,9 @@ export function ServiceWizardPeopleStep({
 
     return (
       <PerPersonReviewWizard
-        key={reviewingPerson.id}
+        key={`${reviewingPerson.id}-${
+          (reviewingPerson.client_profiles?.client_profile_kyc as { updated_at?: string } | null)?.updated_at ?? "init"
+        }`}
         serviceId={serviceId}
         reviewingPerson={reviewingPerson}
         profileRoleRows={profileRoleRows}

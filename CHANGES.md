@@ -15,6 +15,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-062 — Fix form-state wipe introduced by B-061 (Claude Code)
+
+B-061's form-sync useEffect was overwriting `PerPersonReviewWizard`'s
+`form` state with stale `initialKycRecord` data after a wizard
+remount-then-server-refetch race. Symptom: user typed Bruce's
+address, clicked Save & Close (DB had values), opened Bruce again,
+and a follow-on save wiped the DB within ~74 seconds.
+
+Replaced the buggy sync mechanism with a remount strategy:
+
+- Removed the form-sync useEffect and `autosaveStateRef` wiring from
+  `PerPersonReviewWizard.tsx`. Form state goes back to mount-time
+  initialization via `useState(initialKycRecord)`, updated only by
+  user edits via `handleFormChange`.
+- Added the kyc record's `updated_at` to the
+  `<PerPersonReviewWizard>` key in `ServiceWizardPeopleStep.tsx`.
+  When the server-side data refetch lands (post-save router.refresh),
+  the key changes, React unmounts the old wizard and mounts a fresh
+  one, and `useState(initialKycRecord)` picks up the latest values
+  naturally. Typing in progress is preserved because `updated_at`
+  doesn't advance until a save commits — the key is stable while the
+  user is typing.
+
+The persons sync useEffect from B-061 §1 stays — it correctly
+propagates fresh persons data after `router.refresh()`.
+
+Files:
+- `src/components/client/PerPersonReviewWizard.tsx`
+- `src/components/client/ServiceWizardPeopleStep.tsx`
+
+UI / state only. No DB changes. Lint: pre-existing warning
+unchanged. Build green. Tests 160/160 passing. Hard-refresh prod
+tabs after deploy — stale browser cache will still run the old
+(buggy) bundle.
+
 ### 2026-05-05 — B-061 — Sync useState(prop) patterns so autosaves don't wipe values (Claude Code)
 
 Fixes a class of "data appears saved then disappears 30-60s later"
