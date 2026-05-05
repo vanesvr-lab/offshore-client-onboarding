@@ -43,10 +43,11 @@ describe("POST /api/kyc/verify-code", () => {
           {
             id: "v-1",
             access_token: "tok",
-            kyc_record_id: "rec-1",
+            client_profile_id: "cp-1",
             code: "123456",
             attempts: 0,
             verified_at: null,
+            superseded_at: null,
             expires_at: new Date(Date.now() - 60_000).toISOString(),
           },
         ],
@@ -56,6 +57,29 @@ describe("POST /api/kyc/verify-code", () => {
     expect(res.status).toBe(410);
   });
 
+  it("returns 410 with code:'superseded' when a newer invite has replaced this one (B-056 §1.2)", async () => {
+    mockSupabase({
+      verification_codes: {
+        select: [
+          {
+            id: "v-1",
+            access_token: "tok",
+            client_profile_id: "cp-1",
+            code: "123456",
+            attempts: 0,
+            verified_at: null,
+            superseded_at: new Date().toISOString(),
+            expires_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+        ],
+      },
+    });
+    const res = await POST(makeRequest({ token: "tok", code: "123456" }));
+    expect(res.status).toBe(410);
+    const body = await res.json();
+    expect(body.code).toBe("superseded");
+  });
+
   it("returns 401 with 'attempts remaining' on a wrong code", async () => {
     mockSupabase({
       verification_codes: {
@@ -63,10 +87,11 @@ describe("POST /api/kyc/verify-code", () => {
           {
             id: "v-1",
             access_token: "tok",
-            kyc_record_id: "rec-1",
+            client_profile_id: "cp-1",
             code: "123456",
             attempts: 0,
             verified_at: null,
+            superseded_at: null,
             expires_at: new Date(Date.now() + 60_000).toISOString(),
           },
         ],
@@ -87,10 +112,11 @@ describe("POST /api/kyc/verify-code", () => {
           {
             id: "v-1",
             access_token: "tok",
-            kyc_record_id: "rec-1",
+            client_profile_id: "cp-1",
             code: "123456",
             attempts: 5,
             verified_at: null,
+            superseded_at: null,
             expires_at: new Date(Date.now() + 60_000).toISOString(),
           },
         ],
@@ -107,17 +133,33 @@ describe("POST /api/kyc/verify-code", () => {
           {
             id: "v-1",
             access_token: "tok",
-            kyc_record_id: "rec-1",
+            client_profile_id: "cp-1",
             code: "123456",
             attempts: 0,
             verified_at: null,
+            superseded_at: null,
             expires_at: new Date(Date.now() + 60_000).toISOString(),
           },
         ],
         update: [{}],
       },
-      kyc_records: {
-        select: [{ id: "rec-1", client_id: "c-1", full_name: "Jane", profile_roles: [] }],
+      // B-056 — verify-code now reads the new schema: client_profiles +
+      // client_profile_kyc + profile_service_roles, then fans out to
+      // clients / documents / *_requirements.
+      client_profiles: {
+        select: [
+          {
+            id: "cp-1",
+            client_id: "c-1",
+            full_name: "Jane",
+            email: "jane@example.com",
+            phone: null,
+            address: null,
+            record_type: "individual",
+            client_profile_kyc: { id: "kyc-1", date_of_birth: "1990-01-01" },
+            profile_service_roles: [{ role: "director" }],
+          },
+        ],
       },
       clients: {
         select: [{ id: "c-1", company_name: "Acme", due_diligence_level: "cdd" }],
@@ -131,6 +173,12 @@ describe("POST /api/kyc/verify-code", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.verified).toBe(true);
-    expect(body.kycRecord).toMatchObject({ id: "rec-1" });
+    expect(body.kycRecord).toMatchObject({
+      id: "kyc-1",
+      client_id: "c-1",
+      client_profile_id: "cp-1",
+      full_name: "Jane",
+    });
+    expect(body.kycRecord.profile_roles).toEqual([{ role: "director" }]);
   });
 });

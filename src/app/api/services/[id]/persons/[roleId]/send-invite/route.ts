@@ -125,18 +125,38 @@ export async function POST(
   const code = generateCode();
   const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
 
-  // Store in verification_codes (kyc_record_id omitted — new model uses client_profile_kyc)
+  // B-056 §1.2 — store the invite keyed on (email, client_profile_id) so a
+  // user with multiple roles (Director + Shareholder + UBO on the same
+  // service) doesn't see their first link wiped by the second invite. Any
+  // earlier ACTIVE row is marked `superseded_at` (instead of deleted) so
+  // verify-code can return a clear "your invite was updated" 410 if the
+  // old link is opened. The unique partial index on (email,
+  // client_profile_id) WHERE verified_at IS NULL AND superseded_at IS NULL
+  // (B-056 migration) keeps at most one active row per pair.
+  const supersededAt = new Date().toISOString();
   await supabase
     .from("verification_codes")
-    .delete()
-    .eq("email", profile.email);
+    .update({ superseded_at: supersededAt })
+    .eq("email", profile.email)
+    .eq("client_profile_id", profile.id)
+    .is("verified_at", null)
+    .is("superseded_at", null);
 
-  await supabase.from("verification_codes").insert({
-    access_token: accessToken,
-    code,
-    email: profile.email,
-    expires_at: expiresAt,
-  });
+  const { error: insertErr } = await supabase
+    .from("verification_codes")
+    .insert({
+      access_token: accessToken,
+      code,
+      email: profile.email,
+      client_profile_id: profile.id,
+      expires_at: expiresAt,
+    });
+  if (insertErr) {
+    return NextResponse.json(
+      { error: `Failed to create invite: ${insertErr.message}` },
+      { status: 500 }
+    );
+  }
 
   // Send invite email
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

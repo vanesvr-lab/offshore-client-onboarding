@@ -35,7 +35,7 @@ const INDIVIDUAL_FIELDS: { key: string; label: string; type?: string }[] = [
   { key: "source_of_wealth_description", label: "Source of Wealth" },
 ];
 
-type PageState = "code_entry" | "form" | "expired" | "error";
+type PageState = "code_entry" | "form" | "expired" | "superseded" | "error";
 
 interface ClientInfo {
   id: string;
@@ -67,6 +67,7 @@ export function KycFillClient({ token }: { token: string }) {
       const data = (await res.json()) as {
         verified?: boolean;
         error?: string;
+        code?: string;
         kycRecord?: KycRecord;
         client?: ClientInfo;
         documents?: DocumentRecord[];
@@ -76,7 +77,10 @@ export function KycFillClient({ token }: { token: string }) {
 
       if (!res.ok) {
         if (res.status === 410) {
-          setState("expired");
+          // B-056 §1.2 — distinguish "your invite was updated" from
+          // "this link is too old". Both are 410, but the body's
+          // `code` field tells them apart.
+          setState(data.code === "superseded" ? "superseded" : "expired");
           return;
         }
         toast.error(data.error ?? "Verification failed");
@@ -195,6 +199,27 @@ export function KycFillClient({ token }: { token: string }) {
             <p className="text-sm text-gray-500">
               This link has expired. Please contact the administrator to send a
               new invite.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Superseded — newer invite was sent for the same email + role ──
+  if (state === "superseded") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="h-12 w-12 text-amber-400 mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Your invite was updated
+            </h2>
+            <p className="text-sm text-gray-500">
+              A newer invitation email has been sent to you. Please open
+              the most recent email — the link in this one is no longer
+              active.
             </p>
           </CardContent>
         </Card>

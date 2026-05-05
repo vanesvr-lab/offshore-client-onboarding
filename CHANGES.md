@@ -15,6 +15,89 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-056 Batch 1 — Magic-link KYC invite collision + missing-profile fix (Claude Code)
+
+The magic-link KYC invite was returning "Invalid or expired link" or
+"Profile not found" on every fresh send. Root cause analysis on the
+real code path (not the suspected list) found two real bugs and
+neither matched suspect 1.4 (timezone):
+
+**Cause 1 — `kyc_record_id` was never populated.**
+`send-invite/route.ts:128` had a comment saying "kyc_record_id omitted
+— new model uses client_profile_kyc". But `verify-code` was still
+looking up `kyc_records.id = vc.kyc_record_id`, which always resolved
+to `null` → 404. The codebase already had
+`verification_codes.client_profile_id` (added in migration 003); it
+just wasn't being written or read. **This was the primary blocker:
+every fresh single-role invite hit this 404 immediately after a
+correct code entry.**
+
+**Cause 2 — DELETE-by-email collision.** A second invite to the same
+email (multi-role users like Bruce Banner) wiped the first row. The
+first email's link → 404 "Invalid or expired link". Real bug, but
+secondary — single-role users hit Cause 1 first.
+
+Fixes shipped together (one chain, one batch):
+
+- **Migration `20260505050019_verification_codes_supersede.sql`** —
+  pushed via `npm run db:push`, verified with `npm run db:status`
+  (paired Local + Remote, no drift).
+  - `superseded_at timestamptz` column so old rows can be marked
+    replaced instead of deleted.
+  - Unique partial index `verification_codes_email_profile_active_uq`
+    on `(email, client_profile_id)` `WHERE verified_at IS NULL AND
+    superseded_at IS NULL` enforces one active invite per (person,
+    profile) pair.
+  - Plain index on `access_token` (was already implicit; explicit
+    keeps the lookup hot).
+
+- **`src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts`**
+  — replaced `DELETE WHERE email = ?` + `INSERT` with `UPDATE … SET
+  superseded_at = now() WHERE email = ? AND client_profile_id = ? AND
+  verified_at IS NULL AND superseded_at IS NULL` + `INSERT` (now
+  including `client_profile_id`). Errors on insert surface as 500 to
+  the caller instead of being silently swallowed.
+
+- **`src/app/api/kyc/verify-code/route.ts`** — full rewrite:
+  - Looks up `vc.client_profile_id` (not `vc.kyc_record_id`).
+  - Returns a 410 with `code: "superseded"` when the row's
+    `superseded_at` is non-null, distinct from the existing "expired"
+    410.
+  - `returnKycData` now assembles the legacy `KycRecord`-shape
+    response from `client_profiles` + `client_profile_kyc` (1:1 join)
+    + `profile_service_roles` so the existing `KycFillClient`
+    consumes it without any client-side change to the role-filter
+    logic.
+
+- **`src/app/api/kyc/save-external/route.ts`** — was also broken in
+  the same chain (read `vc.kyc_record_id`, wrote to legacy
+  `kyc_records`). Rewritten to update `client_profile_kyc` for KYC
+  fields and `client_profiles` for shared profile fields (full_name /
+  email / phone / address). Without this fix the user would reach the
+  form but every Save Draft / Submit would fail.
+
+- **`src/app/api/documents/upload-external/route.ts`** — same chain;
+  rewritten to write documents with `client_profile_id` (and the
+  resolved `tenant_id` / `client_id` from the profile) instead of the
+  legacy `kyc_record_id` path.
+
+- **`src/app/kyc/fill/[token]/KycFillClient.tsx`** — handle the new
+  `superseded` 410 with a distinct card ("Your invite was updated …
+  the link in this one is no longer active") instead of the generic
+  "Link Expired" copy.
+
+- **Tests** — `tests/integration/api/kyc-verify-code.test.ts`
+  fixtures rewritten to the new `client_profiles + client_profile_kyc
+  + profile_service_roles` shape. New regression test:
+  `superseded_at` non-null returns 410 with `code: "superseded"`.
+  `npx vitest run` → 160/160 green; `npm run build` clean.
+
+Verification (run with the dev server pointed at the linked Supabase
+project): a fresh invite no longer returns "Profile not found";
+re-sending an invite for a second role marks the prior row superseded
+and the prior link surfaces the new copy instead of the generic
+expired page.
+
 ### 2026-05-05 — B-055 Batch 4 — Smart pre-fill from passport / POA OCR (Claude Code)
 
 The Identity and Address per-person sub-steps now offer an optional
