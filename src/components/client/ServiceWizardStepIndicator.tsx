@@ -1,5 +1,9 @@
 "use client";
 
+import { Fragment } from "react";
+import { Check, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+
 const DEFAULT_STEP_LABELS = ["Company Setup", "Financial", "Banking", "People & KYC", "Documents"];
 
 interface Props {
@@ -10,47 +14,51 @@ interface Props {
   labels?: string[];
 }
 
+/**
+ * B-055 §3.1 — Top wizard stepper renders as a horizontal breadcrumb
+ * (`Company Setup › Financial › ... › Documents`) instead of the older
+ * dot+line layout. Completed steps get a green check + are clickable so
+ * the user can jump back; the current step is bolded; future steps are
+ * muted and not clickable. `flex-wrap` lets the breadcrumb wrap on
+ * narrow viewports — no horizontal scroll.
+ */
 export function ServiceWizardStepIndicator({ currentStep, completedSteps, onStepClick, labels }: Props) {
   const STEP_LABELS = labels ?? DEFAULT_STEP_LABELS;
   return (
-    <div className="space-y-3 mb-6">
-      {/* Dots + arrows row */}
-      <div className="flex items-center">
-        {STEP_LABELS.map((label, i) => {
-          const isComplete = completedSteps.includes(i);
-          const isCurrent = i === currentStep;
-          const isClickable = isComplete || i <= currentStep;
-          return (
-            <div key={i} className="flex items-center flex-1 last:flex-none">
-              <button
-                onClick={() => isClickable && onStepClick(i)}
-                disabled={!isClickable}
-                className={`relative h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors shrink-0
-                  ${isCurrent ? "bg-blue-500 text-white ring-2 ring-blue-300" :
-                    isComplete ? "bg-green-500 text-white cursor-pointer hover:bg-green-600" :
-                    "bg-gray-200 text-gray-500 cursor-not-allowed"
-                  }`}
-                title={label}
-              >
-                {isComplete && !isCurrent ? "✓" : i + 1}
-              </button>
-              {i < STEP_LABELS.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-1 ${isComplete ? "bg-green-400" : "bg-gray-200"}`} />
+    <nav
+      aria-label="Wizard progress"
+      className="flex items-center gap-1 flex-wrap text-sm mb-6"
+    >
+      {STEP_LABELS.map((label, i) => {
+        const isCurrent = i === currentStep;
+        const isCompleted = completedSteps.includes(i);
+        const isClickable = isCompleted || (i < currentStep);
+        return (
+          <Fragment key={i}>
+            {i > 0 && (
+              <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" aria-hidden="true" />
+            )}
+            <button
+              type="button"
+              disabled={!isClickable}
+              onClick={isClickable ? () => onStepClick(i) : undefined}
+              aria-current={isCurrent ? "step" : undefined}
+              className={cn(
+                "h-8 px-2 rounded inline-flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                isCurrent && "font-bold text-brand-navy",
+                isCompleted && !isCurrent && "text-gray-700 hover:bg-gray-50 cursor-pointer",
+                !isCurrent && !isCompleted && !isClickable && "text-gray-400 cursor-default",
+                !isCurrent && !isCompleted && isClickable && "text-gray-600 hover:bg-gray-50 cursor-pointer"
               )}
-            </div>
-          );
-        })}
-      </div>
-      {/* B-048 §3.3 — combined into a single tight line so the narrowed
-          container doesn't open a wide gap between the section label and the
-          step counter. */}
-      <p className="text-sm flex items-center gap-2 flex-wrap">
-        <span className="font-semibold text-brand-navy">{STEP_LABELS[currentStep]}</span>
-        <span className="text-gray-300" aria-hidden="true">·</span>
-        <span className="text-xs text-gray-500">
-          Step {currentStep + 1} of {STEP_LABELS.length}
-        </span>
-      </p>
-    </div>
+            >
+              {isCompleted && (
+                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+              )}
+              <span>{label}</span>
+            </button>
+          </Fragment>
+        );
+      })}
+    </nav>
   );
 }

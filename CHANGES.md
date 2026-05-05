@@ -15,6 +15,35 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-055 Batch 3 — Breadcrumb steppers + Review shortcut (Claude Code)
+
+Top wizard stepper and per-person sub-step nav both moved to a
+breadcrumb pattern; the per-person header gains a "Review <name>"
+shortcut visible on every sub-step except the final review.
+
+- `src/components/client/ServiceWizardStepIndicator.tsx`: rewritten as
+  a horizontal breadcrumb (`Setup › Financial › Banking › People & KYC
+  › Documents`). Completed steps render with a green check + are
+  clickable; current step is bolded navy; future steps are muted and
+  disabled. Wraps cleanly on mobile via `flex-wrap`, no horizontal
+  scroll.
+- `src/components/client/PerPersonReviewWizard.tsx`:
+  - New sub-step breadcrumb under the person name with the same `›`
+    pattern (`Contact › Identity › Address …`). Completed sub-steps
+    are clickable.
+  - Header gains a tertiary "Review {personName}" button (top-right of
+    the name row) that jumps to the review sub-step. Hidden on the
+    review sub-step itself.
+  - `reviewSubStepIndex` is computed once (matches `form-review` for
+    individuals and `form-org-review` for orgs).
+  - "Review & Submit" in `OrgReviewStep` renamed to "Review".
+- `npx vitest run` → 159/159 green; `npx tsc --noEmit` clean.
+
+No DB migrations. The standalone `/kyc/fill/[token]`,
+`/kyc/[profileId]`, and `/apply/...` flows still use the old "Review &
+Submit" copy and the old dot+line stepper — they are explicitly out of
+scope for this brief.
+
 ### 2026-05-05 — B-055 Batch 2 — Reorder sub-steps + clickable category jumps (Claude Code)
 
 Per-person KYC wizard sub-steps now lead with form fields and finish

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Fragment, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft,
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
@@ -14,6 +15,7 @@ import {
   Square,
   Upload,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -101,6 +103,25 @@ function categoryLabel(cat: string): string {
       .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
       .join(" ")
   );
+}
+
+// B-055 §3.2 — short labels for the sub-step breadcrumb under the
+// person name. Keep terse so the breadcrumb fits on small viewports.
+const SUB_STEP_BREADCRUMB_LABELS: Record<string, string> = {
+  contact: "Contact",
+  "form-identity": "Identity",
+  "form-residential-address": "Address",
+  "form-financial": "Financial",
+  "form-declarations": "Declarations",
+  "doc-list": "Documents",
+  "form-review": "Review",
+  "form-org-details": "Company",
+  "form-org-tax": "Tax",
+  "form-org-review": "Review",
+};
+
+function subStepBreadcrumbLabel(kind: string): string {
+  return SUB_STEP_BREADCRUMB_LABELS[kind] ?? kind;
 }
 
 // ─── Sub-step types ───────────────────────────────────────────────────────────
@@ -459,7 +480,7 @@ function OrgReviewStep({ form }: { form: Partial<KycRecord> }) {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-brand-navy mb-1">Review & Submit</h2>
+        <h2 className="text-lg font-semibold text-brand-navy mb-1">Review</h2>
         <p className="text-sm text-gray-600">Review the information below before submitting.</p>
       </div>
       <div className="divide-y divide-gray-100">
@@ -657,6 +678,12 @@ export function PerPersonReviewWizard({
   const currentSubStep = subSteps[subStepIndex] ?? subSteps[0];
   const isLastSubStep = subStepIndex === subSteps.length - 1;
   const isFirstSubStep = subStepIndex === 0;
+  // B-055 §3.3 — index of the per-person review sub-step ("form-review"
+  // for individuals, "form-org-review" for organisations). Used by the
+  // "Review <name>" shortcut in the wizard header.
+  const reviewSubStepIndex = subSteps.findIndex(
+    (s) => s.kind === "form-review" || s.kind === "form-org-review"
+  );
 
   // ── Save helpers ──────────────────────────────────────────────────────────
   const autosave = useAutosave();
@@ -1207,9 +1234,59 @@ export function PerPersonReviewWizard({
         ) : null}
 
         {/* B-048 §3.1 — stack roles under the name to remove the wide
-            justify-between gap that opened up after the container narrowed. */}
+            justify-between gap that opened up after the container narrowed.
+            B-055 §3.2 / §3.3 — sub-step breadcrumb sits between the name
+            and the roles row; "Review <name>" shortcut sits top-right of
+            the same row, hidden on the review sub-step itself. */}
         <div className="flex flex-col gap-2">
-          <h3 className="text-base font-semibold text-brand-navy">{profileName}</h3>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <h3 className="text-base font-semibold text-brand-navy">{profileName}</h3>
+            {currentSubStep.kind !== "form-review" &&
+              currentSubStep.kind !== "form-org-review" &&
+              reviewSubStepIndex >= 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSubStepIndex(reviewSubStepIndex)}
+                  className="h-8 px-2 text-brand-navy hover:bg-gray-50 text-sm"
+                >
+                  Review {profileName}
+                  <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              )}
+          </div>
+          {/* Sub-step breadcrumb — `Contact › Identity › Address …` */}
+          <nav
+            aria-label="Sub-step progress"
+            className="flex items-center gap-0.5 flex-wrap text-xs text-gray-500"
+          >
+            {subSteps.map((s, i) => {
+              const isCurrent = i === subStepIndex;
+              const isCompleted = i < subStepIndex;
+              const canJump = isCompleted;
+              return (
+                <Fragment key={s.id + i}>
+                  {i > 0 && (
+                    <ChevronRight className="h-3 w-3 text-gray-300 shrink-0" aria-hidden="true" />
+                  )}
+                  <button
+                    type="button"
+                    disabled={!canJump}
+                    onClick={canJump ? () => setSubStepIndex(i) : undefined}
+                    aria-current={isCurrent ? "step" : undefined}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      isCurrent && "font-semibold text-brand-navy",
+                      isCompleted && "text-gray-600 hover:bg-gray-100 cursor-pointer",
+                      !isCurrent && !isCompleted && "text-gray-300 cursor-default"
+                    )}
+                  >
+                    {subStepBreadcrumbLabel(s.kind)}
+                  </button>
+                </Fragment>
+              );
+            })}
+          </nav>
           <RoleToggleRow
             serviceId={serviceId}
             profileId={profileId}
