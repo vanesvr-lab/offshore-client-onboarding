@@ -15,6 +15,45 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-055 Batch 4 — Smart pre-fill from passport / POA OCR (Claude Code)
+
+The Identity and Address per-person sub-steps now offer an optional
+upload that auto-fills the form fields below from the AI-extracted
+values on the document.
+
+- `src/components/client/PerPersonReviewWizard.tsx`:
+  - New `PrefillUploadCard` rendered above the IdentityStep (passport)
+    and ResidentialAddressStep (POA). Card uses dashed-border copy
+    "Have your passport handy?" and collapses to a quiet "Pre-filled
+    — please review" line after a successful prefill.
+  - `handlePrefillUpload(kind, file)` flow: optional image
+    compression → POST `/api/services/[id]/documents/upload` with the
+    canonical doc-type id (`Certified Passport Copy` /
+    `Proof of Residential Address`) → poll
+    `/api/documents/[id]` until verification leaves `pending` →
+    `computeAvailableExtracts` to derive prefillable form fields →
+    persist via `/api/profiles/kyc/save` first, then mutate local
+    form state via `handleFormChange`.
+  - Hidden file input with `capture="environment"` (mobile camera
+    path) routes uploads to the prefill handler via a ref.
+  - Reuses existing infrastructure (`computeAvailableExtracts`,
+    `KYC_PREFILLABLE_FIELDS`, the upload route's fire-and-forget
+    verification, the `/documents/[id]` GET) — no new API surface,
+    no schema changes.
+  - The same upload counts as the canonical Passport / POA doc
+    upload so the KYC docs progress strip auto-updates and the
+    Documents step shows ✓ Uploaded for that row.
+
+- No DB migrations. Verifies via `npm run lint` (one pre-existing
+  warning, unchanged), `npx vitest run` (159/159), and `npm run
+  build` (clean).
+
+Mapping note: the AI key → KYC column mapping is driven by the
+template's `document_types.ai_extraction_fields[i].prefill_field`
+(B-033 / B-042 plumbing). No prompt update required — the existing
+extraction config already covers the passport + POA fields the brief
+listed.
+
 ### 2026-05-05 — B-055 Batch 3 — Breadcrumb steppers + Review shortcut (Claude Code)
 
 Top wizard stepper and per-person sub-step nav both moved to a

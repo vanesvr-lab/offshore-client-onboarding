@@ -33,6 +33,7 @@ import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { compressIfImage } from "@/lib/imageCompression";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import { DD_LEVEL_INCLUDES } from "@/lib/utils/dueDiligenceConstants";
+import { computeAvailableExtracts } from "@/lib/kyc/computePrefillable";
 import type {
   KycRecord,
   DocumentRecord,
@@ -713,6 +714,37 @@ export function PerPersonReviewWizard({
   const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
+  // ── B-055 §4 — Smart pre-fill from passport / POA OCR ─────────────────────
+  // The user can optionally upload their passport on the Identity sub-step
+  // or their proof of address on the Address sub-step. The upload runs the
+  // normal verification pipeline AND auto-fills the form fields below from
+  // `verification_result.extracted_fields` so users don't re-type what's
+  // already on the document.
+  type PrefillKind = "passport" | "poa";
+  const PREFILL_DOC_NAMES: Record<PrefillKind, string> = {
+    passport: "Certified Passport Copy",
+    poa: "Proof of Residential Address",
+  };
+  const [prefillUploadingKind, setPrefillUploadingKind] = useState<PrefillKind | null>(null);
+  const [prefillFilledKinds, setPrefillFilledKinds] = useState<Set<PrefillKind>>(new Set());
+  const prefillInputRef = useRef<HTMLInputElement>(null);
+  const pendingPrefillKindRef = useRef<PrefillKind | null>(null);
+
+  function resolvePrefillDocType(kind: PrefillKind): DocumentType | undefined {
+    const name = PREFILL_DOC_NAMES[kind];
+    // Match the IdentityStep convention: requirement-first lookup, then a
+    // bare documentTypes name fallback so manually-seeded templates still
+    // work.
+    const fromReq = requirements.find(
+      (r) => r.requirement_type === "document" && r.document_types?.name === name
+    )?.document_type_id;
+    if (fromReq) {
+      const dt = documentTypes.find((d) => d.id === fromReq);
+      if (dt) return dt;
+    }
+    return documentTypes.find((dt) => dt.name === name);
+  }
+
   async function pollForVerification(docId: string, dtId: string) {
     const MAX_ATTEMPTS = 25;
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
@@ -773,6 +805,132 @@ export function PerPersonReviewWizard({
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploadingTypeId(null);
+    }
+  }
+
+  async function handlePrefillUpload(kind: PrefillKind, file: File) {
+    const docType = resolvePrefillDocType(kind);
+    if (!docType) {
+      toast.error(
+        `Couldn't find a ${kind === "passport" ? "passport" : "proof of address"} document type for this template.`
+      );
+      return;
+    }
+
+    setPrefillUploadingKind(kind);
+    let uploadFile = file;
+    if (file.type.startsWith("image/") && file.size > 500 * 1024) {
+      const t = toast.loading("Optimising image…", { position: "top-right" });
+      try { uploadFile = await compressIfImage(file); } finally { toast.dismiss(t); }
+    }
+    const VERCEL_LIMIT = 4.5 * 1024 * 1024;
+    if (uploadFile.size > VERCEL_LIMIT) {
+      toast.error(`File is too large (${(uploadFile.size / 1024 / 1024).toFixed(1)} MB). Please upload under 4.5 MB.`);
+      setPrefillUploadingKind(null);
+      return;
+    }
+
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("documentTypeId", docType.id);
+      fd.append("clientProfileId", profileId);
+      const res = await fetch(`/api/services/${serviceId}/documents/upload`, { method: "POST", body: fd });
+      const raw = await res.text();
+      let data: { document?: ClientServiceDoc; error?: string } = {};
+      try { data = raw ? (JSON.parse(raw) as typeof data) : {}; } catch { /* */ }
+      if (!res.ok || !data.document) {
+        if (res.status === 413) throw new Error("File is too large. Please upload under 4.5 MB.");
+        throw new Error(data.error ?? `Upload failed (${res.status})`);
+      }
+
+      const newDoc = data.document;
+      setLocalDocs((prev) => {
+        const without = prev.filter(
+          (d) => !(d.document_type_id === docType.id && d.client_profile_id === profileId)
+        );
+        return [...without, newDoc];
+      });
+
+      toast.success(
+        kind === "passport"
+          ? "Reading your passport — fields will auto-fill in a moment."
+          : "Reading your proof of address — fields will auto-fill in a moment.",
+        { position: "top-right" }
+      );
+
+      // Poll for AI verification — same cadence as pollForVerification.
+      let verifiedDoc: ClientServiceDoc | null = null;
+      for (let i = 0; i < 25; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const r = await fetch(`/api/documents/${newDoc.id}`);
+          if (!r.ok) continue;
+          const j = (await r.json()) as { document?: ClientServiceDoc };
+          if (j.document && j.document.verification_status !== "pending") {
+            verifiedDoc = j.document;
+            const fresh = j.document;
+            setLocalDocs((prev) => {
+              const without = prev.filter((d) => d.id !== fresh.id);
+              return [...without, fresh];
+            });
+            break;
+          }
+        } catch { /* swallow */ }
+      }
+
+      if (!verifiedDoc) {
+        toast.error("Verification is taking longer than expected. You can keep filling the form — values will appear once it's done.");
+        return;
+      }
+
+      const rows = computeAvailableExtracts({
+        docs: [{
+          id: verifiedDoc.id,
+          document_type_id: verifiedDoc.document_type_id,
+          uploaded_at: verifiedDoc.uploaded_at,
+          verification_result: verifiedDoc.verification_result as { extracted_fields?: Record<string, unknown> | null } | null,
+        }],
+        docTypes: [{
+          id: docType.id,
+          name: docType.name,
+          ai_extraction_fields: docType.ai_extraction_fields ?? null,
+        }],
+      });
+
+      if (rows.length === 0) {
+        toast.error(
+          kind === "passport"
+            ? "Couldn't read your passport — please type the fields manually."
+            : "Couldn't read your proof of address — please type the fields manually."
+        );
+        return;
+      }
+
+      const patch: Record<string, string> = {};
+      for (const row of rows) patch[row.target] = row.value;
+
+      // Persist before mutating local form state so a refresh doesn't lose the values.
+      if (kycRecordId) {
+        try {
+          await fetch("/api/profiles/kyc/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kycRecordId, fields: patch }),
+          });
+        } catch { /* best-effort — local form state still updates */ }
+      }
+
+      handleFormChange(patch as Partial<KycRecord>);
+      setPrefillFilledKinds((prev) => new Set(prev).add(kind));
+      toast.success(
+        `Pre-filled ${rows.length} field${rows.length === 1 ? "" : "s"} from your ${kind === "passport" ? "passport" : "proof of address"}.`,
+        { position: "top-right" }
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setPrefillUploadingKind(null);
     }
   }
 
@@ -1048,39 +1206,65 @@ export function PerPersonReviewWizard({
     switch (currentSubStep.kind) {
       case "form-identity":
         return (
-          <IdentityStep
-            clientId={profileId}
-            kycRecord={initialKycRecord}
-            documents={personDocsAsRecords}
-            documentTypes={documentTypes}
-            requirements={requirements}
-            form={form}
-            onChange={handleFormChange}
-            onDocumentUploaded={() => { /* docs uploaded inside form steps are unused here */ }}
-            showContactFields={false}
-            hideDocumentUploads={true}
-            hideAddressFields={true}
-            showErrorsImmediately
-            personDocs={personDocsAsRecords}
-            personDocTypes={documentTypes}
-            kycRecordId={kycRecordId}
-          />
+          <div className="space-y-4">
+            <PrefillUploadCard
+              kind="passport"
+              docType={resolvePrefillDocType("passport")}
+              uploaded={!!getUploaded(resolvePrefillDocType("passport")?.id ?? "")}
+              filled={prefillFilledKinds.has("passport")}
+              uploading={prefillUploadingKind === "passport"}
+              onTrigger={() => {
+                pendingPrefillKindRef.current = "passport";
+                prefillInputRef.current?.click();
+              }}
+            />
+            <IdentityStep
+              clientId={profileId}
+              kycRecord={initialKycRecord}
+              documents={personDocsAsRecords}
+              documentTypes={documentTypes}
+              requirements={requirements}
+              form={form}
+              onChange={handleFormChange}
+              onDocumentUploaded={() => { /* docs uploaded inside form steps are unused here */ }}
+              showContactFields={false}
+              hideDocumentUploads={true}
+              hideAddressFields={true}
+              showErrorsImmediately
+              personDocs={personDocsAsRecords}
+              personDocTypes={documentTypes}
+              kycRecordId={kycRecordId}
+            />
+          </div>
         );
       case "form-residential-address":
         return (
-          <ResidentialAddressStep
-            clientId={profileId}
-            kycRecord={initialKycRecord}
-            documents={personDocsAsRecords}
-            documentTypes={documentTypes}
-            requirements={requirements}
-            form={form}
-            onChange={handleFormChange}
-            showErrorsImmediately
-            personDocs={personDocsAsRecords}
-            personDocTypes={documentTypes}
-            kycRecordId={kycRecordId}
-          />
+          <div className="space-y-4">
+            <PrefillUploadCard
+              kind="poa"
+              docType={resolvePrefillDocType("poa")}
+              uploaded={!!getUploaded(resolvePrefillDocType("poa")?.id ?? "")}
+              filled={prefillFilledKinds.has("poa")}
+              uploading={prefillUploadingKind === "poa"}
+              onTrigger={() => {
+                pendingPrefillKindRef.current = "poa";
+                prefillInputRef.current?.click();
+              }}
+            />
+            <ResidentialAddressStep
+              clientId={profileId}
+              kycRecord={initialKycRecord}
+              documents={personDocsAsRecords}
+              documentTypes={documentTypes}
+              requirements={requirements}
+              form={form}
+              onChange={handleFormChange}
+              showErrorsImmediately
+              personDocs={personDocsAsRecords}
+              personDocTypes={documentTypes}
+              kycRecordId={kycRecordId}
+            />
+          </div>
         );
       case "form-financial":
         return (
@@ -1437,6 +1621,23 @@ export function PerPersonReviewWizard({
         }}
       />
 
+      {/* B-055 §4 — Hidden file input for the smart prefill uploads on the
+          Identity / Address sub-steps. */}
+      <input
+        ref={prefillInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const kind = pendingPrefillKindRef.current;
+          if (file && kind) void handlePrefillUpload(kind, file);
+          e.target.value = "";
+          pendingPrefillKindRef.current = null;
+        }}
+      />
+
       {/* Document detail popup */}
       {detailDoc && (
         <DocumentDetailDialog
@@ -1474,6 +1675,73 @@ export function PerPersonReviewWizard({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ─── PrefillUploadCard ───────────────────────────────────────────────────────
+//
+// B-055 §4.2 — Optional upload affordance shown at the top of the Identity
+// and Address sub-steps. The user can either upload here (we OCR + prefill
+// the form fields below) OR skip and type the values manually. After a
+// successful prefill the card collapses to a quiet success line so it
+// doesn't keep nagging.
+
+function PrefillUploadCard({
+  kind,
+  docType,
+  uploaded,
+  filled,
+  uploading,
+  onTrigger,
+}: {
+  kind: "passport" | "poa";
+  docType: { id: string; name: string } | undefined;
+  uploaded: boolean;
+  filled: boolean;
+  uploading: boolean;
+  onTrigger: () => void;
+}) {
+  if (!docType) return null;
+
+  const docLabel = kind === "passport" ? "passport" : "proof of address";
+  const buttonLabel = kind === "passport" ? "Upload Passport" : "Upload Proof of Address";
+
+  // After a successful prefill the card collapses to a single quiet line.
+  if (filled) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5 flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />
+        <p className="text-sm text-emerald-800">
+          Pre-filled from your {docLabel}. Please review the values below.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-4">
+      <p className="text-sm font-semibold text-brand-navy mb-1">
+        Have your {docLabel} handy?
+      </p>
+      <p className="text-xs text-gray-600 mb-3">
+        Upload it here — we&apos;ll auto-fill the fields below from the
+        document. You can edit anything that doesn&apos;t look right.
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onTrigger}
+        disabled={uploading}
+        className="h-10 px-4 gap-2"
+      >
+        {uploading ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Upload className="h-4 w-4" aria-hidden="true" />
+        )}
+        {uploading ? "Reading…" : uploaded ? `Replace ${docLabel}` : buttonLabel}
+      </Button>
     </div>
   );
 }
