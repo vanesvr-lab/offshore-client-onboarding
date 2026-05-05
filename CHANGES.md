@@ -15,6 +15,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-066 — Stop wizard from remounting on every save (Claude Code)
+
+B-062 added `kyc.updated_at` to the per-person wizard's mount key to
+force a remount when server data refreshed. After B-063 (form-state
+architecture) and B-065 (onSaveSuccess patches local persons state),
+the key change now happens on EVERY save — so the wizard snapped back
+to the first sub-step every time the user clicked Next.
+
+Fix: drop the `updated_at` portion of the key. The wizard now
+remounts only when `reviewingPerson.id` changes — i.e., when the user
+switches to a different person via "Review KYC" or the review-walk
+arrows. Saves on the same person preserve sub-step position; B-063's
+serverFormData/overlay computation and B-065's response-based persons
+patching keep the displayed data fresh without needing a remount.
+
+`src/components/client/ServiceWizardPeopleStep.tsx` — single-line
+key simplification at the `<PerPersonReviewWizard>` render site.
+
+UI / state only. No DB or API changes. 173 tests pass.
+
 ### 2026-05-05 — B-065 — Instant local-state update after KYC save (Claude Code)
 
 After B-063 fixed the data-wiping bug, a UX follow-on remained: after
