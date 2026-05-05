@@ -15,6 +15,30 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-056 Batch 2 — KYC sidebar redirects to People & KYC view (Claude Code)
+
+The "KYC Profile" sidebar item now sends primary clients to the
+service-level People & KYC view instead of the redundant `/kyc` hub.
+
+- **New `src/app/(client)/kyc-review/page.tsx`** — server-side
+  redirect that picks the most recent non-deleted service the
+  current profile can manage and 302s to
+  `/services/<id>?wizardStep=3`. Uses the
+  `services!inner(is_deleted=false)` join + `order("services(created_at)",
+  { ascending: false })` so the destination is computed in a single
+  query. No service yet → `/apply`.
+- `src/components/shared/Sidebar.tsx` — primary-client `KYC Profile`
+  href flipped from `/kyc` to `/kyc-review`. `activePaths: ["/kyc",
+  "/kyc-review"]` so the nav item still highlights when a user is
+  already inside the legacy `/kyc` page (kept as fallback). Non-primary
+  clients still go to `/kyc` because that's their own profile form.
+- `wizardStep=3` was already plumbed through
+  `services/[id]/page.tsx` → `ClientServiceDetailClient.autoWizardStep`
+  (no client-side change needed).
+- Tech-debt #22 + #23 logged for future cleanup.
+
+`npx vitest run` → 160/160 green; `npx tsc --noEmit` clean.
+
 ### 2026-05-05 — B-056 Batch 1 — Magic-link KYC invite collision + missing-profile fix (Claude Code)
 
 The magic-link KYC invite was returning "Invalid or expired link" or
@@ -3284,6 +3308,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
 | 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
 | 20 | **Admin sidebar not yet mobile-friendly** | Low | B-052 made the *client* sidebar a drawer below `md:` but kept the admin layout (`src/app/(admin)/layout.tsx`) with the inline 260px sidebar. Admins use desktop today so this is deferred. When admin-on-mobile becomes a need, lift the same `mobileOpen` state into an `AdminShell` and reuse the existing `Sidebar` mobile branch (which already supports `mobileOpen` / `onMobileOpenChange` props). |
+| 22 | **`/kyc` route is orphaned for primary clients** | Low | B-056: the primary-client sidebar now points at `/kyc-review` (server redirect → `/services/<latest>?wizardStep=3`). `/kyc` (KycPageClient) still works via direct URL and remains the entry point for non-primary clients. Delete the route + component + supporting fetch logic if Vercel analytics shows zero primary-client traffic for 30 days. |
+| 23 | **Magic-link flow still uses `kyc_records`-shape response** | Low | B-056: verify-code now assembles a legacy `KycRecord`-shape response from the new `client_profiles + client_profile_kyc + profile_service_roles` schema so `KycFillClient` doesn't have to change. Long-term, KycFillClient should consume the modern shape directly (and the `kycRecord.id` ↔ `client_profile_kyc.id` fallback in verify-code can drop). |
 
 ### Resolved
 

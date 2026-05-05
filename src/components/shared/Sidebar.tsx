@@ -123,11 +123,15 @@ function SidebarContent({
   const contextProcessClientId = role === "admin" ? adminProcessMatch?.[1] : undefined;
   const contextProcessId = role === "admin" ? adminProcessMatch?.[2] : undefined;
 
-  // Non-primary users only see their own KYC — no account or solutions nav
+  // Non-primary users only see their own KYC — no account or solutions nav.
+  // B-056 §2 — primary clients route through `/kyc-review` (a server-side
+  // redirect that lands them on `/services/<latest>?wizardStep=3` — the
+  // People & KYC step of the wizard). Non-primary still go to `/kyc`
+  // because that's their own profile form, not a hub.
   const clientNav = isPrimary
     ? [
         { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
-        { label: "KYC Profile", href: "/kyc", icon: UserCheck, exact: false },
+        { label: "KYC Profile", href: "/kyc-review", icon: UserCheck, exact: false, activePaths: ["/kyc", "/kyc-review"] },
         { label: "New Solution", href: "/apply", icon: PlusCircle, exact: false },
         ...(hasApplications
           ? [{ label: "My Solutions", href: "/dashboard", icon: FileText, exact: false, activePaths: ["/applications", "/services"] }]
