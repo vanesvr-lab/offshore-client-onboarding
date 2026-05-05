@@ -74,13 +74,13 @@ const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; activeHover:
 const ROLE_INACTIVE_TONE = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
 
 /**
- * B-049 §1.2 — Doc sub-steps are derived from the document_types that have
- * scope='person' on this template. We label by category but accept any
- * category string, so adding a new doc category in admin / seed data is
- * picked up automatically without a code change.
+ * B-049 §1.2 / B-055 §2.1 — Per-person doc types are derived from
+ * scope='person' document_types on this template, bucketed by category.
+ * After B-055 the wizard renders all categories in a single combined
+ * `doc-list` sub-step at the end of the per-person flow; the in-page
+ * anchors (`docs-cat-<category>`) let the persistent progress strip
+ * jump between sections.
  */
-type KycDocCategory = string;
-
 const CATEGORY_LABELS: Record<string, string> = {
   identity: "Identity",
   financial: "Financial",
@@ -106,16 +106,16 @@ function categoryLabel(cat: string): string {
 // ─── Sub-step types ───────────────────────────────────────────────────────────
 
 type SubStep =
-  | { id: string; kind: "doc-list"; category: KycDocCategory; label: string }
+  | { id: "doc-list"; kind: "doc-list"; label: "Documents" }
   | { id: "contact"; kind: "contact"; label: "Contact details" }
   | { id: "form-identity"; kind: "form-identity"; label: "Identity" }
   | { id: "form-residential-address"; kind: "form-residential-address"; label: "Residential Address" }
   | { id: "form-financial"; kind: "form-financial"; label: "Financial info" }
   | { id: "form-declarations"; kind: "form-declarations"; label: "Declarations" }
-  | { id: "form-review"; kind: "form-review"; label: "Review & save" }
+  | { id: "form-review"; kind: "form-review"; label: "Review" }
   | { id: "form-org-details"; kind: "form-org-details"; label: "Company details" }
   | { id: "form-org-tax"; kind: "form-org-tax"; label: "Tax & financial" }
-  | { id: "form-org-review"; kind: "form-org-review"; label: "Review & save" };
+  | { id: "form-org-review"; kind: "form-org-review"; label: "Review" };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -621,32 +621,32 @@ export function PerPersonReviewWizard({
   // ── Sub-step computation ──────────────────────────────────────────────────
   const isCdd = !isIndividual ? false : dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
 
+  // B-055 §2.1 — Forms first, single combined doc-list at the end. The
+  // doc-list step is omitted if the template has no person-scope doc
+  // requirements (e.g. organisation roles where everything is captured
+  // in form fields). Order:
+  //   individual: contact → identity → address → financial →
+  //               declarations (CDD/EDD) → docs → review
+  //   organisation: contact → company details → tax → docs → review
+  const hasPersonDocs = personCategories.length > 0;
   const subSteps: SubStep[] = useMemo(() => {
     const out: SubStep[] = [];
-    for (const cat of personCategories) {
-      if ((docTypesByCategory[cat] ?? []).length > 0) {
-        out.push({
-          id: `docs-${cat}`,
-          kind: "doc-list",
-          category: cat,
-          label: `${categoryLabel(cat)} documents`,
-        });
-      }
-    }
     out.push({ id: "contact", kind: "contact", label: "Contact details" });
     if (isIndividual) {
       out.push({ id: "form-identity", kind: "form-identity", label: "Identity" });
       out.push({ id: "form-residential-address", kind: "form-residential-address", label: "Residential Address" });
       out.push({ id: "form-financial", kind: "form-financial", label: "Financial info" });
       if (isCdd) out.push({ id: "form-declarations", kind: "form-declarations", label: "Declarations" });
-      out.push({ id: "form-review", kind: "form-review", label: "Review & save" });
+      if (hasPersonDocs) out.push({ id: "doc-list", kind: "doc-list", label: "Documents" });
+      out.push({ id: "form-review", kind: "form-review", label: "Review" });
     } else {
       out.push({ id: "form-org-details", kind: "form-org-details", label: "Company details" });
       out.push({ id: "form-org-tax", kind: "form-org-tax", label: "Tax & financial" });
-      out.push({ id: "form-org-review", kind: "form-org-review", label: "Review & save" });
+      if (hasPersonDocs) out.push({ id: "doc-list", kind: "doc-list", label: "Documents" });
+      out.push({ id: "form-org-review", kind: "form-org-review", label: "Review" });
     }
     return out;
-  }, [docTypesByCategory, personCategories, isIndividual, isCdd]);
+  }, [isIndividual, isCdd, hasPersonDocs]);
 
   const [subStepIndex, setSubStepIndex] = useState(0);
   // Snap back to a valid sub-step if the visible list shrinks (e.g. role flip on org).
@@ -877,8 +877,11 @@ export function PerPersonReviewWizard({
   function isDocCategoryComplete(cat: string): boolean {
     return (docTypesByCategory[cat] ?? []).every((dt) => !!getUploaded(dt.id));
   }
-  const docCategory = currentSubStep.kind === "doc-list" ? currentSubStep.category : null;
-  const docNextDisabled = docCategory ? !isDocCategoryComplete(docCategory) : false;
+  // B-055 §2.1 — single combined doc-list step. Next is disabled until every
+  // category is fully uploaded; the user can still skip via the explicit
+  // "Upload later" middle button.
+  const allDocsComplete = personCategories.every((c) => isDocCategoryComplete(c));
+  const docNextDisabled = currentSubStep.kind === "doc-list" ? !allDocsComplete : false;
 
   // ── Sub-step content render ───────────────────────────────────────────────
   function renderDocCategoryContent(cat: string) {
@@ -977,11 +980,35 @@ export function PerPersonReviewWizard({
 
   function renderContactContent() {
     return (
-      <ContactDetailsSubStep
-        profileId={profileId}
-        initialEmail={reviewingPerson.client_profiles?.email ?? null}
-        initialPhone={reviewingPerson.client_profiles?.phone ?? null}
-      />
+      <div className="space-y-3">
+        {/* B-055 §2.3 — explicit "this is optional" banner so users feel
+            comfortable skipping ahead. Next is never disabled here. */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3">
+          <p className="text-sm text-brand-navy">
+            <span className="font-semibold">Contact details are optional.</span>{" "}
+            You can fill these now or skip and come back later.
+          </p>
+        </div>
+        <ContactDetailsSubStep
+          profileId={profileId}
+          initialEmail={reviewingPerson.client_profiles?.email ?? null}
+          initialPhone={reviewingPerson.client_profiles?.phone ?? null}
+        />
+      </div>
+    );
+  }
+
+  // B-055 §2.1 / §2.2 — render every category vertically stacked, each
+  // wrapped in an anchor div the persistent strip can scroll to.
+  function renderAllDocsContent() {
+    return (
+      <div className="space-y-4">
+        {personCategories.map((cat) => (
+          <div key={cat} id={`docs-cat-${cat}`} className="scroll-mt-4">
+            {renderDocCategoryContent(cat)}
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -1070,13 +1097,20 @@ export function PerPersonReviewWizard({
             requirements={requirements}
             form={form}
             onJumpTo={(target) => {
-              const idx = subSteps.findIndex((s) => {
-                if (target.kind === "doc-list" && s.kind === "doc-list") {
-                  return s.category === target.category;
-                }
-                return s.kind === target.kind;
-              });
-              if (idx >= 0) setSubStepIndex(idx);
+              // B-055 §2.1 — single combined doc-list. Match by kind and,
+              // when the review specifies a doc category, scroll to the
+              // matching anchor after the target step renders.
+              const idx = subSteps.findIndex((s) => s.kind === target.kind);
+              if (idx < 0) return;
+              setSubStepIndex(idx);
+              if (target.kind === "doc-list" && target.category) {
+                const cat = target.category;
+                requestAnimationFrame(() => {
+                  document
+                    .getElementById(`docs-cat-${cat}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+              }
             }}
           />
         );
@@ -1189,7 +1223,8 @@ export function PerPersonReviewWizard({
 
         {showHelperSubtitle && (
           <p className="text-sm text-gray-600">
-            Upload your KYC documents below — we&apos;ll auto-fill the rest of the form from them.
+            Upload the remaining documents below. Tap any category badge
+            above to jump straight to that section.
           </p>
         )}
       </div>
@@ -1210,8 +1245,8 @@ export function PerPersonReviewWizard({
             {personCategories.map((cat) => {
               const total = (docTypesByCategory[cat] ?? []).length;
               if (total === 0) return null;
-              return (
-                <span key={cat} className="inline-flex items-center gap-1.5">
+              const inner = (
+                <>
                   {categoryIcon(cat)}
                   <span className="font-medium uppercase tracking-wide text-[10px] text-gray-700">
                     {categoryLabel(cat)}
@@ -1219,6 +1254,27 @@ export function PerPersonReviewWizard({
                   <span className="tabular-nums">
                     ({uploadedCountFor(cat)}/{total})
                   </span>
+                </>
+              );
+              // B-055 §2.2 — on the doc-list sub-step the badges become
+              // anchor jumps to each category's section.
+              return currentSubStep.kind === "doc-list" ? (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    document
+                      .getElementById(`docs-cat-${cat}`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-label={`Jump to ${categoryLabel(cat)} documents`}
+                >
+                  {inner}
+                </button>
+              ) : (
+                <span key={cat} className="inline-flex items-center gap-1.5">
+                  {inner}
                 </span>
               );
             })}
@@ -1229,7 +1285,7 @@ export function PerPersonReviewWizard({
 
       {/* Sub-step content */}
       <div>
-        {currentSubStep.kind === "doc-list" && renderDocCategoryContent(currentSubStep.category)}
+        {currentSubStep.kind === "doc-list" && renderAllDocsContent()}
         {currentSubStep.kind === "contact" && renderContactContent()}
         {currentSubStep.kind.startsWith("form-") && renderFormContent()}
       </div>

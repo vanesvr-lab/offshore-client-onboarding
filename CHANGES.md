@@ -15,6 +15,35 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-055 Batch 2 — Reorder sub-steps + clickable category jumps (Claude Code)
+
+Per-person KYC wizard sub-steps now lead with form fields and finish
+with a single combined documents step.
+
+- `src/components/client/PerPersonReviewWizard.tsx`:
+  - Sub-step order is now `contact → identity → address → financial →
+    declarations (CDD/EDD) → docs → review` for individuals and
+    `contact → company details → tax → docs → review` for
+    organisations.
+  - The 8 per-category doc-list sub-steps collapsed into ONE combined
+    `doc-list` step that renders every category vertically stacked,
+    each wrapped in a `docs-cat-<category>` anchor div.
+  - Persistent KYC progress strip badges become buttons on the
+    doc-list step that smooth-scroll to their category anchor.
+  - Contact sub-step gains an explicit "optional" banner; Next stays
+    enabled regardless of whether email/phone are filled.
+  - "Review & save" → "Review" everywhere in the per-person wizard.
+  - `SubStep` type tightened: doc-list no longer carries a `category`.
+  - Review screen's `onJumpTo({kind:"doc-list", category})` still
+    works — it now lands on the single doc-list step and scrolls to
+    the requested anchor.
+  - Doc-list "Next" stays gated until every category is fully
+    uploaded; users can still skip via the explicit "Upload later"
+    middle button.
+- `npx vitest run` → 159/159 green; `npx tsc --noEmit` clean.
+
+No DB migrations.
+
 ### 2026-05-05 — B-055 Batch 1 — KYC completion bug + wizard nav state reset (Claude Code)
 
 Two independent bugs surfaced by Bruce Banner (GBC-0002) real-device QA.
