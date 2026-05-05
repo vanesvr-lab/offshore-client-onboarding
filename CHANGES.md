@@ -15,6 +15,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-065 — Instant local-state update after KYC save (Claude Code)
+
+After B-063 fixed the data-wiping bug, a UX follow-on remained: after
+Save & Close, the People list and re-opened wizard showed stale data
+until a manual hard refresh. Cause was the asynchronous
+`router.refresh()` lag combined with aggressive Next.js HTML caching —
+during the refresh window the client tree was still rendering the
+pre-save `initialPersons` props.
+
+Fix: thread the save endpoint's response (which already returns the
+updated `client_profile_kyc` record) into the parent so it can patch
+local state synchronously, eliminating the wait.
+
+- `PerPersonReviewWizard.tsx`: added optional
+  `onSaveSuccess?: (updatedKyc: Record<string, unknown>) => void` prop.
+  `saveKycForm` now reads the JSON response and, on success, calls
+  `onSaveSuccess` with `data.record`. JSON parse errors are tolerated
+  silently — a successful HTTP status is still treated as save success.
+- `ServiceWizardPeopleStep.tsx`: passes an `onSaveSuccess` handler
+  that splices the fresh kyc record into local `persons` state for
+  every role row tied to that profile. The B-063 `serverFormData`
+  useMemo recomputes from the new prop, and the existing B-062
+  `kyc.updated_at` remount key triggers a clean wizard re-mount with
+  fresh server data and a reset overlay (the in-flight overlay would
+  have reconciled to empty anyway since server has caught up).
+- `router.refresh()` calls remain in place as the secondary
+  cache-bust for surfaces outside the wizard (dashboard counts, etc.).
+
+UI / state only. No DB or API contract changes — the response shape
+was already `{ record: <updated kyc> }`. 173 tests pass. Build green.
+
+After deploy, hard-refresh the prod tab once to drop the old JS
+bundle. Subsequent Save & Close clicks should reflect fresh data
+without any further hard refreshes.
+
 ### 2026-05-05 — B-064 — Regression tests for KYC form-state architecture (Claude Code)
 
 Locks in the B-063 architecture so the autosave-wipes-data bug class

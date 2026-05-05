@@ -517,6 +517,10 @@ interface Props {
   onComplete: () => void;
   /** Called when the user clicks "Back to People" — fired after pending edits are flushed. */
   onExit: () => void;
+  /** B-065 — Called with the freshly-saved client_profile_kyc record so
+   * the parent can patch its local persons state immediately, without
+   * waiting for router.refresh() to refetch the server tree. */
+  onSaveSuccess?: (updatedKyc: Record<string, unknown>) => void;
   /** Called by the in-wizard "Leave?" path when there are unsaved edits. */
   onRoleRemoved: (roleId: string) => void;
   onRoleAdded: (person: ServicePerson) => void;
@@ -549,6 +553,7 @@ export function PerPersonReviewWizard({
   dueDiligenceLevel,
   onComplete,
   onExit,
+  onSaveSuccess,
   onRoleRemoved,
   onRoleAdded,
   reviewAllContext,
@@ -760,12 +765,20 @@ export function PerPersonReviewWizard({
           body: JSON.stringify({ kycRecordId, fields: pending }),
         });
         if (!res.ok) return false;
+        // B-065 — Hand the updated record to the parent so it can patch
+        // local state immediately, avoiding the router.refresh() lag.
+        const data = (await res.json().catch(() => null)) as
+          | { record?: Record<string, unknown> }
+          | null;
+        if (data?.record && onSaveSuccess) {
+          onSaveSuccess(data.record);
+        }
         return true;
       } catch {
         return false;
       }
     });
-  }, [kycRecordId, autosave]);
+  }, [kycRecordId, autosave, onSaveSuccess]);
 
   // ── Doc upload handler (mirrors KycDocListPanel) ──────────────────────────
   const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);

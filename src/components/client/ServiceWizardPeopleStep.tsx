@@ -1102,6 +1102,27 @@ export function ServiceWizardPeopleStep({
         dueDiligenceLevel={ddLevel}
         onComplete={handleKycComplete}
         onExit={handleExitKycReview}
+        onSaveSuccess={(updatedKyc) => {
+          // B-065 — Splice the freshly-saved kyc record into local
+          // persons state for every role row tied to this profile, so
+          // the next render sees fresh data without waiting on
+          // router.refresh(). The B-063 serverFormData useMemo will
+          // recompute from the new prop and the form view shows the
+          // latest values immediately.
+          setPersons((prev) =>
+            prev.map((p) => {
+              if (p.client_profiles?.id !== profileId) return p;
+              if (!p.client_profiles) return p;
+              return {
+                ...p,
+                client_profiles: {
+                  ...p.client_profiles,
+                  client_profile_kyc: updatedKyc,
+                },
+              };
+            })
+          );
+        }}
         onRoleRemoved={handleRoleRemoved}
         onRoleAdded={handleRoleAdded}
         reviewAllContext={reviewAllContext}
