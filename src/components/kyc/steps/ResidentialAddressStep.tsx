@@ -117,29 +117,50 @@ export function ResidentialAddressStep({
   const addressTypeId = resolveDocTypeId("Proof of Residential Address");
   const addressDoc = addressTypeId ? documents.find((d) => d.document_type_id === addressTypeId) : null;
 
-  // Auto-trigger prefill on mount: read the AI extraction off the POA doc and
-  // drop values into any address field that's still empty.
+  // B-057 — banner is the single source of truth for prefill feedback on
+  // this sub-step. Re-evaluate every time the relevant POA doc changes
+  // (new upload, replacement, or the verification result populates after
+  // OCR completes). `prefilledFromDocIdRef` keeps the PATCH idempotent
+  // across remounts and re-renders.
   type PrefillBannerState = "idle" | "running" | "success" | "error" | "no-source";
   const [bannerState, setBannerState] = useState<PrefillBannerState>("idle");
-  const prefillFiredRef = useRef(false);
+  const prefilledFromDocIdRef = useRef<string | null>(null);
+  const prefillableLength = prefillable.length;
+  const availableExtractsLength = availableExtracts.length;
 
   useEffect(() => {
-    if (prefillFiredRef.current) return;
-    prefillFiredRef.current = true;
-
+    // 1. No POA uploaded yet → gentle "no-source" banner.
     if (!addressDoc) {
       setBannerState("no-source");
+      prefilledFromDocIdRef.current = null;
       return;
     }
-    if (prefillable.length === 0) {
-      setBannerState(availableExtracts.length > 0 ? "success" : "error");
-      return;
-    }
-    if (!effectiveKycRecordId) {
+
+    // 2. POA exists but the AI didn't return any address-relevant value.
+    if (availableExtractsLength === 0) {
       setBannerState("error");
       return;
     }
 
+    // 3. POA exists and AI returned values, but every address field is
+    //    already populated (the user typed them, or this is a re-mount
+    //    after a prior PATCH). Banner shows success without re-saving.
+    if (prefillableLength === 0) {
+      setBannerState("success");
+      return;
+    }
+
+    // 4. New extracts available — PATCH the empty fields once per doc.
+    if (!effectiveKycRecordId) {
+      setBannerState("error");
+      return;
+    }
+    if (prefilledFromDocIdRef.current === addressDoc.id) {
+      // Already saved for this exact doc; don't re-fire on every render.
+      return;
+    }
+
+    prefilledFromDocIdRef.current = addressDoc.id;
     void (async () => {
       setBannerState("running");
       try {
@@ -162,7 +183,13 @@ export function ResidentialAddressStep({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    addressDoc?.id,
+    addressDoc?.verification_result,
+    prefillableLength,
+    availableExtractsLength,
+    effectiveKycRecordId,
+  ]);
 
   function fieldState(key: keyof KycRecord, required: boolean) {
     return validation.getFieldState(key as string, (form[key] ?? "") as string, required);

@@ -15,6 +15,20 @@ import type { PrefillableField } from "@/lib/kyc/computePrefillable";
 import { FieldPrefillIcon } from "@/components/kyc/FieldPrefillIcon";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceRequirement } from "@/types";
 
+// B-049 §2.2 — when address is its own sub-step, IdentityStep ignores
+// any address-mapped extracts so it doesn't double-fill the row owned
+// by ResidentialAddressStep. Kept at module scope so it isn't rebuilt
+// on every render.
+const ADDRESS_PREFILL_KEYS = new Set([
+  "address",
+  "address_line_1",
+  "address_line_2",
+  "address_city",
+  "address_state",
+  "address_postal_code",
+  "address_country",
+]);
+
 interface IdentityStepProps {
   clientId: string;
   kycRecord: KycRecord;
@@ -202,50 +216,61 @@ export function IdentityStep({
   const passportDoc = passportTypeId ? documents.find((d) => d.document_type_id === passportTypeId) : null;
   const addressDoc = addressTypeId ? documents.find((d) => d.document_type_id === addressTypeId) : null;
 
-  // B-046 batch 5 — Auto-trigger prefill on mount, replace clickable CTA with passive banner.
+  // B-057 — banner is the single source of truth for prefill feedback on
+  // this sub-step. Re-evaluate every time the relevant source doc(s)
+  // change so a fresh upload from the outer PrefillUploadCard flips the
+  // banner immediately. `prefilledFromKeyRef` keeps the PATCH idempotent
+  // across remounts and re-renders for the same source doc identity.
   type PrefillBannerState = "idle" | "running" | "success" | "error" | "no-source";
   const [bannerState, setBannerState] = useState<PrefillBannerState>("idle");
-  const prefillFiredRef = useRef(false);
+  const prefilledFromKeyRef = useRef<string | null>(null);
+
+  // B-049 §2.2 — when address is its own sub-step, IdentityStep handles
+  // passport-derived fields only. Filter the prefill rows + the source-
+  // doc identity accordingly.
+  const filteredPrefillable = hideAddressFields
+    ? prefillable.filter((row) => !ADDRESS_PREFILL_KEYS.has(row.target))
+    : prefillable;
+  const filteredAvailable = hideAddressFields
+    ? availableExtracts.filter((row) => !ADDRESS_PREFILL_KEYS.has(row.target))
+    : availableExtracts;
+  const filteredPrefillableLength = filteredPrefillable.length;
+  const filteredAvailableLength = filteredAvailable.length;
+
+  // Stable identity key for the source doc(s) we've handled. When
+  // hideAddressFields is true we only watch passport; otherwise we watch
+  // both. Re-uploading either bumps the key and the effect re-runs.
+  const sourceDocKey = hideAddressFields
+    ? passportDoc?.id ?? null
+    : ([passportDoc?.id ?? "", addressDoc?.id ?? ""].filter(Boolean).join("|") || null);
+  const hasSourceDoc = !!sourceDocKey;
 
   useEffect(() => {
-    if (prefillFiredRef.current) return;
-    prefillFiredRef.current = true;
-
-    // B-049 §2.2 — when address is its own sub-step, this step only handles
-    // passport-derived fields. Drop address rows so we don't double-fill +
-    // ignore POA when computing whether a source doc is uploaded.
-    const ADDRESS_KEYS = new Set([
-      "address",
-      "address_line_1",
-      "address_line_2",
-      "address_city",
-      "address_state",
-      "address_postal_code",
-      "address_country",
-    ]);
-    const filteredPrefillable = hideAddressFields
-      ? prefillable.filter((row) => !ADDRESS_KEYS.has(row.target))
-      : prefillable;
-    const filteredAvailable = hideAddressFields
-      ? availableExtracts.filter((row) => !ADDRESS_KEYS.has(row.target))
-      : availableExtracts;
-
-    const hasSourceDoc = hideAddressFields ? !!passportDoc : !!(passportDoc || addressDoc);
     if (!hasSourceDoc) {
       setBannerState("no-source");
+      prefilledFromKeyRef.current = null;
       return;
     }
-    // Source doc exists but nothing left to apply (already filled previously).
-    if (filteredPrefillable.length === 0) {
-      if (filteredAvailable.length > 0) setBannerState("success");
-      else setBannerState("error"); // doc uploaded but extraction empty — OCR failed
+    if (filteredAvailableLength === 0) {
+      setBannerState("error"); // doc uploaded but extraction empty — OCR failed
+      return;
+    }
+    if (filteredPrefillableLength === 0) {
+      // Source doc + extracts present, but every form field is already
+      // populated. Banner shows success without re-saving.
+      setBannerState("success");
       return;
     }
     if (!effectiveKycRecordId) {
       setBannerState("error");
       return;
     }
+    if (prefilledFromKeyRef.current === sourceDocKey) {
+      // Already saved for this exact source doc identity.
+      return;
+    }
 
+    prefilledFromKeyRef.current = sourceDocKey;
     void (async () => {
       setBannerState("running");
       try {
@@ -268,7 +293,15 @@ export function IdentityStep({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    sourceDocKey,
+    passportDoc?.verification_result,
+    addressDoc?.verification_result,
+    filteredPrefillableLength,
+    filteredAvailableLength,
+    hasSourceDoc,
+    effectiveKycRecordId,
+  ]);
 
   return (
     <div className="space-y-6">

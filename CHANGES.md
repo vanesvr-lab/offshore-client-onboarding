@@ -15,6 +15,50 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-057 — Prefill banner reacts to uploads (single source of truth) (Claude Code)
+
+Real-device QA on the Address sub-step found contradictory banners
+firing at the same time after a POA upload: a green outer "Pre-filled
+from your proof of address" + a yellow inner "Couldn't auto-fill from
+your document". Root cause: two independent prefill systems looking at
+different slices of the AI extraction.
+
+- `src/components/kyc/steps/ResidentialAddressStep.tsx` — dropped the
+  one-shot `prefillFiredRef` gate. The prefill `useEffect` now keys on
+  `addressDoc?.id` + `addressDoc?.verification_result` +
+  `prefillable.length` + `availableExtracts.length` +
+  `effectiveKycRecordId`, so a fresh upload from the outer card
+  immediately re-evaluates the banner (success / error / no-source).
+  New `prefilledFromDocIdRef` makes the PATCH idempotent across
+  remounts and re-renders for the same doc id.
+
+- `src/components/kyc/steps/IdentityStep.tsx` — same pattern. Source
+  doc identity is composed as `passportDoc.id` (when
+  `hideAddressFields=true`) or `passportDoc.id|addressDoc.id`
+  otherwise, so re-uploading either fires the effect again. The
+  module-level `ADDRESS_PREFILL_KEYS` set replaces the per-render
+  `new Set([...])` allocation inside the old effect.
+
+- `src/components/client/PerPersonReviewWizard.tsx`
+  (`PrefillUploadCard`) — the green "Pre-filled from your <doc>"
+  success card is replaced with a neutral "<Doc> uploaded.
+  [Replace]" line. The inner step's banner is now the single source
+  of truth for prefill success/failure feedback.
+
+- Same file, `handlePrefillUpload`: the redundant top-right
+  `toast.success("Pre-filled N fields…")` is removed (the inline
+  inner banner already conveys this). `toast.error` paths kept for
+  upload-side failures (network, file too big, etc.).
+
+- The `prefillFilledKinds` set + its setter are dropped; the card's
+  state collapses to a single `uploaded` boolean derived from
+  `getUploaded(docTypeId)`. Equivalent to the brief's
+  `prefillUploadedKinds` rename — same semantics, fewer pieces of
+  state to keep in sync.
+
+`npx vitest run` → 160/160 green; `npm run lint` (one pre-existing
+warning, unchanged); `npm run build` clean. No DB changes.
+
 ### 2026-05-05 — B-056 Batch 2 — KYC sidebar redirects to People & KYC view (Claude Code)
 
 The "KYC Profile" sidebar item now sends primary clients to the

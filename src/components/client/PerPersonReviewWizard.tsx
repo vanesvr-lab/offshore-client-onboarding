@@ -726,7 +726,6 @@ export function PerPersonReviewWizard({
     poa: "Proof of Residential Address",
   };
   const [prefillUploadingKind, setPrefillUploadingKind] = useState<PrefillKind | null>(null);
-  const [prefillFilledKinds, setPrefillFilledKinds] = useState<Set<PrefillKind>>(new Set());
   const prefillInputRef = useRef<HTMLInputElement>(null);
   const pendingPrefillKindRef = useRef<PrefillKind | null>(null);
 
@@ -921,12 +920,12 @@ export function PerPersonReviewWizard({
         } catch { /* best-effort — local form state still updates */ }
       }
 
+      // B-057 — the inner step (IdentityStep / ResidentialAddressStep)
+      // owns the "prefill succeeded" feedback now (its own banner reacts
+      // to the new doc id). No top-right toast here so we don't render
+      // duplicate success messaging at the same time as the inline
+      // banner.
       handleFormChange(patch as Partial<KycRecord>);
-      setPrefillFilledKinds((prev) => new Set(prev).add(kind));
-      toast.success(
-        `Pre-filled ${rows.length} field${rows.length === 1 ? "" : "s"} from your ${kind === "passport" ? "passport" : "proof of address"}.`,
-        { position: "top-right" }
-      );
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -1211,7 +1210,6 @@ export function PerPersonReviewWizard({
               kind="passport"
               docType={resolvePrefillDocType("passport")}
               uploaded={!!getUploaded(resolvePrefillDocType("passport")?.id ?? "")}
-              filled={prefillFilledKinds.has("passport")}
               uploading={prefillUploadingKind === "passport"}
               onTrigger={() => {
                 pendingPrefillKindRef.current = "passport";
@@ -1244,7 +1242,6 @@ export function PerPersonReviewWizard({
               kind="poa"
               docType={resolvePrefillDocType("poa")}
               uploaded={!!getUploaded(resolvePrefillDocType("poa")?.id ?? "")}
-              filled={prefillFilledKinds.has("poa")}
               uploading={prefillUploadingKind === "poa"}
               onTrigger={() => {
                 pendingPrefillKindRef.current = "poa";
@@ -1683,38 +1680,51 @@ export function PerPersonReviewWizard({
 //
 // B-055 §4.2 — Optional upload affordance shown at the top of the Identity
 // and Address sub-steps. The user can either upload here (we OCR + prefill
-// the form fields below) OR skip and type the values manually. After a
-// successful prefill the card collapses to a quiet success line so it
-// doesn't keep nagging.
+// the form fields below) OR skip and type the values manually.
+//
+// B-057 — the inner step (IdentityStep / ResidentialAddressStep) is now the
+// single source of truth for prefill success/failure feedback (its own
+// banner reacts to the new doc id). This card is intentionally neutral
+// once a doc has been uploaded — it only offers a Replace affordance, no
+// "Pre-filled" claim that could contradict the inner banner.
 
 function PrefillUploadCard({
   kind,
   docType,
   uploaded,
-  filled,
   uploading,
   onTrigger,
 }: {
   kind: "passport" | "poa";
   docType: { id: string; name: string } | undefined;
   uploaded: boolean;
-  filled: boolean;
   uploading: boolean;
   onTrigger: () => void;
 }) {
   if (!docType) return null;
 
   const docLabel = kind === "passport" ? "passport" : "proof of address";
+  const docLabelCapitalized = docLabel.charAt(0).toUpperCase() + docLabel.slice(1);
   const buttonLabel = kind === "passport" ? "Upload Passport" : "Upload Proof of Address";
 
-  // After a successful prefill the card collapses to a single quiet line.
-  if (filled) {
+  // Once a doc of this kind exists, collapse to a neutral "uploaded +
+  // Replace" line. The inline banner inside the form below reflects
+  // whether prefill succeeded.
+  if (uploaded && !uploading) {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-4 py-2.5 flex items-center gap-2">
-        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />
-        <p className="text-sm text-emerald-800">
-          Pre-filled from your {docLabel}. Please review the values below.
-        </p>
+      <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />
+          <span>{docLabelCapitalized} uploaded.</span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onTrigger}
+          className="h-8 text-xs text-gray-600 hover:text-gray-900"
+        >
+          Replace
+        </Button>
       </div>
     );
   }
@@ -1740,7 +1750,7 @@ function PrefillUploadCard({
         ) : (
           <Upload className="h-4 w-4" aria-hidden="true" />
         )}
-        {uploading ? "Reading…" : uploaded ? `Replace ${docLabel}` : buttonLabel}
+        {uploading ? "Reading…" : buttonLabel}
       </Button>
     </div>
   );
