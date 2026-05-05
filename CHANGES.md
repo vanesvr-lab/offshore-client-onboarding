@@ -15,6 +15,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-060 — Always show "Pre-fill from uploaded document" button when a doc exists (Claude Code)
+
+B-058 §4 introduced a manual prefill button gated on
+`addressDoc && availableExtracts.length > 0` (and the `passportDoc`
+equivalent on Identity). When the AI returned no extracts relevant to
+the sub-step (e.g., a POA where Claude couldn't read the address),
+the button was hidden and users had no retry path even though the doc
+was clearly uploaded.
+
+Loosened the render gate to `addressDoc?.verification_result`
+(`passportDoc?.verification_result` on Identity) at both gate sites
+in each file (the yellow error banner and the blue success banner).
+The button now appears as soon as the AI has finished processing the
+doc, regardless of whether useful values were extracted for the
+sub-step. The existing handler already toasts a clear explanation
+("This document didn't include address details. Please enter them
+below.") on the empty-extracts path, so the user always gets
+feedback.
+
+Files:
+- `src/components/kyc/steps/ResidentialAddressStep.tsx`
+- `src/components/kyc/steps/IdentityStep.tsx`
+
+UI only. No DB changes. Lint: pre-existing warning unchanged. Build
+green. Tests 160/160 passing.
+
 ### 2026-05-05 — B-058 — Free navigation in per-person KYC + Resend tooltip + manual prefill + role/walk refresh (Claude Code)
 
 Six clickability/feedback fixes in the per-person KYC wizard. UI only,

@@ -257,7 +257,7 @@ export function ResidentialAddressStep({
             <p className="text-sm font-medium text-brand-navy">Filled from uploaded document</p>
             <p className="text-xs text-gray-600">Values extracted from your proof of address.</p>
           </div>
-          {addressDoc && availableExtracts.length > 0 && (
+          {addressDoc?.verification_result && (
             <Button
               variant="ghost"
               size="sm"
@@ -282,7 +282,7 @@ export function ResidentialAddressStep({
           <p className="flex-1 text-sm text-amber-800">
             Couldn&apos;t auto-fill from your document. Please enter values manually.
           </p>
-          {addressDoc && availableExtracts.length > 0 && (
+          {addressDoc?.verification_result && (
             <Button
               variant="ghost"
               size="sm"
