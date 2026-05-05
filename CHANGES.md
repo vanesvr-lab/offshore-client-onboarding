@@ -15,6 +15,61 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-04 — B-054 — Adopt Supabase CLI for migration tracking (Claude Code)
+
+Replaces the ad-hoc "paste SQL into Supabase web editor and remember to
+do it" workflow that has caused three production incidents (most
+recently today: 500 on KYC autosave because migrations 006/007/008
+were never applied). Now the CLI tracks state in
+`supabase_migrations.schema_migrations` on the linked project; drift
+is one `npm run db:status` away.
+
+- `supabase` ^2.98.1 added to devDependencies.
+- `npx supabase init` ran — `supabase/config.toml` and
+  `supabase/.gitignore` (`.branches`, `.temp`) committed. Root
+  `.gitignore` already excluded `supabase/.temp/` so no new entries
+  there.
+- 7 migration files renamed via `git mv` (history preserved) to the
+  CLI's required `<YYYYMMDDHHMMSS>_<name>.sql` format with synthetic
+  `20260301000002…000008` timestamps that preserve original ordering.
+- Three new npm scripts: `db:status` / `db:push` / `db:diff`.
+- CLAUDE.md gains a "Database Migration Workflow" section (between
+  "Dev Commands" and "Testing") covering the daily-check + deploy
+  ritual and the rationale for no CI auto-push.
+- **Explicitly NOT done**: CI integration. Adding Supabase
+  credentials to GitHub Actions secrets is a leak risk for a
+  compliance product. The deploy ritual + `db:status` discipline are
+  the guard. Consider revisiting later with a project-scoped
+  read-only token.
+
+**User actions required before `db:push` will work** (these are
+interactive / write to prod and can only be done by the user — CLI
+cannot run them):
+
+1. **Apply migration 006 if not already live in prod** (the
+   `document_types.scope` ALTER TABLE block from earlier today). If
+   you skip this and run the backfill SQL below, the CLI will
+   incorrectly mark 006 as applied.
+2. `npx supabase login` (browser OAuth flow).
+3. `npx supabase link --project-ref <ref>` where `<ref>` is the
+   subdomain of `NEXT_PUBLIC_SUPABASE_URL` in `.env.local`.
+4. In the Supabase SQL editor, run the `schema_migrations` backfill
+   SQL from `docs/cli-brief-supabase-cli-migration-tracking-b054.md`
+   §5 (creates the `supabase_migrations` schema + table and inserts
+   the 7 already-applied versions).
+5. `npm run db:status` — expect all 7 migrations paired Local +
+   Remote.
+
+If `db:status` shows a mismatch beyond the expected 7 paired rows,
+STOP and document it here rather than guessing — it likely means
+something is out of sync between repo and prod.
+
+Tech-debt #14b (recurring missing-migration incidents): tracked but
+not flagged in the open list because the workflow is now structurally
+preventative.
+
+---
+
 ### 2026-05-04 — B-053 — Mobile/desktop polish fixes (Claude Code)
 
 Two B-052 follow-up fixes from real-device QA. Both CSS-only,

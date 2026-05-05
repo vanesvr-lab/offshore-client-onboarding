@@ -184,6 +184,36 @@ npm run build     # Production build + type check
 npm run lint      # ESLint
 ```
 
+## Database Migration Workflow
+
+Migrations are tracked by Supabase CLI in `supabase/migrations/` and on
+the prod project's `supabase_migrations.schema_migrations` table.
+
+**Daily check** — see if anyone (you or another instance) added a
+migration that hasn't been pushed yet:
+
+```bash
+npm run db:status
+```
+
+If anything shows "Local" without a matching "Remote", a `db:push` is
+pending.
+
+**Adding a new migration:**
+
+1. Create the file: `supabase/migrations/<YYYYMMDDHHMMSS>_<description>.sql`. Use `npx supabase migration new <description>` to auto-generate the timestamp.
+2. Write the SQL. Prefer idempotent (`CREATE … IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`) when possible.
+3. Test locally (if you have a local Supabase running) or in the SQL editor against a non-critical area.
+4. Open a PR. After merge:
+5. **Run `npm run db:push`** from your local machine. This applies the new migration to prod.
+6. Verify with `npm run db:status` — should show no pending.
+7. Add a CHANGES.md note that the migration was pushed.
+
+**Why no CI auto-push?** Putting Supabase credentials (DB password or
+service role) in GitHub Actions secrets is a leak risk for a
+compliance product. The deploy ritual is short and the `db:status`
+command makes drift visible immediately.
+
 ## Testing
 
 ```bash
