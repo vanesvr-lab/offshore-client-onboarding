@@ -1,9 +1,11 @@
 # CLI Brief — B-072 Admin Actions Registry + Substance Review
 
-**Status:** Ready for CLI (depends on B-071 for service-template binding)
+**Status:** Ready for CLI (depends on B-073 for services path; can run independently of B-071)
 **Estimated batches:** 6
-**Touches migrations:** Yes (two new tables: `application_actions` + `application_substance`)
+**Touches migrations:** Yes (two new tables: `service_actions` + `service_substance`)
 **Touches AI verification:** No
+
+> **Path note (post-B-073):** The admin detail page is `/admin/services/[id]` (modern, reads from the `services` table). The legacy `/admin/applications/[id]` is being phased out and stays untouched in this brief. New tables in this brief use `service_id` (FK to `services.id`) — DO NOT repeat the misleading naming from `application_section_reviews` (tech debt #26).
 
 ---
 
@@ -36,14 +38,16 @@ This brief delivers:
 
 ---
 
-## Batch 1 — Migration: `application_actions` registry + `service_template_actions` binding
+## Batch 1 — Migration: `service_actions` registry + `service_template_actions` binding
 
-Create `supabase/migrations/<ts>_application_actions.sql`:
+Create `supabase/migrations/<ts>_service_actions.sql`:
 
 ```sql
--- Registry of admin tasks per application (substance review, bank opening,
+-- Registry of admin tasks per service (substance review, bank opening,
 -- FSC checklist generation, etc.). Service-template binding lives in a
 -- separate table so adding a new template just inserts a few rows.
+-- NOTE: keys are scoped to services (not applications). Do not repeat
+-- the misleading naming from application_section_reviews (tech debt #26).
 
 CREATE TABLE IF NOT EXISTS public.service_template_actions (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,11 +61,11 @@ CREATE TABLE IF NOT EXISTS public.service_template_actions (
   UNIQUE (service_template_id, action_key)
 );
 
-CREATE TABLE IF NOT EXISTS public.application_actions (
+CREATE TABLE IF NOT EXISTS public.service_actions (
   id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id               uuid NOT NULL DEFAULT 'a1b2c3d4-0000-4000-8000-000000000001'
                             REFERENCES public.tenants(id),
-  application_id          uuid NOT NULL REFERENCES public.applications(id) ON DELETE CASCADE,
+  service_id              uuid NOT NULL REFERENCES public.services(id) ON DELETE CASCADE,
   action_key              text NOT NULL,
   status                  text NOT NULL DEFAULT 'pending'
                             CHECK (status IN ('pending', 'in_progress', 'done', 'blocked', 'not_applicable')),
@@ -71,33 +75,39 @@ CREATE TABLE IF NOT EXISTS public.application_actions (
   notes                   text,
   created_at              timestamptz NOT NULL DEFAULT now(),
   updated_at              timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (application_id, action_key)
+  UNIQUE (service_id, action_key)
 );
 
-CREATE INDEX IF NOT EXISTS aa_app_idx     ON public.application_actions(application_id);
-CREATE INDEX IF NOT EXISTS aa_status_idx  ON public.application_actions(status);
+CREATE INDEX IF NOT EXISTS sa_svc_idx     ON public.service_actions(service_id);
+CREATE INDEX IF NOT EXISTS sa_status_idx  ON public.service_actions(status);
 CREATE INDEX IF NOT EXISTS sta_template_idx ON public.service_template_actions(service_template_id);
 
 ALTER TABLE public.service_template_actions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.application_actions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.service_actions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "sta_admin_all" ON public.service_template_actions FOR ALL USING (public.is_admin());
 CREATE POLICY "sta_read"      ON public.service_template_actions FOR SELECT USING (true);
 
-CREATE POLICY "aa_admin_all"  ON public.application_actions FOR ALL USING (public.is_admin());
--- No client policy → clients cannot read application_actions
+CREATE POLICY "sa_admin_all"  ON public.service_actions FOR ALL USING (public.is_admin());
+-- No client policy → clients cannot read service_actions
 
--- Seed: GBC and AC get all three actions
+-- Seed: GBC and AC get all three actions. The actual seeded service template
+-- names in this DB are "Global Business Corporation (GBC)" and "Authorised
+-- Company (AC)" — verify via `SELECT name FROM service_templates` if seed
+-- inserts no rows.
 INSERT INTO public.service_template_actions (service_template_id, action_key, action_label, sort_order)
-SELECT id, 'substance_review',     'Substance Review',     1 FROM public.service_templates WHERE name ILIKE '%global business%' OR name ILIKE '%authorised company%'
+SELECT id, 'substance_review',     'Substance Review',     1 FROM public.service_templates
+WHERE name ILIKE '%global business%' OR name ILIKE '%authorised company%'
 ON CONFLICT (service_template_id, action_key) DO NOTHING;
 
 INSERT INTO public.service_template_actions (service_template_id, action_key, action_label, sort_order)
-SELECT id, 'bank_account_opening', 'Bank Account Opening', 2 FROM public.service_templates WHERE name ILIKE '%global business%' OR name ILIKE '%authorised company%'
+SELECT id, 'bank_account_opening', 'Bank Account Opening', 2 FROM public.service_templates
+WHERE name ILIKE '%global business%' OR name ILIKE '%authorised company%'
 ON CONFLICT (service_template_id, action_key) DO NOTHING;
 
 INSERT INTO public.service_template_actions (service_template_id, action_key, action_label, sort_order)
-SELECT id, 'fsc_checklist',        'Generate FSC Checklist', 3 FROM public.service_templates WHERE name ILIKE '%global business%' OR name ILIKE '%authorised company%'
+SELECT id, 'fsc_checklist',        'Generate FSC Checklist', 3 FROM public.service_templates
+WHERE name ILIKE '%global business%' OR name ILIKE '%authorised company%'
 ON CONFLICT (service_template_id, action_key) DO NOTHING;
 ```
 
@@ -106,7 +116,7 @@ After file lands: `npm run db:push` + `npm run db:status`.
 Add to `src/types/index.ts`:
 
 ```ts
-export type ApplicationActionStatus = "pending" | "in_progress" | "done" | "blocked" | "not_applicable";
+export type ServiceActionStatus = "pending" | "in_progress" | "done" | "blocked" | "not_applicable";
 export type ActionKey = "substance_review" | "bank_account_opening" | "fsc_checklist";
 
 export interface ServiceTemplateAction {
@@ -118,11 +128,11 @@ export interface ServiceTemplateAction {
   sort_order: number;
 }
 
-export interface ApplicationAction {
+export interface ServiceAction {
   id: string;
-  application_id: string;
+  service_id: string;
   action_key: ActionKey;
-  status: ApplicationActionStatus;
+  status: ServiceActionStatus;
   assigned_to: string | null;
   completed_by: string | null;
   completed_at: string | null;
@@ -132,20 +142,22 @@ export interface ApplicationAction {
 }
 ```
 
-**Commit message:** `feat: application_actions registry + service_template_actions binding (seeded for GBC + AC)`
+**Commit message:** `feat: service_actions registry + service_template_actions binding (seeded for GBC + AC)`
 
 ---
 
-## Batch 2 — Migration: `application_substance`
+## Batch 2 — Migration: `service_substance`
 
-Create `supabase/migrations/<ts>_application_substance.sql` — exact schema from Vanessa's brainstorm, with one change: reference the right `applications` (or `services`) table for this codebase. Verify which table represents the customer's GBC/AC application — search the project. The brainstorm says `applications`. If the project uses `services` interchangeably (the codebase has both), pick `applications` (per the brainstorm) and confirm via the FK reference in `client_profile_kyc.application_id` patterns.
+Create `supabase/migrations/<ts>_service_substance.sql` — exact schema from Vanessa's brainstorm, with two corrections from the original paste:
+1. Table renamed from `application_substance` → `service_substance` (substance is per-service).
+2. FK changed from `applications(id)` → `services(id)` — substance applies to GBC and AC services in the modern data model.
 
 ```sql
-CREATE TABLE IF NOT EXISTS public.application_substance (
+CREATE TABLE IF NOT EXISTS public.service_substance (
   id                                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id                         uuid NOT NULL DEFAULT 'a1b2c3d4-0000-4000-8000-000000000001'
                                       REFERENCES public.tenants(id),
-  application_id                    uuid NOT NULL UNIQUE REFERENCES public.applications(id) ON DELETE CASCADE,
+  service_id                        uuid NOT NULL UNIQUE REFERENCES public.services(id) ON DELETE CASCADE,
 
   -- §3.2 mandatory criteria (booleans)
   has_two_mu_resident_directors     boolean,
@@ -188,11 +200,11 @@ CREATE TABLE IF NOT EXISTS public.application_substance (
   updated_at                        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS as_app_idx     ON public.application_substance(application_id);
-CREATE INDEX IF NOT EXISTS as_tenant_idx  ON public.application_substance(tenant_id);
+CREATE INDEX IF NOT EXISTS ss_svc_idx     ON public.service_substance(service_id);
+CREATE INDEX IF NOT EXISTS ss_tenant_idx  ON public.service_substance(tenant_id);
 
-ALTER TABLE public.application_substance ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "as_admin_all" ON public.application_substance FOR ALL USING (public.is_admin());
+ALTER TABLE public.service_substance ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "ss_admin_all" ON public.service_substance FOR ALL USING (public.is_admin());
 -- No client policy → admin-only by design (per Vanessa's brainstorm)
 ```
 
@@ -205,10 +217,10 @@ Add to `src/types/index.ts`:
 ```ts
 export type SubstanceAssessment = "pass" | "review" | "fail";
 
-export interface ApplicationSubstance {
+export interface ServiceSubstance {
   id: string;
   tenant_id: string;
-  application_id: string;
+  service_id: string;
   // §3.2
   has_two_mu_resident_directors: boolean | null;
   principal_bank_account_in_mu: boolean | null;
@@ -245,7 +257,7 @@ export interface ApplicationSubstance {
 }
 ```
 
-**Commit message:** `feat: application_substance table for FSC §3.2/3.3/3.4 substance criteria`
+**Commit message:** `feat: service_substance table for FSC §3.2/3.3/3.4 substance criteria`
 
 ---
 
@@ -253,17 +265,17 @@ export interface ApplicationSubstance {
 
 Create:
 
-- `src/app/api/admin/applications/[id]/actions/route.ts`
-  - **GET** — returns required actions for this application's service template, joined with the application's action statuses (creates pending rows on demand if missing). Shape: `{ data: Array<{ template_action: ServiceTemplateAction; instance: ApplicationAction }> }`
-  - **PATCH** — body `{ action_key: ActionKey; status?: ApplicationActionStatus; notes?: string | null }`. Updates the `application_actions` row (insert if missing). Sets `completed_by` + `completed_at` when status transitions to `done`.
+- `src/app/api/admin/services/[id]/actions/route.ts`
+  - **GET** — returns required actions for this service's template, joined with the service's action statuses (creates pending rows on demand if missing). Shape: `{ data: Array<{ template_action: ServiceTemplateAction; instance: ServiceAction }> }`
+  - **PATCH** — body `{ action_key: ActionKey; status?: ServiceActionStatus; notes?: string | null }`. Updates the `service_actions` row (insert if missing). Sets `completed_by` + `completed_at` when status transitions to `done`.
 
-- `src/app/api/admin/applications/[id]/substance/route.ts`
-  - **GET** — returns the existing `application_substance` row (or `null` if not yet created)
-  - **PUT** — upserts the substance row. Body matches `ApplicationSubstance` minus audit fields. Save automatically populates `admin_assessed_by` + `admin_assessed_at` when `admin_assessment` is set/changed. `updated_at` always set.
+- `src/app/api/admin/services/[id]/substance/route.ts`
+  - **GET** — returns the existing `service_substance` row (or `null` if not yet created)
+  - **PUT** — upserts the substance row. Body matches `ServiceSubstance` minus audit fields. Save automatically populates `admin_assessed_by` + `admin_assessed_at` when `admin_assessment` is set/changed. `updated_at` always set.
 
-All admin-only — verify the caller is in `admin_users`.
+All admin-only — verify the caller is in `admin_users` (use the same auth helper that B-068 / B-073 routes use).
 
-**Commit message:** `feat: admin actions + substance API routes`
+**Commit message:** `feat: admin actions + substance API routes (services-scoped)`
 
 ---
 
@@ -294,12 +306,12 @@ Layout:
    - Notes textarea (required when Fail or Review, optional when Pass)
 6. Save button (saves to `/api/admin/applications/[id]/substance` PUT)
 
-Form state: a single object matching `ApplicationSubstance`. On mount, GET the existing row to prefill. On Save, PUT the full state. Show toast on success/error.
+Form state: a single object matching `ServiceSubstance`. On mount, GET the existing row to prefill. On Save, PUT the full state. Show toast on success/error.
 
-Wire it into the admin app detail page. From B-068's section-review pattern, this becomes a new section with `section_key = "action:substance_review"`. Show:
+Wire it into `/admin/services/[id]` (NOT the legacy `/admin/applications/[id]`). From B-068's section-review pattern (extended in B-073), this becomes a new section with `section_key = "action:substance_review"`. Show:
 - The substance form inside the section
-- A `SectionHeader` at top with status badge
-- A `SectionNotesHistory` at bottom (the section reviews from B-068)
+- A `ConnectedSectionHeader` at top with status badge (reuses B-068 components — `applicationId` prop receives `service.id`, per tech-debt #26)
+- A `ConnectedNotesHistory` at bottom (the section reviews trail from B-068)
 
 Visibility: only render this section if `service_template_actions` for this template includes `substance_review` (i.e. GBC + AC).
 
@@ -309,9 +321,9 @@ Visibility: only render this section if `service_template_actions` for this temp
 
 ## Batch 5 — Bank Opening + FSC Checklist stubs
 
-For each, create a **stub** Card that shows up on the admin app detail page (gated by service_template_actions like substance):
+For each, create a **stub** Card that shows up on `/admin/services/[id]` (gated by `service_template_actions` like substance):
 
-- `BankAccountOpeningStub.tsx` — placeholder text "Bank account engagement workflow — coming soon", a simple status dropdown (pending/in_progress/done/blocked) bound to PATCH `/api/admin/applications/[id]/actions`, and a notes textarea. That's it.
+- `BankAccountOpeningStub.tsx` — placeholder text "Bank account engagement workflow — coming soon", a simple status dropdown (pending/in_progress/done/blocked) bound to PATCH `/api/admin/services/[id]/actions`, and a notes textarea. That's it.
 - `FscChecklistStub.tsx` — placeholder text "FSC FS-41 Form A checklist — generation coming soon", a "Mark as ready to generate" button that flips the action to `in_progress`, and a notes textarea.
 
 Both stubs use `section_key = "action:bank_account_opening"` and `section_key = "action:fsc_checklist"` for their section reviews.
@@ -320,16 +332,16 @@ Both stubs use `section_key = "action:bank_account_opening"` and `section_key = 
 
 ---
 
-## Batch 6 — Wire into admin app detail page
+## Batch 6 — Wire into `/admin/services/[id]` page
 
 Final integration:
 
-- Server-side fetch in `src/app/(admin)/admin/applications/[id]/page.tsx`:
-  - Required actions for this template
-  - This application's action instances
-  - The substance row (if any)
-- Pass to a new client component `AdminApplicationActionsSection.tsx` that renders the relevant action UIs in order, gated by which actions the template requires.
-- Place this new section AFTER the Documents step in the wizard-shaped layout from B-069. Step number depends on whether B-069 has landed. If B-069 hasn't landed, append it as a new Card at the bottom of the left column.
+- Server-side fetch in `src/app/(admin)/admin/services/[id]/page.tsx`:
+  - Required actions for this service's template (`service_template_actions` rows)
+  - This service's action instances (`service_actions` rows)
+  - The substance row (if any) (`service_substance`)
+- Pass to a new client component `AdminServiceActionsSection.tsx` that renders the relevant action UIs in order, gated by which actions the template requires.
+- Place this new section AFTER the Documents `ServiceCollapsibleSection` (Step 5) in the wizard-shaped layout that already exists in `ServiceDetailClient.tsx`. The section becomes a new "Step 6 — Admin Actions" or rendered as a parallel "Admin Tasks" Card after Documents — pick whichever fits the existing layout cleanest.
 
 End of brief:
 1. `npm run build` clean
@@ -338,7 +350,7 @@ End of brief:
 4. Final push
 5. Stop.
 
-**Commit message:** `feat: wire Substance / Bank Opening / FSC Checklist actions into admin app detail`
+**Commit message:** `feat: wire Substance / Bank Opening / FSC Checklist actions into /admin/services/[id]`
 
 ---
 

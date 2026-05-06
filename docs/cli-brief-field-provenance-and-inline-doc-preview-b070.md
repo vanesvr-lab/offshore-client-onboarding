@@ -1,9 +1,11 @@
 # CLI Brief — B-070 Field Provenance + Inline Doc Preview
 
-**Status:** Ready for CLI (depends on B-068 + B-069)
+**Status:** Ready for CLI (depends on B-068 + B-069 + B-073 — all landed)
 **Estimated batches:** 4
 **Touches migrations:** Yes (one new table OR one JSONB column — see Batch 1)
 **Touches AI verification:** Yes (write path needs to record provenance)
+
+> **Path note (post-B-073):** The admin detail page is `/admin/services/[id]` (modern). The KYC views per profile live there via `AdminKycPersonReviewPanel` (or wherever B-073 wired the `kyc:<profile_id>:<category>` subsection cards). Field markers go on the fields rendered in those views, so the wiring landing point is the services path — NOT the legacy `/admin/applications/[id]`. Server-side extraction fetch happens in `src/app/(admin)/admin/services/[id]/page.tsx`.
 
 ---
 
@@ -152,9 +154,9 @@ Create / extend the inline preview:
 - If `DocumentPreviewDialog` exists, reuse it. If not, create a thin wrapper around the existing `documents/[docId]` page rendered in a Sheet (right-slide). Decision: prefer reusing.
 - The dialog should highlight WHICH field this preview was opened for (small banner at top: "Source for: passport_number").
 
-Wire `FieldProvenanceMarker` into the read-only KYC view from B-069. Each labeled field gets the marker positioned to the right of the label or right of the value.
+Wire `FieldProvenanceMarker` into the per-profile KYC views on `/admin/services/[id]` (built/wired in B-069 + B-073). Each labeled field gets the marker positioned to the right of the label or right of the value. Wherever the field is rendered in `AdminKycPersonReviewPanel.tsx` or the inline KYC sections in `ServiceDetailClient.tsx`, drop the marker next to the field's value.
 
-Where to fetch extractions: server-side in the admin app detail page (`page.tsx`), filter by `client_profile_id IN (…)` for all profiles in this app, then pass down.
+Where to fetch extractions: server-side in `src/app/(admin)/admin/services/[id]/page.tsx`, filter by `client_profile_id IN (…)` for all profiles in this service, then pass down.
 
 ```ts
 const { data: extractions } = await supabase
