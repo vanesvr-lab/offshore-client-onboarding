@@ -206,6 +206,11 @@ Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
     if (value === undefined || value === null || value === "") return;
     contextLines.push(`- ${label}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
   };
+  // B-067 §7.1 — inject today's date FIRST so date-based rules (e.g.
+  // "issued within the last 3 months", "must not be future-dated") can compare
+  // against an authoritative current date instead of falling back to the
+  // model's training cutoff. Stable position keeps the prompt cache warm.
+  push("Today's date", new Date().toISOString().slice(0, 10));
   push("Applicant name", ctx.applicant_full_name ?? ctx.contact_name);
   push("Date of birth", ctx.applicant_dob);
   push("Nationality", ctx.applicant_nationality);

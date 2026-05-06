@@ -164,6 +164,22 @@ export async function POST(
     return NextResponse.json({ document: doc });
   }
 
+  // B-067 §7.2 — for per-person KYC documents the verification context needs
+  // the person's declared name so the AI can compare passports / proof-of-
+  // address against an authoritative applicant identity. Fetch it before
+  // kicking off the (fire-and-forget) AI run so the closure captures the
+  // resolved name.
+  let personFullName: string | null = null;
+  if (targetProfileId) {
+    const { data: profileRow } = await supabase
+      .from("client_profiles")
+      .select("full_name")
+      .eq("id", targetProfileId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    personFullName = profileRow?.full_name?.trim() || null;
+  }
+
   // Fire AI verification asynchronously (fire-and-forget — response goes back immediately)
   const docId = doc.id as string;
   const VERIFICATION_TIMEOUT_MS = 45_000;
@@ -183,7 +199,12 @@ export async function POST(
           fileBuffer,
           mimeType: file.type,
           rules,
-          applicationContext: { contact_name: null, business_name: null, ubo_data: null },
+          applicationContext: {
+            contact_name: personFullName,
+            applicant_full_name: personFullName,
+            business_name: null,
+            ubo_data: null,
+          },
           documentType: docTypeRow?.name ?? null,
           plainTextRules: docTypeRow?.verification_rules_text ?? null,
           extractionEnabled: docTypeRow?.ai_extraction_enabled === true,
