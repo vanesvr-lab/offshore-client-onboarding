@@ -15,6 +15,15 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-068 Batch 5 — Per-section notes history (Claude Code)
+
+- `src/components/admin/SectionNotesHistory.tsx` — collapsible "Admin notes (N)" block at the bottom of a section. Renders nothing when reviews list is empty (no header noise).
+- Each row: status badge + reviewer name (`profiles.full_name` or "Admin") + relative time (`just now / Nm ago / Nh ago / Nd ago / locale date`) with hover tooltip showing the absolute timestamp. Notes shown verbatim or italic "No notes".
+- No `date-fns` dep — used a small inline `formatRelative()` helper.
+- Build passes.
+
+---
+
 ### 2026-05-06 — B-068 Batch 4 — Right-slide review panel form (Claude Code)
 
 - `SectionReviewPanel.tsx` (Batch 3 stub replaced) — full form:
