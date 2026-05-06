@@ -15,6 +15,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-068 Batch 2 — Section reviews API routes (Claude Code)
+
+- New `src/app/api/admin/applications/[id]/section-reviews/route.ts`
+  - **GET** — lists reviews for application; optional `?section_key=…` filter; sorted `reviewed_at DESC`; joins `profiles:reviewed_by(full_name)`
+  - **POST** — body `{ section_key, status, notes }`. Inserts a new row using `createAdminClient()`. `reviewed_by = session.user.id`. Server-side validates: `section_key` required; `status ∈ {approved,flagged,rejected}`; `notes` required when status is `flagged` or `rejected`.
+- Auth: standard project pattern — `await auth()` from NextAuth + `session.user.role !== "admin"` → 403.
+- Returns `{ data: ApplicationSectionReview | ApplicationSectionReview[] }` on success or `{ error: string }` on failure.
+- Build passes.
+
+---
+
 ### 2026-05-06 — B-068 Batch 1 — `application_section_reviews` migration (Claude Code)
 
 - New migration `supabase/migrations/20260506070332_application_section_reviews.sql`
