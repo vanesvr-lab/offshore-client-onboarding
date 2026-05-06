@@ -71,7 +71,7 @@ function AddDocumentForm({
         document_type_id: selectedId,
         is_required: true,
         sort_order: 999,
-        document_types: { id: dt.id, name: dt.name },
+        document_types: dt,
       };
       toast.success("Requirement added");
       onAdded(newReq);

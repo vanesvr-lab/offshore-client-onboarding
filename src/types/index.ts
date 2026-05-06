@@ -427,7 +427,26 @@ export interface RoleDocumentRequirement {
   document_type_id: string;
   is_required: boolean;
   sort_order: number;
-  document_types?: { id: string; name: string } | null;
+  document_types?: DocumentType | null;
+}
+
+/**
+ * B-071 — Bind a document type to a specific service template.
+ * If a template has rows here, ONLY these docs apply (per-template curated list).
+ * Empty binding falls back to the global DD-driven list.
+ */
+export interface ServiceTemplateDocument {
+  id: string;
+  tenant_id: string;
+  service_template_id: string;
+  document_type_id: string;
+  is_required: boolean;
+  /** NULL = applies to whole application; else specific role like "director". */
+  applies_to_role: string | null;
+  sort_order: number;
+  notes: string | null;
+  created_at: string;
+  document_types?: DocumentType | null;
 }
 
 export interface ProfileRequirementOverride {

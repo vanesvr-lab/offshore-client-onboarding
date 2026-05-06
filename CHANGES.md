@@ -15,6 +15,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-071 Batch 1 — service_template_documents migration (Claude Code)
+
+Foundation for per-template curated doc lists (e.g. GBC's 18 docs, AC's own list, Trust's own list — independent of the global DD-driven set).
+
+- **Migration `20260506183609_service_template_documents.sql`** — new join table `service_template_documents` with FKs to `service_templates(id)` (cascade) and `document_types(id)` (cascade). Columns: `is_required`, `applies_to_role` (nullable text — NULL = whole application, else specific role like "director"), `sort_order`, `notes`. UNIQUE `(service_template_id, document_type_id, applies_to_role)`. RLS enabled with idempotent guards: `std_admin_all` (FOR ALL via `public.is_admin()`) + `std_client_read` (FOR SELECT, public). No backfill — empty binding triggers fallback to existing DD-driven logic. Pushed via `npm run db:push`; `db:status` shows paired Local + Remote.
+- **`src/types/index.ts`** — added `ServiceTemplateDocument` interface; tightened `RoleDocumentRequirement.document_types` from `{id, name}` to full `DocumentType` (needed downstream for scope/applies_to/category access in the wizard wiring batches). One callsite fix in `RoleRequirementsManager.tsx` (passes the full DT object now).
+
+Batches 2–5 wire this binding + scope UI + role requirements + applies_to filter into the runtime.
+
+---
+
 ### 2026-05-06 — B-059 — Email uniqueness on client_profiles + dedup guard (Claude Code)
 
 Resolves the recurring duplicate-profile bug class (Bruce Banner, Vanessa Rangasamy, "Vanessa R", "PANIKEN VANESSA" all came from the same root cause: API blindly INSERTs a new `client_profiles` row when adding a person, even when an active row with the same email already exists in the tenant).
