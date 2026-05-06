@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-074 Batch 4 — Inline KYC subsection reviews inside KycLongForm (Claude Code)
+
+The brief targeted `KycStepWizard` for the inline review wiring, but on `/admin/services/[id]` the per-person KYC editor is `KycLongForm` (defined inline in `ServiceDetailClient.tsx`). Wired the inline review affordances there instead — same `kyc:<profileId>:<category>` keys as B-069/B-073 and the existing AdminKycPersonReviewPanel, so any existing review rows continue to render under the new UI without migration. (DB query on 2026-05-06 confirmed zero `kyc:*` rows exist today, so the cutover has no live history to preserve.)
+
+- **`KYC_SECTIONS` / `KYC_SECTIONS_ORG`** — added `categoryKey?: string` to each section, mapping to one of the 8 review categories: `Your Identity → identity`, `Financial → financial`, `Declarations → compliance`, `Work / Professional Details → professional`, `Company Details → identity`, `Tax / Financial → tax`. Sections without a categoryKey skip review affordances. The four categories with no UI section in this form (`adverse_media`, `wealth`, `additional`, plus `compliance/professional` for orgs) are documented as out-of-scope here; we never had reviewable data for them in the codebase.
+- **`KycLongForm`** — extracted the per-section render into a new `KycLongFormSection` component. When a section has a `categoryKey` AND the form has a `profileId`, the row renders:
+  - `<SectionReviewBadge>` inline next to the title (live status from context)
+  - `<SectionReviewButton>` next to the percentage (opens the existing right-slide review panel)
+  - `<ConnectedNotesHistory>` below the section content (full review history)
+- The collapsible header is now a `<div role="button">` with keyboard support so the inline `SectionReviewButton` can sit next to the chevron without nested-button HTML. Click on the inner action area uses `stopPropagation` to avoid toggling the section.
+- New small wrappers `InlineReviewBadge` / `InlineReviewButton` read live status via `useSectionReview` — kept separate from `ConnectedSectionHeader` because the wizard's existing collapsible header design is incompatible with the `CardHeader` that the latter renders.
+- Existing `Save KYC` button at the foot of the form is unchanged — admin can still edit fields and save (admin override flow from B-070 still records provenance).
+
+Acceptance: open admin's services page → expand a profile → KYC long form shows each section with a subtle status badge and a Review button inline. Clicking Review opens the slide-out panel. Saving updates the badge optimistically; history grows below the section.
+
+---
+
 ### 2026-05-06 — B-074 Batch 3 — KycStepWizard accepts readOnly prop (Claude Code)
 
 Adds an opt-in view-only mode to the per-person KYC wizard. The brief intends this for an admin context, but in this codebase the admin path on `/admin/services/[id]` actually renders `KycLongForm` (defined inline in `ServiceDetailClient.tsx`), not `KycStepWizard`. The prop is still wired exactly as the brief asked so future callers can pick it up; admin-side review affordances (Batch 4) land on `KycLongForm` instead.

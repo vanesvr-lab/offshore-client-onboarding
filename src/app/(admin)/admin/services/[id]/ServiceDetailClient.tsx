@@ -41,7 +41,9 @@ import {
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
-import { AdminApplicationSectionsProvider } from "@/components/admin/AdminApplicationSections";
+import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview } from "@/components/admin/AdminApplicationSections";
+import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
+import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminKycPersonReviewPanel, type PersonRow as KycPersonRow } from "@/components/admin/AdminKycPersonReviewPanel";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
@@ -475,12 +477,20 @@ function KycDocSlot({
 }
 
 type KycField = { key: string; label: string; type: string; options?: { value: string; label: string }[] };
-type KycSection = { title: string; fields: KycField[] };
+// B-074 — categoryKey maps to `kyc:<profileId>:<category>` so each section
+// in the admin's KYC long form carries its own SectionReview affordances.
+// Categories must match the 8 keys defined in AdminKycPersonReviewPanel
+// (identity / financial / compliance / professional / tax / adverse_media /
+// wealth / additional). The form covers a subset; the rest had no UI slot in
+// this codebase and no reviews ever landed against them (verified via DB
+// check on 2026-05-06).
+type KycSection = { title: string; fields: KycField[]; categoryKey?: string };
 
 // KYC section fields — Individual
 const KYC_SECTIONS: KycSection[] = [
   {
     title: "Your Identity",
+    categoryKey: "identity",
     fields: [
       { key: "full_name", label: "Full legal name", type: "text" },
       { key: "aliases", label: "Aliases / other names", type: "text" },
@@ -496,6 +506,7 @@ const KYC_SECTIONS: KycSection[] = [
   },
   {
     title: "Financial",
+    categoryKey: "financial",
     fields: [
       { key: "source_of_funds_description", label: "Source of funds", type: "textarea" },
       { key: "source_of_wealth_description", label: "Source of wealth", type: "textarea" },
@@ -504,6 +515,7 @@ const KYC_SECTIONS: KycSection[] = [
   },
   {
     title: "Declarations",
+    categoryKey: "compliance",
     fields: [
       { key: "is_pep", label: "Politically Exposed Person (PEP)", type: "boolean" },
       { key: "pep_details", label: "PEP details", type: "textarea" },
@@ -513,6 +525,7 @@ const KYC_SECTIONS: KycSection[] = [
   },
   {
     title: "Work / Professional Details",
+    categoryKey: "professional",
     fields: [
       { key: "occupation", label: "Occupation", type: "text" },
       { key: "work_address", label: "Work address", type: "textarea" },
@@ -526,6 +539,7 @@ const KYC_SECTIONS: KycSection[] = [
 const KYC_SECTIONS_ORG: KycSection[] = [
   {
     title: "Company Details",
+    categoryKey: "identity",
     fields: [
       { key: "full_name", label: "Company name", type: "text" },
       { key: "company_registration_number", label: "Registration number", type: "text" },
@@ -546,6 +560,7 @@ const KYC_SECTIONS_ORG: KycSection[] = [
   },
   {
     title: "Tax / Financial",
+    categoryKey: "tax",
     fields: [
       { key: "jurisdiction_tax_residence", label: "Jurisdiction of tax residence", type: "text" },
       { key: "tax_identification_number", label: "Tax identification number", type: "text" },
@@ -671,104 +686,22 @@ function KycLongForm({
         const pct = sectionPct(section);
         const isOpen = openSections.has(section.title);
         return (
-          <div key={section.title} className="border rounded-lg overflow-hidden">
-            <button
-              onClick={() => toggleSection(section.title)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} />
-                <span className="text-sm font-medium text-brand-navy">{section.title}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                    <div className={`h-full rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="text-[10px] text-gray-500 tabular-nums w-8">{pct}%</span>
-                </div>
-                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-              </div>
-            </button>
-            {isOpen && (
-              <div className="px-4 py-3 space-y-3">
-                {section.fields.map(f => (
-                  <div key={f.key}>
-                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-                      <span>{f.label}</span>
-                      <FieldProvenanceMarker
-                        extractions={extractionsByField[f.key] ?? []}
-                        sourceDocs={sourceDocsForMarker}
-                        fieldLabel={f.label}
-                      />
-                    </label>
-                    {f.type === "textarea" ? (
-                      <textarea
-                        value={(fields[f.key] as string | null) ?? ""}
-                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        rows={2}
-                        className="w-full border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                      />
-                    ) : f.type === "boolean" ? (
-                      <select
-                        value={fields[f.key] === true ? "yes" : fields[f.key] === false ? "no" : ""}
-                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value === "yes" ? true : e.target.value === "no" ? false : null }))}
-                        className="border rounded-lg px-3 py-2 text-sm w-full"
-                      >
-                        <option value="">— Select —</option>
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                      </select>
-                    ) : f.type === "select" ? (
-                      <select
-                        value={(fields[f.key] as string | null) ?? ""}
-                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
-                        className="border rounded-lg px-3 py-2 text-sm w-full"
-                      >
-                        <option value="">— Select —</option>
-                        {(f.options ?? []).map(o => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                    ) : f.type === "date" ? (
-                      <input
-                        type="date"
-                        value={(fields[f.key] as string | null) ?? ""}
-                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
-                        className="border rounded-lg px-3 py-2 text-sm w-full"
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={(fields[f.key] as string | null) ?? ""}
-                        onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                      />
-                    )}
-                  </div>
-                ))}
-                {/* KYC document slots — shown in first section */}
-                {(section.title === "Your Identity" || section.title === "Company Details") && profileId && serviceId && kycDocTypes.length > 0 && (
-                  <div className="mt-1 pt-2 border-t">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Documents</p>
-                    <div className="space-y-0">
-                      {kycDocTypes.map(dt => (
-                        <KycDocSlot
-                          key={dt.id}
-                          docTypeName={dt.name}
-                          docTypeId={dt.id}
-                          profileId={profileId}
-                          serviceId={serviceId}
-                          existing={localDocs.find(d => d.document_type_id === dt.id) ?? null}
-                          onUploaded={handleDocUploaded}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <KycLongFormSection
+            key={section.title}
+            section={section}
+            pct={pct}
+            isOpen={isOpen}
+            onToggle={() => toggleSection(section.title)}
+            fields={fields}
+            setFields={setFields}
+            extractionsByField={extractionsByField}
+            sourceDocsForMarker={sourceDocsForMarker}
+            profileId={profileId}
+            serviceId={serviceId}
+            kycDocTypes={kycDocTypes}
+            localDocs={localDocs}
+            onDocUploaded={handleDocUploaded}
+          />
         );
       })}
       <div className="flex justify-end pt-2">
@@ -778,6 +711,195 @@ function KycLongForm({
         </Button>
       </div>
     </div>
+  );
+}
+
+// B-074 — one row of the admin KYC long form. Renders inline review
+// affordances (badge + Review button + notes history) when the section has
+// a `categoryKey` and the form has a `profileId`. Replaces the parallel
+// AdminKycPersonReviewPanel — same `kyc:<profileId>:<category>` keys, so any
+// existing review rows continue to display correctly.
+function KycLongFormSection({
+  section,
+  pct,
+  isOpen,
+  onToggle,
+  fields,
+  setFields,
+  extractionsByField,
+  sourceDocsForMarker,
+  profileId,
+  serviceId,
+  kycDocTypes,
+  localDocs,
+  onDocUploaded,
+}: {
+  section: KycSection;
+  pct: number;
+  isOpen: boolean;
+  onToggle: () => void;
+  fields: Record<string, unknown>;
+  setFields: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+  extractionsByField: Record<string, FieldExtraction[]>;
+  sourceDocsForMarker: {
+    id: string;
+    file_name: string;
+    mime_type: string | null;
+    uploaded_at: string;
+    verification_status: string;
+  }[];
+  profileId?: string;
+  serviceId?: string;
+  kycDocTypes: DocumentType[];
+  localDocs: ServiceDoc[];
+  onDocUploaded: (doc: ServiceDoc) => void;
+}) {
+  const reviewKey =
+    section.categoryKey && profileId
+      ? `kyc:${profileId}:${section.categoryKey}`
+      : null;
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`h-2 w-2 rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} />
+          <span className="text-sm font-medium text-brand-navy">{section.title}</span>
+          {reviewKey && <InlineReviewBadge sectionKey={reviewKey} />}
+        </div>
+        <div
+          className="flex items-center gap-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+              <div className={`h-full rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-[10px] text-gray-500 tabular-nums w-8">{pct}%</span>
+          </div>
+          {reviewKey && (
+            <InlineReviewButton sectionKey={reviewKey} sectionLabel={section.title} />
+          )}
+          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        </div>
+      </div>
+      {isOpen && (
+        <div className="px-4 py-3 space-y-3">
+          {section.fields.map(f => (
+            <div key={f.key}>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                <span>{f.label}</span>
+                <FieldProvenanceMarker
+                  extractions={extractionsByField[f.key] ?? []}
+                  sourceDocs={sourceDocsForMarker}
+                  fieldLabel={f.label}
+                />
+              </label>
+              {f.type === "textarea" ? (
+                <textarea
+                  value={(fields[f.key] as string | null) ?? ""}
+                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  rows={2}
+                  className="w-full border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                />
+              ) : f.type === "boolean" ? (
+                <select
+                  value={fields[f.key] === true ? "yes" : fields[f.key] === false ? "no" : ""}
+                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value === "yes" ? true : e.target.value === "no" ? false : null }))}
+                  className="border rounded-lg px-3 py-2 text-sm w-full"
+                >
+                  <option value="">— Select —</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              ) : f.type === "select" ? (
+                <select
+                  value={(fields[f.key] as string | null) ?? ""}
+                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
+                  className="border rounded-lg px-3 py-2 text-sm w-full"
+                >
+                  <option value="">— Select —</option>
+                  {(f.options ?? []).map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              ) : f.type === "date" ? (
+                <input
+                  type="date"
+                  value={(fields[f.key] as string | null) ?? ""}
+                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
+                  className="border rounded-lg px-3 py-2 text-sm w-full"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={(fields[f.key] as string | null) ?? ""}
+                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                />
+              )}
+            </div>
+          ))}
+          {/* KYC document slots — shown in first section */}
+          {(section.title === "Your Identity" || section.title === "Company Details") && profileId && serviceId && kycDocTypes.length > 0 && (
+            <div className="mt-1 pt-2 border-t">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Documents</p>
+              <div className="space-y-0">
+                {kycDocTypes.map(dt => (
+                  <KycDocSlot
+                    key={dt.id}
+                    docTypeName={dt.name}
+                    docTypeId={dt.id}
+                    profileId={profileId}
+                    serviceId={serviceId}
+                    existing={localDocs.find(d => d.document_type_id === dt.id) ?? null}
+                    onUploaded={onDocUploaded}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {reviewKey && (
+            <div className="pt-2 border-t mt-2">
+              <ConnectedNotesHistory sectionKey={reviewKey} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// B-074 — small wrappers so the long-form section row can read the live
+// review status from context without rebuilding the full ConnectedSectionHeader
+// (which renders its own CardHeader and would conflict with the existing
+// collapsible header design).
+function InlineReviewBadge({ sectionKey }: { sectionKey: string }) {
+  const { currentStatus } = useSectionReview(sectionKey);
+  return <SectionReviewBadge status={currentStatus} />;
+}
+
+function InlineReviewButton({
+  sectionKey,
+  sectionLabel,
+}: {
+  sectionKey: string;
+  sectionLabel: string;
+}) {
+  const { applicationId, currentStatus, onReviewSaved } = useSectionReview(sectionKey);
+  return (
+    <SectionReviewButton
+      applicationId={applicationId}
+      sectionKey={sectionKey}
+      sectionLabel={sectionLabel}
+      currentStatus={currentStatus}
+      onReviewSaved={onReviewSaved}
+    />
   );
 }
 
