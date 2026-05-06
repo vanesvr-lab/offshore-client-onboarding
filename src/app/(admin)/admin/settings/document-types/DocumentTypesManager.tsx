@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import type { DocumentType } from "@/types";
+import type { DocumentType, DocumentScope } from "@/types";
 
 interface Props {
   documentTypes: DocumentType[];
@@ -28,12 +28,18 @@ const APPLIES_TO = [
   { value: "both", label: "Both" },
 ] as const;
 
+const SCOPE_OPTIONS = [
+  { value: "person", label: "Person KYC" },
+  { value: "application", label: "Service-level" },
+] as const;
+
 type CategoryValue = typeof CATEGORIES[number]["value"];
 
 const EMPTY_FORM = {
   name: "",
   category: "identity" as CategoryValue,
   applies_to: "both" as "individual" | "organisation" | "both",
+  scope: "person" as DocumentScope,
   description: "",
 };
 
@@ -82,6 +88,20 @@ function DocumentTypeForm({
           </select>
         </div>
         <div className="col-span-2 space-y-1">
+          <Label className="text-xs">Scope</Label>
+          <select
+            value={form.scope}
+            onChange={(e) => setForm((p) => ({ ...p, scope: e.target.value as DocumentScope }))}
+            className="w-full border rounded-lg px-3 py-2 text-sm"
+          >
+            {SCOPE_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <p className="text-[11px] text-gray-500 leading-snug">
+            <span className="font-medium">Person KYC</span>: uploaded per Director / Shareholder / UBO inside the per-person KYC wizard.
+            {" "}<span className="font-medium">Service-level</span>: uploaded once per application in the Documents step.
+          </p>
+        </div>
+        <div className="col-span-2 space-y-1">
           <Label className="text-xs">Description</Label>
           <Input
             value={form.description}
@@ -121,6 +141,15 @@ function DocTypeRow({
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-gray-900 truncate">{dt.name}</p>
           <span className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{dt.applies_to}</span>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded ${
+              (dt.scope ?? "person") === "application"
+                ? "bg-blue-50 text-blue-700"
+                : "bg-amber-50 text-amber-700"
+            }`}
+          >
+            {(dt.scope ?? "person") === "application" ? "Service" : "KYC"}
+          </span>
         </div>
         {dt.description && <p className="text-xs text-gray-400 truncate">{dt.description}</p>}
       </div>
@@ -275,6 +304,7 @@ export function DocumentTypesManager({ documentTypes: initial }: Props) {
                           name: dt.name,
                           category: dt.category as CategoryValue,
                           applies_to: dt.applies_to as "individual" | "organisation" | "both",
+                          scope: (dt.scope ?? "person") as DocumentScope,
                           description: dt.description ?? "",
                         }}
                         onSave={(form) => void handleUpdate(dt.id, form)}

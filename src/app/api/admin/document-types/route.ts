@@ -13,12 +13,15 @@ export async function POST(request: Request) {
     name: string;
     category: string;
     applies_to?: string;
+    scope?: string;
     description?: string;
   };
 
   if (!body.name?.trim() || !body.category) {
     return NextResponse.json({ error: "name and category are required" }, { status: 400 });
   }
+
+  const scope = body.scope === "application" ? "application" : "person";
 
   const supabase = createAdminClient();
 
@@ -39,6 +42,7 @@ export async function POST(request: Request) {
       name: body.name.trim(),
       category: body.category,
       applies_to: body.applies_to ?? "both",
+      scope,
       description: body.description?.trim() || null,
       is_active: true,
       sort_order: sortOrder,

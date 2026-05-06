@@ -15,10 +15,13 @@ export async function PATCH(
   const { id } = await params;
   const body = (await request.json()) as Record<string, unknown>;
 
-  const ALLOWED = ["name", "category", "applies_to", "description", "is_active", "sort_order"];
+  const ALLOWED = ["name", "category", "applies_to", "scope", "description", "is_active", "sort_order"];
   const patch: Record<string, unknown> = {};
   for (const key of ALLOWED) {
     if (key in body) patch[key] = body[key];
+  }
+  if ("scope" in patch && patch.scope !== "person" && patch.scope !== "application") {
+    return NextResponse.json({ error: "scope must be 'person' or 'application'" }, { status: 400 });
   }
 
   if (Object.keys(patch).length === 0) {

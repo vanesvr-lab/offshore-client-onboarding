@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-071 Batch 2 — Scope field in admin Document Types form (Claude Code)
+
+- **`DocumentTypesManager.tsx`** — `EMPTY_FORM` now includes `scope` (default `"person"`); new `SCOPE_OPTIONS` select rendered between "Applies to" and "Description" with a one-line caption explaining Person KYC vs Service-level. Each row badge now shows a small `KYC` (amber) / `Service` (blue) chip next to the existing applies-to chip. Edit-mode initial form maps `dt.scope ?? "person"`.
+- **`POST /api/admin/document-types`** — accepts `scope` in body, normalizes to `"person" | "application"`, includes in insert.
+- **`PATCH /api/admin/document-types/[id]`** — `scope` added to ALLOWED list; rejects non-`person|application` values with 400.
+
+Existing doc types still display correctly (their scope was set in migration `20260301000006_document_scope_flag.sql`). New types created after this batch default to `person` unless changed.
+
+---
+
 ### 2026-05-06 — B-071 Batch 1 — service_template_documents migration (Claude Code)
 
 Foundation for per-template curated doc lists (e.g. GBC's 18 docs, AC's own list, Trust's own list — independent of the global DD-driven set).
