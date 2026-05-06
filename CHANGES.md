@@ -15,9 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
-### 2026-05-05 — B-067 — Client portal polish (Claude Code) — IN PROGRESS
+### 2026-05-05 — B-067 — Client portal polish (Claude Code)
 
-End-user QA pass — 7 batches:
+End-user QA pass — 7 batches, all green (build + 173 tests). After the
+final commit, restarted the dev server (`pkill -f "next dev"; rm -rf
+.next; npm run dev`). Knowledge-base PDF ingestion stays out of scope
+(deferred to B-068).
+
+**Migration applied:**
+- `20260505235835_kyc_invite_rate_limit.sql` — adds
+  `invites_sent_count_24h` + `invites_count_window_start` to
+  `profile_service_roles`. Pushed via `npm run db:push`; `db:status`
+  shows paired Local + Remote with no drift.
+
 
 **Batch 1 — Home rename + welcome banner:**
 - `src/components/shared/Sidebar.tsx` — client primary nav label "Dashboard" → "Home" (route `/dashboard` unchanged; admin sidebar untouched)
