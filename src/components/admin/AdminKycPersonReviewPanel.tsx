@@ -39,7 +39,7 @@ const ROLE_LABELS: Record<string, string> = {
   contact: "Contact",
 };
 
-interface PersonRow {
+export interface PersonRow {
   id: string;
   role: string;
   shareholding_percentage: number | null;
@@ -49,13 +49,23 @@ interface PersonRow {
 
 interface Props {
   applicationId: string;
+  // B-073 — when provided, skips the legacy `/api/applications/[id]/persons`
+  // fetch. Required for the services detail page which has roles loaded
+  // server-side and whose `applicationId` is actually a `service.id` (the
+  // legacy persons API returns 404 for service ids).
+  persons?: PersonRow[];
 }
 
-export function AdminKycPersonReviewPanel({ applicationId }: Props) {
-  const [persons, setPersons] = useState<PersonRow[]>([]);
-  const [loading, setLoading] = useState(true);
+export function AdminKycPersonReviewPanel({ applicationId, persons: presetPersons }: Props) {
+  const [persons, setPersons] = useState<PersonRow[]>(presetPersons ?? []);
+  const [loading, setLoading] = useState(presetPersons === undefined);
 
   useEffect(() => {
+    if (presetPersons !== undefined) {
+      setPersons(presetPersons);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     fetch(`/api/applications/${applicationId}/persons`)
       .then((r) => r.json())
@@ -71,7 +81,7 @@ export function AdminKycPersonReviewPanel({ applicationId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [applicationId]);
+  }, [applicationId, presetPersons]);
 
   if (loading) {
     return (

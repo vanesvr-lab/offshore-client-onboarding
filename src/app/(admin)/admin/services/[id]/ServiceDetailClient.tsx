@@ -41,6 +41,8 @@ import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
 import { AdminApplicationSectionsProvider } from "@/components/admin/AdminApplicationSections";
+import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
+import { AdminKycPersonReviewPanel, type PersonRow as KycPersonRow } from "@/components/admin/AdminKycPersonReviewPanel";
 
 // ─── Document category helpers ────────────────────────────────────────────────
 
@@ -2009,6 +2011,16 @@ const STATUS_OPTIONS = [
   "draft", "in_progress", "submitted", "in_review", "pending_action", "verification", "approved", "rejected",
 ] as const;
 
+// B-073 — five wizard steps for the modern services detail page. Section keys
+// match what's wired into ServiceCollapsibleSection in this file.
+const ADMIN_STEPS_SERVICES: AdminStep[] = [
+  { id: "step-company-setup", label: "Company Setup", sectionKeys: ["company_setup"] },
+  { id: "step-financial",     label: "Financial",     sectionKeys: ["financial"] },
+  { id: "step-banking",       label: "Banking",       sectionKeys: ["banking"] },
+  { id: "step-people-kyc",    label: "People & KYC",  sectionKeys: ["people"] },
+  { id: "step-documents",     label: "Documents",     sectionKeys: ["documents"] },
+];
+
 const DD_LEVELS = [
   { value: "sdd", label: "SDD — Simplified" },
   { value: "cdd", label: "CDD — Standard" },
@@ -2341,6 +2353,11 @@ export function ServiceDetailClient({
         </div>
       </div>
 
+      {/* B-073 — wizard-shaped step indicator with smooth-scroll anchors */}
+      <div className="mb-4 rounded-lg border bg-white px-4 py-3">
+        <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} />
+      </div>
+
       {/* ── Two-column layout ──────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -2469,6 +2486,33 @@ export function ServiceDetailClient({
               serviceId={service.id}
               onSaved={handleRolesRefresh}
             />
+
+            {/* B-073 — per-profile KYC subsection reviews. Persons are
+                derived from typedRoles so the panel skips its legacy
+                /api/applications/[id]/persons fetch (which 404s for
+                service ids). Same `kyc:<profile_id>:<category>` keys
+                as the legacy admin path. */}
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-brand-navy mb-2">
+                KYC Review — per profile, per subsection
+              </h3>
+              <AdminKycPersonReviewPanel
+                applicationId={service.id}
+                persons={typedRoles
+                  .filter((r) => r.client_profiles?.id)
+                  .map<KycPersonRow>((r) => ({
+                    id: r.id,
+                    role: r.role,
+                    shareholding_percentage: r.shareholding_percentage ?? null,
+                    kyc_records: r.client_profiles
+                      ? {
+                          id: r.client_profiles.id,
+                          full_name: r.client_profiles.full_name ?? null,
+                        }
+                      : null,
+                  }))}
+              />
+            </div>
           </div>
         </ServiceCollapsibleSection>
 

@@ -15,6 +15,15 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-073 Batch 3 — Step indicator + per-profile KYC subsection reviews on services detail (Claude Code)
+
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — defines a new `ADMIN_STEPS_SERVICES` array (5 steps: Company Setup, Financial, Banking, People & KYC, Documents) using the section keys wired in Batch 2. Renders `<AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} />` in its own bordered card between the sticky status header and the main two-column grid. Click a step → smooth-scroll to the matching `ServiceCollapsibleSection` (anchor IDs landed in Batch 2). Aggregate status pills resolve via `useAggregateStatus` against the same provider context.
+- Inside Step 4's expanded body (below `OwnershipStructure`), renders `<AdminKycPersonReviewPanel applicationId={service.id} persons={…} />` with persons derived server-side from `typedRoles` — produces a collapsible card per profile, each containing 8 KYC subsection cards (`identity / financial / compliance / professional / tax / adverse_media / wealth / additional`) with `kyc:<profile_id>:<category>` review keys.
+- `src/components/admin/AdminKycPersonReviewPanel.tsx` — new optional `persons?: PersonRow[]` prop. When provided, the component skips its `/api/applications/[id]/persons` fetch (which would 404 against a service id). The legacy `/admin/applications/[id]` consumer still works unchanged. `PersonRow` is now exported for callers building the prop.
+- `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-073 Batch 2 — Section-review affordances on all 5 ServiceCollapsibleSection blocks (Claude Code)
 
 - `src/components/admin/ServiceCollapsibleSection.tsx` — extended (Option A from the brief). New optional `sectionKey` and `anchorId` props. When `sectionKey` is supplied, the header renders a `<SectionReviewBadge>` + `<SectionReviewButton>` (visible even when collapsed; clicking Review opens the right-slide panel without toggling expansion), and the expanded body appends `<ConnectedNotesHistory>` after the children. Reads state via the `useSectionReview` hook from `AdminApplicationSections`. Outer wrapper is now a `<div>` containing the toggle `<button>` + a sibling `<SectionReviewControls>` so the Review button never bubbles to the toggle. The percentage bar + label hide below `lg:` when `sectionKey` is wired so the badge has room on narrow viewports (the RAG dot stays visible).
