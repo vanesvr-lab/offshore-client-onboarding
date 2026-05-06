@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-05 — B-067 — Client portal polish (Claude Code) — IN PROGRESS
+
+End-user QA pass — 7 batches:
+
+**Batch 1 — Home rename + welcome banner:**
+- `src/components/shared/Sidebar.tsx` — client primary nav label "Dashboard" → "Home" (route `/dashboard` unchanged; admin sidebar untouched)
+- `src/components/client/DashboardClient.tsx` — page heading is now "Home", new subtle brand-navy/blue welcome banner (`Welcome <FirstName>. Thank you for choosing GWMS.`), per-card nudge line `Your application for <Service> is X% complete — Review →` shown only when `overallPct < 100`. Removed the old amber "all complete" / "missing info" greeting branches in favour of one consistent layout.
+
 ### 2026-05-05 — B-066 — Stop wizard from remounting on every save (Claude Code)
 
 B-062 added `kyc.updated_at` to the per-person wizard's mount key to

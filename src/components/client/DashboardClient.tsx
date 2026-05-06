@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight, ArrowDown } from "lucide-react";
+import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getClientStatusLabel } from "@/lib/utils/clientLabels";
 
@@ -49,6 +49,9 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
       ? "bg-amber-500"
       : "bg-gray-300";
 
+  const serviceName = svc.service_templates?.name ?? "Service";
+  const showNudge = svc.overallPct < 100;
+
   return (
     <div className="bg-white border rounded-xl overflow-hidden">
       {/* Card header */}
@@ -56,7 +59,7 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
         {/* Service name + status badge */}
         <div className="flex items-start justify-between gap-3 mb-1">
           <h2 className="font-semibold text-brand-navy text-base leading-snug">
-            {svc.service_templates?.name ?? "Service"}
+            {serviceName}
           </h2>
           <span
             className={`text-[10px] font-medium px-2 py-0.5 rounded-full capitalize shrink-0 ${badgeClass}`}
@@ -78,10 +81,6 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
           </span>
         </div>
 
-        {/* B-048 §5.2 — Review CTA grouped with the card content (not
-            edge-pinned). The collapse toggle is a small tertiary control;
-            Review is the primary action and sized to the brand 44pt CTA
-            standard so it reads as "the thing to do". */}
         <div className="flex items-center gap-3 flex-wrap">
           <Button
             size="sm"
@@ -102,6 +101,22 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
             )}
           </button>
         </div>
+
+        {showNudge && (
+          <p className="mt-3 text-sm text-gray-600">
+            Your application for{" "}
+            <span className="font-medium text-brand-navy">{serviceName}</span> is{" "}
+            <span className="font-semibold text-brand-navy">{svc.overallPct}%</span>{" "}
+            complete —{" "}
+            <button
+              onClick={() => router.push(`/services/${svc.id}?startWizard=true`)}
+              className="inline-flex items-center gap-0.5 text-brand-blue font-medium hover:underline"
+            >
+              Review
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </p>
+        )}
       </div>
 
       {/* Collapsible sections */}
@@ -144,43 +159,21 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
   );
 }
 
-export function DashboardClient({ userName, firstName, services, allComplete }: Props) {
-  if (allComplete) {
-    return (
-      <div className="mx-auto w-full max-w-4xl space-y-6">
-        {/* Greeting — all complete */}
-        <div>
-          <h1 className="text-2xl font-bold text-brand-navy">Welcome {userName}</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            All sections complete! Your application is under review.
-          </p>
-        </div>
-
-        {/* Service cards */}
-        <div className="space-y-4">
-          {services.map((svc) => (
-            <ServiceCard key={svc.id} svc={svc} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // Missing-info path — point user at the Review CTA on the cards below
-  const greetingLead = firstName ? `Welcome, ${firstName}.` : "Welcome back.";
+export function DashboardClient({ userName, firstName, services }: Props) {
+  // Welcome banner uses first name when available; falls back to full name.
+  const greetingName = firstName ?? userName;
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
-      {/* Greeting card with downward visual cue */}
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-        <p className="text-sm text-amber-900">
-          <span className="font-semibold text-brand-navy">{greetingLead}</span>{" "}
-          Your application is missing some information — click{" "}
-          <span className="font-semibold">Review</span> below to complete it.
+    <div className="mx-auto w-full max-w-4xl space-y-5">
+      {/* Page heading */}
+      <h1 className="text-2xl font-bold text-brand-navy">Home</h1>
+
+      {/* Welcome banner — subtle brand-navy/blue, friendly greeting */}
+      <div className="rounded-xl border border-brand-navy/15 bg-brand-blue/5 px-5 py-4">
+        <p className="text-sm text-brand-navy">
+          <span className="font-semibold">Welcome {greetingName}.</span>{" "}
+          Thank you for choosing GWMS.
         </p>
-        <div className="flex justify-center mt-2 -mb-1 text-amber-500">
-          <ArrowDown className="h-4 w-4 animate-bounce" />
-        </div>
       </div>
 
       {/* Service cards */}

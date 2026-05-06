@@ -130,7 +130,7 @@ function SidebarContent({
   // because that's their own profile form, not a hub.
   const clientNav = isPrimary
     ? [
-        { label: "Dashboard", href: "/dashboard", icon: Home, exact: true },
+        { label: "Home", href: "/dashboard", icon: Home, exact: true },
         { label: "KYC Profile", href: "/kyc-review", icon: UserCheck, exact: false, activePaths: ["/kyc", "/kyc-review"] },
         { label: "New Solution", href: "/apply", icon: PlusCircle, exact: false },
         ...(hasApplications
