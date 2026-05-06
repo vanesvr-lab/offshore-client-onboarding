@@ -15,6 +15,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-073 Batch 4 — Tech debt + final polish; B-073 done (Claude Code)
+
+- Tech debt #26 added (see Tracker below): the `application_section_reviews.application_id` column now polymorphically holds applications.id OR services.id; the FK was dropped in Batch 1's migration. Plan to rename and reinstate a typed FK once the legacy applications path retires.
+- Confirmed the legacy `/admin/applications/[id]` page still loads — `AdminKycPersonReviewPanel`'s new `persons` prop is optional, so the legacy call site (`<AdminKycPersonReviewPanel applicationId={params.id} />`) is unchanged and continues to fetch via `/api/applications/[id]/persons`. `npm run build` type-checks both consumers.
+- Mobile pass at 375px on `/admin/services/[id]`:
+  - Step indicator wraps via `flex flex-wrap items-center gap-1` (`AdminApplicationStepIndicator`).
+  - In Batch 2, `ServiceCollapsibleSection` was tweaked so the percentage bar + `%` label hide below `lg:` whenever `sectionKey` is wired — the SectionReviewBadge + Review button now have room next to the title without overflow on narrow viewports. The RAG dot remains visible.
+  - KYC subsection cards (`AdminKycPersonReviewPanel`) stack inside a `space-y-3` list and each `PersonReviewCard` renders its 8 categories in a `space-y-4` column inside a `CardContent`, so they stack cleanly.
+- Final `npm run build` passes.
+
+**B-073 done.** Modern `/admin/services/[id]` page now mirrors the legacy admin detail page's section-review surface:
+- `AdminApplicationSectionsProvider` wraps the page (Batch 1) — service.id is passed as `applicationId`; FK to `applications(id)` dropped via migration.
+- All 5 wizard sections (Company Setup, Financial, Banking, People & KYC, Documents) carry `<SectionReviewBadge>` + `<SectionReviewButton>` in their headers and `<ConnectedNotesHistory>` at the bottom (Batch 2).
+- Step indicator at top with smooth-scroll anchors per step; per-profile KYC subsection reviews inside Step 4 (Batch 3).
+- Tech debt #26 captures the polymorphic-id shortcut for follow-up.
+
+Test target: `/admin/services/1c131367-b89f-44db-8787-6958a306b73d` (GBC-0002).
+
+---
+
 ### 2026-05-06 — B-073 Batch 3 — Step indicator + per-profile KYC subsection reviews on services detail (Claude Code)
 
 - `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — defines a new `ADMIN_STEPS_SERVICES` array (5 steps: Company Setup, Financial, Banking, People & KYC, Documents) using the section keys wired in Batch 2. Renders `<AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} />` in its own bordered card between the sticky status header and the main two-column grid. Click a step → smooth-scroll to the matching `ServiceCollapsibleSection` (anchor IDs landed in Batch 2). Aggregate status pills resolve via `useAggregateStatus` against the same provider context.
@@ -3935,6 +3955,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 23 | **Magic-link flow still uses `kyc_records`-shape response** | Low | B-056: verify-code now assembles a legacy `KycRecord`-shape response from the new `client_profiles + client_profile_kyc + profile_service_roles` schema so `KycFillClient` doesn't have to change. Long-term, KycFillClient should consume the modern shape directly (and the `kycRecord.id` ↔ `client_profile_kyc.id` fallback in verify-code can drop). |
 | 24 | **No systematic client-side data freshness layer** | Medium | Today's pattern: server components fetch via Supabase, props flow down, mutations PATCH via `/api/...`, then we manually `router.refresh()` + splice updated records into local state (B-065). Each save flow has to opt into the cache-bust pattern individually. Migrate to React Query or SWR for systematic mutation-and-invalidation: declare query keys per resource, mutations auto-invalidate, focus/reconnect refetches handled, stale-while-revalidate gives a free perceived perf win. ~1-2 days refactor across the wizard + dashboard + admin queue. Defer until POC ships and a pattern of "data freshness regression" recurs — for now B-065's response-based patching is sufficient. |
 | 25 | **Admin KYC view is parallel, not inline read-only mirror** | Medium | B-069 Batch 3 ships per-profile per-subsection review affordances via a parallel admin panel (`AdminKycPersonReviewPanel`) below `PersonsManager`, instead of the brief's intended inline read-only `PerPersonReviewWizard`/`KycStepWizard`. The wizard components (636 + 2122 lines, deeply stateful) couldn't be safely retrofit with a `readOnly` prop in one batch. Plan: add `readOnly` to `KycStepWizard` (disable inputs, hide save buttons), then either accept a `subsectionHeaderRenderer` prop or render `<ConnectedSectionHeader sectionKey="kyc:<profile_id>:<cat>">` around each existing category bucket. Once that lands, the parallel panel can be deleted. Aggregate badge derivation already in place via `useAggregateStatus`. |
+| 26 | **`application_section_reviews.application_id` stores service ids** | Medium | B-073 ports section reviews to `/admin/services/[id]` while reusing the existing table from B-068. The column name is misleading — it now holds either `applications.id` (legacy path, 1 stale test row) or `services.id` (modern path, going forward). The FK to `applications(id)` was dropped in `20260506155512_drop_section_reviews_application_fk.sql` so service-id inserts succeed; UUID v4 collision risk between the two ID spaces is statistically zero. Once the legacy `applications` table is fully retired, rename the column to `subject_id` (or `service_id`), reinstate a typed FK, and rename `/api/admin/applications/[id]/section-reviews` to a service-prefixed path. Affects: `application_section_reviews` table, `/api/admin/applications/[id]/section-reviews/*` route handlers, and any component prop named `applicationId` that's now passed a service id (`AdminApplicationSectionsProvider`, `AdminKycPersonReviewPanel`, `SectionReviewButton`, `SectionReviewPanel`). |
 
 ### Resolved
 
