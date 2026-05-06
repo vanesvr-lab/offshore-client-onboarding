@@ -735,3 +735,19 @@ export interface ServiceSectionOverride {
   overridden_by: string | null;
   overridden_at: string;
 }
+
+// B-068 — per-section admin review workflow
+export type SectionReviewStatus = "approved" | "flagged" | "rejected";
+
+export interface ApplicationSectionReview {
+  id: string;
+  tenant_id: string;
+  application_id: string;
+  section_key: string;
+  status: SectionReviewStatus;
+  notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string;
+  // joined optionally via reviewed_by → profiles(full_name)
+  profiles?: { full_name: string | null } | null;
+}

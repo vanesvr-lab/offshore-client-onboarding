@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-068 Batch 1 — `application_section_reviews` migration (Claude Code)
+
+- New migration `supabase/migrations/20260506070332_application_section_reviews.sql`
+  - `id`, `tenant_id` (default GWMS UUID, FK → tenants), `application_id` (FK → applications, ON DELETE CASCADE), `section_key`, `status` (CHECK approved|flagged|rejected), `notes`, `reviewed_by` (FK → profiles), `reviewed_at`
+  - Indexes: `asr_app_idx`, `asr_app_key_idx (application_id, section_key, reviewed_at DESC)`, `asr_tenant_idx`
+  - History-preserving: every save inserts a new row; latest row per `(application_id, section_key)` is current status
+- **RLS deviation from brief:** brief asked for policies gated on `public.is_admin()`. No such helper exists in this project — auth is NextAuth (application layer), and the established pattern (migration 005) is RLS-default-deny with no policies, all access via `createAdminClient()`. Followed project convention: RLS enabled, no policies. Route handlers gate on `session.user.role === "admin"`. See tech-debt #3.
+- `npm run db:push` applied. `npm run db:status` shows Local + Remote pair for `20260506070332` with no drift.
+- Added `SectionReviewStatus` + `ApplicationSectionReview` types to `src/types/index.ts`.
+
+---
+
 ### 2026-05-06 — Briefs B-068 → B-072 ready (Claude Desktop, planning)
 
 Vanessa brainstormed the next admin-workflow chunk. Five briefs written, ready for CLI execution. They build a coherent admin-side overhaul:
