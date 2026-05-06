@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-069 Batch 3 — KYC subsection reviews per profile (Claude Code)
+
+- New `src/components/admin/AdminKycPersonReviewPanel.tsx` — admin-side panel that fetches the application's persons and renders a collapsible card per profile. Each card shows an aggregate badge across all 8 KYC categories and expands into 8 sub-blocks (Identity / Financial / Compliance / Professional / Tax / Adverse Media / Wealth / Additional), each with its own `ConnectedSectionHeader` + `ConnectedNotesHistory`.
+- Section key format: `kyc:<kyc_records.id>:<category>`. `kyc_records.id` is the same UUID as `client_profiles.id` per migration 003 line 360, so this matches the brief's specified format effectively.
+- Wired into Step 4 (People & KYC) on the admin app detail page, below the existing PersonsManager card. Step 4 now contains: Section D card (with `people` review) + new "KYC Review — per profile, per subsection" card.
+- **Pragmatic deviation from brief:** brief asked for the client's `PerPersonReviewWizard` rendered inline in `readOnly` mode with section-review affordances per category. The actual admin path uses `KycStepWizard` (636 lines) via `PersonsManager`, not `PerPersonReviewWizard` (2122 lines) — and refactoring either to take a `readOnly` prop is too invasive for tonight. The brief itself endorses a fallback ("if PerPersonReviewWizard doesn't easily accept readOnly … add a tech debt entry to revisit cleanly"). Going one step further: ship a parallel admin panel that adds the per-subsection review affordances without touching the wizard. Admin still uses PersonsManager (interactive) for the data view + edits. See tech-debt entry below.
+- Build passes.
+
+**Tech debt** (added to bottom of CHANGES.md): inline read-only KYC subsection mirror — render `KycStepWizard` (or its successor) in read-only mode inside the per-person card, with each category bucket bound to its `kyc:<profile_id>:<category>` review affordance, removing the parallel panel.
+
+---
+
 ### 2026-05-06 — B-069 Batch 2 — Admin app detail wizard-shaped restructure (Claude Code)
 
 - `src/app/(admin)/admin/applications/[id]/page.tsx` — left column now wraps three `<section>` blocks with anchor IDs that match `ADMIN_STEPS_DEFAULT`:
@@ -3863,6 +3875,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 22 | **`/kyc` route is orphaned for primary clients** | Low | B-056: the primary-client sidebar now points at `/kyc-review` (server redirect → `/services/<latest>?wizardStep=3`). `/kyc` (KycPageClient) still works via direct URL and remains the entry point for non-primary clients. Delete the route + component + supporting fetch logic if Vercel analytics shows zero primary-client traffic for 30 days. |
 | 23 | **Magic-link flow still uses `kyc_records`-shape response** | Low | B-056: verify-code now assembles a legacy `KycRecord`-shape response from the new `client_profiles + client_profile_kyc + profile_service_roles` schema so `KycFillClient` doesn't have to change. Long-term, KycFillClient should consume the modern shape directly (and the `kycRecord.id` ↔ `client_profile_kyc.id` fallback in verify-code can drop). |
 | 24 | **No systematic client-side data freshness layer** | Medium | Today's pattern: server components fetch via Supabase, props flow down, mutations PATCH via `/api/...`, then we manually `router.refresh()` + splice updated records into local state (B-065). Each save flow has to opt into the cache-bust pattern individually. Migrate to React Query or SWR for systematic mutation-and-invalidation: declare query keys per resource, mutations auto-invalidate, focus/reconnect refetches handled, stale-while-revalidate gives a free perceived perf win. ~1-2 days refactor across the wizard + dashboard + admin queue. Defer until POC ships and a pattern of "data freshness regression" recurs — for now B-065's response-based patching is sufficient. |
+| 25 | **Admin KYC view is parallel, not inline read-only mirror** | Medium | B-069 Batch 3 ships per-profile per-subsection review affordances via a parallel admin panel (`AdminKycPersonReviewPanel`) below `PersonsManager`, instead of the brief's intended inline read-only `PerPersonReviewWizard`/`KycStepWizard`. The wizard components (636 + 2122 lines, deeply stateful) couldn't be safely retrofit with a `readOnly` prop in one batch. Plan: add `readOnly` to `KycStepWizard` (disable inputs, hide save buttons), then either accept a `subsectionHeaderRenderer` prop or render `<ConnectedSectionHeader sectionKey="kyc:<profile_id>:<cat>">` around each existing category bucket. Once that lands, the parallel panel can be deleted. Aggregate badge derivation already in place via `useAggregateStatus`. |
 
 ### Resolved
 

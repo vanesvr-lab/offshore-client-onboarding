@@ -23,6 +23,7 @@ import {
   AdminApplicationStepIndicator,
   type AdminStep,
 } from "@/components/admin/AdminApplicationStepIndicator";
+import { AdminKycPersonReviewPanel } from "@/components/admin/AdminKycPersonReviewPanel";
 import {
   Card,
   CardContent,
@@ -237,6 +238,18 @@ export default async function ApplicationDetailPage({
               <CardContent>
                 <PersonsManager applicationId={params.id} />
                 <ConnectedNotesHistory sectionKey="people" />
+              </CardContent>
+            </Card>
+
+            {/* B-069 Batch 3 — per-profile KYC subsection reviews */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-brand-navy text-base">
+                  KYC Review — per profile, per subsection
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AdminKycPersonReviewPanel applicationId={params.id} />
               </CardContent>
             </Card>
           </section>
