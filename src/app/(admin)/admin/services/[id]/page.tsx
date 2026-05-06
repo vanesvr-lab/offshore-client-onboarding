@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { ServiceDetailClient } from "./ServiceDetailClient";
-import type { ServiceRecord, ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance } from "@/types";
+import type { ServiceRecord, ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export const dynamic = "force-dynamic";
@@ -214,6 +214,24 @@ export default async function ServiceDetailPage({
       .maybeSingle(),
   ]);
 
+  // B-070 — field provenance for admin KYC marker UI. Fetch all current
+  // (non-superseded) rows for every profile linked to this service. Markers
+  // need the latest row; the "previous value" tooltip on admin_override
+  // markers reads superseded rows too, so include them for the matched
+  // profiles as well.
+  const profileIdsForFE = ((rolesRes.data ?? []) as unknown as ProfileServiceRole[])
+    .map((r) => r.client_profile_id)
+    .filter((pid): pid is string => !!pid);
+
+  const fieldExtractionsRes =
+    profileIdsForFE.length > 0
+      ? await supabase
+          .from("field_extractions")
+          .select("*")
+          .in("client_profile_id", profileIdsForFE)
+          .order("extracted_at", { ascending: false })
+      : { data: [] as FieldExtraction[] };
+
   const templateActions = (templateActionsRes.data ?? []) as unknown as ServiceTemplateAction[];
   let actionInstances = (existingActionsRes.data ?? []) as unknown as ServiceAction[];
   const haveKeys = new Set(actionInstances.map((a) => a.action_key));
@@ -267,6 +285,7 @@ export default async function ServiceDetailPage({
         templateActions={templateActions}
         actionsByKey={actionsByKey}
         substance={substance}
+        fieldExtractions={(fieldExtractionsRes.data ?? []) as unknown as FieldExtraction[]}
       />
     </div>
   );

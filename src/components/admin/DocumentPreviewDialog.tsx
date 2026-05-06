@@ -20,6 +20,9 @@ interface DocumentPreviewDialogProps {
   verificationStatus?: VerificationStatus;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** B-070 — when provided, renders a small banner above the preview body
+   * indicating which KYC field the dialog was opened to defend. */
+  sourceFieldLabel?: string;
 }
 
 function formatDate(dateStr?: string): string {
@@ -39,6 +42,7 @@ export function DocumentPreviewDialog({
   verificationStatus,
   open,
   onOpenChange,
+  sourceFieldLabel,
 }: DocumentPreviewDialogProps) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -96,6 +100,13 @@ export function DocumentPreviewDialog({
             </button>
           </div>
         </DialogHeader>
+
+        {/* B-070 — source-field banner so the admin sees what they're defending. */}
+        {sourceFieldLabel && (
+          <div className="px-5 py-2 bg-amber-50 border-b text-xs text-amber-900">
+            <span className="font-semibold">Source for:</span> {sourceFieldLabel}
+          </div>
+        )}
 
         {/* Preview body */}
         <div className="flex-1 overflow-hidden" style={{ height: "calc(80vh - 112px)" }}>

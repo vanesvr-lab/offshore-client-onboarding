@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -28,6 +28,7 @@ import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
+import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
 import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { normalizeConfidence } from "@/lib/ai/confidence";
@@ -38,7 +39,7 @@ import {
   calcDocumentsCompletion,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
-import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance } from "@/types";
+import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
 import { AdminApplicationSectionsProvider } from "@/components/admin/AdminApplicationSections";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
@@ -563,6 +564,7 @@ function KycLongForm({
   profileDocuments,
   documentTypes,
   recordType,
+  fieldExtractions,
   onSaved,
   onDocUploaded,
 }: {
@@ -575,11 +577,35 @@ function KycLongForm({
   profileDocuments?: ServiceDoc[];
   documentTypes?: DocumentType[];
   recordType?: string;
+  /** B-070 — provenance rows for this profile (any field). */
+  fieldExtractions?: FieldExtraction[];
   onSaved: () => void;
   onDocUploaded?: (doc: ServiceDoc) => void;
 }) {
   const isOrg = recordType === "organisation";
   const sections = isOrg ? KYC_SECTIONS_ORG : KYC_SECTIONS;
+
+  // B-070 — group provenance rows by field_key for O(1) marker lookup.
+  const extractionsByField = useMemo(() => {
+    const out: Record<string, FieldExtraction[]> = {};
+    for (const fe of fieldExtractions ?? []) {
+      if (!out[fe.field_key]) out[fe.field_key] = [];
+      out[fe.field_key].push(fe);
+    }
+    return out;
+  }, [fieldExtractions]);
+  // Source-doc lookup table for the inline preview (only profile-scoped docs).
+  const sourceDocsForMarker = useMemo(
+    () =>
+      (profileDocuments ?? []).map((d) => ({
+        id: d.id,
+        file_name: d.file_name,
+        mime_type: d.mime_type,
+        uploaded_at: d.uploaded_at,
+        verification_status: d.verification_status,
+      })),
+    [profileDocuments]
+  );
 
   const [fields, setFields] = useState<Record<string, unknown>>({
     ...kyc,
@@ -668,7 +694,14 @@ function KycLongForm({
               <div className="px-4 py-3 space-y-3">
                 {section.fields.map(f => (
                   <div key={f.key}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
+                    <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+                      <span>{f.label}</span>
+                      <FieldProvenanceMarker
+                        extractions={extractionsByField[f.key] ?? []}
+                        sourceDocs={sourceDocsForMarker}
+                        fieldLabel={f.label}
+                      />
+                    </label>
                     {f.type === "textarea" ? (
                       <textarea
                         value={(fields[f.key] as string | null) ?? ""}
@@ -1068,6 +1101,7 @@ function PersonCard({
   documentTypes,
   updateRequests,
   defaultExpanded,
+  fieldExtractions,
   onRefresh,
 }: {
   roleRow: RoleWithProfile;
@@ -1078,6 +1112,8 @@ function PersonCard({
   documentTypes?: DocumentType[];
   updateRequests?: DocumentUpdateRequest[];
   defaultExpanded?: boolean;
+  /** B-070 — provenance rows already filtered to this profile. */
+  fieldExtractions?: FieldExtraction[];
   onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
@@ -1397,6 +1433,7 @@ function PersonCard({
                 profileDocuments={profileDocuments}
                 documentTypes={documentTypes}
                 recordType={profile.record_type}
+                fieldExtractions={fieldExtractions ?? []}
                 onSaved={onRefresh}
                 onDocUploaded={onRefresh}
               />
@@ -2010,6 +2047,8 @@ interface Props {
   templateActions: ServiceTemplateAction[];
   actionsByKey: Record<string, ServiceAction>;
   substance: ServiceSubstance | null;
+  // B-070 — provenance rows for the per-field marker UI in KYC views.
+  fieldExtractions: FieldExtraction[];
 }
 
 const STATUS_OPTIONS = [
@@ -2049,6 +2088,7 @@ export function ServiceDetailClient({
   templateActions,
   actionsByKey,
   substance,
+  fieldExtractions,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -2450,6 +2490,10 @@ export function ServiceDetailClient({
                   const personProfileDocs = pid
                     ? profileDocs.filter((d) => d.client_profile_id === pid)
                     : [];
+                  // B-070 — provenance rows scoped to this profile.
+                  const personFieldExtractions = pid
+                    ? fieldExtractions.filter((fe) => fe.client_profile_id === pid)
+                    : [];
                   return (
                     <PersonCard
                       key={pid ?? person.id}
@@ -2461,6 +2505,7 @@ export function ServiceDetailClient({
                       documentTypes={documentTypes}
                       updateRequests={updateRequests}
                       defaultExpanded={!!pid && pid === newlyAddedProfileId}
+                      fieldExtractions={personFieldExtractions}
                       onRefresh={handleRolesRefresh}
                     />
                   );

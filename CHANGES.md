@@ -15,6 +15,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-070 Batch 3 — Field provenance markers + inline source preview (Claude Code)
+
+Admin KYC views on `/admin/services/[id]` now show a small marker next to every labeled field that has provenance, with click-to-preview the source doc.
+
+- **`src/components/admin/FieldProvenanceMarker.tsx`** — new admin-only component. Reads filtered `extractions: FieldExtraction[]` for one `(profile, field_key)`. Picks the latest non-superseded row (falls back to most recent if no current). Renders nothing when latest is `manual` or absent. `ai_extraction` → tiny blue Sparkles icon with "Auto-filled from {file_name}" tooltip. `admin_override` → amber PencilLine icon with "Admin override (was: {prior value})" — picks the most-recent superseded row whose value differs from the override. Click opens `DocumentPreviewDialog` with the resolved source doc; disabled when `source_document_id` is null.
+- **`src/components/admin/DocumentPreviewDialog.tsx`** — added optional `sourceFieldLabel` prop. When provided, renders a small amber banner above the preview body: "Source for: {fieldLabel}". Lets the admin see exactly which field they're defending.
+- **`src/app/(admin)/admin/services/[id]/page.tsx`** — added a server-side fetch on `field_extractions` filtered by `client_profile_id IN (…)` for every profile linked to this service, ordered by `extracted_at DESC` (descending so the latest non-superseded row is found in O(n)). Passed as a new `fieldExtractions` prop to `ServiceDetailClient`.
+- **`ServiceDetailClient`** — accepts `fieldExtractions: FieldExtraction[]`, splits by `client_profile_id` at the `PersonCard` map site, threads through `PersonCard` → `KycLongForm`. `KycLongForm` builds a `useMemo` `extractionsByField` lookup and renders `<FieldProvenanceMarker>` inside each field's `<label>` element (now flex-row aligned). Source-doc lookup table is derived from the existing `profileDocuments` prop.
+
+UI footprint is intentionally subtle: a 12px icon next to the label, no badge or border. The marker disappears entirely on fields with no provenance row, so client-typed manual fields stay clean.
+
+Acceptance: open admin KYC view for a profile that had docs verified → AI-extracted fields show the sparkle. Hover → "Auto-filled from passport.pdf" tooltip. Click → preview dialog with amber "Source for: Passport number" banner. Manually-typed fields show no marker. Admin override → pencil icon with prior AI value in tooltip.
+
+---
+
 ### 2026-05-06 — B-070 Batch 2 — AI write path records field provenance (Claude Code)
 
 Every AI verification run now writes per-field rows into `field_extractions`. Admin overrides on KYC fields also write a row with `source='admin_override'`. Re-extraction of the same `(client_profile_id, field_key)` supersedes the prior current row (`superseded_at = now()`) before inserting the new one — preserves history without duplicate "current" rows.
