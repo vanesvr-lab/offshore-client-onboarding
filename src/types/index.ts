@@ -431,6 +431,27 @@ export interface RoleDocumentRequirement {
 }
 
 /**
+ * B-070 — Records where a KYC field value came from (AI extraction from a
+ * specific doc, typed by the client, or admin override). Critical for FSC
+ * substance-assessment defensibility.
+ */
+export type FieldSource = "ai_extraction" | "manual" | "admin_override";
+
+export interface FieldExtraction {
+  id: string;
+  tenant_id: string;
+  client_profile_id: string;
+  field_key: string;
+  extracted_value: string | null;
+  source_document_id: string | null;
+  source: FieldSource;
+  ai_confidence: number | null;
+  extracted_at: string;
+  /** Non-null when this extraction was replaced by a later one. */
+  superseded_at: string | null;
+}
+
+/**
  * B-071 — Bind a document type to a specific service template.
  * If a template has rows here, ONLY these docs apply (per-template curated list).
  * Empty binding falls back to the global DD-driven list.

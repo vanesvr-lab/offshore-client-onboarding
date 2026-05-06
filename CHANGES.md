@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-070 Batch 1 — field_extractions table for KYC field provenance (Claude Code)
+
+Foundation for the FSC-defensibility ask: every KYC field can now be tagged with where its value came from (AI extraction from a specific doc, manual typing, admin override). Lets the admin justify "passport_number = X12345 because it came from this passport scan, not because the client typed it" when defending a substance assessment.
+
+- **Migration `20260506191234_field_extractions.sql`** — new table `field_extractions` with FKs to `client_profiles` (cascade) and `documents` (set null — preserves audit row if source doc later removed). Columns: `field_key`, `extracted_value`, `source_document_id`, `source` (CHECK: `ai_extraction|manual|admin_override`), `ai_confidence numeric(4,3)`, `extracted_at`, `superseded_at`. Indexes on `(client_profile_id, field_key, extracted_at DESC)`, `(source_document_id)`, `(tenant_id)`. RLS enabled with idempotent guards: `fe_admin_read` + `fe_admin_write` (FOR ALL via `public.is_admin()`) + `fe_client_read` (joins `client_profiles.user_id = auth.uid()` since the v2 schema has no `client_profiles.client_id` for the brief's `client_users` join). Pushed via `npm run db:push`; `db:status` shows paired Local + Remote.
+- **`src/types/index.ts`** — added `FieldSource` union and `FieldExtraction` interface.
+
+Note: the brief's SQL referenced `document_uploads(id)` but the table is named `documents` in this codebase — FK adjusted accordingly. No data backfill — existing rows have no provenance and will display as "manual / unknown" (no marker) per Batch 4.
+
+Batches 2–4 will record provenance at AI-extraction time, surface markers + inline preview in admin KYC views, and guard markers to admin context.
+
+---
+
 ### 2026-05-06 — B-071 Batch 5 — Filter applies_to vs profile type in KYC wizard (Claude Code)
 
 Fixes the long-standing "corporate-entity profile sees Driver's License" bug. `document_types.applies_to` was being set on every doc type but the wizard never enforced it — every person, individual or organisation, saw the union of individual + organisation + both docs.
