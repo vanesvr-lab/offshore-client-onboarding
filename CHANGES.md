@@ -23,6 +23,14 @@ End-user QA pass — 7 batches:
 - `src/components/shared/Sidebar.tsx` — client primary nav label "Dashboard" → "Home" (route `/dashboard` unchanged; admin sidebar untouched)
 - `src/components/client/DashboardClient.tsx` — page heading is now "Home", new subtle brand-navy/blue welcome banner (`Welcome <FirstName>. Thank you for choosing GWMS.`), per-card nudge line `Your application for <Service> is X% complete — Review →` shown only when `overallPct < 100`. Removed the old amber "all complete" / "missing info" greeting branches in favour of one consistent layout.
 
+**Batch 3 — KYC card compaction + button styling + heading rename:**
+- `src/components/client/ServiceWizardPeopleStep.tsx` (`PersonCard` + `ResendInviteButton`):
+  - Compact single-row header — left 3/4 has avatar + name + role chips (email truncated below); right 1/4 shows the KYC % above a thin progress bar. On `< sm` the right region stacks under the left so the percentage stays visible.
+  - Reduced vertical padding (`py-2.5` instead of `py-3.5 space-y-3` between sections).
+  - "Review KYC" → state-aware label per profile completion: `Add KYC for <Name>` (0%) / `Continue KYC for <Name>` (1–99%) / `View KYC for <Name>` (100%) — applied wherever the wizard surfaces the start-KYC affordance.
+  - "View Summary" upgraded from `variant="ghost"` to `variant="outline"`, h-11 (44pt touch target).
+  - "Request KYC" / "Resend invite" upgraded to a primary brand-navy `<Button>` (h-11, semibold) so it reads as the main outbound CTA.
+
 **Batch 2 — Service wizard polish:**
 - `src/components/ui/NumberInput.tsx` — new shared currency/amount input. Raw digits on focus, locale-formatted (`en-US`) thousand separators on blur, stores raw numeric string. Used for every `type: "number"` field rendered through `DynamicServiceForm`.
 - `src/components/shared/DynamicServiceForm.tsx` — renders `type: "number"` via `NumberInput`. Special-cases `proposed_names` `text_array`: each slot is its own labeled field ("Proposed Name 1/2/3"), Name 1 has the red required asterisk plus a `FieldTooltip` explaining the Registrar of Companies context (B-067 copy). Legacy data with > 3 entries is logged to console and the first 3 shown; extras only get overwritten if the user touches an input.

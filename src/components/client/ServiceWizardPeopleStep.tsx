@@ -745,67 +745,82 @@ function PersonCard({
     ? new Date(inviteSentAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
     : null;
 
+  // B-067 §3.3 — KYC action label tracks completion state per profile.
+  const personName = person.client_profiles?.full_name ?? "Unknown";
+  const reviewLabel =
+    kycPct === 100
+      ? `View KYC for ${personName}`
+      : kycPct > 0
+      ? `Continue KYC for ${personName}`
+      : `Add KYC for ${personName}`;
+
   return (
-    <div className="border rounded-xl bg-white px-4 py-3.5 space-y-3">
-      {/* Header row — avatar, name, role chips, email */}
-      <div className="flex items-center gap-2.5 flex-wrap">
-        <div className="relative h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-          <User className="h-4 w-4 text-gray-500" />
-          {isComplete && (
-            <CheckCircle2
-              className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 text-green-500 bg-white rounded-full"
-              aria-label="KYC complete"
-            />
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <p className="text-sm font-semibold text-brand-navy leading-tight">
-              {person.client_profiles?.full_name ?? "Unknown"}
-            </p>
-            {currentRoles.map((r) => (
-              <span key={r} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}>
-                {ROLE_LABELS[r] ?? r}
-              </span>
-            ))}
+    <div className="border rounded-xl bg-white px-4 py-2.5 space-y-2.5">
+      {/* B-067 §3.1 — Compact single-row header.
+          Left (3/4): avatar + name + role chips (+ email below).
+          Right (1/4): KYC % above thin progress bar.
+          On mobile (< sm) the right region stacks under the left. */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+        {/* Left region — 3/4 */}
+        <div className="flex items-center gap-2.5 sm:basis-3/4 min-w-0">
+          <div className="relative h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+            <User className="h-4 w-4 text-gray-500" />
+            {isComplete && (
+              <CheckCircle2
+                className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 text-green-500 bg-white rounded-full"
+                aria-label="KYC complete"
+              />
+            )}
           </div>
-          {person.client_profiles?.email && (
-            <p className="text-xs text-gray-400">{person.client_profiles.email}</p>
-          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm font-semibold text-brand-navy leading-tight truncate">
+                {personName}
+              </p>
+              {currentRoles.map((r) => (
+                <span key={r} className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-600"}`}>
+                  {ROLE_LABELS[r] ?? r}
+                </span>
+              ))}
+            </div>
+            {person.client_profiles?.email && (
+              <p className="text-xs text-gray-400 truncate">{person.client_profiles.email}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right region — 1/4 */}
+        <div className="sm:basis-1/4 shrink-0 flex flex-col gap-1">
+          <span className={`text-xs font-semibold tabular-nums sm:text-right ${kycColor}`}>
+            {kycPct}%
+          </span>
+          <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${kycBarColor}`}
+              style={{ width: `${kycPct}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* KYC status bar */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${kycBarColor}`}
-            style={{ width: `${kycPct}%` }}
-          />
-        </div>
-        <span className={`text-[11px] font-medium tabular-nums ${kycColor}`}>
-          KYC: {kycPct}%
-        </span>
-      </div>
-
-      {/* Action row: Review KYC + View Summary + Request/Resend invite.
-          B-050 §6.3 (View Summary) + §7.1 (Resend invite). */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* B-067 §3.2 — Action row: Review/Add/Continue/View KYC + View Summary +
+          Request KYC. Real <Button>s with 44pt touch targets. */}
+      <div className="flex items-center gap-2 flex-wrap pt-0.5">
         <Button
           size="sm"
           variant="outline"
           onClick={onReviewKyc}
-          className="h-7 px-3 text-xs gap-1.5"
+          className="h-11 px-4 text-sm gap-1.5"
         >
-          Review KYC
+          {reviewLabel}
         </Button>
 
         <Button
           size="sm"
-          variant="ghost"
+          variant="outline"
           onClick={onViewSummary}
           title="See everything you've entered so far."
-          className="h-7 px-3 text-xs gap-1.5 text-gray-700 hover:text-brand-navy hover:bg-gray-50"
+          className="h-11 px-4 text-sm gap-1.5"
         >
           View Summary
         </Button>
@@ -874,16 +889,16 @@ function ResendInviteButton({
   // the hover) and use shadcn Tooltip; the wrapper is keyboard-focusable
   // only when the button is disabled so screen readers can still announce
   // the reason.
+  // B-067 §3.2 — primary brand-navy button with 44pt touch target.
   const button = (
     <Button
       size="sm"
-      variant="ghost"
       onClick={onClick}
       disabled={isCoolingDown}
       aria-label={label}
-      className="h-7 px-3 text-xs gap-1.5 text-gray-600 hover:text-brand-navy disabled:opacity-50 disabled:cursor-not-allowed"
+      className="h-11 px-4 text-sm gap-1.5 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <Mail className="h-3 w-3" />
+      <Mail className="h-3.5 w-3.5" />
       {label}
     </Button>
   );
