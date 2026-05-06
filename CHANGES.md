@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-072 Batch 4 — Substance Review action UI for GBC + AC (Claude Code)
+
+- New `src/components/admin/SubstanceReviewForm.tsx`. Self-contained Card composed of:
+  - `<ConnectedSectionHeader sectionKey="action:substance_review" title="Substance Review — {serviceLabel}">` — picks up the section-review badge + Review button from the existing `AdminApplicationSectionsProvider` (B-073 Batch 1).
+  - Form body with three sections:
+    - §3.2 Mandatory — six tri-state radios (Yes / No / Unknown). Unknown maps to `null` so unanswered criteria are distinguishable from explicit No.
+    - §3.3 At-Least-One — six (boolean + evidence) groups. Evidence inputs (address / employee count / clause text / asset value+desc / listing reference / yearly USD+justification) only render when the boolean is Yes; collapse cleanly otherwise.
+    - §3.4 Fallback — related-corp boolean + name.
+    - Admin Assessment — three Pass / Review / Fail buttons (toggleable) + notes textarea (required when Review or Fail; the Save button disables until the rule is satisfied).
+  - `<ConnectedNotesHistory sectionKey="action:substance_review" />` at the bottom for the audit trail.
+- On mount, GETs `/api/admin/services/[id]/substance` and prefills via `fromServer()` (numeric values stringified for empty-handling). Save PUTs the full payload via `toPayload()` (string→number/null normalization). Save shows success/failure toast and re-prefills from the server response.
+- Admin assessment uses the same colour vocabulary as `SectionReviewBadge` (green / amber / red) so the new section reads consistently with the existing review affordances.
+- Component is admin-only by virtue of the API routes; not yet wired into the page (Batch 6 composes the actions section).
+- `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-072 Batch 3 — Admin actions + substance API routes (services-scoped) (Claude Code)
 
 - `src/app/api/admin/services/[id]/actions/route.ts`:
