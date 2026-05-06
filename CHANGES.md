@@ -15,6 +15,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-073 Batch 2 — Section-review affordances on all 5 ServiceCollapsibleSection blocks (Claude Code)
+
+- `src/components/admin/ServiceCollapsibleSection.tsx` — extended (Option A from the brief). New optional `sectionKey` and `anchorId` props. When `sectionKey` is supplied, the header renders a `<SectionReviewBadge>` + `<SectionReviewButton>` (visible even when collapsed; clicking Review opens the right-slide panel without toggling expansion), and the expanded body appends `<ConnectedNotesHistory>` after the children. Reads state via the `useSectionReview` hook from `AdminApplicationSections`. Outer wrapper is now a `<div>` containing the toggle `<button>` + a sibling `<SectionReviewControls>` so the Review button never bubbles to the toggle. The percentage bar + label hide below `lg:` when `sectionKey` is wired so the badge has room on narrow viewports (the RAG dot stays visible).
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — wired the five wizard sections:
+  - Company Setup → `sectionKey="company_setup"`, `anchorId="step-company-setup"`
+  - Financial → `sectionKey="financial"`, `anchorId="step-financial"`
+  - Banking → `sectionKey="banking"`, `anchorId="step-banking"`
+  - People & KYC → `sectionKey="people"`, `anchorId="step-people-kyc"`
+  - Documents → `sectionKey="documents"`, `anchorId="step-documents"`
+  Internal Notes / Risk Assessment / Milestones / Audit Trail and the right-column panels are intentionally untouched (informational only).
+- `npm run build` passes. ServiceCollapsibleSection has no other consumers.
+
+---
+
 ### 2026-05-06 — B-073 Batch 1 — Services detail page wraps in section-reviews provider (Claude Code)
 
 Port of B-068/B-069 admin section reviews from the legacy `/admin/applications/[id]` page to the modern `/admin/services/[id]` page. Batch 1 = data + provider wiring.

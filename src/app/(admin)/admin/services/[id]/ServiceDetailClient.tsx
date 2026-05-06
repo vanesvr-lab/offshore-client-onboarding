@@ -2352,6 +2352,8 @@ export function ServiceDetailClient({
           title="Company Setup"
           percentage={companySetupPct}
           ragStatus={ragFromPct(companySetupPct)}
+          sectionKey="company_setup"
+          anchorId="step-company-setup"
         >
           {companyFields.length === 0 ? (
             <p className="text-sm text-gray-400">No company setup fields for this template.</p>
@@ -2370,6 +2372,8 @@ export function ServiceDetailClient({
           title="Financial"
           percentage={financialPct}
           ragStatus={ragFromPct(financialPct)}
+          sectionKey="financial"
+          anchorId="step-financial"
         >
           {financialFields.length === 0 ? (
             <p className="text-sm text-gray-400">No financial fields for this template.</p>
@@ -2388,6 +2392,8 @@ export function ServiceDetailClient({
           title="Banking"
           percentage={bankingPct}
           ragStatus={ragFromPct(bankingPct)}
+          sectionKey="banking"
+          anchorId="step-banking"
         >
           {bankingFields.length === 0 ? (
             <p className="text-sm text-gray-400">No banking fields for this template.</p>
@@ -2406,6 +2412,8 @@ export function ServiceDetailClient({
           title={`People & KYC (${uniqueRoles.length} ${uniqueRoles.length === 1 ? "person" : "people"})`}
           percentage={peopleKycPct}
           ragStatus={ragFromPct(peopleKycPct)}
+          sectionKey="people"
+          anchorId="step-people-kyc"
         >
           <div className="pt-4">
             {uniqueRoles.length === 0 ? (
@@ -2469,6 +2477,8 @@ export function ServiceDetailClient({
           title={`Documents (${corporateDocs.length})`}
           percentage={documentsPct}
           ragStatus={ragFromPct(documentsPct)}
+          sectionKey="documents"
+          anchorId="step-documents"
         >
           <AdminDocumentsSection
             serviceId={service.id}
