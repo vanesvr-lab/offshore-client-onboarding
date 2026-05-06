@@ -56,6 +56,18 @@ interface KycStepWizardProps {
     personName?: string | null;
     onAdvance: () => void;
   };
+  /**
+   * B-074 — when true, render the wizard non-interactive: form content is
+   * wrapped in `pointer-events-none` (the simplest path the brief sanctioned)
+   * and the bottom nav is hidden. Internal save/submit logic is gated off so
+   * a stray re-render can never PATCH from the admin path. Default: false.
+   * Note: form controls visually keep their normal style (no greyed-out
+   * appearance from native `disabled`); the dimmed wrapper + missing nav
+   * are the only visual cues. Document upload widgets sit inside the wrapper
+   * too — already covered by `hideDocumentUploads` for callers that want a
+   * clean view-only KYC form.
+   */
+  readOnly?: boolean;
 }
 
 const STEP_LABELS = ["Your Identity", "Financial Profile", "Declarations", "Review & Submit"];
@@ -271,6 +283,7 @@ export function KycStepWizard({
   personDocTypes,
   onRegisterFlush,
   reviewAllContext,
+  readOnly = false,
 }: KycStepWizardProps) {
   const isOrg = profileType === "organisation";
   const isCdd = !isOrg && (dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd");
@@ -323,11 +336,12 @@ export function KycStepWizard({
 
   // B-043 — expose saveCurrentStep to the parent so it can flush pending edits
   // before navigating away (e.g. "Back to People" exits the KYC review panel).
+  // B-074 — readOnly skips registration; nothing to flush in view-only mode.
   useEffect(() => {
-    if (!onRegisterFlush) return;
+    if (!onRegisterFlush || readOnly) return;
     onRegisterFlush(saveCurrentStep);
     return () => onRegisterFlush(null);
-  }, [onRegisterFlush, saveCurrentStep]);
+  }, [onRegisterFlush, saveCurrentStep, readOnly]);
 
   async function handleNext() {
     const ok = await saveCurrentStep();
@@ -465,7 +479,10 @@ export function KycStepWizard({
         showIdentityPrefillHint={showIdentityPrefillHint}
       />
 
-      <div className={compact ? "min-h-[200px]" : "min-h-[400px]"}>
+      <div
+        className={`${compact ? "min-h-[200px]" : "min-h-[400px]"} ${readOnly ? "pointer-events-none select-none opacity-95" : ""}`}
+        aria-disabled={readOnly || undefined}
+      >
         {logicalStep === "org_details" && (
           <CompanyDetailsStep form={form} onChange={handleChange} />
         )}
@@ -536,8 +553,12 @@ export function KycStepWizard({
       </div>
 
       {/* Spacer reserves room at the bottom of the page so fixed nav never covers final fields */}
-      {fixedNav && <div aria-hidden className="h-28" />}
+      {fixedNav && !readOnly && <div aria-hidden className="h-28" />}
 
+      {/* B-074 — readOnly hides the entire nav; admin uses surrounding
+          section navigation instead and must not save through the wizard. */}
+      {!readOnly && (
+      <>
       {/* B-047 §4 — three-tier button hierarchy. Back = tertiary (text link),
           primary action (Submit / Save & Continue) = brand-navy 44pt.
           B-052 §4.1 — fixedNav must be full-width on mobile (sidebar is a
@@ -631,6 +652,8 @@ export function KycStepWizard({
           </Button>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

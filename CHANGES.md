@@ -15,6 +15,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-074 Batch 3 — KycStepWizard accepts readOnly prop (Claude Code)
+
+Adds an opt-in view-only mode to the per-person KYC wizard. The brief intends this for an admin context, but in this codebase the admin path on `/admin/services/[id]` actually renders `KycLongForm` (defined inline in `ServiceDetailClient.tsx`), not `KycStepWizard`. The prop is still wired exactly as the brief asked so future callers can pick it up; admin-side review affordances (Batch 4) land on `KycLongForm` instead.
+
+- **`src/components/kyc/KycStepWizard.tsx`** — added `readOnly?: boolean` (default `false`). When `true`:
+  - The step content `<div>` gets `pointer-events-none select-none opacity-95` and `aria-disabled` — the brief explicitly sanctioned this CSS-disabled wrapper as the simplest path. No diverging input-prop API; existing inputs are not touched.
+  - Bottom nav (Back / Save & Continue / Submit / Save & Close / Save & Finish) is hidden entirely. The wizard is meant to live inside a surrounding section navigator (e.g. `ServiceCollapsibleSection`) which provides its own navigation.
+  - The B-043 `onRegisterFlush` registration is gated off — nothing to flush in view-only mode, and we never want a stray PATCH from the admin path.
+- Existing client usage (`PersonsManager` in `src/components/client/PersonsManager.tsx` and the kyc magic-link page) defaults `readOnly=false` and is unchanged.
+
+Trade-off documented in the prop's JSDoc: form controls visually keep their normal style (no greyed-out browser default). The dimmed wrapper plus missing nav are the only visual cues. If a future caller wants greyed inputs, switching to `<fieldset disabled>` is a small follow-up.
+
+---
+
 ### 2026-05-06 — B-074 Batch 2 — Visual containment pass on admin services detail (Claude Code)
 
 QA flagged sections on `/admin/services/[id]` rendering with inconsistent containment — flat headers, thin ring-only borders, and a parent `divide-y` line that visually fused adjacent cards. Vanessa wants the same "boxes nested in boxes" rhythm the client portal already has.
