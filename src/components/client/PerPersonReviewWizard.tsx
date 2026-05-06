@@ -27,6 +27,13 @@ import { DeclarationsStep } from "@/components/kyc/steps/DeclarationsStep";
 import { ReviewStep } from "@/components/kyc/steps/ReviewStep";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { computePersonCompletion } from "@/lib/utils/personCompletion";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { DocumentStatusLegend } from "@/components/shared/DocumentStatusLegend";
 import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
@@ -1053,7 +1060,57 @@ export function PerPersonReviewWizard({
     }
   }
 
+  // B-067 §5 — Post-review confirmation dialog. Shown right before the
+  // wizard closes, summarising the saved profile's completion state.
+  const [completionDialog, setCompletionDialog] = useState<
+    { pct: number; personName: string; isComplete: boolean } | null
+  >(null);
+
+  function buildCompletionSnapshot() {
+    const profileForCompletion = reviewingPerson.client_profiles;
+    const recordType =
+      (profileForCompletion?.record_type as "individual" | "organisation" | null) ??
+      "individual";
+    // Use serverFormData merged with the in-flight overlay so the dialog
+    // reflects what the user just saved (overlay), not what the server had
+    // before this save round-tripped.
+    const kycForCompletion = {
+      ...(serverFormData as unknown as Record<string, unknown>),
+      ...(overlay as unknown as Record<string, unknown>),
+    };
+    const completion = computePersonCompletion({
+      kyc: kycForCompletion,
+      recordType,
+      personDocs: profileDocs.map((d) => ({
+        document_type_id: d.document_type_id ?? null,
+        is_active: true,
+      })),
+      documentTypes,
+      requirements,
+      dueDiligenceLevel,
+    });
+    const fullName = profileForCompletion?.full_name?.trim() ?? "";
+    const fallbackName =
+      reviewingPerson.role
+        ? reviewingPerson.role.charAt(0).toUpperCase() +
+          reviewingPerson.role.slice(1)
+        : "this profile";
+    return {
+      pct: completion.percentage,
+      personName: fullName || fallbackName,
+      isComplete: completion.isComplete,
+    };
+  }
+
+  function showCompletionDialog() {
+    setCompletionDialog(buildCompletionSnapshot());
+  }
+
   // ── Sub-step transitions ──────────────────────────────────────────────────
+  const isReviewSubStep =
+    currentSubStep.kind === "form-review" ||
+    currentSubStep.kind === "form-org-review";
+
   async function goNext() {
     // Save form data on form sub-steps before advancing
     if (currentSubStep.kind.startsWith("form-")) {
@@ -1068,7 +1125,18 @@ export function PerPersonReviewWizard({
       void triggerDeferredVerifications();
     }
     if (isLastSubStep) {
-      // Either single-mode "Save & Close" or review-all "Save & Finish"
+      // B-067 §5 — finishing the review sub-step always shows the
+      // completion dialog before the wizard closes (single-mode Save &
+      // Close, or review-all Save & Finish on the last person).
+      if (isReviewSubStep) {
+        if (reviewAllContext && reviewAllContext.current + 1 < reviewAllContext.total) {
+          // Mid-walk in review-all mode: advance to the next person without a dialog.
+          reviewAllContext.onAdvance();
+          return;
+        }
+        showCompletionDialog();
+        return;
+      }
       onComplete();
       return;
     }
@@ -1092,6 +1160,8 @@ export function PerPersonReviewWizard({
       // Review-all final sub-step: advance the walk OR finish.
       if (reviewAllContext.current + 1 < reviewAllContext.total) {
         reviewAllContext.onAdvance();
+      } else if (isReviewSubStep) {
+        showCompletionDialog();
       } else {
         onComplete();
       }
@@ -1101,6 +1171,8 @@ export function PerPersonReviewWizard({
     if (currentSubStep.kind === "doc-list") {
       // Upload later — advance only this sub-step.
       setSubStepIndex((i) => i + 1);
+    } else if (isReviewSubStep) {
+      showCompletionDialog();
     } else {
       onComplete();
     }
@@ -1704,6 +1776,57 @@ export function PerPersonReviewWizard({
           pendingPrefillKindRef.current = null;
         }}
       />
+
+      {/* B-067 §5 — Post-review confirmation dialog. Shown after the user
+          finishes the Review sub-step but before the wizard closes. */}
+      {completionDialog && (
+        <Dialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              // Esc / overlay click closes the dialog only — wizard stays open.
+              setCompletionDialog(null);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-brand-navy">
+                {completionDialog.isComplete ? "Profile complete" : "Profile saved"}
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {completionDialog.isComplete ? (
+                <>
+                  You&apos;ve completed all KYC details for{" "}
+                  <span className="font-semibold text-brand-navy">{completionDialog.personName}</span>.
+                  This profile is ready for submission.
+                </>
+              ) : (
+                <>
+                  You&apos;ve completed{" "}
+                  <span className="font-semibold text-brand-navy">{completionDialog.pct}%</span>{" "}
+                  of KYC for{" "}
+                  <span className="font-semibold text-brand-navy">{completionDialog.personName}</span>.
+                  Please review and provide the missing information before submitting your application.
+                </>
+              )}
+            </p>
+            <div className="flex justify-end pt-2">
+              <Button
+                autoFocus
+                onClick={() => {
+                  setCompletionDialog(null);
+                  onComplete();
+                }}
+                className="h-10 px-6 bg-brand-navy text-white font-semibold hover:bg-brand-navy/90"
+              >
+                OK
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Document detail popup */}
       {detailDoc && (
