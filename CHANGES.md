@@ -15,6 +15,30 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — Briefs B-068 → B-072 ready (Claude Desktop, planning)
+
+Vanessa brainstormed the next admin-workflow chunk. Five briefs written, ready for CLI execution. They build a coherent admin-side overhaul:
+
+- **B-068** — `docs/cli-brief-section-review-workflow-b068.md` — Section review workflow foundation. New `application_section_reviews` table (history-preserving), right-slide review panel (Approved / Flagged / Rejected + notes), section badges, per-section notes history at bottom. Reviews are advisory (no gating). Wired into existing admin app detail page sections (business, contact, service, people, documents).
+- **B-069** — `docs/cli-brief-admin-view-mirror-client-wizard-b069.md` — Admin app detail view restructured to mirror the client wizard's step-shaped layout. KYC profiles render via the same `PerPersonReviewWizard` in read-only mode, with section reviews on every subsection (Identity / Financial / Compliance per profile via `kyc:<profile_id>:<category>` keys). "Approve All" wizard mode explicitly skipped per Vanessa.
+- **B-070** — `docs/cli-brief-field-provenance-and-inline-doc-preview-b070.md` — `field_extractions` table tracks where each KYC field came from (AI extraction, manual, admin override). UI markers on each field show provenance. Click marker → inline preview of source document. Critical for FSC defensibility.
+- **B-071** — `docs/cli-brief-doc-model-fixes-b071.md` — Closes four doc-model gaps in one brief: `scope` field exposed in admin Document Types form; new `service_template_documents` join table for per-template doc binding (GBC's 18 docs can finally be modelled); `role_document_requirements` wired into KYC at runtime (currently dormant); `applies_to` filtered against profile type in KYC (corporate profiles no longer see passport requirement).
+- **B-072** — `docs/cli-brief-admin-actions-substance-review-b072.md` — `application_actions` registry + `service_template_actions` binding. `application_substance` table per Vanessa's brainstorm (FSC §3.2/3.3/3.4 mandatory + at-least-one + fallback criteria, admin assessment pass/review/fail). Substance Review action UI for GBC + AC. Stubs for Bank Account Opening + Generate FSC Checklist.
+
+**Overnight handoff:** B-068 + B-069 only. B-070, B-071, B-072 are written and ready for follow-up sessions. B-069 depends on B-068; B-070 depends on B-068+B-069. B-071 is independent and can run in parallel. B-072 depends on B-071 (uses `service_template_actions` which lives in B-072 itself, but the doc-binding pattern is shared).
+
+**Open design decisions (locked in):**
+- Section reviews are advisory; admin can override (no gating).
+- Section reviews can be partial; subsection-level granularity.
+- "Approve All" wizard mode skipped for now.
+- Substance applies to both GBC + AC.
+- Substance §3.3 evidence is text-only for POC (no doc attachments yet).
+- Substance is an **admin Action** (not a workflow stage). Other actions: Bank Account Opening, Generate FSC Checklist.
+- Substance fail blocks terminal status; review pauses.
+- FSC PDF prefill (FS-41 Form A — `/Users/elaris/Downloads/fs-41_form_a-Checklist.pdf`) deferred — included in B-072 as a stub only.
+
+---
+
 ### 2026-05-05 — B-067 — Client portal polish (Claude Code)
 
 End-user QA pass — 7 batches, all green (build + 173 tests). After the
