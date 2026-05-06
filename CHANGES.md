@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-069 Batch 1 — Admin step indicator (Claude Code)
+
+- New `src/components/admin/AdminApplicationStepIndicator.tsx` — breadcrumb-style step list with chevron separators, mirroring the client's `ServiceWizardStepIndicator` visual pattern.
+- Each step shows a status pill aggregated across that step's section_keys:
+  - All approved → green CheckCircle2
+  - Any rejected → red XCircle
+  - Any flagged (no rejected) → amber Flag
+  - Otherwise → gray Circle, with `N/M reviewed` count text when partial
+- Added `useAggregateStatus(sectionKeys)` hook to `AdminApplicationSections.tsx` exposing `{ status, reviewedCount, totalCount }` from the section-reviews context.
+- Wired into the admin app detail page above the main grid. Provider now wraps both the indicator and the existing left/right column grid.
+- Three visible steps per the brief's POC shortcut (service_details JSON not easily split into Financial / Banking yet): Company Setup (`business`, `contact`, `service`), People & KYC (`people`), Documents (`documents`).
+- Click → smooth-scrolls to `#step-…` anchor (anchors land in Batch 2; safe no-op if missing).
+- Build passes.
+
+---
+
 ### 2026-05-06 — B-068 Batch 6 — Wired into admin application detail page (Claude Code)
 
 - New client component `AdminApplicationSections.tsx` exposes a React context for the page's section reviews:

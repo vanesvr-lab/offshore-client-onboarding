@@ -20,6 +20,10 @@ import {
   ConnectedNotesHistory,
 } from "@/components/admin/AdminApplicationSections";
 import {
+  AdminApplicationStepIndicator,
+  type AdminStep,
+} from "@/components/admin/AdminApplicationStepIndicator";
+import {
   Card,
   CardContent,
   CardHeader,
@@ -173,12 +177,19 @@ export default async function ApplicationDetailPage({
         <WorkflowTracker status={app.status as ApplicationStatus} />
       </div>
 
+      <AdminApplicationSectionsProvider
+        applicationId={params.id}
+        initialReviews={sectionReviews}
+      >
+        {/* B-069 — wizard-shaped step indicator (anchors land in Batch 2) */}
+        <div className="mb-6 rounded-lg border bg-white px-4 py-3">
+          <AdminApplicationStepIndicator
+            steps={ADMIN_STEPS_DEFAULT}
+          />
+        </div>
+
       <div className="grid grid-cols-3 gap-6">
         {/* Left: Application info (col-span-2) */}
-        <AdminApplicationSectionsProvider
-          applicationId={params.id}
-          initialReviews={sectionReviews}
-        >
         <div className="col-span-2 space-y-6">
           <EditableApplicationDetails
             app={{
@@ -303,7 +314,6 @@ export default async function ApplicationDetailPage({
             </CardContent>
           </Card>
         </div>
-        </AdminApplicationSectionsProvider>
 
         {/* Right: Actions */}
         <div className="space-y-6">
@@ -379,6 +389,29 @@ export default async function ApplicationDetailPage({
           </Card>
         </div>
       </div>
+      </AdminApplicationSectionsProvider>
     </div>
   );
 }
+
+// B-069 — visible admin steps for the indicator. Financial / Banking
+// folded into Step 1 (Company Setup) per the brief's POC shortcut —
+// service_details JSON isn't easy to split out cleanly, so we omit
+// those steps from the indicator until that work is undertaken.
+const ADMIN_STEPS_DEFAULT: AdminStep[] = [
+  {
+    id: "step-company-setup",
+    label: "Company Setup",
+    sectionKeys: ["business", "contact", "service"],
+  },
+  {
+    id: "step-people-kyc",
+    label: "People & KYC",
+    sectionKeys: ["people"],
+  },
+  {
+    id: "step-documents",
+    label: "Documents",
+    sectionKeys: ["documents"],
+  },
+];

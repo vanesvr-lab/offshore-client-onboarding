@@ -109,3 +109,40 @@ export function ConnectedNotesHistory({ sectionKey }: { sectionKey: string }) {
   const { history } = useSectionReview(sectionKey);
   return <SectionNotesHistory reviews={history} />;
 }
+
+// B-069 — aggregate of multiple sections (e.g. one wizard step covers
+// several section_keys). Used by the admin step indicator.
+export function useAggregateStatus(sectionKeys: string[]): {
+  status: ApplicationSectionReview["status"] | null;
+  reviewedCount: number;
+  totalCount: number;
+} {
+  const ctx = useContext(SectionReviewsContext);
+  if (!ctx) {
+    throw new Error(
+      "useAggregateStatus must be used inside AdminApplicationSectionsProvider",
+    );
+  }
+  const totalCount = sectionKeys.length;
+  if (totalCount === 0) return { status: null, reviewedCount: 0, totalCount: 0 };
+
+  let reviewedCount = 0;
+  let hasRejected = false;
+  let hasFlagged = false;
+  let allApproved = true;
+  for (const key of sectionKeys) {
+    const latest = ctx.reviewsBySection[key]?.[0];
+    if (!latest) {
+      allApproved = false;
+      continue;
+    }
+    reviewedCount++;
+    if (latest.status === "rejected") hasRejected = true;
+    else if (latest.status === "flagged") hasFlagged = true;
+    if (latest.status !== "approved") allApproved = false;
+  }
+  if (hasRejected) return { status: "rejected", reviewedCount, totalCount };
+  if (hasFlagged) return { status: "flagged", reviewedCount, totalCount };
+  if (allApproved) return { status: "approved", reviewedCount, totalCount };
+  return { status: null, reviewedCount, totalCount };
+}
