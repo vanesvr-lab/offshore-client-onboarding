@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-069 Batch 2 — Admin app detail wizard-shaped restructure (Claude Code)
+
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — left column now wraps three `<section>` blocks with anchor IDs that match `ADMIN_STEPS_DEFAULT`:
+  - `#step-company-setup` → step heading "1. Company Setup" + `<EditableApplicationDetails>` (its 3 internal Cards: business / contact / service)
+  - `#step-people-kyc` → step heading "4. People & KYC" + Section D (Directors, Shareholders & UBOs) Card
+  - `#step-documents` → step heading "5. Documents" + Documents + AI Flagged Discrepancies + Verification Checklist Cards
+- Step headings use `text-lg font-semibold text-brand-navy` to match the client wizard step headings (`ServiceWizardPeopleStep` h2). Each section gets `scroll-mt-20` so anchor jumps don't bury the heading under the page nav.
+- Step indicator clicks now smooth-scroll to the matching anchor.
+- Financial / Banking remain folded into Step 1 per brief POC shortcut — `service_details` JSON not split out yet.
+- Build passes.
+
+---
+
 ### 2026-05-06 — B-069 Batch 1 — Admin step indicator (Claude Code)
 
 - New `src/components/admin/AdminApplicationStepIndicator.tsx` — breadcrumb-style step list with chevron separators, mirroring the client's `ServiceWizardStepIndicator` visual pattern.

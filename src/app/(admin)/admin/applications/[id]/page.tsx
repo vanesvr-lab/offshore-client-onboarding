@@ -191,35 +191,66 @@ export default async function ApplicationDetailPage({
       <div className="grid grid-cols-3 gap-6">
         {/* Left: Application info (col-span-2) */}
         <div className="col-span-2 space-y-6">
-          <EditableApplicationDetails
-            app={{
-              id: app.id,
-              business_name: app.business_name ?? null,
-              business_type: app.business_type ?? null,
-              business_country: app.business_country ?? null,
-              business_address: app.business_address ?? null,
-              contact_name: app.contact_name ?? null,
-              contact_email: app.contact_email ?? null,
-              contact_phone: app.contact_phone ?? null,
-              service_details: appTyped.service_details ?? null,
-              admin_notes: app.admin_notes ?? null,
-            }}
-            serviceFields={serviceFields}
-            templateName={appTyped.service_templates?.name}
-          />
-
-          {/* Section D: Directors, Shareholders & UBOs */}
-          <Card>
-            <ConnectedSectionHeader
-              title="Section D: Directors, Shareholders & UBOs"
-              sectionKey="people"
+          {/* ── Step 1 — Company Setup ─────────────────────────────── */}
+          <section id="step-company-setup" className="scroll-mt-20 space-y-4">
+            <header>
+              <h2 className="text-lg font-semibold text-brand-navy">
+                1. Company Setup
+              </h2>
+              <p className="text-xs text-gray-500">
+                Business, contact, and service details — what the client filled in Steps 1–3 of the wizard.
+              </p>
+            </header>
+            <EditableApplicationDetails
+              app={{
+                id: app.id,
+                business_name: app.business_name ?? null,
+                business_type: app.business_type ?? null,
+                business_country: app.business_country ?? null,
+                business_address: app.business_address ?? null,
+                contact_name: app.contact_name ?? null,
+                contact_email: app.contact_email ?? null,
+                contact_phone: app.contact_phone ?? null,
+                service_details: appTyped.service_details ?? null,
+                admin_notes: app.admin_notes ?? null,
+              }}
+              serviceFields={serviceFields}
+              templateName={appTyped.service_templates?.name}
             />
-            <CardContent>
-              <PersonsManager applicationId={params.id} />
-              <ConnectedNotesHistory sectionKey="people" />
-            </CardContent>
-          </Card>
+          </section>
 
+          {/* ── Step 4 — People & KYC ──────────────────────────────── */}
+          <section id="step-people-kyc" className="scroll-mt-20 space-y-4">
+            <header>
+              <h2 className="text-lg font-semibold text-brand-navy">
+                4. People &amp; KYC
+              </h2>
+              <p className="text-xs text-gray-500">
+                Directors, Shareholders &amp; UBOs and their KYC submissions.
+              </p>
+            </header>
+            <Card>
+              <ConnectedSectionHeader
+                title="Section D: Directors, Shareholders & UBOs"
+                sectionKey="people"
+              />
+              <CardContent>
+                <PersonsManager applicationId={params.id} />
+                <ConnectedNotesHistory sectionKey="people" />
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* ── Step 5 — Documents ─────────────────────────────────── */}
+          <section id="step-documents" className="scroll-mt-20 space-y-4">
+            <header>
+              <h2 className="text-lg font-semibold text-brand-navy">
+                5. Documents
+              </h2>
+              <p className="text-xs text-gray-500">
+                Application-scope documents and AI verification results.
+              </p>
+            </header>
           <Card>
             <ConnectedSectionHeader
               title="Documents"
@@ -313,6 +344,7 @@ export default async function ApplicationDetailPage({
               </p>
             </CardContent>
           </Card>
+          </section>
         </div>
 
         {/* Right: Actions */}
