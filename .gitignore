@@ -39,3 +39,6 @@ yarn-error.log*
 next-env.d.ts
 .env.local
 supabase/.temp/
+
+# Claude Code local state
+.claude/
