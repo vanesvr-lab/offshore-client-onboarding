@@ -61,40 +61,81 @@ export async function POST(
   }
 
   if (body.full_name) {
-    // Create new profile + KYC row + role
-    const { data: profile, error: profileError } = await supabase
-      .from("client_profiles")
-      .insert({
-        tenant_id: tenantId,
-        user_id: null,
-        record_type: body.record_type ?? "individual",
-        is_representative: false,
-        full_name: body.full_name,
-        email: body.email ?? null,
-        phone: body.phone ?? null,
-        due_diligence_level: "sdd",
-      })
-      .select("id")
-      .single();
-    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+    const trimmedEmail = body.email?.trim() ?? "";
 
-    // Create KYC record
-    await supabase.from("client_profile_kyc").insert({
-      tenant_id: tenantId,
-      client_profile_id: profile.id,
-      completion_status: "incomplete",
-      kyc_journey_completed: false,
-      sanctions_checked: false,
-      adverse_media_checked: false,
-      pep_verified: false,
-    });
+    // B-059: lookup-then-insert. If an active profile already exists for
+    // (tenant_id, email), link the new role to it rather than creating a
+    // duplicate. The unique partial index on (tenant_id, lower(email)) is
+    // the safety net; this is the clean-UX path.
+    let profileId: string | undefined;
+    let linkedExisting = false;
+    if (trimmedEmail) {
+      const { data: existing } = await supabase
+        .from("client_profiles")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .ilike("email", trimmedEmail)
+        .eq("is_deleted", false)
+        .maybeSingle();
+      if (existing) {
+        profileId = existing.id;
+        linkedExisting = true;
+      }
+    }
 
-    // Create role
+    if (!profileId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("client_profiles")
+        .insert({
+          tenant_id: tenantId,
+          user_id: null,
+          record_type: body.record_type ?? "individual",
+          is_representative: false,
+          full_name: body.full_name,
+          email: body.email ?? null,
+          phone: body.phone ?? null,
+          due_diligence_level: "sdd",
+        })
+        .select("id")
+        .single();
+
+      if (profileError) {
+        // Race: lookup didn't find it but the unique constraint did. Refetch.
+        if (profileError.code === "23505" && trimmedEmail) {
+          const { data: refetch } = await supabase
+            .from("client_profiles")
+            .select("id")
+            .eq("tenant_id", tenantId)
+            .ilike("email", trimmedEmail)
+            .eq("is_deleted", false)
+            .maybeSingle();
+          if (refetch) {
+            profileId = refetch.id;
+            linkedExisting = true;
+          }
+        }
+        if (!profileId) {
+          return NextResponse.json({ error: profileError.message }, { status: 500 });
+        }
+      } else {
+        profileId = profile.id;
+        await supabase.from("client_profile_kyc").insert({
+          tenant_id: tenantId,
+          client_profile_id: profile.id,
+          completion_status: "incomplete",
+          kyc_journey_completed: false,
+          sanctions_checked: false,
+          adverse_media_checked: false,
+          pep_verified: false,
+        });
+      }
+    }
+
     const { data: roleRow, error: roleError } = await supabase
       .from("profile_service_roles")
       .insert({
         tenant_id: tenantId,
-        client_profile_id: profile.id,
+        client_profile_id: profileId,
         service_id: serviceId,
         role,
         can_manage: false,
@@ -103,7 +144,7 @@ export async function POST(
       .select("id")
       .single();
     if (roleError) return NextResponse.json({ error: roleError.message }, { status: 500 });
-    return NextResponse.json({ id: roleRow.id, profileId: profile.id });
+    return NextResponse.json({ id: roleRow.id, profileId, linkedExisting });
   }
 
   return NextResponse.json({ error: "client_profile_id or full_name required" }, { status: 400 });

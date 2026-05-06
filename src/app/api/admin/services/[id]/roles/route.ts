@@ -51,33 +51,68 @@ export async function POST(
 
   // Create new profile if no existing profile ID provided
   if (!profileId && body.full_name) {
-    const { data: profile, error: profileError } = await supabase
-      .from("client_profiles")
-      .insert({
-        tenant_id: tenantId,
-        user_id: null,
-        record_type: body.record_type ?? "individual",
-        is_representative: false,
-        full_name: body.full_name,
-        email: body.email ?? null,
-        due_diligence_level: "sdd",
-      })
-      .select("id")
-      .single();
-    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+    const trimmedEmail = body.email?.trim() ?? "";
 
-    // Create KYC record
-    await supabase.from("client_profile_kyc").insert({
-      tenant_id: tenantId,
-      client_profile_id: profile.id,
-      completion_status: "incomplete",
-      kyc_journey_completed: false,
-      sanctions_checked: false,
-      adverse_media_checked: false,
-      pep_verified: false,
-    });
+    // B-059: lookup-then-insert. If an active profile already exists for
+    // (tenant_id, email), reuse it rather than creating a duplicate.
+    if (trimmedEmail) {
+      const { data: existing } = await supabase
+        .from("client_profiles")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .ilike("email", trimmedEmail)
+        .eq("is_deleted", false)
+        .maybeSingle();
+      if (existing) {
+        profileId = existing.id;
+      }
+    }
 
-    profileId = profile.id;
+    if (!profileId) {
+      const { data: profile, error: profileError } = await supabase
+        .from("client_profiles")
+        .insert({
+          tenant_id: tenantId,
+          user_id: null,
+          record_type: body.record_type ?? "individual",
+          is_representative: false,
+          full_name: body.full_name,
+          email: body.email ?? null,
+          due_diligence_level: "sdd",
+        })
+        .select("id")
+        .single();
+
+      if (profileError) {
+        // Race: another request created the same email-keyed profile first.
+        if (profileError.code === "23505" && trimmedEmail) {
+          const { data: refetch } = await supabase
+            .from("client_profiles")
+            .select("id")
+            .eq("tenant_id", tenantId)
+            .ilike("email", trimmedEmail)
+            .eq("is_deleted", false)
+            .maybeSingle();
+          if (refetch) {
+            profileId = refetch.id;
+          }
+        }
+        if (!profileId) {
+          return NextResponse.json({ error: profileError.message }, { status: 500 });
+        }
+      } else {
+        profileId = profile.id;
+        await supabase.from("client_profile_kyc").insert({
+          tenant_id: tenantId,
+          client_profile_id: profile.id,
+          completion_status: "incomplete",
+          kyc_journey_completed: false,
+          sanctions_checked: false,
+          adverse_media_checked: false,
+          pep_verified: false,
+        });
+      }
+    }
   }
 
   const { data, error } = await supabase

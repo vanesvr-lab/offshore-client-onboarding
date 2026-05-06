@@ -24,6 +24,22 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
+  const trimmedEmail = body.email?.trim() ?? "";
+
+  // B-059: lookup-then-insert. If an active profile already exists for
+  // (tenant_id, email), reuse it rather than creating a duplicate.
+  if (trimmedEmail) {
+    const { data: existing } = await supabase
+      .from("client_profiles")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .ilike("email", trimmedEmail)
+      .eq("is_deleted", false)
+      .maybeSingle();
+    if (existing) {
+      return NextResponse.json({ id: existing.id, linkedExisting: true });
+    }
+  }
 
   // Create client_profile
   const { data: profile, error: profileErr } = await supabase
@@ -31,7 +47,7 @@ export async function POST(request: Request) {
     .insert({
       tenant_id: tenantId,
       full_name: body.full_name.trim(),
-      email: body.email?.trim() || null,
+      email: trimmedEmail || null,
       phone: body.phone?.trim() || null,
       record_type: body.record_type ?? "individual",
       is_representative: body.is_representative ?? false,
@@ -41,6 +57,19 @@ export async function POST(request: Request) {
     .single();
 
   if (profileErr || !profile) {
+    // Race: another request created the same email-keyed profile first.
+    if (profileErr?.code === "23505" && trimmedEmail) {
+      const { data: refetch } = await supabase
+        .from("client_profiles")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .ilike("email", trimmedEmail)
+        .eq("is_deleted", false)
+        .maybeSingle();
+      if (refetch) {
+        return NextResponse.json({ id: refetch.id, linkedExisting: true });
+      }
+    }
     return NextResponse.json(
       { error: profileErr?.message ?? "Failed to create profile" },
       { status: 500 }
