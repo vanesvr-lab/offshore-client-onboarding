@@ -189,9 +189,9 @@ export default async function ApplicationDetailPage({
           />
         </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left: Application info (col-span-2) */}
-        <div className="col-span-2 space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Left: Application info (col-span-2 on lg+, full-width below) */}
+        <div className="space-y-6 lg:col-span-2">
           {/* ── Step 1 — Company Setup ─────────────────────────────── */}
           <section id="step-company-setup" className="scroll-mt-20 space-y-4">
             <header>

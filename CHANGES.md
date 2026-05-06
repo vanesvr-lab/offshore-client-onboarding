@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-069 Batch 5 — Visual consistency pass + B-069 done (Claude Code)
+
+- Admin app detail grid is now responsive: `grid-cols-1 gap-6 lg:grid-cols-3` (was `grid-cols-3`). Left column is `lg:col-span-2`. On viewports below `lg:`, the right-column sidebar (Stage Management, Communication, Account Manager, Audit Trail) stacks below the main content instead of being squeezed into a 1/3 column.
+- Step indicator already wraps via `flex-wrap`, so it stacks naturally on narrow viewports.
+- SectionReviewPanel is `w-full sm:max-w-md` — full-width on mobile, right-slide on desktop.
+- Step headings already use `text-lg font-semibold text-brand-navy`, matching the client wizard's `ServiceWizardPeopleStep` h2.
+- Build passes.
+
+**B-069 done.** Admin app detail page now has:
+- A wizard-shaped step indicator above the main grid with aggregate review status per step
+- Three anchor sections (`#step-company-setup`, `#step-people-kyc`, `#step-documents`) reachable via smooth-scroll
+- Per-section review affordances on five top-level keys (`business`, `contact`, `service`, `people`, `documents`) and 8 sub-keys per profile (`kyc:<profile_id>:identity|financial|compliance|professional|tax|adverse_media|wealth|additional`)
+- Responsive grid that stacks below `lg:`
+
+The full inline read-only KYC mirror is documented in tech-debt #25 for follow-up.
+
+---
+
 ### 2026-05-06 — B-069 Batch 4 — Documents step polish (Claude Code)
 
 - Verified Step 5 (`#step-documents`) layout post-restructure: Step 5 heading sits above the Documents Card, which carries the `documents` `ConnectedSectionHeader` (title + badge + uploader rightSlot) and renders `ConnectedNotesHistory` at the bottom. AI Flagged Discrepancies and Verification Checklist Cards remain informational (no SectionHeader) per the B-068 acceptance criteria.
