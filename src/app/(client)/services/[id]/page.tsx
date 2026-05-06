@@ -8,6 +8,7 @@ import type {
   DueDiligenceRequirement,
   DocumentType,
   ServiceTemplateDocument,
+  RoleDocumentRequirement,
 } from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
@@ -144,18 +145,26 @@ export default async function ClientServiceDetailPage({
 
   if (!serviceRes.data) notFound();
 
-  // B-071 — service-template doc binding.
+  // B-071 — service-template doc binding + global role doc requirements.
   const serviceTemplateId =
     (serviceRes.data as unknown as { service_template_id?: string | null }).service_template_id ?? null;
 
-  const templateDocsRes = serviceTemplateId
-    ? await supabase
-        .from("service_template_documents")
-        .select("*, document_types(*)")
-        .eq("service_template_id", serviceTemplateId)
-        .eq("tenant_id", tenantId)
-        .order("sort_order")
-    : { data: [] as ServiceTemplateDocument[] };
+  const [templateDocsRes, roleRequirementsRes] = await Promise.all([
+    serviceTemplateId
+      ? supabase
+          .from("service_template_documents")
+          .select("*, document_types(*)")
+          .eq("service_template_id", serviceTemplateId)
+          .eq("tenant_id", tenantId)
+          .order("sort_order")
+      : Promise.resolve({ data: [] as ServiceTemplateDocument[] }),
+
+    supabase
+      .from("role_document_requirements")
+      .select("*, document_types(*)")
+      .eq("tenant_id", tenantId)
+      .eq("is_required", true),
+  ]);
 
   // Resolve invite sender names (invite_sent_by = user_id → profiles.full_name)
   const senderIds = (personsRes.data ?? [])
@@ -210,6 +219,7 @@ export default async function ClientServiceDetailPage({
       requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
       templateDocs={(templateDocsRes.data ?? []) as unknown as ServiceTemplateDocument[]}
+      roleRequirements={(roleRequirementsRes.data ?? []) as unknown as RoleDocumentRequirement[]}
       myRole={roleCheck.role}
       autoWizardStep={autoWizardStep}
     />

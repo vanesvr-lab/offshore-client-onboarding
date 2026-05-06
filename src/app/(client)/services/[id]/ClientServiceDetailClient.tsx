@@ -17,6 +17,7 @@ import type {
   DueDiligenceRequirement,
   DocumentType,
   ServiceTemplateDocument,
+  RoleDocumentRequirement,
 } from "@/types";
 import type { ClientServiceRecord, ClientServiceDoc, ServicePerson } from "./page";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
@@ -29,6 +30,7 @@ interface Props {
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
   templateDocs: ServiceTemplateDocument[];
+  roleRequirements: RoleDocumentRequirement[];
   myRole: string;
   autoWizardStep?: number;
 }
@@ -126,6 +128,7 @@ export function ClientServiceDetailClient({
   requirements,
   documentTypes,
   templateDocs,
+  roleRequirements,
   myRole,
   autoWizardStep,
 }: Props) {
@@ -260,6 +263,7 @@ export function ClientServiceDetailClient({
           requirements={requirements}
           documentTypes={documentTypes}
           templateDocs={templateDocs}
+          roleRequirements={roleRequirements}
           startStep={wizardStartStep}
           onDirtyChange={setWizardIsDirty}
           onSaveFailedChange={setWizardSaveFailed}

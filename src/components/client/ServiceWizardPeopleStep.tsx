@@ -20,6 +20,7 @@ import type {
   DueDiligenceLevel,
   DueDiligenceRequirement,
   KycRecord,
+  RoleDocumentRequirement,
   ServiceTemplateDocument,
   VerificationResult,
   VerificationStatus,
@@ -995,6 +996,8 @@ interface Props {
   documentTypes: DocumentType[];
   /** B-071 — per-template doc binding. Empty = fall back to DD-driven list. */
   templateDocs: ServiceTemplateDocument[];
+  /** B-071 — global role-based doc requirements (used when templateDocs is empty). */
+  roleRequirements: RoleDocumentRequirement[];
   onNavVisibilityChange: (hide: boolean) => void;
 }
 
@@ -1006,6 +1009,7 @@ export function ServiceWizardPeopleStep({
   requirements,
   documentTypes,
   templateDocs,
+  roleRequirements,
   onNavVisibilityChange,
 }: Props) {
   const router = useRouter();
@@ -1182,6 +1186,7 @@ export function ServiceWizardPeopleStep({
         documentTypes={documentTypes}
         requirements={requirements}
         templateDocs={templateDocs}
+        roleRequirements={roleRequirements}
         dueDiligenceLevel={ddLevel}
         onComplete={handleKycComplete}
         onExit={handleExitKycReview}

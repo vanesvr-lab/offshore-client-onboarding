@@ -15,6 +15,7 @@ import type {
   DueDiligenceRequirement,
   DocumentType,
   ServiceTemplateDocument,
+  RoleDocumentRequirement,
 } from "@/types";
 import type { ClientServiceRecord, ClientServiceDoc, ServicePerson } from "@/app/(client)/services/[id]/page";
 import type { ValidationResult } from "@/app/api/services/[id]/validate/route";
@@ -28,6 +29,8 @@ interface Props {
   documentTypes: DocumentType[];
   /** B-071 — per-template doc binding. Empty = fall back to DD-driven list. */
   templateDocs: ServiceTemplateDocument[];
+  /** B-071 — global role-based doc requirements. Used in fallback path. */
+  roleRequirements: RoleDocumentRequirement[];
   startStep?: number;
   onClose: (updatedDetails?: Record<string, unknown>, updatedPersons?: ServicePerson[], updatedDocs?: ClientServiceDoc[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -76,6 +79,7 @@ export function ServiceWizard({
   requirements,
   documentTypes,
   templateDocs,
+  roleRequirements,
   startStep = 0,
   onClose,
   onDirtyChange,
@@ -389,6 +393,7 @@ export function ServiceWizard({
             requirements={requirements}
             documentTypes={documentTypes}
             templateDocs={templateDocs}
+            roleRequirements={roleRequirements}
             onNavVisibilityChange={setHideWizardNav}
           />
         )}

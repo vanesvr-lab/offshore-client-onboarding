@@ -48,6 +48,7 @@ import type {
   DocumentType,
   DueDiligenceLevel,
   DueDiligenceRequirement,
+  RoleDocumentRequirement,
   ServiceTemplateDocument,
   VerificationStatus,
   VerificationResult,
@@ -522,6 +523,8 @@ interface Props {
   requirements: DueDiligenceRequirement[];
   /** B-071 — per-template doc binding. Empty = fall back to DD-driven list. */
   templateDocs?: ServiceTemplateDocument[];
+  /** B-071 — global role-based doc requirements (used when templateDocs is empty). */
+  roleRequirements?: RoleDocumentRequirement[];
   dueDiligenceLevel: DueDiligenceLevel;
   /** Called when the user finishes the wizard (last sub-step "Save & Close" / "Save & Finish"). */
   onComplete: () => void;
@@ -561,6 +564,7 @@ export function PerPersonReviewWizard({
   documentTypes,
   requirements,
   templateDocs = [],
+  roleRequirements = [],
   dueDiligenceLevel,
   onComplete,
   onExit,
@@ -660,9 +664,11 @@ export function PerPersonReviewWizard({
   //   1. templateDocs has rows for this service template → use ONLY those
   //      that match this person (applies_to_role === person.role OR
   //      applies_to_role IS NULL with scope='person'). Template binding is
-  //      the most specific source.
-  //   2. templateDocs empty → DD requirements (legacy behavior).
-  //      [Batch 4 will add role_document_requirements into this branch.]
+  //      the most specific source and wins over the global role list.
+  //   2. templateDocs empty → DD requirements UNION role_document_requirements
+  //      matching this person's role. The role list lets admins say e.g.
+  //      "directors need a CV" without touching DD configuration.
+  //   3. Both empty → all person-scope doc types (legacy behavior).
   const personRole = reviewingPerson.role as string | null;
 
   const docTypesByCategory = useMemo(() => {
@@ -688,9 +694,23 @@ export function PerPersonReviewWizard({
         eligible.push(dt);
       }
     } else {
+      const roleDocTypeIds = personRole
+        ? roleRequirements
+            .filter(
+              (rr) =>
+                rr.is_required &&
+                rr.role === personRole &&
+                rr.document_type_id
+            )
+            .map((rr) => rr.document_type_id)
+        : [];
+      const allowedIds = new Set<string>([
+        ...ddReqDocTypeIds,
+        ...roleDocTypeIds,
+      ]);
       eligible =
-        ddReqDocTypeIds.length > 0
-          ? documentTypes.filter((dt) => ddReqDocTypeIds.includes(dt.id))
+        allowedIds.size > 0
+          ? documentTypes.filter((dt) => allowedIds.has(dt.id))
           : documentTypes;
     }
 
@@ -702,7 +722,7 @@ export function PerPersonReviewWizard({
       out[cat].push(dt);
     }
     return out;
-  }, [documentTypes, ddReqDocTypeIds, templateDocs, personRole]);
+  }, [documentTypes, ddReqDocTypeIds, templateDocs, roleRequirements, personRole]);
 
   const personCategories = useMemo<string[]>(() => {
     const present = Object.keys(docTypesByCategory).filter((c) => docTypesByCategory[c].length > 0);

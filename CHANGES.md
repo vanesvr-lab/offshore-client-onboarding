@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-071 Batch 4 — Wire role_document_requirements at runtime (Claude Code)
+
+`role_document_requirements` is finally honored by the client KYC wizard. Configuring "directors need a CV" in `/admin/settings/role-requirements` now actually surfaces that doc type in every director's per-person doc list (until this batch the table was admin-configurable but ignored at runtime — tech-debt item the brief surfaced).
+
+- **`/services/[id]/page.tsx`** — added a parallel fetch on `role_document_requirements` joined with `document_types(*)`, scoped by `tenant_id` and `is_required = true`. Result passed as `roleRequirements` through `ClientServiceDetailClient` → `ServiceWizard` → `ServiceWizardPeopleStep` → `PerPersonReviewWizard`.
+- **`PerPersonReviewWizard.tsx`** — `docTypesByCategory` fallback branch (only when `templateDocs` is empty) now unions `ddReqDocTypeIds` with role-driven ids matching `reviewingPerson.role`. When the union has any rows, `eligible` is filtered to that union; else legacy "all person-scope doc types" remains. Precedence is documented inline: templateDocs > (DD ∪ roleRequirements) > all person-scope.
+- **Edge case honored**: when `templateDocs.length > 0`, the role-requirements union is short-circuited — explicit per-template binding wins over the global role list (matches the brief).
+
+Acceptance check (manual): adding a doc type for `director` in role-requirements now appears in any director's KYC wizard for service templates that don't have explicit `service_template_documents` rows. Removing it removes it from the wizard.
+
+---
+
 ### 2026-05-06 — B-071 Batch 3 — Wire service-template binding into client wizard (Claude Code)
 
 Service-template ↔ document-type binding now drives the client wizard at runtime. Templates with curated doc lists (e.g. GBC's 18 docs) override the global DD-driven list; templates without bindings fall back to the existing logic.
