@@ -38,11 +38,12 @@ import {
   calcDocumentsCompletion,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
-import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview } from "@/types";
+import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
 import { AdminApplicationSectionsProvider } from "@/components/admin/AdminApplicationSections";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminKycPersonReviewPanel, type PersonRow as KycPersonRow } from "@/components/admin/AdminKycPersonReviewPanel";
+import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
 
 // ─── Document category helpers ────────────────────────────────────────────────
 
@@ -2005,6 +2006,10 @@ interface Props {
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
   sectionReviews: ApplicationSectionReview[];
+  // B-072 — admin actions surface (substance review + bank opening + FSC)
+  templateActions: ServiceTemplateAction[];
+  actionsByKey: Record<string, ServiceAction>;
+  substance: ServiceSubstance | null;
 }
 
 const STATUS_OPTIONS = [
@@ -2041,6 +2046,9 @@ export function ServiceDetailClient({
   requirements,
   documentTypes,
   sectionReviews,
+  templateActions,
+  actionsByKey,
+  substance,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -2535,6 +2543,18 @@ export function ServiceDetailClient({
             onRefresh={handleRolesRefresh}
           />
         </ServiceCollapsibleSection>
+
+        {/* ── B-072 — Admin Actions (Substance / Bank / FSC) ─────────────── */}
+        {templateActions.length > 0 && (
+          <AdminServiceActionsSection
+            serviceId={service.id}
+            serviceLabel={service.service_templates?.name ?? "Service"}
+            templateActions={templateActions}
+            actionsByKey={actionsByKey}
+            initialSubstance={substance}
+            anchorId="step-admin-actions"
+          />
+        )}
 
         {/* ── Admin divider ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-3 py-2">

@@ -15,6 +15,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-072 Batch 6 — Wire Substance / Bank Opening / FSC Checklist actions into /admin/services/[id]; B-072 done (Claude Code)
+
+- `src/app/(admin)/admin/services/[id]/page.tsx` — three new parallel server-side fetches:
+  - `service_template_actions` filtered to the service's `service_template_id`, ordered by `sort_order`.
+  - `service_actions` for `service_id`.
+  - `service_substance` (single row) for `service_id`.
+  Auto-creates pending `service_actions` rows for any required template action that doesn't yet have an instance (mirrors the GET API route's behavior so the page renders complete data on first load). Builds an `actionsByKey` map and passes `templateActions`, `actionsByKey`, `substance` to `ServiceDetailClient`.
+- `src/components/admin/AdminServiceActionsSection.tsx` (new) — composes the three action UIs in `sort_order`. Switches on `action_key` to render `SubstanceReviewForm`, `BankAccountOpeningStub`, or `FscChecklistStub`. Local state mirrors the actions map so child PATCHes update the parent's view without a full refresh. Renders nothing when `templateActions` is empty (Trust / Domestic Co / Relocation services stay clean). Section heading uses the same uppercase tracking style as the existing "Admin" divider for visual consistency.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — accepts the new props; renders `<AdminServiceActionsSection>` in the left column right after the Documents `ServiceCollapsibleSection`, before the existing Admin divider. `anchorId="step-admin-actions"` reserved for a future step indicator entry.
+- `src/components/admin/SubstanceReviewForm.tsx` — accepts an optional `initialSubstance` prop. When provided, skips the GET fetch on mount and renders prefilled (no loading flash). The Batch 6 page now passes the server-loaded row.
+- `npm run build` passes.
+
+**B-072 done.** `/admin/services/[id]` for GBC + AC services now shows an "Admin Actions" section after Documents containing:
+1. Substance Review form (FSC §3.2/§3.3/§3.4 + Pass/Review/Fail assessment).
+2. Bank Account Opening stub (status dropdown + notes).
+3. FSC Checklist stub (mark-as-ready button + notes).
+
+Each action carries its own `SectionReviewBadge` + `SectionReviewButton` + `ConnectedNotesHistory` under `section_key = "action:<key>"`, so the existing review trail surface from B-068/B-073 applies uniformly. Migrations: `20260506172151_service_actions_tables.sql` (registry + seed for GBC/AC), `20260506172342_service_substance.sql` (FSC criteria). Trust / Domestic Co / Relocation services have no template actions seeded so the section is invisible there.
+
+Test target: `/admin/services/1c131367-b89f-44db-8787-6958a306b73d` (GBC-0002).
+
+---
+
 ### 2026-05-06 — B-072 Batch 5 — Bank Opening + FSC Checklist stubs (Claude Code)
 
 - `src/components/admin/BankAccountOpeningStub.tsx`:

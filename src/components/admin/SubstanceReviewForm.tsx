@@ -230,15 +230,22 @@ const ASSESSMENT_OPTIONS: {
 export function SubstanceReviewForm({
   serviceId,
   serviceLabel,
+  initialSubstance,
 }: {
   serviceId: string;
   serviceLabel: string;
+  // B-072 Batch 6 — when provided, skips the GET /substance fetch on mount.
+  // The page already loads this server-side so the form renders prefilled.
+  initialSubstance?: ServiceSubstance | null;
 }) {
-  const [state, setState] = useState<FormState>(EMPTY_STATE);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<FormState>(() =>
+    initialSubstance !== undefined ? fromServer(initialSubstance) : EMPTY_STATE,
+  );
+  const [loading, setLoading] = useState(initialSubstance === undefined);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (initialSubstance !== undefined) return;
     let cancelled = false;
     fetch(`/api/admin/services/${serviceId}/substance`)
       .then((r) => r.json())
@@ -259,7 +266,7 @@ export function SubstanceReviewForm({
     return () => {
       cancelled = true;
     };
-  }, [serviceId]);
+  }, [serviceId, initialSubstance]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));

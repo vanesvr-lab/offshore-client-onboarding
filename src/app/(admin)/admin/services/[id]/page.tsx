@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { ServiceDetailClient } from "./ServiceDetailClient";
-import type { ServiceRecord, ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, ApplicationSectionReview } from "@/types";
+import type { ServiceRecord, ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance } from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export const dynamic = "force-dynamic";
@@ -186,6 +186,60 @@ export default async function ServiceDetailPage({
 
   if (!serviceRes.data) notFound();
 
+  // ── B-072 Batch 6 — admin actions + substance ────────────────────────────
+  // Read template-bound actions, existing per-service instances, and the
+  // optional substance row in parallel. Auto-create pending instances for
+  // any required action that doesn't yet have a row (mirrors the GET route).
+  const serviceTemplateId = (serviceRes.data as unknown as { service_template_id: string | null }).service_template_id;
+
+  const [templateActionsRes, existingActionsRes, substanceRes] = await Promise.all([
+    serviceTemplateId
+      ? supabase
+          .from("service_template_actions")
+          .select("*")
+          .eq("service_template_id", serviceTemplateId)
+          .eq("tenant_id", tenantId)
+          .order("sort_order")
+      : Promise.resolve({ data: [] as ServiceTemplateAction[], error: null }),
+    supabase
+      .from("service_actions")
+      .select("*")
+      .eq("service_id", id)
+      .eq("tenant_id", tenantId),
+    supabase
+      .from("service_substance")
+      .select("*")
+      .eq("service_id", id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+  ]);
+
+  const templateActions = (templateActionsRes.data ?? []) as unknown as ServiceTemplateAction[];
+  let actionInstances = (existingActionsRes.data ?? []) as unknown as ServiceAction[];
+  const haveKeys = new Set(actionInstances.map((a) => a.action_key));
+  const missing = templateActions.filter((ta) => !haveKeys.has(ta.action_key));
+  if (missing.length > 0) {
+    const { data: created } = await supabase
+      .from("service_actions")
+      .insert(
+        missing.map((ta) => ({
+          service_id: id,
+          action_key: ta.action_key,
+          status: "pending" as const,
+          tenant_id: tenantId,
+        })),
+      )
+      .select("*");
+    actionInstances = [
+      ...actionInstances,
+      ...((created ?? []) as unknown as ServiceAction[]),
+    ];
+  }
+  const actionsByKey = Object.fromEntries(
+    actionInstances.map((a) => [a.action_key, a]),
+  ) as Record<string, ServiceAction>;
+  const substance = (substanceRes.data ?? null) as ServiceSubstance | null;
+
   // Flatten admin users (users join comes as array)
   const adminUsers: AdminUser[] = (adminUsersRes.data ?? []).map((u) => {
     const users = (u as unknown as { user_id: string; users: { full_name: string | null; email: string | null } | null }).users;
@@ -210,6 +264,9 @@ export default async function ServiceDetailPage({
         requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
         documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
         sectionReviews={(sectionReviewsRes.data ?? []) as unknown as ApplicationSectionReview[]}
+        templateActions={templateActions}
+        actionsByKey={actionsByKey}
+        substance={substance}
       />
     </div>
   );
