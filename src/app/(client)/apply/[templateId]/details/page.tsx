@@ -145,6 +145,14 @@ export default function BusinessDetailsPage({
   async function saveProgress(andContinue = false) {
     setSaving(true);
     try {
+      // B-067 §2.1 — drop empty optional proposed-name slots before persisting.
+      const cleanedServiceDetails: Record<string, unknown> = { ...serviceDetails };
+      if (Array.isArray(cleanedServiceDetails.proposed_names)) {
+        cleanedServiceDetails.proposed_names = (
+          cleanedServiceDetails.proposed_names as unknown[]
+        ).filter((s): s is string => typeof s === "string" && s.trim() !== "");
+      }
+
       const res = await fetch("/api/applications/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -153,7 +161,7 @@ export default function BusinessDetailsPage({
           templateId: params.templateId,
           ...form,
           ubo_data: [],
-          service_details: serviceDetails,
+          service_details: cleanedServiceDetails,
         }),
       });
       const data = await res.json() as { applicationId?: string; error?: string };

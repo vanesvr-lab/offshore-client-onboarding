@@ -13,6 +13,11 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldTooltip } from "@/components/shared/FieldTooltip";
 import { MultiSelectCountry } from "@/components/shared/MultiSelectCountry";
+import { NumberInput } from "@/components/ui/NumberInput";
+
+// B-067 §2.1 — Tooltip copy on Proposed Name 1 only.
+const PROPOSED_NAME_TOOLTIP =
+  "Provide your preferred company name for Name Reservation with the Registrar of Companies. You can suggest up to three alternatives in case your first choice is unavailable.";
 
 /** Field definition from service_templates.service_fields */
 export interface ServiceField {
@@ -96,7 +101,7 @@ export function DynamicServiceForm({
         //   stretches across the entire 2-col-span row.
         const inputWidth =
           field.type === "date" ? "w-full md:w-40"
-          : field.type === "number" ? "w-full md:w-32"
+          : field.type === "number" ? "w-full md:w-40"
           : field.full_width ? "w-full md:max-w-md"
           : "w-full";
         return (
@@ -111,14 +116,26 @@ export function DynamicServiceForm({
               )}
               {field.tooltip && <FieldTooltip content={field.tooltip} />}
             </Label>
-            <Input
-              type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
-              value={(val as string) ?? ""}
-              onChange={(e) => onChange(field.key, e.target.value)}
-              placeholder={field.placeholder}
-              readOnly={readOnly}
-              className={inputWidth}
-            />
+            {field.type === "number" ? (
+              // B-067 §2.3/2.4 — currency/amount inputs show thousand separators
+              // on blur, raw digits on focus, store raw numeric string.
+              <NumberInput
+                value={(val as string | number | null | undefined) ?? ""}
+                onChange={(raw) => onChange(field.key, raw)}
+                placeholder={field.placeholder}
+                readOnly={readOnly}
+                className={inputWidth}
+              />
+            ) : (
+              <Input
+                type={field.type === "date" ? "date" : "text"}
+                value={(val as string) ?? ""}
+                onChange={(e) => onChange(field.key, e.target.value)}
+                placeholder={field.placeholder}
+                readOnly={readOnly}
+                className={inputWidth}
+              />
+            )}
           </div>
         );
       }
@@ -217,31 +234,64 @@ export function DynamicServiceForm({
       case "text_array": {
         const arr = (Array.isArray(val) ? val : []) as string[];
         const max = field.max ?? 3;
-        // Pad to max length
+        // Warn (don't drop) on legacy data with more than `max` entries — extras
+        // remain in the array and are preserved on save unless the user touches
+        // an input (then we overwrite the visible slots cleanly).
+        if (arr.length > max && typeof console !== "undefined") {
+          console.warn(
+            `[DynamicServiceForm] field "${field.key}" has ${arr.length} entries; only first ${max} are shown.`
+          );
+        }
+        // Pad to max length for display
         const padded = [...arr, ...Array(Math.max(0, max - arr.length)).fill("")].slice(0, max);
+
+        // B-067 §2.1 — proposed_names renders as 3 separate labeled inputs:
+        // Name 1 required + tooltip, Name 2 / Name 3 optional.
+        const isProposedNames = field.key === "proposed_names";
+        const itemLabel = (i: number): string =>
+          isProposedNames ? `Proposed Name ${i + 1}` : `Option ${i + 1}`;
+        const itemRequired = (i: number): boolean =>
+          isProposedNames ? i === 0 : false;
+        const itemTooltip = (i: number): string | null =>
+          isProposedNames && i === 0 ? PROPOSED_NAME_TOOLTIP : null;
+
         return (
           <div key={field.key} className="col-span-2 space-y-1.5">
-            <Label className="text-sm">
-              {field.label}
-              {field.required && " *"}
-            </Label>
+            {!isProposedNames && (
+              <Label className="text-sm">
+                {field.label}
+                {field.required && " *"}
+              </Label>
+            )}
             {/* B-048 §4 — each option capped at max-w-md so the column of
                 inputs stays compact (e.g. proposed company names). */}
-            <div className="space-y-2">
-              {padded.map((v: string, i: number) => (
-                <Input
-                  key={i}
-                  placeholder={`Option ${i + 1}`}
-                  value={v}
-                  onChange={(e) => {
-                    const next = [...padded];
-                    next[i] = e.target.value;
-                    onChange(field.key, next);
-                  }}
-                  readOnly={readOnly}
-                  className="w-full md:max-w-md"
-                />
-              ))}
+            <div className="space-y-3">
+              {padded.map((v: string, i: number) => {
+                const required = itemRequired(i);
+                const tooltip = itemTooltip(i);
+                return (
+                  <div key={i} className="space-y-1.5">
+                    {isProposedNames && (
+                      <Label className="text-sm flex items-center gap-1">
+                        {itemLabel(i)}
+                        {required && <span className="text-red-600">*</span>}
+                        {tooltip && <FieldTooltip content={tooltip} />}
+                      </Label>
+                    )}
+                    <Input
+                      placeholder={isProposedNames ? "" : itemLabel(i)}
+                      value={v}
+                      onChange={(e) => {
+                        const next = [...padded];
+                        next[i] = e.target.value;
+                        onChange(field.key, next);
+                      }}
+                      readOnly={readOnly}
+                      className="w-full md:max-w-md"
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

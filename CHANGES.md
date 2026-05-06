@@ -23,6 +23,12 @@ End-user QA pass — 7 batches:
 - `src/components/shared/Sidebar.tsx` — client primary nav label "Dashboard" → "Home" (route `/dashboard` unchanged; admin sidebar untouched)
 - `src/components/client/DashboardClient.tsx` — page heading is now "Home", new subtle brand-navy/blue welcome banner (`Welcome <FirstName>. Thank you for choosing GWMS.`), per-card nudge line `Your application for <Service> is X% complete — Review →` shown only when `overallPct < 100`. Removed the old amber "all complete" / "missing info" greeting branches in favour of one consistent layout.
 
+**Batch 2 — Service wizard polish:**
+- `src/components/ui/NumberInput.tsx` — new shared currency/amount input. Raw digits on focus, locale-formatted (`en-US`) thousand separators on blur, stores raw numeric string. Used for every `type: "number"` field rendered through `DynamicServiceForm`.
+- `src/components/shared/DynamicServiceForm.tsx` — renders `type: "number"` via `NumberInput`. Special-cases `proposed_names` `text_array`: each slot is its own labeled field ("Proposed Name 1/2/3"), Name 1 has the red required asterisk plus a `FieldTooltip` explaining the Registrar of Companies context (B-067 copy). Legacy data with > 3 entries is logged to console and the first 3 shown; extras only get overwritten if the user touches an input.
+- `src/components/shared/MultiSelectCountry.tsx`, `src/components/shared/CountrySelect.tsx` — outline switched from `border-gray-200` / default to `border-gray-300` so country dropdowns visually match the standard `<Input>` border across the wizard.
+- `src/components/client/ServiceWizard.tsx` and `src/app/(client)/apply/[templateId]/details/page.tsx` — drop empty `proposed_names` entries before PATCH/save so optional fields don't pollute the array (`[name1, name2, name3].filter(s => s && s.trim() !== "")`).
+
 ### 2026-05-05 — B-066 — Stop wizard from remounting on every save (Claude Code)
 
 B-062 added `kyc.updated_at` to the per-person wizard's mount key to

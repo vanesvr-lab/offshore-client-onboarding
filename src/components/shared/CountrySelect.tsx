@@ -77,7 +77,7 @@ export function CountrySelect({ value, onChange, placeholder = "Select country..
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full text-left border rounded-md px-3 py-2 text-sm bg-white hover:border-gray-400 flex items-center justify-between"
+        className="w-full text-left border border-gray-300 rounded-md px-3 py-2 text-sm bg-white hover:border-gray-400 flex items-center justify-between"
       >
         <span className={value ? "text-gray-900" : "text-gray-500"}>
           {value || placeholder}

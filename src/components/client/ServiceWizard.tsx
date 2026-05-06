@@ -173,13 +173,23 @@ export function ServiceWizard({
     }
   }
 
+  function cleanForSave(details: Record<string, unknown>): Record<string, unknown> {
+    // B-067 §2.1 — drop empty optional proposed-name slots before persisting.
+    const out = { ...details };
+    if (Array.isArray(out.proposed_names)) {
+      out.proposed_names = (out.proposed_names as unknown[])
+        .filter((s): s is string => typeof s === "string" && s.trim() !== "");
+    }
+    return out;
+  }
+
   async function saveServiceDetails(): Promise<boolean> {
     return autosave.save(async () => {
       try {
         const res = await fetch(`/api/services/${serviceId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ service_details: serviceDetails }),
+          body: JSON.stringify({ service_details: cleanForSave(serviceDetails) }),
         });
         if (!res.ok) return false;
         return true;
