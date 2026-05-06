@@ -15,6 +15,30 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-068 Batch 6 — Wired into admin application detail page (Claude Code)
+
+- New client component `AdminApplicationSections.tsx` exposes a React context for the page's section reviews:
+  - `<AdminApplicationSectionsProvider applicationId initialReviews>` — server hands the initial review list down; provider buckets by `section_key` and stores in state
+  - `useSectionReview(sectionKey)` — returns `{ applicationId, currentStatus, history, onReviewSaved }`. `currentStatus` is the latest row's status (`null` if no reviews); `history` is full DESC list for that section; `onReviewSaved` prepends a new row optimistically (no full page refresh needed)
+  - `<ConnectedSectionHeader title sectionKey rightSlot>` — convenience wrapper around `SectionHeader` that pulls everything from context
+  - `<ConnectedNotesHistory sectionKey>` — renders `SectionNotesHistory` for the matching bucket
+- `src/app/(admin)/admin/applications/[id]/page.tsx`:
+  - Added a sixth parallel query for `application_section_reviews` (joined to `profiles:reviewed_by(full_name)`, sorted DESC).
+  - Wrapped the entire left column in `<AdminApplicationSectionsProvider>` so every reviewable section binds to the same store.
+  - Section D (Directors/Shareholders/UBOs) Card now uses `ConnectedSectionHeader title="Section D…" sectionKey="people"` and renders `ConnectedNotesHistory` at the bottom.
+  - Documents Card now uses `ConnectedSectionHeader title="Documents" sectionKey="documents" rightSlot={<AdminDocumentUploader … />}` and renders the history at the bottom.
+  - Informational sections (AI Flagged Discrepancies, Verification Checklist) are deliberately NOT wired (per brief acceptance).
+- `src/components/admin/EditableApplicationDetails.tsx` (consumed inside the provider):
+  - Replaced inline `CardHeader` for Business / Contact / Service with `ConnectedSectionHeader` so each gets a status badge + Review button while keeping the existing edit flow as `rightSlot`.
+  - Added `<ConnectedNotesHistory>` at the bottom of each of those three CardContent blocks.
+  - Internal Notes section left untouched (not reviewable).
+- Optimistic update pattern: saving a review POSTs, the API returns the inserted row (joined with reviewer's name), and the panel calls `onReviewSaved(review)` → context prepends → badge + history both update without a server roundtrip.
+- Build passes.
+
+**B-068 done.** Five wired section keys: `business`, `contact`, `service`, `people`, `documents`. Migration filename: `supabase/migrations/20260506070332_application_section_reviews.sql` (already pushed; Local + Remote pair).
+
+---
+
 ### 2026-05-06 — B-068 Batch 5 — Per-section notes history (Claude Code)
 
 - `src/components/admin/SectionNotesHistory.tsx` — collapsible "Admin notes (N)" block at the bottom of a section. Renders nothing when reviews list is empty (no header noise).

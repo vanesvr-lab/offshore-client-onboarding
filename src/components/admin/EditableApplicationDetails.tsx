@@ -30,6 +30,10 @@ import {
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { BUSINESS_TYPES } from "@/lib/utils/constants";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
+import {
+  ConnectedSectionHeader,
+  ConnectedNotesHistory,
+} from "./AdminApplicationSections";
 
 const COUNTRIES = [
   "Mauritius", "United Kingdom", "France", "United States", "India", "China",
@@ -247,17 +251,13 @@ export function EditableApplicationDetails({
 
       {/* ── Section A: Business Information ─────────────────────────────── */}
       <Card className={editing === "business" ? "border-blue-200 bg-blue-50/30" : ""}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-brand-navy text-base">
-              Section A: Business Information
-            </CardTitle>
-            <SectionActions
-              section="business"
-              {...actions("business", biz)}
-            />
-          </div>
-        </CardHeader>
+        <ConnectedSectionHeader
+          title="Section A: Business Information"
+          sectionKey="business"
+          rightSlot={
+            <SectionActions section="business" {...actions("business", biz)} />
+          }
+        />
         <CardContent>
           {editing === "business" ? (
             <div className="grid grid-cols-2 gap-3">
@@ -340,22 +340,19 @@ export function EditableApplicationDetails({
               </div>
             </div>
           )}
+          <ConnectedNotesHistory sectionKey="business" />
         </CardContent>
       </Card>
 
       {/* ── Section B: Primary Contact ───────────────────────────────────── */}
       <Card className={editing === "contact" ? "border-blue-200 bg-blue-50/30" : ""}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-brand-navy text-base">
-              Primary Contact
-            </CardTitle>
-            <SectionActions
-              section="contact"
-              {...actions("contact", contact)}
-            />
-          </div>
-        </CardHeader>
+        <ConnectedSectionHeader
+          title="Primary Contact"
+          sectionKey="contact"
+          rightSlot={
+            <SectionActions section="contact" {...actions("contact", contact)} />
+          }
+        />
         <CardContent>
           {editing === "contact" ? (
             <div className="grid grid-cols-2 gap-3">
@@ -410,23 +407,23 @@ export function EditableApplicationDetails({
               </div>
             </div>
           )}
+          <ConnectedNotesHistory sectionKey="contact" />
         </CardContent>
       </Card>
 
       {/* ── Section C: Service Details (dynamic) ─────────────────────────── */}
       {serviceFields.length > 0 && (
         <Card className={editing === "service" ? "border-blue-200 bg-blue-50/30" : ""}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-brand-navy text-base">
-                Service Details{templateName ? ` — ${templateName}` : ""}
-              </CardTitle>
+          <ConnectedSectionHeader
+            title={`Service Details${templateName ? ` — ${templateName}` : ""}`}
+            sectionKey="service"
+            rightSlot={
               <SectionActions
                 section="service"
                 {...actions("service", { service_details: serviceDetails })}
               />
-            </div>
-          </CardHeader>
+            }
+          />
           <CardContent>
             <DynamicServiceForm
               fields={serviceFields}
@@ -436,6 +433,7 @@ export function EditableApplicationDetails({
               }
               readOnly={editing !== "service"}
             />
+            <ConnectedNotesHistory sectionKey="service" />
           </CardContent>
         </Card>
       )}

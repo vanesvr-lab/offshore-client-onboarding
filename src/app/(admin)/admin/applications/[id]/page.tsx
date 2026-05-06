@@ -15,6 +15,11 @@ import { EditableApplicationDetails } from "@/components/admin/EditableApplicati
 import { AdminDocumentUploader } from "@/components/admin/AdminDocumentUploader";
 import { PersonsManager } from "@/components/client/PersonsManager";
 import {
+  AdminApplicationSectionsProvider,
+  ConnectedSectionHeader,
+  ConnectedNotesHistory,
+} from "@/components/admin/AdminApplicationSections";
+import {
   Card,
   CardContent,
   CardHeader,
@@ -32,6 +37,7 @@ import type {
   ApplicationStatus,
   ClientAccountManager,
   VerificationResult,
+  ApplicationSectionReview,
 } from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
@@ -48,6 +54,7 @@ export default async function ApplicationDetailPage({
     { data: auditLog },
     { data: emailLog },
     { data: allAdmins },
+    { data: sectionReviewsRaw },
   ] = await Promise.all([
     supabase
       .from("applications")
@@ -73,7 +80,14 @@ export default async function ApplicationDetailPage({
       .from("admin_users")
       .select("user_id, profiles(full_name, email)")
       .order("created_at"),
+    supabase
+      .from("application_section_reviews")
+      .select("*, profiles:reviewed_by(full_name)")
+      .eq("application_id", params.id)
+      .order("reviewed_at", { ascending: false }),
   ]);
+
+  const sectionReviews = (sectionReviewsRaw ?? []) as unknown as ApplicationSectionReview[];
 
   if (!application) notFound();
 
@@ -161,6 +175,10 @@ export default async function ApplicationDetailPage({
 
       <div className="grid grid-cols-3 gap-6">
         {/* Left: Application info (col-span-2) */}
+        <AdminApplicationSectionsProvider
+          applicationId={params.id}
+          initialReviews={sectionReviews}
+        >
         <div className="col-span-2 space-y-6">
           <EditableApplicationDetails
             app={{
@@ -181,27 +199,28 @@ export default async function ApplicationDetailPage({
 
           {/* Section D: Directors, Shareholders & UBOs */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-brand-navy text-base">
-                Section D: Directors, Shareholders &amp; UBOs
-              </CardTitle>
-            </CardHeader>
+            <ConnectedSectionHeader
+              title="Section D: Directors, Shareholders & UBOs"
+              sectionKey="people"
+            />
             <CardContent>
               <PersonsManager applicationId={params.id} />
+              <ConnectedNotesHistory sectionKey="people" />
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-brand-navy text-base">
-                Documents
-              </CardTitle>
-              <AdminDocumentUploader
-                applicationId={params.id}
-                requirements={(requirements ?? []) as DocumentRequirement[]}
-                existingUploads={typedUploads}
-              />
-            </CardHeader>
+            <ConnectedSectionHeader
+              title="Documents"
+              sectionKey="documents"
+              rightSlot={
+                <AdminDocumentUploader
+                  applicationId={params.id}
+                  requirements={(requirements ?? []) as DocumentRequirement[]}
+                  existingUploads={typedUploads}
+                />
+              }
+            />
             <CardContent className="pt-0">
               {linkedDocs.length === 0 && typedUploads.length === 0 ? (
                 <p className="py-4 text-sm text-gray-400 text-center">No documents uploaded yet</p>
@@ -229,6 +248,7 @@ export default async function ApplicationDetailPage({
                   ))}
                 </div>
               )}
+              <ConnectedNotesHistory sectionKey="documents" />
             </CardContent>
           </Card>
 
@@ -283,6 +303,7 @@ export default async function ApplicationDetailPage({
             </CardContent>
           </Card>
         </div>
+        </AdminApplicationSectionsProvider>
 
         {/* Right: Actions */}
         <div className="space-y-6">
