@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-072 Batch 5 — Bank Opening + FSC Checklist stubs (Claude Code)
+
+- `src/components/admin/BankAccountOpeningStub.tsx`:
+  - "Bank account engagement workflow — coming soon" banner.
+  - Status dropdown (pending / in_progress / done / blocked / not_applicable) — change auto-PATCHes `/api/admin/services/[id]/actions` with `action_key="bank_account_opening"`. The PATCH route handles the "transition to done" audit (sets `completed_by` + `completed_at` server-side).
+  - Notes textarea — auto-saves on blur if changed.
+  - `<ConnectedSectionHeader sectionKey="action:bank_account_opening">` + `<ConnectedNotesHistory>` for the review trail.
+- `src/components/admin/FscChecklistStub.tsx`:
+  - "FSC FS-41 Form A checklist — generation coming soon" banner.
+  - Status pill + a "Mark as ready to generate" button that flips the action to `in_progress`. When already `in_progress`, a second "Mark as generated" button flips to `done`. Both PATCH the same actions endpoint.
+  - Notes textarea — auto-saves on blur.
+  - `<ConnectedSectionHeader sectionKey="action:fsc_checklist">` + `<ConnectedNotesHistory>`.
+- Both stubs accept `initialAction: ServiceAction` from the parent (which fetches the full set in Batch 6) so the stubs don't double-fetch on mount.
+- `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-072 Batch 4 — Substance Review action UI for GBC + AC (Claude Code)
 
 - New `src/components/admin/SubstanceReviewForm.tsx`. Self-contained Card composed of:
