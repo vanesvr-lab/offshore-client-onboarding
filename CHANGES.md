@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-074 Batch 2 — Visual containment pass on admin services detail (Claude Code)
+
+QA flagged sections on `/admin/services/[id]` rendering with inconsistent containment — flat headers, thin ring-only borders, and a parent `divide-y` line that visually fused adjacent cards. Vanessa wants the same "boxes nested in boxes" rhythm the client portal already has.
+
+- **`ServiceCollapsibleSection.tsx`** — added `border border-gray-200 shadow-sm` to the outer `<Card>`. Default `<Card>` only ships a thin `ring-1 ring-foreground/10`; the explicit border + subtle shadow make each section visibly contained without dominating the page.
+- **`ServiceDetailClient.tsx`** — replaced parent layout `space-y-4 divide-y divide-blue-200/60 [&>*]:pt-4 [&>*:first-child]:pt-0` with plain `space-y-4`. The divider line was creating the "flat wall of dividers" effect because each Card's border was rounded but the divider line ran flat across, making boundaries blurry. With the divider gone and cards now boxed, sections sit as discrete cards on the page background.
+- Sub-cards (PersonCard `border rounded-xl`, AdminServiceActions stubs that already wrap in `<Card>`, the gray Completion Summary box in Risk Assessment) keep their own boxed style — produces the nested-boxes rhythm.
+
+Build passes; mobile (375px) clean (existing responsive classes unchanged).
+
+---
+
 ### 2026-05-06 — B-074 Batch 1 — Re-drop application_section_reviews FK (Claude Code)
 
 QA reported `Save Admin Review` on `/admin/services/[id]` still failing with PG `23503`:

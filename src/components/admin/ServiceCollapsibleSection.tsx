@@ -58,7 +58,10 @@ export function ServiceCollapsibleSection({
     "bg-red-500";
 
   return (
-    <Card id={anchorId} className="overflow-hidden scroll-mt-24">
+    <Card
+      id={anchorId}
+      className="overflow-hidden scroll-mt-24 border border-gray-200 shadow-sm"
+    >
       <div className="flex items-center px-5 py-4 gap-2">
         <button
           type="button"

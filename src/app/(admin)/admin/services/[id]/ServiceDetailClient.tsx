@@ -2410,7 +2410,8 @@ export function ServiceDetailClient({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
-      <div className="lg:col-span-2 space-y-4 divide-y divide-blue-200/60 [&>*]:pt-4 [&>*:first-child]:pt-0">
+      {/* Each section is its own boxed Card; outer container provides spacing only */}
+      <div className="lg:col-span-2 space-y-4">
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
         <ServiceCollapsibleSection
