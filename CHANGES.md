@@ -15,6 +15,13 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-069 Batch 4 — Documents step polish (Claude Code)
+
+- Verified Step 5 (`#step-documents`) layout post-restructure: Step 5 heading sits above the Documents Card, which carries the `documents` `ConnectedSectionHeader` (title + badge + uploader rightSlot) and renders `ConnectedNotesHistory` at the bottom. AI Flagged Discrepancies and Verification Checklist Cards remain informational (no SectionHeader) per the B-068 acceptance criteria.
+- No code change needed — the wizard-shaped restructure from Batch 2 already placed the Documents Card first inside Step 5 with the correct review affordance.
+
+---
+
 ### 2026-05-06 — B-069 Batch 3 — KYC subsection reviews per profile (Claude Code)
 
 - New `src/components/admin/AdminKycPersonReviewPanel.tsx` — admin-side panel that fetches the application's persons and renders a collapsible card per profile. Each card shows an aggregate badge across all 8 KYC categories and expands into 8 sub-blocks (Identity / Financial / Compliance / Professional / Tax / Adverse Media / Wealth / Additional), each with its own `ConnectedSectionHeader` + `ConnectedNotesHistory`.
