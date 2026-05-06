@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-070 Batch 2 — AI write path records field provenance (Claude Code)
+
+Every AI verification run now writes per-field rows into `field_extractions`. Admin overrides on KYC fields also write a row with `source='admin_override'`. Re-extraction of the same `(client_profile_id, field_key)` supersedes the prior current row (`superseded_at = now()`) before inserting the new one — preserves history without duplicate "current" rows.
+
+- **`src/lib/ai/recordProvenance.ts`** — new helper module with `recordFieldProvenance` (single field, supersede-then-insert) and `recordAiExtractionProvenance` (walks a doc type's `ai_extraction_fields`, records each one whose `prefill_field` is mapped and whose extracted value is non-empty). Best-effort: try/catch swallows errors so a provenance write can never fail the AI verification flow.
+- **AI verification entry points wired**:
+  - `src/app/api/services/[id]/documents/upload/route.ts` (client wizard upload, async AI block)
+  - `src/app/api/admin/services/[id]/documents/upload/route.ts` (admin upload, async AI block)
+  - `src/app/api/documents/[id]/verify-with-context/route.ts` (deferred-AI re-trigger from the wizard's per-person Save & Continue)
+  - `src/app/api/admin/documents/[id]/rerun-ai/route.ts` (admin "Re-run AI" — also extended the doc select to include `client_profile_id` + `tenant_id`)
+- **Admin override**: `src/app/api/admin/profiles-v2/[id]/kyc/route.ts` PATCH now iterates the whitelisted updates and records each as `admin_override` provenance (skipping the synthetic `updated_at`). Booleans / objects are JSON-stringified for the `text` `extracted_value` column.
+- **Client-typed manual fields**: no provenance row written. Absence of a row implies manual / unknown — matches the brief intent and keeps the UI marker logic simple (no row → no marker).
+
+`upload-external` (KYC magic-link flow) intentionally not wired — that route only stores the file; AI verification is triggered separately downstream and already covered by the verify-with-context entry point.
+
+Acceptance: uploading a passport that the AI extracts `passport_number` + `nationality` from → two rows in `field_extractions` with `source='ai_extraction'` and `source_document_id` set. Admin then patches `nationality` → new `admin_override` row inserted, prior AI row's `superseded_at` set.
+
+---
+
 ### 2026-05-06 — B-070 Batch 1 — field_extractions table for KYC field provenance (Claude Code)
 
 Foundation for the FSC-defensibility ask: every KYC field can now be tagged with where its value came from (AI extraction from a specific doc, manual typing, admin override). Lets the admin justify "passport_number = X12345 because it came from this passport scan, not because the client typed it" when defending a substance assessment.

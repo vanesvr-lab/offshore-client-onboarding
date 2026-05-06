@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { verifyDocument, type VerificationContext } from "@/lib/ai/verifyDocument";
+import { recordAiExtractionProvenance } from "@/lib/ai/recordProvenance";
 import type { AiExtractionField, VerificationRules } from "@/types";
 
 /**
@@ -183,6 +184,18 @@ export async function POST(
         verified_at: new Date().toISOString(),
       })
       .eq("id", documentId);
+
+    // B-070 — record per-field provenance for the admin marker UI.
+    if (doc.client_profile_id) {
+      await recordAiExtractionProvenance({
+        supabase,
+        tenantId,
+        clientProfileId: doc.client_profile_id,
+        sourceDocumentId: documentId,
+        extractedFields: result.extracted_fields ?? null,
+        aiExtractionFields: extractionFields,
+      });
+    }
 
     return NextResponse.json({ ok: true, verificationStatus, result });
   } catch (err) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { recordFieldProvenance } from "@/lib/ai/recordProvenance";
 
 export async function PATCH(
   request: Request,
@@ -61,6 +62,28 @@ export async function PATCH(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // B-070 — record admin_override provenance for every patched field. Only
+  // tracks fields the admin actually edited (those present in `body`); skips
+  // the synthetic `updated_at` and excluded keys. `recordFieldProvenance`
+  // handles supersede + insert and is best-effort (won't fail the PATCH).
+  for (const [fieldKey, rawValue] of Object.entries(updates)) {
+    if (fieldKey === "updated_at") continue;
+    const value =
+      rawValue === null || rawValue === undefined
+        ? null
+        : typeof rawValue === "string"
+        ? rawValue
+        : JSON.stringify(rawValue);
+    await recordFieldProvenance({
+      supabase,
+      tenantId,
+      clientProfileId: params.id,
+      fieldKey,
+      value,
+      source: "admin_override",
+    });
   }
 
   return NextResponse.json({ success: true });

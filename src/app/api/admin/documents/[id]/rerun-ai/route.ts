@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyDocument } from "@/lib/ai/verifyDocument";
+import { recordAiExtractionProvenance } from "@/lib/ai/recordProvenance";
 import type { AiExtractionField, VerificationRules } from "@/types";
 
 /**
@@ -32,7 +33,7 @@ export async function POST(
   const { data: doc, error: docError } = await supabase
     .from("documents")
     .select(
-      "id, file_path, mime_type, file_name, document_type_id, document_types(name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields)"
+      "id, file_path, mime_type, file_name, document_type_id, client_profile_id, tenant_id, document_types(name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields)"
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -124,6 +125,19 @@ export async function POST(
       .single();
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+    // B-070 — record per-field provenance for the admin marker UI.
+    const docMeta = doc as unknown as { client_profile_id: string | null; tenant_id: string };
+    if (docMeta.client_profile_id) {
+      await recordAiExtractionProvenance({
+        supabase,
+        tenantId: docMeta.tenant_id,
+        clientProfileId: docMeta.client_profile_id,
+        sourceDocumentId: params.id,
+        extractedFields: result.extracted_fields ?? null,
+        aiExtractionFields: extractionFields,
+      });
+    }
 
     // Audit log — best-effort
     await supabase.from("audit_log").insert({

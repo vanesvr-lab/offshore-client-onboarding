@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { verifyDocument } from "@/lib/ai/verifyDocument";
+import { recordAiExtractionProvenance } from "@/lib/ai/recordProvenance";
 import type { AiExtractionField, VerificationRules } from "@/types";
 
 const ALLOWED_MIME_TYPES = [
@@ -169,6 +170,18 @@ export async function POST(
           verified_at: new Date().toISOString(),
         })
         .eq("id", docId);
+
+      // B-070 — record per-field provenance for the admin marker UI.
+      if (clientProfileId) {
+        await recordAiExtractionProvenance({
+          supabase,
+          tenantId,
+          clientProfileId,
+          sourceDocumentId: docId,
+          extractedFields: result.extracted_fields ?? null,
+          aiExtractionFields: extractionFields,
+        });
+      }
     } catch {
       // Verification failure is non-fatal; leave row marked as pending so UI retries manually.
     }
