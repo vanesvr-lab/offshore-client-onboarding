@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-068 Batch 3 — Badge + button + section header components (Claude Code)
+
+- `src/components/admin/SectionReviewBadge.tsx` — small pill: green/amber/red/gray for `approved | flagged | rejected | null`. Lucide icons (`CheckCircle2 | Flag | XCircle | Circle`). "Not reviewed" when null.
+- `src/components/admin/SectionReviewButton.tsx` — outline `Button` ("Review" + ClipboardCheck icon). Owns its own open-state and renders `SectionReviewPanel`.
+- `src/components/admin/SectionHeader.tsx` — drop-in `CardHeader` replacement: `[CardTitle] [Badge] · · · [rightSlot] [ReviewButton]`. Wraps below `sm:` so the badge stacks under the title on mobile (375px).
+- `src/components/admin/SectionReviewPanel.tsx` — minimal Sheet scaffold (right-side, `sm:max-w-md`) so the button compiles. Real form (status radios + notes textarea + POST) lands in Batch 4.
+- Build passes.
+
+---
+
 ### 2026-05-06 — B-068 Batch 2 — Section reviews API routes (Claude Code)
 
 - New `src/app/api/admin/applications/[id]/section-reviews/route.ts`
