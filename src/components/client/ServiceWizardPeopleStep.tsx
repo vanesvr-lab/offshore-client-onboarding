@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PerPersonReviewWizard } from "@/components/client/PerPersonReviewWizard";
 import { ReviewStep } from "@/components/kyc/steps/ReviewStep";
+import { KycIntroTooltip } from "@/components/shared/KycIntroTooltip";
 import { computePersonCompletion } from "@/lib/utils/personCompletion";
 import type {
   DocumentType,
@@ -1151,8 +1152,11 @@ export function ServiceWizardPeopleStep({
     <div className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-brand-navy mb-1">People & KYC</h2>
-        <p className="text-sm text-gray-500">
-          Add directors, shareholders, and UBOs. Click &quot;Review KYC&quot; to complete each person&apos;s compliance information.
+        <p className="text-sm text-gray-500 inline-flex items-start gap-1.5 flex-wrap">
+          <span>
+            Add directors, shareholders, and UBOs. Click &quot;Review KYC&quot; to complete each person&apos;s compliance information.
+          </span>
+          <KycIntroTooltip />
         </p>
       </div>
 

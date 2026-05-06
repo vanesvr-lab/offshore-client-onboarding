@@ -328,11 +328,44 @@ export function KycFillClient({ token }: { token: string }) {
     (client?.due_diligence_level ?? "cdd") as DueDiligenceLevel
   );
 
-  // Get required document types from role requirements
+  // Get required document types from role requirements.
+  // B-067 §4.2 — dedupe across roles: when the same document is required by
+  // two or three of the person's roles (e.g. Director + Shareholder + UBO all
+  // require "Declaration of Source of Funds"), render it once with all role
+  // badges aggregated.
   const profileRoles = kycRecord?.profile_roles ?? [];
-  const requiredDocTypes = roleDocReqs.filter((rdr) =>
+  const ROLE_LABEL_MAP: Record<string, string> = {
+    primary_client: "Primary Client",
+    director: "Director",
+    shareholder: "Shareholder",
+    ubo: "UBO",
+  };
+  const reqsForPerson = roleDocReqs.filter((rdr) =>
     profileRoles.some((pr) => pr.role === rdr.role)
   );
+  type DedupedDocReq = {
+    id: string;
+    document_type_id: string;
+    document_types: { id: string; name: string } | null;
+    roles: string[];
+  };
+  const dedupedDocsMap = new Map<string, DedupedDocReq>();
+  for (const rdr of reqsForPerson) {
+    const docType = rdr.document_types as { id: string; name: string } | null;
+    if (!docType) continue;
+    const existing = dedupedDocsMap.get(docType.id);
+    if (existing) {
+      if (!existing.roles.includes(rdr.role)) existing.roles.push(rdr.role);
+    } else {
+      dedupedDocsMap.set(docType.id, {
+        id: rdr.id,
+        document_type_id: docType.id,
+        document_types: docType,
+        roles: [rdr.role],
+      });
+    }
+  }
+  const requiredDocTypes = Array.from(dedupedDocsMap.values());
 
   return (
     // B-052 §4.2 — extra bottom padding so the sticky mobile submit
@@ -446,9 +479,7 @@ export function KycFillClient({ token }: { token: string }) {
             </CardHeader>
             <CardContent className="space-y-4">
               {requiredDocTypes.map((rdr) => {
-                const docType = rdr.document_types as
-                  | { id: string; name: string }
-                  | null;
+                const docType = rdr.document_types;
                 if (!docType) return null;
                 const existing = documents.find(
                   (d) => d.document_type_id === docType.id
@@ -456,13 +487,23 @@ export function KycFillClient({ token }: { token: string }) {
 
                 return (
                   <div
-                    key={rdr.id}
-                    className="flex items-center justify-between border rounded-lg p-3"
+                    key={rdr.document_type_id}
+                    className="flex items-center justify-between border rounded-lg p-3 gap-3"
                   >
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {docType.name}
-                      </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900">
+                          {docType.name}
+                        </p>
+                        {rdr.roles.map((r) => (
+                          <span
+                            key={r}
+                            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200"
+                          >
+                            {ROLE_LABEL_MAP[r] ?? r}
+                          </span>
+                        ))}
+                      </div>
                       {existing ? (
                         <p className="text-xs text-green-600 flex items-center gap-1 mt-0.5">
                           <CheckCircle className="h-3 w-3" />
@@ -474,7 +515,7 @@ export function KycFillClient({ token }: { token: string }) {
                         </p>
                       )}
                     </div>
-                    <label className="cursor-pointer">
+                    <label className="cursor-pointer shrink-0">
                       <input
                         type="file"
                         className="hidden"

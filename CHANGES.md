@@ -23,6 +23,11 @@ End-user QA pass — 7 batches:
 - `src/components/shared/Sidebar.tsx` — client primary nav label "Dashboard" → "Home" (route `/dashboard` unchanged; admin sidebar untouched)
 - `src/components/client/DashboardClient.tsx` — page heading is now "Home", new subtle brand-navy/blue welcome banner (`Welcome <FirstName>. Thank you for choosing GWMS.`), per-card nudge line `Your application for <Service> is X% complete — Review →` shown only when `overallPct < 100`. Removed the old amber "all complete" / "missing info" greeting branches in favour of one consistent layout.
 
+**Batch 4 — KYC tooltip + duplicate document dedupe + Review/Documents parity:**
+- `src/components/shared/KycIntroTooltip.tsx` — new ELI10 popover (click + hover, Esc closes, focus-visible outline). Used next to the People & KYC intro copy in `ServiceWizardPeopleStep.tsx`. Body matches the brief's verbatim copy: why we ask, who to add (with the 25% UBO definition), what each person needs.
+- `src/components/kyc/steps/ReviewStep.tsx` — `docStatuses` now mirrors the per-person doc-list source of truth: filtered by DD level (basic ⊆ sdd ⊆ cdd ⊆ edd), restricted to `scope === "person"` doc types, deduped on `document_type_id`. The "Before submitting, please upload:" missing list reads from the same deduped source. This fixes the parity gap between the wizard's Review step and the Documents card on the same person.
+- `src/app/kyc/fill/[token]/KycFillClient.tsx` — magic-link KYC fill view now dedupes `roleDocReqs` by `document_type_id` before rendering, aggregating role badges (`Director`, `Shareholder`, `UBO`, `Primary Client`) onto a single line per doc. A person holding three roles that each require "Declaration of Source of Funds" now sees one row with three badges instead of three rows.
+
 **Batch 3 — KYC card compaction + button styling + heading rename:**
 - `src/components/client/ServiceWizardPeopleStep.tsx` (`PersonCard` + `ResendInviteButton`):
   - Compact single-row header — left 3/4 has avatar + name + role chips (email truncated below); right 1/4 shows the KYC % above a thin progress bar. On `< sm` the right region stacks under the left so the percentage stays visible.

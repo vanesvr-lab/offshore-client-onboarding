@@ -90,17 +90,41 @@ export function ReviewStep({
   const isCdd = dueDiligenceLevel === "cdd" || dueDiligenceLevel === "edd";
   const isEdd = dueDiligenceLevel === "edd";
 
-  // Build doc status list from DD requirements (avoids hardcoded document names)
-  const documentReqs = requirements.filter((r) => r.requirement_type === "document" && r.document_type_id);
-  const docStatuses = documentReqs.map((req) => {
-    const uploaded = documents.some((d) => d.document_type_id === req.document_type_id && d.is_active !== false);
+  // B-067 §4.3 — match the per-person doc-list source of truth exactly:
+  // filter by DD level (basic ⊆ sdd ⊆ cdd ⊆ edd), keep only person-scope
+  // doc types, and dedupe by document_type_id so the same doc never
+  // appears twice when multiple roles require it.
+  const DD_LEVEL_INCLUDES: Record<DueDiligenceLevel, ("basic" | "sdd" | "cdd" | "edd")[]> = {
+    sdd: ["basic", "sdd"],
+    cdd: ["basic", "sdd", "cdd"],
+    edd: ["basic", "sdd", "cdd", "edd"],
+  };
+  const includedLevels = DD_LEVEL_INCLUDES[dueDiligenceLevel] ?? ["basic", "sdd", "cdd"];
+
+  const documentReqsFiltered = requirements.filter(
+    (r) =>
+      r.requirement_type === "document" &&
+      r.document_type_id != null &&
+      includedLevels.includes(r.level as "basic" | "sdd" | "cdd" | "edd")
+  );
+
+  const seenDocTypeIds = new Set<string>();
+  const docStatuses: { name: string; uploaded: boolean; category: string }[] = [];
+  for (const req of documentReqsFiltered) {
     const docType = documentTypes.find((dt) => dt.id === req.document_type_id);
-    return {
-      name: req.label,
+    // Skip non-person-scope docs (those live on the outer Documents step).
+    if (docType && (docType.scope ?? "person") !== "person") continue;
+    if (req.document_type_id && seenDocTypeIds.has(req.document_type_id)) continue;
+    if (req.document_type_id) seenDocTypeIds.add(req.document_type_id);
+    const uploaded = documents.some(
+      (d) => d.document_type_id === req.document_type_id && d.is_active !== false
+    );
+    docStatuses.push({
+      name: docType?.name ?? req.label,
       uploaded,
       category: docType?.category ?? "additional",
-    };
-  });
+    });
+  }
 
   // If no requirements available, fall back to level-based static list
   const fallbackDocNames: string[] = [];
