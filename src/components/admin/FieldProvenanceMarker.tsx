@@ -36,6 +36,12 @@ interface Props {
   /** Human-readable field label, e.g. "Passport number". Surfaces in the
    * preview-dialog banner. */
   fieldLabel: string;
+  /** Defensive guard: admin context only. Defaults to `true` because
+   * the component lives in `/components/admin/` and the only intended
+   * call site is the admin services detail page. If the client ever
+   * imports it, the call site can pass `adminContext={false}` (or
+   * simply omit the marker). */
+  adminContext?: boolean;
 }
 
 function pickLatest(rows: FieldExtraction[]): FieldExtraction | null {
@@ -57,7 +63,12 @@ function pickPriorOverridden(rows: FieldExtraction[], latest: FieldExtraction): 
   return candidates[0] ?? null;
 }
 
-export function FieldProvenanceMarker({ extractions, sourceDocs, fieldLabel }: Props) {
+export function FieldProvenanceMarker({
+  extractions,
+  sourceDocs,
+  fieldLabel,
+  adminContext = true,
+}: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const latest = useMemo(() => pickLatest(extractions), [extractions]);
@@ -66,6 +77,8 @@ export function FieldProvenanceMarker({ extractions, sourceDocs, fieldLabel }: P
     return sourceDocs.find((d) => d.id === latest.source_document_id) ?? null;
   }, [latest, sourceDocs]);
 
+  // B-070 Batch 4 — admin-only feature: skip rendering when not in admin context.
+  if (!adminContext) return null;
   if (!latest) return null;
   if (latest.source === "manual") return null;
 

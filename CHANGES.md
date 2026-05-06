@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-070 Batch 4 — Polish: guard provenance markers to admin context (Claude Code)
+
+- **`FieldProvenanceMarker.tsx`** — added optional `adminContext` prop, defaulting to `true`. When `false`, the component returns `null` before any tooltip / dialog wiring runs. The marker already lives in `/components/admin/` and is only imported by `ServiceDetailClient.tsx`, but this is a runtime belt-and-suspenders guard the brief asked for: if a future client component ever imports the marker, passing `adminContext={false}` (or omitting it from the client surface) leaves no markers visible. No call-site changes needed since the only existing usage is in admin code.
+
+Backfill: nothing to do — pre-existing data has no `field_extractions` rows so the marker renders nothing for those fields (treated as manual / unknown), per the brief's intent.
+
+Subsection-level "all-fields-from-same-doc" indicator: deferred per the brief's "skip if it adds complexity" — current per-field markers are subtle enough.
+
+End of B-070 brief: 4 batches complete, migration paired Local + Remote, AI write paths record provenance, admin override writes provenance, admin KYC view shows markers + inline source preview, marker guarded to admin context.
+
+---
+
 ### 2026-05-06 — B-070 Batch 3 — Field provenance markers + inline source preview (Claude Code)
 
 Admin KYC views on `/admin/services/[id]` now show a small marker next to every labeled field that has provenance, with click-to-preview the source doc.
