@@ -15,6 +15,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-072 Batch 2 — service_substance table for FSC §3.2/3.3/3.4 (Claude Code)
+
+- New table `service_substance` (migration `20260506172342_service_substance.sql`, pushed):
+  - 6 booleans for §3.2 mandatory criteria.
+  - 6 (boolean + evidence) pairs for §3.3 at-least-one criteria — evidence columns hold address, employee_count, arbitration text, MU asset value/description, listing reference, yearly USD + justification.
+  - §3.4 fallback: `related_corp_satisfies_3_3` + `related_corp_name`.
+  - Admin assessment: `admin_assessment` (pass/review/fail with check constraint) + notes + assessed_by + assessed_at.
+  - `generated_pdf_id` reserved for the FSC FS-41 PDF generator (no FK yet — `generated_documents` table doesn't exist).
+- `service_id` is `UNIQUE` so each service has at most one substance record (upsert from API). FK to `services.id` with ON DELETE CASCADE.
+- RLS enabled with `is_admin()` admin-only policy; no client policy. Per Vanessa's brainstorm: substance is admin-only.
+- `src/types/index.ts` — added `SubstanceAssessment` and `ServiceSubstance` interfaces.
+- `npm run db:status` shows 13 paired migrations. `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-072 Batch 1 — service_actions registry + service_template_actions binding (Claude Code)
 
 - New tables (migration `20260506172151_service_actions_tables.sql`, pushed):

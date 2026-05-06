@@ -789,3 +789,45 @@ export interface ServiceAction {
   created_at: string;
   updated_at: string;
 }
+
+// B-072 — FSC §3.2/§3.3/§3.4 substance criteria + admin assessment per service.
+export type SubstanceAssessment = "pass" | "review" | "fail";
+
+export interface ServiceSubstance {
+  id: string;
+  tenant_id: string;
+  service_id: string;
+  // §3.2 mandatory criteria
+  has_two_mu_resident_directors: boolean | null;
+  principal_bank_account_in_mu: boolean | null;
+  accounting_records_in_mu: boolean | null;
+  audited_in_mu: boolean | null;
+  board_meetings_with_mu_quorum: boolean | null;
+  cis_administered_from_mu: boolean | null;
+  // §3.3 at-least-one criteria
+  has_office_premises_in_mu: boolean | null;
+  office_address: string | null;
+  has_full_time_mu_employee: boolean | null;
+  employee_count: number | null;
+  arbitration_clause_in_mu: boolean | null;
+  arbitration_clause_text: string | null;
+  holds_mu_assets_above_100k_usd: boolean | null;
+  mu_assets_value_usd: number | null;
+  mu_assets_description: string | null;
+  shares_listed_on_mu_exchange: boolean | null;
+  exchange_listing_reference: string | null;
+  has_reasonable_mu_expenditure: boolean | null;
+  yearly_mu_expenditure_usd: number | null;
+  expenditure_justification: string | null;
+  // §3.4 fallback
+  related_corp_satisfies_3_3: boolean | null;
+  related_corp_name: string | null;
+  // Admin assessment
+  admin_assessment: SubstanceAssessment | null;
+  admin_assessment_notes: string | null;
+  admin_assessed_by: string | null;
+  admin_assessed_at: string | null;
+  generated_pdf_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
