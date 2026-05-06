@@ -38,8 +38,9 @@ import {
   calcDocumentsCompletion,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
-import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry } from "@/types";
+import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
+import { AdminApplicationSectionsProvider } from "@/components/admin/AdminApplicationSections";
 
 // ─── Document category helpers ────────────────────────────────────────────────
 
@@ -2001,6 +2002,7 @@ interface Props {
   auditEntries: ServiceAuditEntry[];
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
+  sectionReviews: ApplicationSectionReview[];
 }
 
 const STATUS_OPTIONS = [
@@ -2026,6 +2028,7 @@ export function ServiceDetailClient({
   auditEntries,
   requirements,
   documentTypes,
+  sectionReviews,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -2256,6 +2259,10 @@ export function ServiceDetailClient({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <AdminApplicationSectionsProvider
+      applicationId={service.id}
+      initialReviews={sectionReviews}
+    >
     <div>
       {/* Back */}
       <Link
@@ -2800,5 +2807,6 @@ export function ServiceDetailClient({
       {/* Bottom padding for fixed bar */}
       {pendingChanges && <div className="h-16" />}
     </div>
+    </AdminApplicationSectionsProvider>
   );
 }

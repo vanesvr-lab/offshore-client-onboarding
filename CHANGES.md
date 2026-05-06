@@ -15,6 +15,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-073 Batch 1 — Services detail page wraps in section-reviews provider (Claude Code)
+
+Port of B-068/B-069 admin section reviews from the legacy `/admin/applications/[id]` page to the modern `/admin/services/[id]` page. Batch 1 = data + provider wiring.
+
+- `src/app/(admin)/admin/services/[id]/page.tsx` — added a parallel `application_section_reviews` query keyed on `service.id` (the column is misleadingly named `application_id` — see tech-debt #26 in Batch 4). Result passed down to `ServiceDetailClient` as `sectionReviews`.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — added `sectionReviews: ApplicationSectionReview[]` prop; wrapped the entire return JSX in `<AdminApplicationSectionsProvider applicationId={service.id} initialReviews={sectionReviews}>` so any descendant can call `useSectionReview()` / `useAggregateStatus()`.
+- **Migration `20260506155512_drop_section_reviews_application_fk.sql` (pushed)** — drops the FK `application_section_reviews_application_id_fkey`. The brief said "no migrations" but the FK to `applications(id)` would block service-id inserts. UUID v4 collision risk between the two ID spaces is statistically zero. ON DELETE CASCADE behavior is lost for the legacy applications path; safe because section-review rows are advisory-only and the legacy path is heading for retirement. Migration verified via `npm run db:status` — Local + Remote paired.
+- `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-069 Batch 5 — Visual consistency pass + B-069 done (Claude Code)
 
 - Admin app detail grid is now responsive: `grid-cols-1 gap-6 lg:grid-cols-3` (was `grid-cols-3`). Left column is `lg:col-span-2`. On viewports below `lg:`, the right-column sidebar (Stage Management, Communication, Account Manager, Audit Trail) stacks below the main content instead of being squeezed into a 1/3 column.

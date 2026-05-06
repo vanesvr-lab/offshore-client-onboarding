@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { ServiceDetailClient } from "./ServiceDetailClient";
-import type { ServiceRecord, ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType } from "@/types";
+import type { ServiceRecord, ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, ApplicationSectionReview } from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export const dynamic = "force-dynamic";
@@ -91,6 +91,7 @@ export default async function ServiceDetailPage({
     auditRes,
     requirementsRes,
     documentTypesRes,
+    sectionReviewsRes,
   ] = await Promise.all([
     supabase
       .from("services")
@@ -173,6 +174,14 @@ export default async function ServiceDetailPage({
       .from("document_types")
       .select("*")
       .eq("tenant_id", tenantId),
+
+    // B-073 — section reviews keyed by service.id (column is misleadingly
+    // named application_id; see tech-debt #26).
+    supabase
+      .from("application_section_reviews")
+      .select("*, profiles:reviewed_by(full_name)")
+      .eq("application_id", id)
+      .order("reviewed_at", { ascending: false }),
   ]);
 
   if (!serviceRes.data) notFound();
@@ -200,6 +209,7 @@ export default async function ServiceDetailPage({
         auditEntries={(auditRes.data ?? []) as unknown as ServiceAuditEntry[]}
         requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
         documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
+        sectionReviews={(sectionReviewsRes.data ?? []) as unknown as ApplicationSectionReview[]}
       />
     </div>
   );
