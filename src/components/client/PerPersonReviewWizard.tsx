@@ -714,7 +714,19 @@ export function PerPersonReviewWizard({
           : documentTypes;
     }
 
-    const personOnly = eligible.filter((dt) => (dt.scope ?? "person") === "person");
+    // B-071 Batch 5 — filter by applies_to against the profile's record_type.
+    // Fixes the "corporate-entity profile sees Driver's License" bug.
+    const profileType: "individual" | "organisation" = isIndividual
+      ? "individual"
+      : "organisation";
+
+    const personOnly = eligible.filter((dt) => {
+      if ((dt.scope ?? "person") !== "person") return false;
+      // Default to "both" for legacy doc types without an explicit applies_to.
+      const appliesTo = dt.applies_to ?? "both";
+      if (appliesTo === "both") return true;
+      return appliesTo === profileType;
+    });
     const out: Record<string, DocumentType[]> = {};
     for (const dt of personOnly) {
       const cat = (dt.category || "additional") as string;
@@ -722,7 +734,7 @@ export function PerPersonReviewWizard({
       out[cat].push(dt);
     }
     return out;
-  }, [documentTypes, ddReqDocTypeIds, templateDocs, roleRequirements, personRole]);
+  }, [documentTypes, ddReqDocTypeIds, templateDocs, roleRequirements, personRole, isIndividual]);
 
   const personCategories = useMemo<string[]>(() => {
     const present = Object.keys(docTypesByCategory).filter((c) => docTypesByCategory[c].length > 0);

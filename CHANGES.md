@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-071 Batch 5 — Filter applies_to vs profile type in KYC wizard (Claude Code)
+
+Fixes the long-standing "corporate-entity profile sees Driver's License" bug. `document_types.applies_to` was being set on every doc type but the wizard never enforced it — every person, individual or organisation, saw the union of individual + organisation + both docs.
+
+- **`PerPersonReviewWizard.tsx`** — `docTypesByCategory.personOnly` filter widened: a doc type is included only if (`scope === "person"`) AND (`applies_to === "both"` OR `applies_to === profileType`). `profileType` is derived from the existing `isIndividual` boolean on the reviewing person's `client_profiles.record_type` (no new column needed). Legacy doc types without an explicit `applies_to` default to `"both"` so existing data behaves unchanged.
+- `useMemo` deps include `isIndividual` so toggling a profile's record_type immediately re-buckets the doc list.
+
+Acceptance: an individual profile no longer sees organisation-only docs (e.g. Certificate of Incorporation); an organisation profile no longer sees individual-only docs (e.g. Driver's License).
+
+End of B-071 brief: 4 doc-model gaps closed (scope UI, service-template binding, role wiring, applies_to filter). Migration paired Local + Remote.
+
+---
+
 ### 2026-05-06 — B-071 Batch 4 — Wire role_document_requirements at runtime (Claude Code)
 
 `role_document_requirements` is finally honored by the client KYC wizard. Configuring "directors need a CV" in `/admin/settings/role-requirements` now actually surfaces that doc type in every director's per-person doc list (until this batch the table was admin-configurable but ignored at runtime — tech-debt item the brief surfaced).
