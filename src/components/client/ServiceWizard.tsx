@@ -11,7 +11,11 @@ import { SubmitValidationDialog } from "./SubmitValidationDialog";
 import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { useAutosave } from "@/lib/hooks/useAutosave";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
-import type { DueDiligenceRequirement, DocumentType } from "@/types";
+import type {
+  DueDiligenceRequirement,
+  DocumentType,
+  ServiceTemplateDocument,
+} from "@/types";
 import type { ClientServiceRecord, ClientServiceDoc, ServicePerson } from "@/app/(client)/services/[id]/page";
 import type { ValidationResult } from "@/app/api/services/[id]/validate/route";
 
@@ -22,6 +26,8 @@ interface Props {
   documents: ClientServiceDoc[];
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
+  /** B-071 — per-template doc binding. Empty = fall back to DD-driven list. */
+  templateDocs: ServiceTemplateDocument[];
   startStep?: number;
   onClose: (updatedDetails?: Record<string, unknown>, updatedPersons?: ServicePerson[], updatedDocs?: ClientServiceDoc[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -69,6 +75,7 @@ export function ServiceWizard({
   documents: initialDocuments,
   requirements,
   documentTypes,
+  templateDocs,
   startStep = 0,
   onClose,
   onDirtyChange,
@@ -127,15 +134,39 @@ export function ServiceWizard({
 
   // B-049 §1.3 — Documents step is application-scope docs only. If the
   // template has none, skip the step entirely so the wizard collapses to 4.
-  const applicationScopeRequirements = requirements.filter(
-    (r) =>
-      r.requirement_type === "document" &&
-      r.document_type_id &&
-      // Default scope is 'person'. We treat 'application' (and only that) as
-      // belonging to the outer Documents step.
-      r.document_types?.scope === "application"
-  );
-  const hasApplicationDocs = applicationScopeRequirements.length > 0;
+  //
+  // B-071 — Prefer the template's bound docs (`service_template_documents`)
+  // when any rows exist. Empty binding falls back to the DD-driven list so
+  // existing service templates that haven't been configured yet keep their
+  // current behavior.
+  const applicationScopeDocs: { id: string; name: string; category: string }[] =
+    templateDocs.length > 0
+      ? templateDocs
+          .filter(
+            (td) =>
+              td.document_types?.scope === "application" &&
+              !td.applies_to_role
+          )
+          .map((td) => ({
+            id: td.document_type_id,
+            name: td.document_types?.name ?? "Document",
+            category: td.document_types?.category ?? "",
+          }))
+      : requirements
+          .filter(
+            (r) =>
+              r.requirement_type === "document" &&
+              r.document_type_id &&
+              // Default scope is 'person'. We treat 'application' (and only that) as
+              // belonging to the outer Documents step.
+              r.document_types?.scope === "application"
+          )
+          .map((r) => ({
+            id: r.document_type_id!,
+            name: r.label,
+            category: r.document_types?.category ?? "",
+          }));
+  const hasApplicationDocs = applicationScopeDocs.length > 0;
   const totalSteps = hasApplicationDocs ? 5 : 4;
   const wizardStepLabels = hasApplicationDocs
     ? ["Company Setup", "Financial", "Banking", "People & KYC", "Documents"]
@@ -357,6 +388,7 @@ export function ServiceWizard({
             onPersonsChange={setPersons}
             requirements={requirements}
             documentTypes={documentTypes}
+            templateDocs={templateDocs}
             onNavVisibilityChange={setHideWizardNav}
           />
         )}
@@ -366,11 +398,7 @@ export function ServiceWizard({
             documents={documents}
             onDocumentsChange={setDocuments}
             submitBlockers={submitBlockers}
-            requiredDocTypes={applicationScopeRequirements.map((r) => ({
-              id: r.document_type_id!,
-              name: r.label,
-              category: r.document_types?.category ?? "",
-            }))}
+            requiredDocTypes={applicationScopeDocs}
           />
         )}
       </div>

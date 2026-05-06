@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-071 Batch 3 — Wire service-template binding into client wizard (Claude Code)
+
+Service-template ↔ document-type binding now drives the client wizard at runtime. Templates with curated doc lists (e.g. GBC's 18 docs) override the global DD-driven list; templates without bindings fall back to the existing logic.
+
+- **`/services/[id]/page.tsx`** — added `service_template_id` to the services select; new `templateDocsRes` fetch on `service_template_documents` joined with `document_types(*)`, scoped by `service_template_id` + `tenant_id`, ordered by `sort_order`. Result passed as `templateDocs` to `ClientServiceDetailClient`. DD requirements select now hydrates the full `document_types(*)` (was a partial projection) so the joined record satisfies the wider `RoleDocumentRequirement.document_types: DocumentType` type.
+- **`ClientServiceDetailClient`** — accepts and passes `templateDocs` to `ServiceWizard`.
+- **`ServiceWizard.tsx`** — new `applicationScopeDocs` derivation: when `templateDocs.length > 0`, builds the Step 5 doc list from rows where `document_types.scope === "application" && !applies_to_role`; else falls back to the existing `requirements`-based filter. The collapsed `requiredDocTypes` shape is `{id, name, category}[]` regardless of source. Now passes `templateDocs` to `ServiceWizardPeopleStep`.
+- **`ServiceWizardPeopleStep.tsx`** — accepts `templateDocs` and forwards to `PerPersonReviewWizard`.
+- **`PerPersonReviewWizard.tsx`** — `docTypesByCategory` now has a `useTemplateDocs` short-circuit: when rows exist, it builds `eligible` from `templateDocs.document_types` whose `scope==='person'` AND (`applies_to_role==null` OR `applies_to_role===reviewingPerson.role`); else falls back to the existing DD-driven logic. Empty binding preserves current behavior across the wizard.
+
+Backwards-compatible: a template with no `service_template_documents` rows behaves exactly as before. New rows take effect immediately.
+
+Batch 4 will fold `role_document_requirements` into the non-templateDocs branch (and bring the global role list into the wizard for the first time).
+
+---
+
 ### 2026-05-06 — B-071 Batch 2 — Scope field in admin Document Types form (Claude Code)
 
 - **`DocumentTypesManager.tsx`** — `EMPTY_FORM` now includes `scope` (default `"person"`); new `SCOPE_OPTIONS` select rendered between "Applies to" and "Description" with a one-line caption explaining Person KYC vs Service-level. Each row badge now shows a small `KYC` (amber) / `Service` (blue) chip next to the existing applies-to chip. Edit-mode initial form maps `dt.scope ?? "person"`.

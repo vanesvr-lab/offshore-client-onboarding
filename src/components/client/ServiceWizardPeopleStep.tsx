@@ -20,6 +20,7 @@ import type {
   DueDiligenceLevel,
   DueDiligenceRequirement,
   KycRecord,
+  ServiceTemplateDocument,
   VerificationResult,
   VerificationStatus,
 } from "@/types";
@@ -992,6 +993,8 @@ interface Props {
   onPersonsChange: (persons: ServicePerson[]) => void;
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
+  /** B-071 — per-template doc binding. Empty = fall back to DD-driven list. */
+  templateDocs: ServiceTemplateDocument[];
   onNavVisibilityChange: (hide: boolean) => void;
 }
 
@@ -1002,6 +1005,7 @@ export function ServiceWizardPeopleStep({
   onPersonsChange,
   requirements,
   documentTypes,
+  templateDocs,
   onNavVisibilityChange,
 }: Props) {
   const router = useRouter();
@@ -1177,6 +1181,7 @@ export function ServiceWizardPeopleStep({
         documents={documents}
         documentTypes={documentTypes}
         requirements={requirements}
+        templateDocs={templateDocs}
         dueDiligenceLevel={ddLevel}
         onComplete={handleKycComplete}
         onExit={handleExitKycReview}

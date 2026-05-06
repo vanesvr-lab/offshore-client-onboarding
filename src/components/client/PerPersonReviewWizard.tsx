@@ -48,6 +48,7 @@ import type {
   DocumentType,
   DueDiligenceLevel,
   DueDiligenceRequirement,
+  ServiceTemplateDocument,
   VerificationStatus,
   VerificationResult,
 } from "@/types";
@@ -519,6 +520,8 @@ interface Props {
   documents: ClientServiceDoc[];
   documentTypes: DocumentType[];
   requirements: DueDiligenceRequirement[];
+  /** B-071 — per-template doc binding. Empty = fall back to DD-driven list. */
+  templateDocs?: ServiceTemplateDocument[];
   dueDiligenceLevel: DueDiligenceLevel;
   /** Called when the user finishes the wizard (last sub-step "Save & Close" / "Save & Finish"). */
   onComplete: () => void;
@@ -557,6 +560,7 @@ export function PerPersonReviewWizard({
   documents: initialDocuments,
   documentTypes,
   requirements,
+  templateDocs = [],
   dueDiligenceLevel,
   onComplete,
   onExit,
@@ -652,10 +656,44 @@ export function PerPersonReviewWizard({
     "additional",
   ] as const;
 
+  // B-071 — Doc selection precedence:
+  //   1. templateDocs has rows for this service template → use ONLY those
+  //      that match this person (applies_to_role === person.role OR
+  //      applies_to_role IS NULL with scope='person'). Template binding is
+  //      the most specific source.
+  //   2. templateDocs empty → DD requirements (legacy behavior).
+  //      [Batch 4 will add role_document_requirements into this branch.]
+  const personRole = reviewingPerson.role as string | null;
+
   const docTypesByCategory = useMemo(() => {
-    const eligible = ddReqDocTypeIds.length > 0
-      ? documentTypes.filter((dt) => ddReqDocTypeIds.includes(dt.id))
-      : documentTypes;
+    const useTemplateDocs = templateDocs.length > 0;
+
+    let eligible: DocumentType[];
+
+    if (useTemplateDocs) {
+      const seen = new Set<string>();
+      eligible = [];
+      for (const td of templateDocs) {
+        const dt = td.document_types;
+        if (!dt) continue;
+        const scope = dt.scope ?? "person";
+        if (scope !== "person") continue;
+        const matchesRole =
+          td.applies_to_role === null || td.applies_to_role === undefined
+            ? true
+            : personRole !== null && td.applies_to_role === personRole;
+        if (!matchesRole) continue;
+        if (seen.has(dt.id)) continue;
+        seen.add(dt.id);
+        eligible.push(dt);
+      }
+    } else {
+      eligible =
+        ddReqDocTypeIds.length > 0
+          ? documentTypes.filter((dt) => ddReqDocTypeIds.includes(dt.id))
+          : documentTypes;
+    }
+
     const personOnly = eligible.filter((dt) => (dt.scope ?? "person") === "person");
     const out: Record<string, DocumentType[]> = {};
     for (const dt of personOnly) {
@@ -664,7 +702,7 @@ export function PerPersonReviewWizard({
       out[cat].push(dt);
     }
     return out;
-  }, [documentTypes, ddReqDocTypeIds]);
+  }, [documentTypes, ddReqDocTypeIds, templateDocs, personRole]);
 
   const personCategories = useMemo<string[]>(() => {
     const present = Object.keys(docTypesByCategory).filter((c) => docTypesByCategory[c].length > 0);

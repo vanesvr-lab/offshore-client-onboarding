@@ -3,7 +3,12 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { ClientServiceDetailClient } from "./ClientServiceDetailClient";
-import type { ServiceSectionOverride, DueDiligenceRequirement, DocumentType } from "@/types";
+import type {
+  ServiceSectionOverride,
+  DueDiligenceRequirement,
+  DocumentType,
+  ServiceTemplateDocument,
+} from "@/types";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
 export const dynamic = "force-dynamic";
@@ -95,7 +100,7 @@ export default async function ClientServiceDetailPage({
     supabase
       .from("services")
       .select(`
-        id, status, service_number, service_details,
+        id, status, service_number, service_details, service_template_id,
         service_templates(id, name, description, service_fields)
       `)
       .eq("id", id)
@@ -126,7 +131,7 @@ export default async function ClientServiceDetailPage({
     // DD requirements for KYC wizards
     supabase
       .from("due_diligence_requirements")
-      .select("*, document_types(id, name, category, scope)")
+      .select("*, document_types(*)")
       .eq("tenant_id", tenantId)
       .order("sort_order"),
 
@@ -138,6 +143,19 @@ export default async function ClientServiceDetailPage({
   ]);
 
   if (!serviceRes.data) notFound();
+
+  // B-071 — service-template doc binding.
+  const serviceTemplateId =
+    (serviceRes.data as unknown as { service_template_id?: string | null }).service_template_id ?? null;
+
+  const templateDocsRes = serviceTemplateId
+    ? await supabase
+        .from("service_template_documents")
+        .select("*, document_types(*)")
+        .eq("service_template_id", serviceTemplateId)
+        .eq("tenant_id", tenantId)
+        .order("sort_order")
+    : { data: [] as ServiceTemplateDocument[] };
 
   // Resolve invite sender names (invite_sent_by = user_id → profiles.full_name)
   const senderIds = (personsRes.data ?? [])
@@ -191,6 +209,7 @@ export default async function ClientServiceDetailPage({
       persons={enrichedPersons as unknown as ServicePerson[]}
       requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
+      templateDocs={(templateDocsRes.data ?? []) as unknown as ServiceTemplateDocument[]}
       myRole={roleCheck.role}
       autoWizardStep={autoWizardStep}
     />

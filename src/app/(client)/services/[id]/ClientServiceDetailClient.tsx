@@ -12,7 +12,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { ServiceWizard, getFieldsForStep } from "@/components/client/ServiceWizard";
 import { getClientStatusLabel } from "@/lib/utils/clientLabels";
-import type { ServiceSectionOverride, DueDiligenceRequirement, DocumentType } from "@/types";
+import type {
+  ServiceSectionOverride,
+  DueDiligenceRequirement,
+  DocumentType,
+  ServiceTemplateDocument,
+} from "@/types";
 import type { ClientServiceRecord, ClientServiceDoc, ServicePerson } from "./page";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 
@@ -23,6 +28,7 @@ interface Props {
   persons: ServicePerson[];
   requirements: DueDiligenceRequirement[];
   documentTypes: DocumentType[];
+  templateDocs: ServiceTemplateDocument[];
   myRole: string;
   autoWizardStep?: number;
 }
@@ -119,6 +125,7 @@ export function ClientServiceDetailClient({
   persons,
   requirements,
   documentTypes,
+  templateDocs,
   myRole,
   autoWizardStep,
 }: Props) {
@@ -252,6 +259,7 @@ export function ClientServiceDetailClient({
           documents={liveDocs}
           requirements={requirements}
           documentTypes={documentTypes}
+          templateDocs={templateDocs}
           startStep={wizardStartStep}
           onDirtyChange={setWizardIsDirty}
           onSaveFailedChange={setWizardSaveFailed}
