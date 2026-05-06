@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-072 Batch 1 — service_actions registry + service_template_actions binding (Claude Code)
+
+- New tables (migration `20260506172151_service_actions_tables.sql`, pushed):
+  - `service_template_actions` — binds an `action_key` (e.g. `substance_review`) to a service template with display label + sort order. Seeded for "Global Business Corporation (GBC)" and "Authorised Company (AC)" with all three actions: `substance_review`, `bank_account_opening`, `fsc_checklist`. Verified 6 rows present.
+  - `service_actions` — per-service action instance (status pending/in_progress/done/blocked/not_applicable, assigned_to, completed_by, completed_at, notes). Service-scoped via `service_id` FK to `services(id)`. Unique `(service_id, action_key)` so a service has at most one row per action.
+  - RLS enabled on both. `is_admin()` policies for FOR ALL on both; `service_template_actions` also has a public read policy so templates are readable by clients (matches the existing `service_templates` pattern).
+- Note: `npx supabase migration new` created an empty stub `20260506172057_service_actions.sql` which got pushed with no SQL before content was written. Replaced with `SELECT 1;` + comment so the migration ledger stays paired; actual DDL in the next-timestamp migration.
+- `src/types/index.ts` — added `ServiceActionStatus`, `ActionKey`, `ServiceTemplateAction`, `ServiceAction` interfaces.
+- `npm run db:status` — Local + Remote paired (12 migrations each). `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-073 Batch 4 — Tech debt + final polish; B-073 done (Claude Code)
 
 - Tech debt #26 added (see Tracker below): the `application_section_reviews.application_id` column now polymorphically holds applications.id OR services.id; the FK was dropped in Batch 1's migration. Plan to rename and reinstate a typed FK once the legacy applications path retires.

@@ -751,3 +751,41 @@ export interface ApplicationSectionReview {
   // joined optionally via reviewed_by → profiles(full_name)
   profiles?: { full_name: string | null } | null;
 }
+
+// B-072 — admin actions registry per service (substance review, bank
+// account opening, FSC checklist). Service-scoped, NOT application-scoped.
+export type ServiceActionStatus =
+  | "pending"
+  | "in_progress"
+  | "done"
+  | "blocked"
+  | "not_applicable";
+
+export type ActionKey =
+  | "substance_review"
+  | "bank_account_opening"
+  | "fsc_checklist";
+
+export interface ServiceTemplateAction {
+  id: string;
+  tenant_id: string;
+  service_template_id: string;
+  action_key: ActionKey;
+  action_label: string;
+  is_required: boolean;
+  sort_order: number;
+}
+
+export interface ServiceAction {
+  id: string;
+  tenant_id: string;
+  service_id: string;
+  action_key: ActionKey;
+  status: ServiceActionStatus;
+  assigned_to: string | null;
+  completed_by: string | null;
+  completed_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
