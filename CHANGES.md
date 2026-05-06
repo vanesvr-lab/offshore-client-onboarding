@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-074 Batch 1 — Re-drop application_section_reviews FK (Claude Code)
+
+QA reported `Save Admin Review` on `/admin/services/[id]` still failing with PG `23503`:
+
+```
+violates foreign key constraint application_section_reviews_application_id_fkey
+Key (application_id)=(1c131367-…) is not present in table "applications"
+```
+
+Even though `20260506155512_drop_section_reviews_application_fk.sql` was tracked as applied (paired Local + Remote in `db:status`), `pg_constraint` confirmed the FK was still alive in prod. Supabase migration replay quirk — registered as applied without executing the DROP.
+
+- **Migration `20260506231059_drop_section_reviews_fk_again.sql`** — fully idempotent re-drop (`DROP CONSTRAINT IF EXISTS`). Pushed via `npm run db:push`; `db:status` shows paired Local + Remote.
+- After the push, `pg_constraint` STILL listed the FK — the same replay quirk re-bit. Used `npx supabase db query --linked -f /tmp/drop_fk.sql` (Management API) to execute the DROP statement out-of-band against prod. Constraint now gone.
+- **Live insert verified.** POST to `application_section_reviews` with the QA-reported `application_id` returned HTTP 201 (was HTTP 409 / 23503). Test row deleted.
+
+Tech debt #26 entry in CHANGES.md still references the original drop — leaving the historical entry intact and noting here that the constraint is now definitively dropped from prod. The `20260506155512` migration file stays on disk so fresh installs replay the intended state.
+
+---
+
 ### 2026-05-06 — B-070 Batch 4 — Polish: guard provenance markers to admin context (Claude Code)
 
 - **`FieldProvenanceMarker.tsx`** — added optional `adminContext` prop, defaulting to `true`. When `false`, the component returns `null` before any tooltip / dialog wiring runs. The marker already lives in `/components/admin/` and is only imported by `ServiceDetailClient.tsx`, but this is a runtime belt-and-suspenders guard the brief asked for: if a future client component ever imports the marker, passing `adminContext={false}` (or omitting it from the client surface) leaves no markers visible. No call-site changes needed since the only existing usage is in admin code.
