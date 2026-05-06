@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-068 Batch 4 — Right-slide review panel form (Claude Code)
+
+- `SectionReviewPanel.tsx` (Batch 3 stub replaced) — full form:
+  - Three large status options (Approved / Flagged / Rejected) with green/amber/red active states
+  - Notes textarea, required when status is `flagged` or `rejected` (asterisk + placeholder switch)
+  - Cancel + Save footer with loader; Save disabled until status set + notes valid
+  - Form state resets on each open
+  - Posts to `/api/admin/applications/[id]/section-reviews`; toasts success/error; calls `onSaved(review)`
+- Right-slide on desktop (`side="right"`, `sm:max-w-md`); full-width on mobile (`w-full`). Sheet's existing `bg-black/10` backdrop keeps the page visible underneath.
+- Build passes.
+
+---
+
 ### 2026-05-06 — B-068 Batch 3 — Badge + button + section header components (Claude Code)
 
 - `src/components/admin/SectionReviewBadge.tsx` — small pill: green/amber/red/gray for `approved | flagged | rejected | null`. Lucide icons (`CheckCircle2 | Flag | XCircle | Circle`). "Not reviewed" when null.
