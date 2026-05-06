@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-072 Batch 3 — Admin actions + substance API routes (services-scoped) (Claude Code)
+
+- `src/app/api/admin/services/[id]/actions/route.ts`:
+  - **GET** — resolves service → template id, fetches required actions from `service_template_actions`, joins with the service's `service_actions` instances. Auto-creates pending instances for any required action without a row (so the UI never sees a "missing" action). Returns `{ data: Array<{ template_action, instance }> }`.
+  - **PATCH** — body `{ action_key, status?, notes?, assigned_to? }`. Updates the matching `service_actions` row, or inserts if absent. When `status` transitions to `done`, sets `completed_by` + `completed_at` from the session; reverts both to null if the status moves away from done so the audit doesn't lie. Validates status against the 5 allowed values.
+- `src/app/api/admin/services/[id]/substance/route.ts`:
+  - **GET** — returns the existing `service_substance` row or `{ data: null }`.
+  - **PUT** — upsert keyed on `(service_id, tenant_id)`. Body matches `ServiceSubstance` minus audit fields; only allowlisted columns from `EDITABLE_FIELDS` are accepted. When `admin_assessment` is set or changed, populates `admin_assessed_by` + `admin_assessed_at` server-side (from the session); clearing assessment to null clears the audit too. Validates `admin_assessment` against `pass | review | fail | null`.
+- Both routes admin-only via `await auth()` + `session.user.role === "admin"`, matching the B-068/B-073 pattern. Tenant-scoped via `getTenantId(session)`.
+- `npm run build` passes.
+
+---
+
 ### 2026-05-06 — B-072 Batch 2 — service_substance table for FSC §3.2/3.3/3.4 (Claude Code)
 
 - New table `service_substance` (migration `20260506172342_service_substance.sql`, pushed):
