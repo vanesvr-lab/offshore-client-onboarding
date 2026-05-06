@@ -74,11 +74,11 @@ export async function POST(
     .maybeSingle();
   const serviceName = (serviceRow?.service_templates as unknown as { name: string } | null)?.name ?? "your service";
 
-  // Get the target person's profile via roleId (include role for label)
+  // Get the target person's profile via roleId (include role for label + rate-limit state)
   const { data: roleRow } = await supabase
     .from("profile_service_roles")
     .select(`
-      id, role, invite_sent_at,
+      id, role, invite_sent_at, invites_sent_count_24h, invites_count_window_start,
       client_profiles(id, full_name, email)
     `)
     .eq("id", params.roleId)
@@ -90,25 +90,35 @@ export async function POST(
     return NextResponse.json({ error: "Person not found on this service" }, { status: 404 });
   }
 
-  // B-050 §7.1 — 24h server-side rate limit on resends. Defends against the
-  // client tooltip alone. Admins are exempt (they may need to override).
-  const lastSentAt = (roleRow as unknown as { invite_sent_at: string | null }).invite_sent_at;
-  if (!isAdmin && lastSentAt) {
-    const lastMs = new Date(lastSentAt).getTime();
-    if (!Number.isNaN(lastMs)) {
-      const cooldownMs = 24 * 60 * 60 * 1000;
-      const elapsed = Date.now() - lastMs;
-      if (elapsed < cooldownMs) {
-        const retryAfter = new Date(lastMs + cooldownMs).toISOString();
-        return NextResponse.json(
-          {
-            error: "Already sent in the last 24 hours. Please wait before resending.",
-            retry_after: retryAfter,
-          },
-          { status: 429 }
-        );
-      }
-    }
+  // B-067 §6.2 — 3 invites per profile/service pair per rolling 24h window.
+  // Replaces the previous "1 per 24h" cooldown. Admins are still exempt.
+  const RATE_LIMIT_MAX = 3;
+  const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const limitState = roleRow as unknown as {
+    invites_sent_count_24h: number | null;
+    invites_count_window_start: string | null;
+  };
+  const windowStartedAt = limitState.invites_count_window_start
+    ? new Date(limitState.invites_count_window_start).getTime()
+    : null;
+  const currentCount = limitState.invites_sent_count_24h ?? 0;
+  const now = Date.now();
+  const windowIsActive =
+    windowStartedAt != null && now - windowStartedAt < RATE_LIMIT_WINDOW_MS;
+
+  if (!isAdmin && windowIsActive && currentCount >= RATE_LIMIT_MAX) {
+    const retryAfterSeconds = Math.max(
+      0,
+      Math.ceil((windowStartedAt! + RATE_LIMIT_WINDOW_MS - now) / 1000)
+    );
+    return NextResponse.json(
+      {
+        error: "rate_limited",
+        retry_after_seconds: retryAfterSeconds,
+        retry_after: new Date(windowStartedAt! + RATE_LIMIT_WINDOW_MS).toISOString(),
+      },
+      { status: 429 }
+    );
   }
 
   const profile = (roleRow.client_profiles as unknown as { id: string; full_name: string | null; email: string | null } | null);
@@ -220,12 +230,30 @@ export async function POST(
     );
   }
 
-  // Update invite_sent_at and invite_sent_by on the role row
+  // Update invite_sent_at, invite_sent_by, and rate-limit window/count on the role row.
+  // B-067 §6.2 — open or roll over the 24h window when needed; otherwise increment.
   const sentAt = new Date().toISOString();
+  const isNewWindow = !windowIsActive;
+  const nextCount = isNewWindow ? 1 : currentCount + 1;
+  const nextWindowStart = isNewWindow
+    ? sentAt
+    : (limitState.invites_count_window_start ?? sentAt);
+
   await supabase
     .from("profile_service_roles")
-    .update({ invite_sent_at: sentAt, invite_sent_by: session.user.id })
+    .update({
+      invite_sent_at: sentAt,
+      invite_sent_by: session.user.id,
+      invites_sent_count_24h: nextCount,
+      invites_count_window_start: nextWindowStart,
+    })
     .eq("id", params.roleId);
 
-  return NextResponse.json({ ok: true, invite_sent_at: sentAt });
+  return NextResponse.json({
+    ok: true,
+    invite_sent_at: sentAt,
+    invites_sent_count_24h: nextCount,
+    invites_count_window_start: nextWindowStart,
+    invites_remaining: Math.max(0, RATE_LIMIT_MAX - nextCount),
+  });
 }

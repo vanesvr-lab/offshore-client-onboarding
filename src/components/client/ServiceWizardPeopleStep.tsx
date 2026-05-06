@@ -612,13 +612,19 @@ function InviteDialog({
   isResend = false,
   onClose,
   onSent,
+  onRateLimited,
 }: {
   person: ServicePerson;
   serviceId: string;
   combinedRoleLabels: string;
   isResend?: boolean;
   onClose: () => void;
-  onSent: (sentAt: string) => void;
+  onSent: (info: {
+    sentAt: string;
+    count: number | null;
+    windowStart: string | null;
+  }) => void;
+  onRateLimited: (retryAfterSeconds: number) => void;
 }) {
   const [email, setEmail] = useState(person.client_profiles?.email ?? "");
   const [note, setNote] = useState("");
@@ -636,9 +642,30 @@ function InviteDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), note: note.trim() || undefined }),
       });
-      const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        invite_sent_at?: string;
+        invites_sent_count_24h?: number;
+        invites_count_window_start?: string;
+        error?: string;
+        retry_after_seconds?: number;
+      };
+      if (res.status === 429 && typeof data.retry_after_seconds === "number") {
+        const hours = Math.max(1, Math.ceil(data.retry_after_seconds / 3600));
+        toast.error(
+          `You've sent the maximum 3 invites today. You can send another in ${hours}h.`,
+          { position: "top-right" }
+        );
+        onRateLimited(data.retry_after_seconds);
+        onClose();
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Failed to send");
-      onSent(data.invite_sent_at ?? new Date().toISOString());
+      onSent({
+        sentAt: data.invite_sent_at ?? new Date().toISOString(),
+        count: data.invites_sent_count_24h ?? null,
+        windowStart: data.invites_count_window_start ?? null,
+      });
       toast.success(
         isResend ? `Invite resent to ${email.trim()}.` : "Email sent",
         { position: "top-right" }
@@ -732,6 +759,13 @@ function PersonCard({
 }) {
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(person.invite_sent_at);
+  const [inviteCount, setInviteCount] = useState<number | null>(
+    person.invites_sent_count_24h ?? null
+  );
+  const [inviteWindowStart, setInviteWindowStart] = useState<string | null>(
+    person.invites_count_window_start ?? null
+  );
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
   const inviteSentByName = person.invite_sent_by_name ?? null;
 
   const currentRoles = allRoleRows.map((r) => r.role as ServicePersonRole);
@@ -830,6 +864,9 @@ function PersonCard({
           inviteSentAt={inviteSentAt}
           inviteSentByName={inviteSentByName}
           sentDate={sentDate}
+          inviteCount={inviteCount}
+          inviteWindowStart={inviteWindowStart}
+          rateLimitedUntil={rateLimitedUntil}
           onClick={() => setShowInviteDialog(true)}
         />
       </div>
@@ -841,7 +878,15 @@ function PersonCard({
           combinedRoleLabels={combinedRoleLabels}
           isResend={!!inviteSentAt}
           onClose={() => setShowInviteDialog(false)}
-          onSent={(sentAt) => setInviteSentAt(sentAt)}
+          onSent={({ sentAt, count, windowStart }) => {
+            setInviteSentAt(sentAt);
+            setInviteCount(count);
+            setInviteWindowStart(windowStart);
+            setRateLimitedUntil(null);
+          }}
+          onRateLimited={(seconds) => {
+            setRateLimitedUntil(Date.now() + seconds * 1000);
+          }}
         />
       )}
     </div>
@@ -854,36 +899,55 @@ function ResendInviteButton({
   inviteSentAt,
   inviteSentByName,
   sentDate,
+  inviteCount,
+  inviteWindowStart,
+  rateLimitedUntil,
   onClick,
 }: {
   inviteSentAt: string | null;
   inviteSentByName: string | null;
   sentDate: string | null;
+  inviteCount: number | null;
+  inviteWindowStart: string | null;
+  rateLimitedUntil: number | null;
   onClick: () => void;
 }) {
-  // 24h rate limit. The server enforces it too.
-  const lastSent = inviteSentAt ? new Date(inviteSentAt).getTime() : null;
+  // B-067 §6.3 — 3-per-24h rate limit. The server is the source of truth;
+  // we mirror the limit client-side so the button disables instantly after
+  // the third send (or after a 429 response) without needing a server poll.
+  const RATE_LIMIT_MAX = 3;
+  const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
   const now = Date.now();
-  const cooldownEnds = lastSent ? lastSent + 24 * 60 * 60 * 1000 : null;
-  const isCoolingDown = cooldownEnds != null && now < cooldownEnds;
-  const cooldownReadable = cooldownEnds
-    ? new Date(cooldownEnds).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
+
+  const windowStartMs = inviteWindowStart ? new Date(inviteWindowStart).getTime() : null;
+  const windowIsActive =
+    windowStartMs != null && now - windowStartMs < RATE_LIMIT_WINDOW_MS;
+  const countInWindow = windowIsActive ? (inviteCount ?? 0) : 0;
+  const windowResetMs = windowIsActive ? windowStartMs! + RATE_LIMIT_WINDOW_MS : null;
+
+  // Rate limited if either: server told us so via 429, or our local count is 3.
+  const isCapped =
+    (rateLimitedUntil != null && now < rateLimitedUntil) ||
+    (windowIsActive && countInWindow >= RATE_LIMIT_MAX);
+
+  const resetMs = rateLimitedUntil ?? windowResetMs;
+  const hoursToReset = resetMs
+    ? Math.max(1, Math.ceil((resetMs - now) / (60 * 60 * 1000)))
     : null;
 
   const isResend = !!inviteSentAt;
   const label = isResend ? "Resend invite" : "Request KYC";
-  const tooltip = isCoolingDown
-    ? `Already sent today. You can resend after ${cooldownReadable}.`
+  const tooltip = isCapped && hoursToReset != null
+    ? `You've sent the maximum 3 invites today. You can send another in ${hoursToReset}h.`
     : isResend
     ? sentDate
-      ? `Last sent on ${sentDate}${inviteSentByName ? ` by ${inviteSentByName}` : ""}.`
+      ? `Last sent on ${sentDate}${inviteSentByName ? ` by ${inviteSentByName}` : ""}.${
+          windowIsActive ? ` ${countInWindow} of ${RATE_LIMIT_MAX} sent today.` : ""
+        }`
       : "Send another invite to this person."
     : "Send the KYC invite email to this person.";
+
+  const isCoolingDown = isCapped;
 
   // B-058 §3 — disabled native buttons swallow hover events, so the
   // 24h cooldown reason was invisible. Wrap in a span (which receives

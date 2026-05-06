@@ -23,6 +23,16 @@ End-user QA pass — 7 batches:
 - `src/components/shared/Sidebar.tsx` — client primary nav label "Dashboard" → "Home" (route `/dashboard` unchanged; admin sidebar untouched)
 - `src/components/client/DashboardClient.tsx` — page heading is now "Home", new subtle brand-navy/blue welcome banner (`Welcome <FirstName>. Thank you for choosing GWMS.`), per-card nudge line `Your application for <Service> is X% complete — Review →` shown only when `overallPct < 100`. Removed the old amber "all complete" / "missing info" greeting branches in favour of one consistent layout.
 
+**Batch 6 — Resend invite rate limit (3 per profile per 24h):**
+- `supabase/migrations/20260505235835_kyc_invite_rate_limit.sql` — adds `invites_sent_count_24h` (int, NOT NULL DEFAULT 0) and `invites_count_window_start` (timestamptz, NULL) to `profile_service_roles`. Idempotent (`ADD COLUMN IF NOT EXISTS`). Pushed to prod via `npm run db:push`; `npm run db:status` shows paired Local + Remote with no drift.
+- `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts` — server enforces 3 invites per profile/service pair per rolling 24h window. Replaces the old "1 per 24h" cooldown. Window opens (or rolls over) automatically on the first send after expiry; subsequent sends increment the count; the 4th in-window send returns `429 { error: "rate_limited", retry_after_seconds, retry_after }`. Admins remain exempt. Successful response now also returns `invites_sent_count_24h`, `invites_count_window_start`, and `invites_remaining` so the UI can mirror state without polling.
+- `src/components/client/ServiceWizardPeopleStep.tsx`:
+  - `ServicePerson` carries `invites_sent_count_24h` and `invites_count_window_start` from the server load.
+  - `PersonCard` tracks count + window + a server-supplied `rateLimitedUntil` ms timestamp.
+  - `InviteDialog` parses 429s with `retry_after_seconds` and toasts `"You've sent the maximum 3 invites today. You can send another in {X}h."` (X = ceil(seconds/3600)).
+  - `ResendInviteButton` disables when the local count hits 3 or the server returned a 429, with a tooltip showing "X of 3 sent today" / "send another in {X}h".
+- `src/app/(client)/services/[id]/page.tsx` — selects + propagates the two new columns on the persons query.
+
 **Batch 5 — KYC post-review confirmation dialog:**
 - `src/components/client/PerPersonReviewWizard.tsx` — finishing the Review sub-step (single-mode Save & Close, or review-all Save & Finish on the last person) now opens a `<Dialog>` summarising the per-profile completion before the wizard closes. < 100% → "Profile saved" with `You've completed {X}% of KYC for {Name}. Please review…`; 100% → "Profile complete" with `You've completed all KYC details for {Name}. This profile is ready for submission.` Esc closes only the dialog (wizard stays open); OK is auto-focused and calls `onComplete()` to close the wizard. Mid-walk advances in review-all mode are unchanged — no dialog between people.
 - Completion is computed via the existing `computePersonCompletion` helper using the in-flight overlay merged with `serverFormData`, so the % matches what the user just saved (not what was on the server before this round-trip).

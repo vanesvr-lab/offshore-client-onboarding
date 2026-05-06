@@ -43,6 +43,9 @@ export type ServicePerson = {
   can_manage: boolean;
   invite_sent_at: string | null;
   invite_sent_by_name: string | null; // resolved sender name (from profiles join)
+  // B-067 §6 — invite rate-limit state (3 per profile/service per 24h).
+  invites_sent_count_24h?: number | null;
+  invites_count_window_start?: string | null;
   client_profiles: {
     id: string;
     full_name: string;
@@ -111,6 +114,7 @@ export default async function ClientServiceDetailPage({
       .from("profile_service_roles")
       .select(`
         id, role, shareholding_percentage, can_manage, invite_sent_at, invite_sent_by,
+        invites_sent_count_24h, invites_count_window_start,
         client_profiles!inner(
           id, full_name, email, phone, due_diligence_level, record_type,
           client_profile_kyc(*)
