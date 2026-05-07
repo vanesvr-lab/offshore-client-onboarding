@@ -23,7 +23,6 @@ import {
   AdminApplicationStepIndicator,
   type AdminStep,
 } from "@/components/admin/AdminApplicationStepIndicator";
-import { AdminKycPersonReviewPanel } from "@/components/admin/AdminKycPersonReviewPanel";
 import {
   Card,
   CardContent,
@@ -241,17 +240,11 @@ export default async function ApplicationDetailPage({
               </CardContent>
             </Card>
 
-            {/* B-069 Batch 3 — per-profile KYC subsection reviews */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-brand-navy text-base">
-                  KYC Review — per profile, per subsection
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AdminKycPersonReviewPanel applicationId={params.id} />
-              </CardContent>
-            </Card>
+            {/* B-074 — AdminKycPersonReviewPanel deleted; the new admin
+                services page renders per-section reviews inline inside the
+                KYC long form. The legacy applications page does not have an
+                equivalent inline form yet — kept blank to avoid dangling
+                affordances. */}
           </section>
 
           {/* ── Step 5 — Documents ─────────────────────────────────── */}

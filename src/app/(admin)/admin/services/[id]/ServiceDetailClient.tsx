@@ -45,7 +45,6 @@ import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionRevi
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
-import { AdminKycPersonReviewPanel, type PersonRow as KycPersonRow } from "@/components/admin/AdminKycPersonReviewPanel";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
 
 // ─── Document category helpers ────────────────────────────────────────────────
@@ -2663,32 +2662,11 @@ export function ServiceDetailClient({
               onSaved={handleRolesRefresh}
             />
 
-            {/* B-073 — per-profile KYC subsection reviews. Persons are
-                derived from typedRoles so the panel skips its legacy
-                /api/applications/[id]/persons fetch (which 404s for
-                service ids). Same `kyc:<profile_id>:<category>` keys
-                as the legacy admin path. */}
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold text-brand-navy mb-2">
-                KYC Review — per profile, per subsection
-              </h3>
-              <AdminKycPersonReviewPanel
-                applicationId={service.id}
-                persons={typedRoles
-                  .filter((r) => r.client_profiles?.id)
-                  .map<KycPersonRow>((r) => ({
-                    id: r.id,
-                    role: r.role,
-                    shareholding_percentage: r.shareholding_percentage ?? null,
-                    kyc_records: r.client_profiles
-                      ? {
-                          id: r.client_profiles.id,
-                          full_name: r.client_profiles.full_name ?? null,
-                        }
-                      : null,
-                  }))}
-              />
-            </div>
+            {/* B-074 — per-profile KYC subsection reviews are now inline in
+                KycLongForm (each section row carries its own review badge +
+                button + history). The parallel AdminKycPersonReviewPanel
+                that used to live here was deleted in B-074 — same review
+                keys, no data migration. */}
           </div>
         </ServiceCollapsibleSection>
 
