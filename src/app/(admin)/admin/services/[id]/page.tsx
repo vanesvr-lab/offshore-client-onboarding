@@ -153,7 +153,8 @@ export default async function ServiceDetailPage({
       .select("user_id, users(full_name, email)")
       .eq("tenant_id", tenantId),
 
-    // Audit log entries for this service
+    // Audit log entries for this service. Document audit rows (entity_type
+    // "document") are pulled in via the parallel query below and merged.
     supabase
       .from("audit_log")
       .select("id, created_at, actor_id, actor_name, actor_role, action, entity_type, entity_id, previous_value, new_value, detail")
@@ -232,6 +233,36 @@ export default async function ServiceDetailPage({
           .order("extracted_at", { ascending: false })
       : { data: [] as FieldExtraction[] };
 
+  // B-077 Batch 7 — pull document audit rows for every doc in this
+  // service so admin's audit panel shows Approve / Reject / Revoke (and
+  // any future doc-level actions) alongside service-level events.
+  const docIdsForAudit = ((docsRes.data ?? []) as { id: string }[]).map(
+    (d) => d.id,
+  );
+  const auditDocsRes =
+    docIdsForAudit.length > 0
+      ? await supabase
+          .from("audit_log")
+          .select(
+            "id, created_at, actor_id, actor_name, actor_role, action, entity_type, entity_id, previous_value, new_value, detail",
+          )
+          .eq("entity_type", "document")
+          .in("entity_id", docIdsForAudit)
+          .order("created_at", { ascending: false })
+          .limit(100)
+      : { data: [] as ServiceAuditEntry[] };
+
+  // Merge service + document audit rows, sort by created_at DESC, cap at 100.
+  const mergedAuditEntries = [
+    ...((auditRes.data ?? []) as unknown as ServiceAuditEntry[]),
+    ...((auditDocsRes.data ?? []) as unknown as ServiceAuditEntry[]),
+  ]
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )
+    .slice(0, 100);
+
   const templateActions = (templateActionsRes.data ?? []) as unknown as ServiceTemplateAction[];
   let actionInstances = (existingActionsRes.data ?? []) as unknown as ServiceAction[];
   const haveKeys = new Set(actionInstances.map((a) => a.action_key));
@@ -278,7 +309,7 @@ export default async function ServiceDetailPage({
         updateRequests={(updateRequestsRes.data ?? []) as unknown as DocumentUpdateRequest[]}
         allProfiles={(profilesRes.data ?? []) as unknown as ClientProfile[]}
         adminUsers={adminUsers}
-        auditEntries={(auditRes.data ?? []) as unknown as ServiceAuditEntry[]}
+        auditEntries={mergedAuditEntries}
         requirements={(requirementsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
         documentTypes={(documentTypesRes.data ?? []) as unknown as DocumentType[]}
         sectionReviews={(sectionReviewsRes.data ?? []) as unknown as ApplicationSectionReview[]}

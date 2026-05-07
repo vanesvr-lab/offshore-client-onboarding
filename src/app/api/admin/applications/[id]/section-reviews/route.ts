@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { ApplicationSectionReview, SectionReviewStatus } from "@/types";
 
 export async function GET(
@@ -73,6 +74,19 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // B-077 Batch 7 — record the section review in the audit_log so the
+  // service-detail audit panel surfaces it. `params.id` is the service id
+  // (column name is misleading per tech-debt #26 — application_id stores
+  // service ids on the modern path).
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    action: "section_review_saved",
+    entity_type: "service",
+    entity_id: params.id,
+    new_value: { section_key: sectionKey, status, notes },
+  });
 
   return NextResponse.json({ data: data as unknown as ApplicationSectionReview });
 }

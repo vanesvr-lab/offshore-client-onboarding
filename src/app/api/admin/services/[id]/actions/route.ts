@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type {
   ServiceTemplateAction,
   ServiceAction,
@@ -196,6 +197,30 @@ export async function PATCH(
       .select("*")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // B-077 Batch 7 — audit only when something user-facing changed
+    // (status, notes, assigned_to). Skip pure timestamp-only updates.
+    if (
+      body.status !== undefined ||
+      body.notes !== undefined ||
+      body.assigned_to !== undefined
+    ) {
+      await writeAuditLog(supabase, {
+        actor_id: session.user.id,
+        actor_role: "admin",
+        action: "service_action_updated",
+        entity_type: "service",
+        entity_id: id,
+        previous_value: { status: previousStatus },
+        new_value: {
+          action_key: actionKey,
+          status: (patch.status as ServiceActionStatus | undefined) ?? previousStatus,
+          notes: (patch.notes as string | null | undefined) ?? undefined,
+          assigned_to:
+            (patch.assigned_to as string | null | undefined) ?? undefined,
+        },
+      });
+    }
     return NextResponse.json({ data: data as unknown as ServiceAction });
   }
 
@@ -219,5 +244,21 @@ export async function PATCH(
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    action: "service_action_updated",
+    entity_type: "service",
+    entity_id: id,
+    previous_value: null,
+    new_value: {
+      action_key: actionKey,
+      status: insert.status,
+      notes: insert.notes,
+      assigned_to: insert.assigned_to,
+    },
+  });
+
   return NextResponse.json({ data: data as unknown as ServiceAction });
 }

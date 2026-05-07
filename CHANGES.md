@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 7 — audit_log writes for section reviews / substance / service actions; widen display query (Claude Code)
+
+The audit panel on `/admin/services/[id]` was empty after the 2026-05-06 cleanup despite many admin actions, because three high-traffic mutating routes never wrote `audit_log` and the display query only picked up `entity_type = "service"` rows. Resolves both gaps.
+
+- **New helper** `src/lib/audit/writeAuditLog.ts` — thin wrapper around `supabase.from("audit_log").insert(...)` so the four routes share one column shape. Failures are `console.error`d but never block the user-facing mutation.
+- **`/api/admin/applications/[id]/section-reviews` POST** — after the section review insert succeeds, writes `audit_log` with `action: "section_review_saved"`, `entity_type: "service"`, `entity_id: params.id` (service id; column tech-debt #26), `new_value: { section_key, status, notes }`.
+- **`/api/admin/services/[id]/substance` PUT** — when `admin_assessment` is part of the patch, writes `action: "substance_review_saved"` (or `"substance_review_updated"` when an assessment already existed), `entity_type: "service"`, with both `previous_value` and `new_value` capturing the assessment + notes. Saves to non-assessment fields stay silent to avoid noise.
+- **`/api/admin/services/[id]/actions` PATCH** — writes `action: "service_action_updated"` whenever `status`, `notes`, or `assigned_to` changes (also on insert). `previous_value` carries the prior status; `new_value` carries the patch.
+- **`/api/admin/documents/[id]/admin-status` PATCH** — already wrote audit (B-075 Batch 4). Verified intact; uses `entity_type: "document"`, `entity_id: docId`. The new display-query merge below picks these up.
+- **Service-detail audit display** — `src/app/(admin)/admin/services/[id]/page.tsx` adds a parallel `audit_log` query keyed on `entity_type: "document"` + `entity_id IN (docs for this service)`. Results from both queries are merged client-side, sorted by `created_at` DESC, and capped at 100. Audit panel now surfaces section reviews + substance changes + service-action updates + document approve/reject/revoke + the legacy stage changes.
+
+Touched: `src/lib/audit/writeAuditLog.ts` (new), `src/app/api/admin/applications/[id]/section-reviews/route.ts`, `src/app/api/admin/services/[id]/substance/route.ts`, `src/app/api/admin/services/[id]/actions/route.ts`, `src/app/(admin)/admin/services/[id]/page.tsx`.
+
 ### 2026-05-07 — B-077 Batch 6 — Add Person modal: placement, active styling, click-to-select, post-add scroll/expand (Claude Code)
 
 Three sub-tasks for the People & KYC Add Director / Shareholder / UBO flow on `/admin/services/[id]` Step 4.

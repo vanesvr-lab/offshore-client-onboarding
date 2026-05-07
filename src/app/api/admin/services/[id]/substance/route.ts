@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { ServiceSubstance, SubstanceAssessment } from "@/types";
 
 const ASSESSMENTS: SubstanceAssessment[] = ["pass", "review", "fail"];
@@ -158,6 +159,31 @@ export async function PUT(
       .select("*")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // B-077 Batch 7 — only audit when admin_assessment was part of this
+    // patch (the assessment is the meaningful event). Saves to other
+    // substance fields are left silent to avoid noise.
+    if ("admin_assessment" in patch) {
+      const before =
+        (existing as { admin_assessment?: string | null } | null)
+          ?.admin_assessment ?? null;
+      const after = (patch.admin_assessment as SubstanceAssessment | null) ?? null;
+      await writeAuditLog(supabase, {
+        actor_id: session.user.id,
+        actor_role: "admin",
+        action: before
+          ? "substance_review_updated"
+          : "substance_review_saved",
+        entity_type: "service",
+        entity_id: id,
+        previous_value: { admin_assessment: before },
+        new_value: {
+          admin_assessment: after,
+          admin_assessment_notes:
+            (patch.admin_assessment_notes as string | null | undefined) ?? null,
+        },
+      });
+    }
     return NextResponse.json({ data: data as unknown as ServiceSubstance });
   }
 
@@ -172,5 +198,22 @@ export async function PUT(
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if ("admin_assessment" in patch) {
+    await writeAuditLog(supabase, {
+      actor_id: session.user.id,
+      actor_role: "admin",
+      action: "substance_review_saved",
+      entity_type: "service",
+      entity_id: id,
+      previous_value: null,
+      new_value: {
+        admin_assessment: (patch.admin_assessment as SubstanceAssessment | null) ?? null,
+        admin_assessment_notes:
+          (patch.admin_assessment_notes as string | null | undefined) ?? null,
+      },
+    });
+  }
+
   return NextResponse.json({ data: data as unknown as ServiceSubstance });
 }
