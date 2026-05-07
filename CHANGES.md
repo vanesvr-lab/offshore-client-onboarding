@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 6 — Profile containment: vertical gray line + sticky horizontal banner (Claude Code)
+
+Per-profile expanded card on `/admin/services/[id]` Step 4 now reads as one visual unit so admin always knows whose data is on screen.
+
+- **`PersonCard` expanded body** — wrapped in `border-l-4 border-l-gray-200`, giving every per-profile section a clear vertical gray line on the left edge. All content (sticky banner + roles + docs + long-form + dialog) sits inside the contained box.
+- **Sticky horizontal banner** at the very top of the container: profile-type icon + name (sm semibold) + role badges + KYC% bar + status text. `sticky top-0 z-10` with `bg-gray-50/95 backdrop-blur` so it stays legible as admin scrolls through the long-form sections below. The banner mirrors the data shown in the collapsed header card so context is preserved even when scrolling deep into KYC sections.
+- Visual weight tuned to be informative without overpowering — banner is a thin strip (px-4 py-2), KYC% bar is 80×6px, badges keep their existing 10px capitalized brand-navy tone.
+
+Build passes.
+
 ### 2026-05-06 — B-076 Batch 5 — Per-doc View opens DocumentDetailDialog with admin actions (Claude Code)
 
 The View click on `KycDocsByCategory` rows was already wired in Batch 4 to open the existing `DocumentDetailDialog` (rich admin popup with Approve / Reject / Re-run AI / Send Update Request / Download). This batch verifies the wiring + auto-close on status change.

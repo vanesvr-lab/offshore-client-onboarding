@@ -1597,7 +1597,48 @@ function PersonCard({
 
       {/* ── Expanded body ────────────────────────────────────────────── */}
       {expanded && (
-        <div className="border-t" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="border-t border-l-4 border-l-gray-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* B-076 — sticky profile banner. Stays visible as admin
+              scrolls through the long-form so it's always clear which
+              user's data is on screen. */}
+          <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 border-b px-4 py-2 flex items-center gap-2 flex-wrap">
+            {profile.is_representative ? (
+              <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+            ) : profile.record_type === "organisation" ? (
+              <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+            ) : (
+              <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            )}
+            <span className="text-sm font-semibold text-brand-navy truncate">
+              {profile.full_name}
+            </span>
+            {(combinedRoles ?? [roleRow.role]).map((r) => (
+              <span
+                key={r}
+                className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0"
+              >
+                {r}
+              </span>
+            ))}
+            {!profile.is_representative && (
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                <div className="w-20 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
+                    style={{ width: `${kycPct}%` }}
+                  />
+                </div>
+                <span
+                  className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}
+                >
+                  {kycDone ? "✓ Complete" : `${kycPct}%`}
+                </span>
+              </div>
+            )}
+          </div>
 
           {/* B-076 — visual parity with client wizard. Stacked top to
               bottom: Roles picker → KYC docs status box → grouped
