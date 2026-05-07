@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-078 Batch 1 — Editable KYC fields + per-profile dirty tracking (Claude Code)
+
+Removed the hardcoded `disabled` prop on every `KycLongFormField` in the admin per-profile expanded view. Lifted the `fields` state out of `KycLongForm` into `PersonCard` where it joins a new `savedFields` / `draftFields` pair so admins can type into Identity / Financial / Declarations inputs without bouncing to a separate edit page.
+
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `KycLongForm` is now a controlled component receiving `fields` + `setFields` from `PersonCard`. Hooks moved above the early-return so they run unconditionally. Per-profile `dirtyFieldKeys` derived via `useMemo`, `isDirty` boolean exposed for Batch 2's Save bar, currently surfaced via `data-kyc-dirty*` attributes on the per-profile container.
+- `KycLongForm` exposes `onAfterReapply` so `PersonCard` syncs `savedFields` after a successful re-apply (which still PATCHes immediately via `/api/profiles/kyc/save`) — without it the freshly-saved values would falsely register as dirty.
+- `KycLongFormField` defaults `disabled` to `false`; the `disabled` prop is no longer passed at the call site, so admin inputs render in their normal styling (no `bg-gray-50`, no opacity dimming). Refresh-to-revert is the temporary cancel path until Batch 2.
+
 ### 2026-05-07 — B-077 Batch 8 — Smoke test + cleanup + close-out (Claude Code)
 
 End of B-077. Build is clean. Per-batch acceptance items are individually verifiable from the code paths added in Batches 1–7 (linked from each batch entry below). Browser smoke test on `/admin/services/<gbc-0002>` Step 4 deferred to user since I can't drive the UI; the brief's smoke-test checklist maps onto:

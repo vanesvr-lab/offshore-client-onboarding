@@ -405,20 +405,17 @@ function AddProfileDialog({
 
 function KycLongForm({
   kyc,
-  profileName,
-  profileEmail,
-  profilePhone,
   profileId,
   profileDocuments,
   recordType,
   dueDiligenceLevel,
   fieldExtractions,
   onOpenDocumentDetail,
+  fields,
+  setFields,
+  onAfterReapply,
 }: {
   kyc: KycFull;
-  profileName?: string | null;
-  profileEmail?: string | null;
-  profilePhone?: string | null;
   profileId?: string;
   profileDocuments?: ServiceDoc[];
   recordType?: string;
@@ -430,6 +427,13 @@ function KycLongForm({
    *  source-doc rows or the AiPrefillBanner View button. PersonCard
    *  owns the dialog state. */
   onOpenDocumentDetail?: (docId: string) => void;
+  /** B-078 Batch 1 — fields state lifted to PersonCard for per-profile
+   *  dirty tracking. KycLongForm is now controlled. */
+  fields: Record<string, unknown>;
+  setFields: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+  /** B-078 Batch 1 — after a server-side re-apply, PersonCard syncs
+   *  savedFields so dirty tracking resets. */
+  onAfterReapply?: (patched: Record<string, unknown>) => void;
 }) {
   const isOrg = recordType === "organisation";
   const ddLevel: KycDueDiligenceLevel =
@@ -464,12 +468,8 @@ function KycLongForm({
     [profileDocuments]
   );
 
-  const [fields, setFields] = useState<Record<string, unknown>>({
-    ...kyc,
-    full_name: profileName ?? kyc.full_name ?? "",
-    email: profileEmail ?? kyc.email ?? "",
-    phone: profilePhone ?? kyc.phone ?? "",
-  });
+  // B-078 Batch 1 — `fields` + `setFields` are now controlled by PersonCard
+  // so dirty tracking can be lifted to the per-profile container.
   // B-075 — admin opens with everything collapsed. Vanessa, 2026-05-07:
   // "by default the page is loaded with all the sections collapsed."
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
@@ -576,6 +576,10 @@ function KycLongForm({
       });
       if (!res.ok) throw new Error("Re-apply failed");
       setFields((prev) => ({ ...prev, ...payload }));
+      // B-078 Batch 1 — re-apply persists immediately, so sync savedFields
+      // in PersonCard or the per-profile dirty tracker would falsely flag
+      // these freshly-saved values as dirty.
+      onAfterReapply?.(payload);
       toast.success("Re-applied extracted values.", { position: "top-right" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Re-apply failed", {
@@ -844,7 +848,6 @@ function KycLongFormSection({
                     onChange={(v) => setFields(prev => ({ ...prev, [f.key]: v }))}
                     extractions={extractionsByField[f.key] ?? []}
                     sourceDocs={sourceDocsForMarker}
-                    disabled
                   />
                 </div>
               );
@@ -1315,12 +1318,69 @@ function PersonCard({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
 
+  // B-078 Batch 1 — per-profile dirty tracking. `savedFields` is the last-
+  // known-from-DB snapshot; `draftFields` holds in-flight edits that flow
+  // to the Save bar (Batch 2 wires UI, Batch 3 wires the PATCH). Re-sync
+  // both from props every time the parent re-fetches (`onRefresh`) so the
+  // tracker resets cleanly after persistence elsewhere. Hooks must run
+  // unconditionally so they sit before the early-return below.
+  const kycForHook = roleRow.client_profiles
+    ? Array.isArray(roleRow.client_profiles.client_profile_kyc)
+      ? roleRow.client_profiles.client_profile_kyc[0] ?? null
+      : (roleRow.client_profiles.client_profile_kyc as KycFull | null)
+    : null;
+  const initialFields = useMemo<Record<string, unknown>>(
+    () => ({
+      ...((kycForHook as Record<string, unknown> | null) ?? {}),
+      full_name: roleRow.client_profiles?.full_name ?? "",
+      email: roleRow.client_profiles?.email ?? "",
+      phone: roleRow.client_profiles?.phone ?? "",
+    }),
+    [
+      kycForHook,
+      roleRow.client_profiles?.full_name,
+      roleRow.client_profiles?.email,
+      roleRow.client_profiles?.phone,
+    ],
+  );
+  const [savedFields, setSavedFields] = useState<Record<string, unknown>>(initialFields);
+  const [draftFields, setDraftFields] = useState<Record<string, unknown>>(initialFields);
+  useEffect(() => {
+    setSavedFields(initialFields);
+    setDraftFields(initialFields);
+  }, [initialFields]);
+
+  const dirtyFieldKeys = useMemo(() => {
+    const norm = (v: unknown) => (v === undefined || v === "" ? null : v);
+    const valueEqual = (a: unknown, b: unknown) => {
+      const na = norm(a);
+      const nb = norm(b);
+      if (na === nb) return true;
+      if (na == null || nb == null) return false;
+      if (typeof na === "object" && typeof nb === "object") {
+        try {
+          return JSON.stringify(na) === JSON.stringify(nb);
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    };
+    const keys = new Set<string>([
+      ...Object.keys(savedFields),
+      ...Object.keys(draftFields),
+    ]);
+    const out: string[] = [];
+    keys.forEach((k) => {
+      if (!valueEqual(draftFields[k], savedFields[k])) out.push(k);
+    });
+    return out;
+  }, [draftFields, savedFields]);
+  const isDirty = dirtyFieldKeys.length > 0;
+
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
-
-  const kyc = Array.isArray(profile.client_profile_kyc)
-    ? profile.client_profile_kyc[0] ?? null
-    : (profile.client_profile_kyc as KycFull | null);
+  const kyc = kycForHook;
   const kycPct = calcKycPct(kyc);
   const kycDone = kyc?.kyc_journey_completed === true;
 
@@ -1710,7 +1770,12 @@ function PersonCard({
               of the entire profile content (B-077 QA #2). The wrapper
               starts inside the card with margins so the rule reads as a
               clear indent rather than blending with the card border. */}
-          <div className="border-l-4 border-gray-200 ml-4 mr-4 my-4 pl-4">
+          <div
+            className="border-l-4 border-gray-200 ml-4 mr-4 my-4 pl-4"
+            data-profile-id={profile.id}
+            data-kyc-dirty={isDirty ? "true" : "false"}
+            data-kyc-dirty-keys={dirtyFieldKeys.length}
+          >
 
           {/* B-076 — visual parity with client wizard. Stacked top to
               bottom: Roles picker → KYC docs status box → grouped
@@ -1806,15 +1871,17 @@ function PersonCard({
             <div className="pt-3">
               <KycLongForm
                 kyc={kyc}
-                profileName={profile.full_name}
-                profileEmail={profile.email}
-                profilePhone={profile.phone}
                 profileId={profile.id}
                 profileDocuments={profileDocuments}
                 recordType={profile.record_type}
                 dueDiligenceLevel={profile.due_diligence_level}
                 fieldExtractions={fieldExtractions ?? []}
                 onOpenDocumentDetail={handleAdminViewDoc}
+                fields={draftFields}
+                setFields={setDraftFields}
+                onAfterReapply={(patched) =>
+                  setSavedFields((prev) => ({ ...prev, ...patched }))
+                }
               />
             </div>
           )}
