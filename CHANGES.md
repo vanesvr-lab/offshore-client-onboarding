@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-075 Batch 5 — Smoke test + cleanup + close-out (Claude Code)
+
+Final batch of B-075. Closes out the long-form/wizard alignment work.
+
+- Confirmed build passes lint + type-check.
+- Old hardcoded `KYC_SECTIONS` / `KYC_SECTIONS_ORG` arrays + the `KycField` / `KycSection` local types are gone. Single source of truth lives in `src/lib/kyc/sections.ts`. No remaining references in the tree.
+- `KycStepWizard` is unchanged in behaviour and visual style — only `IdentityStep` swapped its success-state banner over to the shared `AiPrefillBanner`. Other client-side banner states (running / error / no-source) stay inline; nav, sub-steps, and submit logic untouched.
+- Step 1 / 2 / 3 / 5 cards, the right-column sidebar (Stage Management / Communication / Audit Trail / Account Manager), Admin Actions section (B-072), and section-reviews data are all untouched per the brief's hard rule #4.
+
+**Out of scope (deferred to a follow-up brief):**
+- Admin-only fields. Pending Vanessa's FSC checklist PDFs (`fs-41_form_a-Checklist.pdf` for GBC + `checklist-authorised-company.pdf` for AC). The follow-up brief will diff against `client_profile_kyc` and add the missing admin-only fields with a `mode="admin"` gate or similar.
+- Migrating the rest of `KycStepWizard` (IdentityStep / FinancialStep / DeclarationsStep) onto the shared schema. Pragmatic call from the brief's open questions: leave the wizard side hardcoded for now; the shared schema is the canonical reference. Follow-up tech debt entry if the wizard's hardcoded list drifts from the shared schema.
+- Pre-existing `kyc:<profileId>:professional` review rows. The new layout doesn't render a separate Professional section (folded into Financial Profile). Rows remain in DB; they just don't have a UI slot. Vanessa can re-review under the new section structure.
+
+End of B-075. Per-profile KYC long-form on `/admin/services/[id]` now mirrors the client wizard: same fields, same labels, same ordering, same Sparkles AI markers, same "Filled from uploaded document" banner. Admin path remains a long-form accordion (intentional — experienced admins scroll), defaults to all-collapsed, and adds inline doc View → Approve / Revoke on top.
+
 ### 2026-05-06 — B-075 Batch 4 — Read-only KycLongForm + inline doc View / Approve / Revoke (Claude Code)
 
 Admin's KYC long form is now strictly read-only on the form data. Reviews (per-section) and inline doc Approve / Revoke are the only writes. Mirrors the brief's intent: experienced admins scroll through, mark sections, and clear the source docs without bouncing to a separate review page.
