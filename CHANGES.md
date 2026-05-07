@@ -15,6 +15,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-075 Batch 1 — Extract shared KYC section schema (Claude Code)
+
+First of 5 batches aligning admin's `KycLongForm` field schema with client's `KycStepWizard`. Admin stays a long-form accordion (intentional — experienced admins scroll); only the per-profile KYC form rendering changes.
+
+- **NEW `src/lib/kyc/sections.ts`** — single source of truth for sections + fields. Exports `KYC_SECTIONS_INDIVIDUAL` (3 sections matching client wizard steps: Identity / Financial Profile / Declarations) and `KYC_SECTIONS_ORGANISATION` (Company Details / Tax-Financial). Each field carries a canonical label (taken from the client wizard), type, optional `required`, optional `cddOrAbove` / `eddOnly` gating, optional `aiExtractable` Sparkles marker, and optional `showWhen` for conditional fields (PEP details, source-of-funds "Other" specify, etc).
+- Helpers `gateSectionForLevel` and `visibleFields` apply DD-level gating and conditional rendering.
+- Categories: `identity / financial / compliance / tax`. Existing review rows (`kyc:<profileId>:<category>`) keep their slot. Per the brief's reference table, professional fields (occupation, employer, industry, work_*) fold into Financial Profile alongside source-of-funds — matching the client wizard's step layout. Any pre-existing `professional` category review rows remain in the DB; the new layout doesn't render a separate Professional section.
+- No consumer changes yet; `KycLongForm` and `KycStepWizard` still use their hardcoded lists. Next batch wires the admin form to the shared schema.
+
+Build passes.
+
 ### 2026-05-06 — B-074 Batch 6 — Polish: aggregate KYC review badge on PersonCard header (Claude Code)
 
 Closes out B-074. With the inline reviews live in `KycLongForm`, the per-person card needed an at-a-glance status indicator so admin can spot unreviewed profiles without expanding each card.
