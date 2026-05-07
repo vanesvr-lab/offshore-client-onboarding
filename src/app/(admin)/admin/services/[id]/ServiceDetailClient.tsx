@@ -474,8 +474,9 @@ function KycLongForm({
   // B-077 Batch 3 — `findSourceDocForSection` returns the most recent
   // `field_extractions.source_document_id` for any field in the section
   // (used by AiPrefillBanner's primary status pill + View button).
-  // `findSourceDocsForSection` returns the unique set, in insertion order
-  // (used by the per-section single-line source-doc rows).
+  // `findSourceDocsForFields` returns the unique source docs that fed any
+  // of the listed field keys (used by the per-section source-doc rows
+  // and Batch 4's Address subdivider split).
   function findSourceDocForSection(section: KycSection): string | null {
     let best: { docId: string; at: number } | null = null;
     for (const f of section.fields) {
@@ -491,11 +492,11 @@ function KycLongForm({
     return best?.docId ?? null;
   }
 
-  function findSourceDocsForSection(section: KycSection): ServiceDoc[] {
+  function findSourceDocsForFields(fieldKeys: string[]): ServiceDoc[] {
     const seen = new Set<string>();
     const docs: ServiceDoc[] = [];
-    for (const f of section.fields) {
-      const rows = extractionsByField[f.key];
+    for (const key of fieldKeys) {
+      const rows = extractionsByField[key];
       if (!rows) continue;
       for (const row of rows) {
         if (row.superseded_at !== null) continue;
@@ -509,6 +510,12 @@ function KycLongForm({
     }
     return docs;
   }
+
+  // B-077 Batch 4 — split source docs for the Identity section so the
+  // Proof of Residential Address row renders inside the Address
+  // subdivider (only feeds the `address` field) while Passport-fed docs
+  // stay at the top of the section.
+  const ADDRESS_FIELD_KEYS = ["address"];
 
   function handleViewSection(section: KycSection) {
     const docId = findSourceDocForSection(section);
@@ -598,7 +605,21 @@ function KycLongForm({
       {sections.map(section => {
         const pct = sectionPct(section);
         const isOpen = openSections.has(section.title);
-        const sectionSourceDocs = findSourceDocsForSection(section);
+        const isIdentityIndividual = section.title === "Your Identity";
+        // B-077 Batch 4 — for Identity, pull address-fed source docs out
+        // of the section-top set so they only render inside the Address
+        // subdivider. Other sections see the full unique set.
+        const allSectionFieldKeys = section.fields.map((f) => f.key);
+        const nonAddressFieldKeys = isIdentityIndividual
+          ? allSectionFieldKeys.filter((k) => !ADDRESS_FIELD_KEYS.includes(k))
+          : allSectionFieldKeys;
+        const sectionSourceDocs = findSourceDocsForFields(nonAddressFieldKeys);
+        const sectionDocIdSet = new Set(sectionSourceDocs.map((d) => d.id));
+        const addressSourceDocs = isIdentityIndividual
+          ? findSourceDocsForFields(ADDRESS_FIELD_KEYS).filter(
+              (d) => !sectionDocIdSet.has(d.id),
+            )
+          : [];
         const primarySourceDocId = findSourceDocForSection(section);
         const primarySourceDoc = primarySourceDocId
           ? localDocs.find((d) => d.id === primarySourceDocId) ?? null
@@ -616,6 +637,7 @@ function KycLongForm({
             sourceDocsForMarker={sourceDocsForMarker}
             profileId={profileId}
             sectionSourceDocs={sectionSourceDocs}
+            addressSourceDocs={addressSourceDocs}
             primarySourceDoc={primarySourceDoc}
             onOpenDocumentDetail={onOpenDocumentDetail}
             onReapply={() => void handleReapplySection(section)}
@@ -651,6 +673,7 @@ function KycLongFormSection({
   sourceDocsForMarker,
   profileId,
   sectionSourceDocs,
+  addressSourceDocs = [],
   primarySourceDoc,
   onOpenDocumentDetail,
   onReapply,
@@ -674,8 +697,13 @@ function KycLongFormSection({
   profileId?: string;
   /** B-077 Batch 3 — unique source docs that fed AI extractions for any
    *  field in this section. Renders as single-line rows above the
-   *  AiPrefillBanner. */
+   *  AiPrefillBanner. For Identity (individual), address-only docs are
+   *  filtered out and surface in the subdivider instead. */
   sectionSourceDocs: ServiceDoc[];
+  /** B-077 Batch 4 — source docs unique to the `address` field (e.g.
+   *  Proof of Residential Address). Only populated for the Identity
+   *  section; rendered inside the Address subdivider above the textarea. */
+  addressSourceDocs?: ServiceDoc[];
   /** B-077 Batch 3 — most recent source doc; backs the banner's status pill + View. */
   primarySourceDoc: ServiceDoc | null;
   /** B-077 Batch 3 — opens admin DocumentDetailDialog (lifted to PersonCard). */
@@ -783,9 +811,9 @@ function KycLongFormSection({
               documentStatus={bannerStatus}
             />
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {visibleFields(section.fields, fields).map(f => {
-              // Wide fields span both columns (textarea, country, helper-text fields).
+          {(() => {
+            const visible = visibleFields(section.fields, fields);
+            const renderField = (f: KycField) => {
               const isWide =
                 f.type === "textarea" ||
                 f.type === "country" ||
@@ -803,8 +831,90 @@ function KycLongFormSection({
                   />
                 </div>
               );
-            })}
-          </div>
+            };
+
+            // B-077 Batch 4 — Identity uses a 3-band layout so the
+            // Address subdivider sits between identity fields and the
+            // post-address contact fields (email/phone). All other
+            // sections fall back to a single grid.
+            const isIdentityIndividual = section.title === "Your Identity";
+            if (!isIdentityIndividual) {
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {visible.map(renderField)}
+                </div>
+              );
+            }
+
+            const ADDRESS_KEYS = new Set(["address"]);
+            const POST_ADDRESS_KEYS = new Set(["email", "phone"]);
+            const preAddress = visible.filter(
+              (f) => !ADDRESS_KEYS.has(f.key) && !POST_ADDRESS_KEYS.has(f.key),
+            );
+            const addressFields = visible.filter((f) => ADDRESS_KEYS.has(f.key));
+            const postAddress = visible.filter((f) => POST_ADDRESS_KEYS.has(f.key));
+
+            return (
+              <>
+                {preAddress.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {preAddress.map(renderField)}
+                  </div>
+                )}
+
+                {addressFields.length > 0 && (
+                  <div className="border-t pt-4 mt-4 space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-700">
+                      Address
+                    </h4>
+                    {addressSourceDocs.length > 0 && (
+                      <div className="rounded-lg border bg-white divide-y">
+                        {addressSourceDocs.map((d) => {
+                          const rowData: KycDocRowData = {
+                            id: d.id,
+                            document_type_id: d.document_type_id ?? "",
+                            document_name:
+                              d.document_types?.name ?? d.file_name ?? "Document",
+                            is_uploaded: true,
+                            verification_status: d.verification_status,
+                            admin_status: d.admin_status ?? null,
+                            file_name: d.file_name,
+                            mime_type: d.mime_type,
+                            uploaded_at: d.uploaded_at,
+                            verification_result:
+                              (d.verification_result ?? null) as
+                                | Record<string, unknown>
+                                | null,
+                            admin_status_note: d.admin_status_note ?? null,
+                            admin_status_at: d.admin_status_at ?? null,
+                          };
+                          return (
+                            <KycDocRow
+                              key={d.id}
+                              doc={rowData}
+                              showAdminControls
+                              onViewClick={(docId) =>
+                                onOpenDocumentDetail?.(docId)
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {addressFields.map(renderField)}
+                    </div>
+                  </div>
+                )}
+
+                {postAddress.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    {postAddress.map(renderField)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {/* B-077 Batch 3 — the legacy bottom flat DOCUMENTS list
               (KycDocSlot loop over kycDocTypes) was deleted. Per-section
               source-doc rows above the AiPrefillBanner replace it; the

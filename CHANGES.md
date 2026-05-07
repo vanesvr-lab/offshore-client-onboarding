@@ -15,6 +15,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 4 — Address subdivider inside Identity with Proof of Address row (Claude Code)
+
+Resolves B-077 QA #8 on `/admin/services/[id]` Step 4 per-profile Identity section.
+
+- **`KycLongFormSection`** now uses a 3-band layout for the Identity (individual) section:
+  1. Pre-address fields (`full_name`, `aliases`, `date_of_birth`, `nationality`, `passport_country`, `passport_number`, `passport_expiry`) in the existing `grid-cols-1 md:grid-cols-2` grid.
+  2. **Address subdivider** — `border-t pt-4 mt-4` block with an `<h4>Address</h4>` heading. When a Proof of Residential Address is uploaded and fed extractions to the `address` field, its row renders here above the residential address textarea (using the same shared `KycDocRow` admin variant).
+  3. Post-address fields (`email`, `phone`) in their own grid below the subdivider.
+- All other sections (Financial / Declarations / Tax / Company Details) keep the original single grid — no behavior change.
+- **`KycLongForm`** splits source docs at the parent level: address-only docs are pulled out of the section-top set so they only render inside the subdivider; passport-fed docs stay at the top. A doc that fed both passport-side fields and the address field stays at the top (deduped, top wins).
+- No new `KycCategoryKey`, no new `application_section_reviews` row — the subdivider is purely cosmetic. Section key remains `kyc:<profileId>:identity`.
+
+Touched: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (KycLongForm + KycLongFormSection).
+
 ### 2026-05-07 — B-077 Batch 3 — Per-section source-doc rows + banner View+status pill; remove flat doc list (Claude Code)
 
 Per-profile KYC subsections on `/admin/services/[id]` Step 4 now mirror the client wizard layout exactly. Resolves B-077 QA #6 + #7.
