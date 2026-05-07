@@ -41,7 +41,7 @@ import {
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
-import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview } from "@/components/admin/AdminApplicationSections";
+import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
@@ -902,6 +902,27 @@ function InlineReviewButton({
   );
 }
 
+// B-074 Batch 6 — at-a-glance KYC review status on the collapsed person card.
+// Derives an aggregate badge from the per-category review keys covered by
+// KycLongForm (matches what's reviewable in the inline form). Renders nothing
+// until at least one of the categories has a review row, so unreviewed
+// profiles stay visually clean.
+function PersonAggregateReviewBadge({
+  profileId,
+  recordType,
+}: {
+  profileId: string;
+  recordType?: string | null;
+}) {
+  const cats = recordType === "organisation"
+    ? ["identity", "tax"]
+    : ["identity", "financial", "compliance", "professional"];
+  const sectionKeys = cats.map((c) => `kyc:${profileId}:${c}`);
+  const { status, reviewedCount } = useAggregateStatus(sectionKeys);
+  if (reviewedCount === 0) return null;
+  return <SectionReviewBadge status={status} />;
+}
+
 // ─── Ownership Structure ──────────────────────────────────────────────────────
 
 function OwnershipStructure({
@@ -1386,6 +1407,12 @@ function PersonCard({
                   {r}
                 </span>
               ))}
+              {!profile.is_representative && (
+                <PersonAggregateReviewBadge
+                  profileId={profile.id}
+                  recordType={profile.record_type}
+                />
+              )}
             </div>
 
             {/* KYC progress */}

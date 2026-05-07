@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-074 Batch 6 — Polish: aggregate KYC review badge on PersonCard header (Claude Code)
+
+Closes out B-074. With the inline reviews live in `KycLongForm`, the per-person card needed an at-a-glance status indicator so admin can spot unreviewed profiles without expanding each card.
+
+- **`ServiceDetailClient.tsx`** — added a `PersonAggregateReviewBadge` helper that calls `useAggregateStatus` over the categories covered by KycLongForm (individual: `identity / financial / compliance / professional`; organisation: `identity / tax`). Rendered next to the role chips in the card header. Returns `null` when no category has a review row, so unreviewed profiles stay visually clean.
+- The `Review all KYC` button at the top of Step 4 — out of scope per the brief, left as-is.
+- The "Add Director / Add Shareholder / Add UBO" tabs — keep their dashed-border style, untouched.
+- Per-person card buttons — unchanged: `Continue KYC for X` / `View Summary` / `Request KYC` / `Resend KYC`. No profile-level "Admin Review" button (review grain stays at the subsection level).
+
+End of B-074. All 6 batches landed; tech debt #25 is in Resolved; the FK bug is dead; visual containment is consistent; admin gets inline reviews per KYC subsection plus an aggregate status badge per person.
+
+---
+
 ### 2026-05-06 — B-074 Batch 5 — Delete parallel AdminKycPersonReviewPanel (Claude Code)
 
 With Batch 4's inline reviews live in `KycLongForm`, the parallel panel is redundant.
