@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 8 — Smoke test + cleanup + close-out (Claude Code)
+
+End of B-077. Build is clean. Per-batch acceptance items are individually verifiable from the code paths added in Batches 1–7 (linked from each batch entry below). Browser smoke test on `/admin/services/<gbc-0002>` Step 4 deferred to user since I can't drive the UI; the brief's smoke-test checklist maps onto:
+
+- B-077 #1 (duplicate name) → Batch 1
+- B-077 #2 (vertical containment) → Batch 1
+- B-077 #3 + #5 (subsection ordering, Documents at end) → Batch 2
+- B-077 #6 + #7 (per-section source-doc rows, banner View+status, no flat doc list) → Batch 3
+- B-077 #8 (Address subdivider) → Batch 4
+- B-077 #4 (Review {Profile} side panel + bulk Approve/Flag) → Batch 5
+- Add modal placement / styling / click-to-select / scroll → Batch 6
+- Audit panel populated end-to-end → Batch 7
+
+Out-of-scope items left untouched per the brief: Step 1/2/3/5 cards, Admin Actions surface (B-072), section-reviews data, right-column sidebar, admin-only fields, FSC checklist PDF diff, bulk audit_log endpoint, edit deep-link from review summary subsection rows, per-profile aggregate review key.
+
+**Dev server restart** kicked off in the background: `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`. Wait for it to print `Ready` before exercising the new UI.
+
 ### 2026-05-07 — B-077 Batch 7 — audit_log writes for section reviews / substance / service actions; widen display query (Claude Code)
 
 The audit panel on `/admin/services/[id]` was empty after the 2026-05-06 cleanup despite many admin actions, because three high-traffic mutating routes never wrote `audit_log` and the display query only picked up `entity_type = "service"` rows. Resolves both gaps.
