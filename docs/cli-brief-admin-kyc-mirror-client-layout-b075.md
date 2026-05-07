@@ -1,7 +1,7 @@
 # CLI Brief — B-075 Admin KYC Step 4 Mirrors Client Layout
 
 **Status:** Ready for CLI
-**Estimated batches:** 5
+**Estimated batches:** 6
 **Touches migrations:** No
 **Touches AI verification:** No
 **Resolves:** Visual divergence between admin and client KYC views (B-074 partial fix landed in `KycLongForm` but admin still uses `PersonsManager`'s bespoke 2-col grid)
@@ -169,12 +169,66 @@ If any of these fail, document in CHANGES.md and stop.
 
 ---
 
-## Batch 5 — Cleanup + final polish
+## Batch 5 — "Filled from uploaded document" admin affordances (View + Approve / Revoke)
+
+The blue banner that says **"✨ Filled from uploaded document — Values extracted from your passport / ID"** already renders inside `KycLongForm` (per Vanessa's screenshot). On client side it has a single `Re-apply` button. On admin side, this banner needs additional affordances so the admin can:
+
+1. **View the source document inline** without leaving the wizard
+2. **See the document's current admin status** (verified / flagged / approved / rejected / pending — these statuses come from `documents.admin_status` + the AI verification result)
+3. **Approve the document inline**, OR — if it was previously approved — **revoke the approval**
+
+### 5a — Add an admin-only `View` button to the banner
+
+When `mode === "admin"`, render an additional `View` button next to the existing `Re-apply`. (Keep `Re-apply` for admin too — admin may want to re-trigger AI extraction after replacing a doc.) Order: `[ View ]  [ Re-apply ]`.
+
+The View button needs the source document's id. The banner already knows which fields were filled by which document (via `field_extractions.source_document_id` from B-070 — find the most recent extraction with `source_document_id` for the fields rendered in this category bucket; if multiple docs contributed, link to the primary one — usually passport in the Identity bucket).
+
+### 5b — Document review side-panel
+
+Clicking `View` opens a right-slide panel (use the same Sheet component pattern as `SectionReviewPanel`). The panel shows:
+
+- **Doc preview** at the top (image inline, or PDF embed). Reuse the existing `DocumentPreviewDialog` content if possible — or extract its preview rendering into a shared component.
+- **Status pill** showing the current state. Map from existing columns:
+  - AI verification: `documents.verification_status` (verified / flagged / needs_review / checking / skipped / pending)
+  - Admin override: `documents.admin_status` (approved / rejected / null)
+  - The pill displays the more authoritative state — admin_status if set, else verification_status
+- **AI verification notes** (if `verification_result.notes` or similar is set) — show in a collapsed block
+- **Action button at the bottom:**
+  - If `admin_status` is null or `pending` → show a green `Approve` button. Clicking sets `admin_status = 'approved'`, `admin_status_by = current admin`, `admin_status_at = now()`, optional `admin_status_note` from a textarea above the button.
+  - If `admin_status === 'approved'` → show a `Revoke approval` button (outline style, less prominent). Clicking clears the admin_status fields back to null and inserts an audit row.
+  - If `admin_status === 'rejected'` → show both `Approve` and `Reset to pending` (handle the same way — clear admin_status). Don't worry about a separate "Reject" path here — that lives on the existing `/admin/applications/[id]/documents/[docId]` deep page.
+
+### 5c — Wire to existing document review API
+
+Reuse the existing PATCH endpoint that the deep document review page (`/admin/applications/[id]/documents/[docId]/page.tsx`) already uses to set `admin_status`. If there's no such endpoint, find where the deep page mutates and either:
+- Extract its mutation into an API route under `/api/admin/documents/[id]/admin-status/route.ts`, OR
+- Call the same RSC server action from the side panel
+
+The side panel mutates → on success, the local state updates the status pill optimistically + the View button on the banner gets a small green check next to it ("approved by admin").
+
+### 5d — Keep the "eye icon" deep-page entry intact
+
+The existing eye icon → `/admin/applications/[id]/documents/[docId]` deep page stays unchanged. The B-075 inline View flow is a faster path that lives next to the field provenance, but the deep page remains the canonical document-review surface.
+
+Acceptance:
+- Admin opens an Identity bucket where AI extracted from a passport. Sees the blue "Filled from uploaded document" banner with `View` + `Re-apply` buttons.
+- Click `View` → right-slide panel shows the passport image + status pill ("Verified" or whatever current state) + Approve button.
+- Click `Approve` → status pill flips to "Approved", panel closes, banner shows a small approved indicator.
+- Re-open `View` → now shows `Revoke approval` button instead of `Approve`.
+- Click `Revoke approval` → status reverts.
+- Client view (`mode === "client"`) does NOT show the View button — only Re-apply.
+- Build passes; mobile clean.
+
+**Commit message:** `feat: inline document View + Approve / Revoke from KYC wizard banner (admin)`
+
+---
+
+## Batch 6 — Cleanup + final polish
 
 1. Delete `docs/kyc-field-inventory.md` — was a working doc, no longer needed
 2. If the admin path now has an unused PersonsManager 2-col grid path, remove dead code. Keep PersonsManager itself if the per-person summary cards still use it as a foundation
 3. Verify there's no broken navigation between the per-person summary and the wizard view (e.g. URL state is preserved on browser back)
-4. Add a CHANGES.md entry for B-075 referencing the deleted bespoke layout, the converged `KycLongForm`, and the new `mode="admin"` prop pattern
+4. Add a CHANGES.md entry for B-075 referencing the deleted bespoke layout, the converged `KycLongForm`, the new `mode="admin"` prop pattern, AND the inline document Approve / Revoke flow (Batch 5)
 5. Background dev server restart:
    ```
    pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev
