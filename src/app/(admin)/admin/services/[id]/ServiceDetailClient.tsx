@@ -857,10 +857,11 @@ function KycLongFormSection({
           <span className="text-sm font-medium text-brand-navy">{section.title}</span>
           {reviewKey && <InlineReviewBadge sectionKey={reviewKey} />}
         </div>
-        <div
-          className="flex items-center gap-3"
-          onClick={(e) => e.stopPropagation()}
-        >
+        {/* B-076 — only the inline Review button stops propagation. The
+            progress bar + chevron stay inside the toggle target so a
+            click anywhere along the row (including the chevron) expands
+            or collapses the section. */}
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
               <div className={`h-full rounded-full ${pct >= 100 ? "bg-green-500" : pct > 0 ? "bg-amber-400" : "bg-red-400"}`} style={{ width: `${pct}%` }} />
@@ -868,7 +869,9 @@ function KycLongFormSection({
             <span className="text-[10px] text-gray-500 tabular-nums w-8">{pct}%</span>
           </div>
           {reviewKey && (
-            <InlineReviewButton sectionKey={reviewKey} sectionLabel={section.title} />
+            <span onClick={(e) => e.stopPropagation()}>
+              <InlineReviewButton sectionKey={reviewKey} sectionLabel={section.title} />
+            </span>
           )}
           <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </div>

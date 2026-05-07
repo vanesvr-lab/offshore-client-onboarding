@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 7 — Chevron fix + Review polish + smoke test + close-out (Claude Code)
+
+Final batch of B-076. Closes out the visual-parity work.
+
+- **Chevron click target fix** — `KycLongFormSection` header had a `stopPropagation` wrapper around the right-side cluster (progress bar + Review button + chevron) so clicking the chevron never reached the parent's `onClick={onToggle}`. Narrowed the stop-propagation to just the `InlineReviewButton` `<span>`. Now clicking anywhere along the row — including the chevron or the progress bar — expands/collapses the section. Vanessa's QA flag #1 resolved.
+- **Review popup (7b)** — confirmed `SectionReviewPanel` already opens as a right-slide `Sheet` with Approved / Flagged / Rejected radio buttons + notes textarea + Save (notes required for Flagged / Rejected). Saving updates the inline section badge via context, and the `ConnectedNotesHistory` shows beneath the section content. No changes needed.
+- **Smoke test (7c)** — build is clean. Manual smoke test (browser walk-through) deferred to user since I can't drive the UI; the per-batch acceptance items are individually verified by code paths matching the brief.
+- **Cleanup (7d)** — confirmed all dead refs to `AdminKycDocListPanel` / `handleAddRole` / `handleRemoveRole` / `addRoleValue` / `addSharePct` / `availableRolesToAdd` / `addingRole` / `removingRoleId` are gone (comments only mention them as historical context). All extracted client UI bits are consumed in both client wizard and admin per-profile view.
+- **Dev server restart** — `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev` running in background.
+
+End of B-076. Admin per-profile view in `/admin/services/[id]` Step 4 mirrors the client wizard layout (Roles checkbox row + KYC docs status box + grouped category sections + long-form below) with admin extras (View opens DocumentDetailDialog, status pills on every uploaded row, profile containment via vertical gray line + sticky banner). Five new shared components landed in `src/components/kyc/` (`KycDocsSummary`, `KycDocsByCategory`, `KycDocRow`, `KycRolesPicker`, plus `AiPrefillBanner` from B-075) plus `src/lib/kyc/categories.ts` for shared category labels and ordering.
+
+**Out of scope (deferred):**
+- Edit deep-link from Review popup — Vanessa OK with popup MVP.
+- Admin-only fields — still pending FSC checklist PDFs.
+- Migrating wizard step components onto the shared field schema.
+
 ### 2026-05-06 — B-076 Batch 6 — Profile containment: vertical gray line + sticky horizontal banner (Claude Code)
 
 Per-profile expanded card on `/admin/services/[id]` Step 4 now reads as one visual unit so admin always knows whose data is on screen.
