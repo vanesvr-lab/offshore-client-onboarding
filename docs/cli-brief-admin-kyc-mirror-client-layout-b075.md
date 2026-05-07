@@ -83,6 +83,12 @@ When `mode === "admin"`:
 - Render the admin-only fields (from the inventory in Batch 1) inline in the appropriate category section
 - Admin-only fields stay **editable regardless of `readOnly`** — the readOnly flag applies to client-shared fields only
 - Shared fields respect `readOnly` (disabled when true)
+- **Inline subsection Review affordances render at each KYC category header** — `SectionReviewBadge` + `SectionReviewButton` (already added to `KycLongForm` in B-074) tied to `section_key = "kyc:<client_profiles.id>:<category>"`. They were unconditionally rendered in B-074; gate them now so they appear only when `mode === "admin"`. Below each category section, render `SectionNotesHistory` for the same key so the audit trail is visible to the admin.
+
+When `mode === "client"`:
+- Hide the inline subsection Review affordances entirely (clients don't review themselves)
+- Hide admin-only fields
+- Default behavior otherwise unchanged
 
 Implementation approach: the existing field-render logic in `KycLongForm` likely iterates over a config array. Add a `clientOnly?: boolean` and/or `adminOnly?: boolean` flag to each entry. When rendering:
 - `clientOnly === true` → show only when `mode === "client"`
@@ -152,7 +158,8 @@ Smoke test path (CLI does this manually after Batch 3 lands):
 4. Verify: every shared field from the inventory is visible AND disabled (read-only)
 5. Verify: every admin-only field from the inventory is visible AND editable
 6. Edit one admin-only field (e.g. an "Internal admin notes" field if it exists), save, reload — value persists
-7. Inline Review button on each subsection still works (open panel, save review, status badge updates)
+7. Inline Review button on each subsection (Identity / Financial / Compliance / etc.) is visible AND functional — opens the right-slide SectionReviewPanel, saving the review updates the badge optimistically and adds a row to the SectionNotesHistory below the subsection
+   - Verify same view as **client** does NOT show these Review buttons (client side stays clean)
 8. Switch to a different profile via the tab selector — same layout
 9. Click `← Back to People` — returns to the per-person card overview
 
