@@ -258,21 +258,27 @@ function AddProfileDialog({
             <DialogTitle>Add {roleTitle}</DialogTitle>
           </DialogHeader>
 
+          {/* B-077 Batch 6b — bumped gray contrast across the modal so
+              eligible rows + the create-new form read as active rather
+              than disabled. Linked rows keep the existing low-contrast
+              styling because they really are unavailable. */}
           <div className="space-y-4 mt-1">
             {/* Search existing profiles */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Search existing profiles</p>
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                Search existing profiles
+              </p>
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name or email…"
                 autoFocus
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
               />
-              <div className="mt-2 max-h-44 overflow-y-auto border rounded-lg divide-y">
+              <div className="mt-2 max-h-44 overflow-y-auto border rounded-lg divide-y bg-white">
                 {filteredProfiles.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-3 text-center">No profiles found</p>
+                  <p className="text-xs text-gray-500 py-3 text-center">No profiles found</p>
                 ) : filteredProfiles.map((p) => {
                   const currentRoles = profileRoleMap.get(p.id) ?? [];
                   const isLinked = currentRoles.length > 0;
@@ -285,22 +291,26 @@ function AddProfileDialog({
                       onClick={() => !isLinked && setSelected(isSelected ? null : p)}
                       className={`w-full text-left px-3 py-2.5 flex items-center justify-between transition-colors ${
                         isLinked
-                          ? "opacity-50 cursor-not-allowed bg-gray-50"
+                          ? "opacity-60 cursor-not-allowed bg-gray-50"
                           : isSelected
                           ? "bg-blue-50 border-l-2 border-brand-blue cursor-pointer"
-                          : "hover:bg-gray-50 cursor-pointer"
+                          : "bg-white text-gray-900 hover:bg-gray-50 cursor-pointer"
                       }`}
                     >
                       <div className="min-w-0">
-                        <p className={`text-sm font-medium truncate ${isLinked ? "text-gray-400" : "text-gray-900"}`}>
+                        <p className={`text-sm font-medium truncate ${isLinked ? "text-gray-500" : "text-gray-900"}`}>
                           {p.full_name}
                         </p>
-                        {p.email && <p className="text-xs text-gray-400 truncate">{p.email}</p>}
+                        {p.email && (
+                          <p className={`text-xs truncate ${isLinked ? "text-gray-400" : "text-gray-600"}`}>
+                            {p.email}
+                          </p>
+                        )}
                       </div>
                       {isLinked && currentRoles.length > 0 && (
                         <div className="flex gap-1 shrink-0 ml-2">
                           {currentRoles.map((r) => (
-                            <span key={r} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 capitalize">
+                            <span key={r} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 capitalize">
                               {r}
                             </span>
                           ))}
@@ -318,7 +328,7 @@ function AddProfileDialog({
             {/* Divider */}
             <div className="flex items-center gap-2">
               <div className="flex-1 h-px bg-gray-200" />
-              <span className="text-xs text-gray-400">Or create new</span>
+              <span className="text-xs text-gray-500">Or create new</span>
               <div className="flex-1 h-px bg-gray-200" />
             </div>
 
@@ -334,12 +344,12 @@ function AddProfileDialog({
                       checked={newType === t}
                       onChange={() => { setNewType(t); setSelected(null); }}
                     />
-                    <span className="text-sm text-gray-700">{t === "organisation" ? "Corporation" : "Individual"}</span>
+                    <span className="text-sm text-gray-900">{t === "organisation" ? "Corporation" : "Individual"}</span>
                   </label>
                 ))}
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                <label className="text-xs font-medium text-gray-700 mb-1 block">
                   {newType === "organisation" ? "Corporation name" : "Full name"}{" "}
                   <span className="text-red-500">*</span>
                 </label>
@@ -348,17 +358,17 @@ function AddProfileDialog({
                   value={newName}
                   onChange={(e) => { setNewName(e.target.value); setSelected(null); }}
                   placeholder={newType === "organisation" ? "Acme Corp Ltd" : "Jane Smith"}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Email address</label>
+                <label className="text-xs font-medium text-gray-700 mb-1 block">Email address</label>
                 <input
                   type="email"
                   value={newEmail}
                   onChange={(e) => { setNewEmail(e.target.value); setSelected(null); }}
                   placeholder="jane@example.com"
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
               </div>
             </div>
@@ -1537,7 +1547,10 @@ function PersonCard({
   }
 
   return (
-    <div className="border rounded-xl overflow-hidden">
+    <div
+      id={`person-card-${profile.id}`}
+      className="border rounded-xl overflow-hidden scroll-mt-32"
+    >
       {/* ── Clickable header ─────────────────────────────────────────── */}
       {/* B-077 — when expanded, the sticky banner inside the body owns the
           name/role badges/KYC% display, so we hide the duplicate header
@@ -2825,6 +2838,24 @@ export function ServiceDetailClient({
     router.refresh();
   }
 
+  // B-077 Batch 6c — when a new profile is added/linked, the card mounts
+  // (or re-mounts) with `defaultExpanded`. Wait for the next render so
+  // the new DOM node exists, then smooth-scroll it into view.
+  useEffect(() => {
+    if (!newlyAddedProfileId) return;
+    let frames = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(`person-card-${newlyAddedProfileId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      frames++;
+      if (frames < 30) requestAnimationFrame(tryScroll);
+    };
+    requestAnimationFrame(tryScroll);
+  }, [newlyAddedProfileId, typedRoles]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -2991,6 +3022,28 @@ export function ServiceDetailClient({
           anchorId="step-people-kyc"
         >
           <div className="pt-4">
+            {/* B-077 Batch 6a — Add Director / Shareholder / UBO buttons
+                live directly under the People & KYC heading, ABOVE the
+                per-person card list (was below it). */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {(["director", "shareholder", "ubo"] as const).map((r) => (
+                <AddProfileDialog
+                  key={r}
+                  serviceId={service.id}
+                  allProfiles={allProfiles}
+                  existingRoles={typedRoles}
+                  onAdded={handleProfileAdded}
+                  defaultRole={r}
+                  trigger={
+                    <Button size="sm" variant="outline" className="gap-1.5 border-dashed">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add {r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1)}
+                    </Button>
+                  }
+                />
+              ))}
+            </div>
+
             {uniqueRoles.length === 0 ? (
               <p className="text-sm text-gray-400 mb-4">No profiles linked yet.</p>
             ) : (
@@ -3022,26 +3075,6 @@ export function ServiceDetailClient({
                 })}
               </div>
             )}
-
-            {/* Add role buttons */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {(["director", "shareholder", "ubo"] as const).map((r) => (
-                <AddProfileDialog
-                  key={r}
-                  serviceId={service.id}
-                  allProfiles={allProfiles}
-                  existingRoles={typedRoles}
-                  onAdded={handleProfileAdded}
-                  defaultRole={r}
-                  trigger={
-                    <Button size="sm" variant="outline" className="gap-1.5 border-dashed">
-                      <Plus className="h-3.5 w-3.5" />
-                      Add {r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1)}
-                    </Button>
-                  }
-                />
-              ))}
-            </div>
 
             {/* Ownership Structure — editable, collapsible */}
             <OwnershipStructure

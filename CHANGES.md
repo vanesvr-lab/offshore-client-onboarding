@@ -15,6 +15,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 6 — Add Person modal: placement, active styling, click-to-select, post-add scroll/expand (Claude Code)
+
+Three sub-tasks for the People & KYC Add Director / Shareholder / UBO flow on `/admin/services/[id]` Step 4.
+
+- **6a — placement** — the dashed-border `[+Add Director] [+Add Shareholder] [+Add UBO]` button row moved from BELOW the per-person card list to directly UNDER the People & KYC heading, ABOVE the cards. Visually anchors the action to the section title.
+- **6b — modal active styling** — bumped gray contrast across `AddProfileDialog`:
+  - Section header `text-gray-400` → `text-gray-600`
+  - "Or create new" divider, empty-state, helper text `text-gray-400` → `text-gray-500`
+  - Field labels `text-gray-600` → `text-gray-700`
+  - Radio labels `text-gray-700` → `text-gray-900`
+  - Eligible profile rows now carry an explicit `bg-white text-gray-900`
+  - Email line on eligible rows `text-gray-400` → `text-gray-600`
+  - Search input + create-new inputs explicit `bg-white text-gray-900 placeholder:text-gray-400`
+  - Linked rows keep their muted styling (`opacity-60`/`text-gray-500`) — they really are unavailable
+- **6c — click-to-select + after-add scroll/expand** — the existing toggle handler + `canSubmit = !saving && (selected !== null || newName.trim().length > 0)` predicate were already correct, but the visual gray made the Add button look disabled even when enabled (Vanessa's read). After the contrast bump in 6b, the active state is unmistakable.
+  - `PersonCard` root gained `id={person-card-<profileId>}` + `scroll-mt-32`. `ServiceDetailClient` gained a `useEffect` that watches `newlyAddedProfileId` + `typedRoles`; on change, it `requestAnimationFrame`-loops up to 30 frames waiting for the new DOM node, then smooth-scrolls it into view. Card is already auto-expanded via the existing `defaultExpanded={pid === newlyAddedProfileId}` wiring.
+
+Touched: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (AddProfileDialog modal markup, People & KYC section reorder, PersonCard root id, scroll effect).
+
 ### 2026-05-07 — B-077 Batch 5 — Per-profile Review summary side panel + bulk Approve/Flag (Claude Code)
 
 Resolves B-077 QA #4 on `/admin/services/[id]` Step 4. Admin can now bulk-approve or bulk-flag a profile across all KYC subsections from one place.
