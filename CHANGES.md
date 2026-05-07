@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-078 Batch 2 — Sticky Save / Cancel bar inside per-profile container (Claude Code)
+
+Added a per-profile bottom Save / Cancel bar inside the gray-line vertical containment of the admin per-profile view. Bar is always visible while the profile is expanded, pins to the viewport bottom while scrolling, and only enables its buttons when the profile is dirty. Save is currently a stub that clears local dirty state with a 250ms spinner — Batch 3 wires the real PATCH.
+
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — new `handleKycBarSave` (stub) + `handleKycBarCancel` (reverts `draftFields` to `savedFields`). New `savingKycBar` state drives the spinner. Bar JSX uses `sticky bottom-0` and extends slightly past the wrapper's left padding (`-ml-4`) so the border-top reads cleanly across the indent.
+- Removed the temporary `data-kyc-dirty*` probe from Batch 1 — `isDirty` now drives the bar directly.
+- Bar disabled-state mirrors the client wizard's `KycStepWizard` `fixedNav`: outline Cancel, brand-navy Save with hover:brand-blue. "You have unsaved changes" amber hint shown on the left when dirty.
+
 ### 2026-05-07 — B-078 Batch 1 — Editable KYC fields + per-profile dirty tracking (Claude Code)
 
 Removed the hardcoded `disabled` prop on every `KycLongFormField` in the admin per-profile expanded view. Lifted the `fields` state out of `KycLongForm` into `PersonCard` where it joins a new `savedFields` / `draftFields` pair so admins can type into Identity / Financial / Declarations inputs without bouncing to a separate edit page.

@@ -1377,6 +1377,7 @@ function PersonCard({
     return out;
   }, [draftFields, savedFields]);
   const isDirty = dirtyFieldKeys.length > 0;
+  const [savingKycBar, setSavingKycBar] = useState(false);
 
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
@@ -1468,6 +1469,30 @@ function PersonCard({
     } finally {
       setSavingProfile(false);
     }
+  }
+
+  // B-078 Batch 2 — bottom Save / Cancel bar handlers. Save is a stub
+  // that clears dirty state locally; Batch 3 replaces the body with the
+  // real PATCH against `/api/admin/profiles/[profileId]/kyc-fields`.
+  // Cancel reverts every dirty field on this profile back to the last-
+  // known-from-DB snapshot. Neither writes to the DB until Batch 3.
+  async function handleKycBarSave() {
+    if (!isDirty || savingKycBar) return;
+    setSavingKycBar(true);
+    try {
+      // Brief animation so the spinner is visible; Batch 3 replaces this
+      // with a real network round-trip.
+      await new Promise((r) => setTimeout(r, 250));
+      setSavedFields(draftFields);
+      toast.success("Changes saved.", { position: "top-right" });
+    } finally {
+      setSavingKycBar(false);
+    }
+  }
+  function handleKycBarCancel() {
+    if (!isDirty || savingKycBar) return;
+    setDraftFields(savedFields);
+    toast.info("Changes discarded.", { position: "top-right" });
   }
 
   // B-076 — old handleRemoveRole / handleAddRole + dropdown picker
@@ -1773,8 +1798,6 @@ function PersonCard({
           <div
             className="border-l-4 border-gray-200 ml-4 mr-4 my-4 pl-4"
             data-profile-id={profile.id}
-            data-kyc-dirty={isDirty ? "true" : "false"}
-            data-kyc-dirty-keys={dirtyFieldKeys.length}
           >
 
           {/* B-076 — visual parity with client wizard. Stacked top to
@@ -1987,6 +2010,49 @@ function PersonCard({
               )}
             </div>
           )}
+
+          {/* B-078 Batch 2 — sticky bottom Save / Cancel bar. Lives inside
+              the per-profile vertical containment so it spans the People
+              & KYC card width. `sticky bottom-0` pins it to the viewport
+              bottom while the user scrolls through the long form, then
+              scrolls away with content once the profile container ends.
+              Always visible while the profile is expanded — admins
+              shouldn't have to guess where it is. */}
+          <div className="sticky bottom-0 z-20 -ml-4 mt-3 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 border-t border-gray-200 rounded-b-md">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="text-xs">
+                {isDirty ? (
+                  <span className="text-amber-700 font-medium">
+                    You have unsaved changes
+                  </span>
+                ) : (
+                  <span className="text-gray-400">No changes</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 px-4 text-sm"
+                  disabled={!isDirty || savingKycBar}
+                  onClick={handleKycBarCancel}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-9 px-4 text-sm bg-brand-navy hover:bg-brand-blue text-white"
+                  disabled={!isDirty || savingKycBar}
+                  onClick={() => void handleKycBarSave()}
+                >
+                  {savingKycBar && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  )}
+                  Save changes
+                </Button>
+              </div>
+            </div>
+          </div>
 
           </div>{/* /vertical containment wrapper (B-077 Batch 1) */}
 
