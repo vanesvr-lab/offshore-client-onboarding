@@ -8,9 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  CheckSquare,
   Loader2,
-  Square,
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +33,7 @@ import { computePersonCompletion } from "@/lib/utils/personCompletion";
 import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import type { KycDocRowData } from "@/components/kyc/KycDocRow";
+import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { compressIfImage } from "@/lib/imageCompression";
 import { useAutosave } from "@/lib/hooks/useAutosave";
@@ -83,7 +82,7 @@ const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; activeHover:
   },
 };
 
-const ROLE_INACTIVE_TONE = "bg-white text-gray-700 border-gray-300 hover:bg-gray-50";
+// B-076 — ROLE_INACTIVE_TONE moved into the shared `KycRolesPicker`.
 
 /**
  * B-049 §1.2 / B-055 §2.1 — Per-person doc types are derived from
@@ -276,8 +275,6 @@ function RoleToggleRow({
   onRoleRemoved: (roleId: string) => void;
   onRoleAdded: (person: ServicePerson) => void;
 }) {
-  const [pending, setPending] = useState<Set<ServicePersonRole>>(new Set());
-
   function rowFor(role: ServicePersonRole): ServicePerson | undefined {
     return profileRoleRows.find((r) => r.role === role);
   }
@@ -287,9 +284,7 @@ function RoleToggleRow({
     : ["director", "shareholder"];
 
   async function toggle(role: ServicePersonRole) {
-    if (pending.has(role)) return;
     const existing = rowFor(role);
-    setPending((prev) => new Set(prev).add(role));
     try {
       if (existing) {
         const remainingAfter = profileRoleRows.filter((r) => r.id !== existing.id);
@@ -331,50 +326,20 @@ function RoleToggleRow({
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Role update failed");
-    } finally {
-      setPending((prev) => {
-        const next = new Set(prev);
-        next.delete(role);
-        return next;
-      });
     }
   }
 
   return (
-    <div className="inline-flex items-center gap-3 flex-wrap">
-      <span className="text-sm font-medium text-gray-600 select-none">Roles:</span>
-      <div className="inline-flex items-center gap-2 flex-wrap">
-        {visibleRoles.map((role) => {
-          const active = !!rowFor(role);
-          const tone = ROLE_TOGGLE_TONE[role];
-          const busy = pending.has(role);
-          return (
-            <button
-              key={role}
-              type="button"
-              role="checkbox"
-              aria-checked={active}
-              aria-pressed={active}
-              aria-label={`Toggle ${ROLE_LABELS[role]} role`}
-              onClick={() => void toggle(role)}
-              disabled={busy}
-              className={`inline-flex items-center gap-2 h-10 px-3 py-2 text-sm font-medium rounded-md border cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed ${
-                active ? `${tone.active} ${tone.activeHover}` : ROLE_INACTIVE_TONE
-              }`}
-            >
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : active ? (
-                <CheckSquare className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Square className="h-4 w-4 text-gray-400" aria-hidden="true" />
-              )}
-              <span>{ROLE_LABELS[role]}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <KycRolesPicker
+      selectedRoles={visibleRoles.filter((r) => !!rowFor(r))}
+      availableRoles={visibleRoles.map((r) => ({
+        key: r,
+        label: ROLE_LABELS[r],
+        activeClass: ROLE_TOGGLE_TONE[r].active,
+        activeHoverClass: ROLE_TOGGLE_TONE[r].activeHover,
+      }))}
+      onToggleRole={(roleKey) => toggle(roleKey as ServicePersonRole)}
+    />
   );
 }
 

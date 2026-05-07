@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 3 — Extract KycRolesPicker (Claude Code)
+
+- **NEW `src/components/kyc/KycRolesPicker.tsx`** — purely presentational checkbox-style roles row. Props: `selectedRoles[]`, `availableRoles[]` (each entry takes optional per-role tone classes for active/hover), `onToggleRole(roleKey) => Promise<void>` (caller owns the API mutation), `disabled`, `hideLabel`. Built-in per-button pending spinner so the caller doesn't have to thread state.
+- **`PerPersonReviewWizard.RoleToggleRow`** — reduced to a thin shell that hands the existing `/api/services/[id]/persons` POST/DELETE handlers + the per-role tone constants to `KycRolesPicker`. Optimistic state still flows through `onRoleAdded` / `onRoleRemoved`.
+- Cleaned up unused `CheckSquare` / `Square` imports + `ROLE_INACTIVE_TONE` constant left over after the inline render moved out.
+
+Build passes. Admin consumer (replacing the legacy `[role][Remove] [+Add]` picker) lands in Batch 4.
+
 ### 2026-05-06 — B-076 Batch 2 — Extract KycDocsByCategory + KycDocRow (Claude Code)
 
 - **NEW `src/components/kyc/KycDocRow.tsx`** — single per-doc row. File icon (state-aware), doc name, optional `DocumentStatusBadge` when uploaded, plus a right-side button (`View` for uploaded, `Upload` for empty). Props expose `showAdminControls` (compact admin density), `onViewClick(docId)`, `onUploadClick(docTypeId)`, and `isUploading`.
