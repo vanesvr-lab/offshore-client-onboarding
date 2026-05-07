@@ -14,6 +14,7 @@ import { formWidths } from "@/lib/form-widths";
 import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import type { PrefillableField } from "@/lib/kyc/computePrefillable";
 import { FieldPrefillIcon } from "@/components/kyc/FieldPrefillIcon";
+import { AiPrefillBanner } from "@/components/kyc/AiPrefillBanner";
 import type { KycRecord, DocumentRecord, DocumentType, DueDiligenceRequirement } from "@/types";
 
 // B-049 §2.2 — when address is its own sub-step, IdentityStep ignores
@@ -357,24 +358,14 @@ export function IdentityStep({
         </div>
       )}
       {bannerState === "success" && (
-        <div className="rounded-lg border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 flex items-start gap-3">
-          <Sparkles className="h-4 w-4 text-brand-blue shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-brand-navy">Filled from uploaded document</p>
-            <p className="text-xs text-gray-600">Values extracted from your passport / ID.</p>
-          </div>
-          {passportDoc?.verification_result && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void handleManualPrefill()}
-              disabled={manualPrefilling}
-              className="h-7 text-xs"
-            >
-              Re-apply
-            </Button>
-          )}
-        </div>
+        <AiPrefillBanner
+          onReapply={
+            passportDoc?.verification_result
+              ? () => void handleManualPrefill()
+              : undefined
+          }
+          isReapplying={manualPrefilling}
+        />
       )}
       {bannerState === "no-source" && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 flex items-center gap-2.5">

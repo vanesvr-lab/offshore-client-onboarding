@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-075 Batch 4 — Read-only KycLongForm + inline doc View / Approve / Revoke (Claude Code)
+
+Admin's KYC long form is now strictly read-only on the form data. Reviews (per-section) and inline doc Approve / Revoke are the only writes. Mirrors the brief's intent: experienced admins scroll through, mark sections, and clear the source docs without bouncing to a separate review page.
+
+- **Read-only enforcement** — every field in `KycLongFormField` renders with `disabled`. Country picker (which doesn't accept `disabled`) wraps in `pointer-events-none`. Save KYC button + the `handleSave`/`saving` state are deleted (form data is no longer editable from this surface).
+- **Inline doc View on the AI prefill banner** — when a section has at least one extracted field, the banner shows `[ View ] [ Re-apply ]`. Clicking View opens a right-slide `Sheet` (`InlineDocReviewPanel`) that resolves the section's source document via the most recent `field_extractions.source_document_id`.
+- **Right-slide panel** — `src/components/kyc/InlineDocReviewPanel.tsx`: image / PDF preview, two-track status pill (admin_status > verification_status), collapsible AI Verification summary (confidence / rules / flags / notes), optional approval note textarea. Footer button is `Approve` (green) when not yet approved, `Revoke approval` (outline) when `admin_status === 'approved'`. After approve/revoke the banner shows a small `✓ Approved` chip via `AiPrefillBanner.rightAdornment`.
+- **NEW `/api/admin/documents/[id]/admin-status` PATCH route** — accepts `{ status: "approved" | null, note?: string }`. Approve sets `admin_status / admin_status_note / admin_status_by / admin_status_at`; revoke clears all four. Audit-logs `document_approved` / `document_approval_revoked` and revalidates the client-scoped admin path. Existing library-doc review route (`/api/admin/documents/library/[id]/review`) is unchanged.
+- **Client wizard cleanup** — `IdentityStep`'s success-state banner now uses the shared `AiPrefillBanner`. No `View` button on the client side (gated by omitting `onView`). Other banner states (running / error / no-source) stay inline since they're admin-irrelevant.
+- `localDocs` syncs from the parent `profileDocuments` prop on every refresh so a freshly-approved status flows back into the panel without remount.
+
+Build passes.
+
 ### 2026-05-06 — B-075 Batch 3 — Default-collapsed accordion + visual style aligned with client wizard (Claude Code)
 
 Polishes the per-profile KYC long-form to match the client wizard visually while preserving the long-form accordion structure (intentional — admin scrolls instead of next-clicking).

@@ -50,6 +50,7 @@ import { CountrySelect } from "@/components/shared/CountrySelect";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AiPrefillBanner } from "@/components/kyc/AiPrefillBanner";
+import { InlineDocReviewPanel, type InlineDocReviewDoc } from "@/components/kyc/InlineDocReviewPanel";
 import {
   KYC_SECTIONS_INDIVIDUAL,
   KYC_SECTIONS_ORGANISATION,
@@ -563,12 +564,88 @@ function KycLongForm({
     email: profileEmail ?? kyc.email ?? "",
     phone: profilePhone ?? kyc.phone ?? "",
   });
-  const [saving, setSaving] = useState(false);
   // B-075 — admin opens with everything collapsed. Vanessa, 2026-05-07:
   // "by default the page is loaded with all the sections collapsed."
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [localDocs, setLocalDocs] = useState<ServiceDoc[]>(profileDocuments ?? []);
   const [reapplyingSection, setReapplyingSection] = useState<string | null>(null);
+
+  // B-075 — sync localDocs when the parent re-fetches (e.g. after an
+  // approve/revoke flips admin_status on the source doc).
+  useEffect(() => {
+    setLocalDocs(profileDocuments ?? []);
+  }, [profileDocuments]);
+
+  // B-075 — Inline doc review panel (right-slide). Opens from the
+  // AiPrefillBanner's `View` button. The source doc is the most recent
+  // `field_extractions` row's `source_document_id` for any field in the
+  // section.
+  const [reviewDocId, setReviewDocId] = useState<string | null>(null);
+
+  function findSourceDocForSection(section: KycSection): string | null {
+    let best: { docId: string; at: number } | null = null;
+    for (const f of section.fields) {
+      const rows = extractionsByField[f.key];
+      if (!rows) continue;
+      for (const row of rows) {
+        if (!row.source_document_id) continue;
+        const at = new Date(row.extracted_at).getTime();
+        if (!best || at > best.at) best = { docId: row.source_document_id, at };
+      }
+    }
+    return best?.docId ?? null;
+  }
+
+  function handleViewSection(section: KycSection) {
+    const docId = findSourceDocForSection(section);
+    if (!docId) {
+      toast.info("No source document found for this section.", {
+        position: "top-right",
+      });
+      return;
+    }
+    setReviewDocId(docId);
+  }
+
+  const reviewDoc: InlineDocReviewDoc | null = reviewDocId
+    ? (() => {
+        const d = localDocs.find((x) => x.id === reviewDocId);
+        if (!d) return null;
+        return {
+          id: d.id,
+          file_name: d.file_name,
+          mime_type: d.mime_type,
+          uploaded_at: d.uploaded_at,
+          document_type_name: d.document_types?.name ?? null,
+          verification_status: d.verification_status,
+          verification_result: (d.verification_result ?? null) as VerificationResult | null,
+          admin_status: d.admin_status ?? null,
+          admin_status_note: d.admin_status_note ?? null,
+          admin_status_at: d.admin_status_at ?? null,
+        };
+      })()
+    : null;
+
+  function handleAdminStatusChange(next: {
+    admin_status: string | null;
+    admin_status_note: string | null;
+    admin_status_at: string | null;
+  }) {
+    if (!reviewDocId) return;
+    setLocalDocs((prev) =>
+      prev.map((d) =>
+        d.id === reviewDocId
+          ? {
+              ...d,
+              admin_status: next.admin_status,
+              admin_status_note: next.admin_status_note,
+              admin_status_at: next.admin_status_at,
+            }
+          : d,
+      ),
+    );
+    onSaved();
+  }
 
   // B-075 — re-apply: re-pull the most recent extracted value for each field
   // in `section` and PATCH them into the form. Mirrors the client wizard's
@@ -647,27 +724,6 @@ function KycLongForm({
     return Math.round((filled / visible.length) * 100);
   }
 
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const kycId = kyc.id as string;
-      if (!kycId) throw new Error("No KYC record ID");
-      const res = await fetch("/api/profiles/kyc/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kycRecordId: kycId, fields }),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      toast.success("KYC saved", { position: "top-right" });
-      onSaved();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to save", { position: "top-right" });
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div className="space-y-3 mt-3">
       {sections.map(section => {
@@ -691,15 +747,34 @@ function KycLongForm({
             onDocUploaded={handleDocUploaded}
             onReapply={() => void handleReapplySection(section)}
             isReapplying={reapplyingSection === section.title}
+            onView={
+              findSourceDocForSection(section)
+                ? () => handleViewSection(section)
+                : undefined
+            }
+            sectionAdminApproved={(() => {
+              const docId = findSourceDocForSection(section);
+              if (!docId) return false;
+              return (
+                localDocs.find((d) => d.id === docId)?.admin_status === "approved"
+              );
+            })()}
           />
         );
       })}
-      <div className="flex justify-end pt-2">
-        <Button size="sm" onClick={() => void handleSave()} disabled={saving} className="bg-brand-navy hover:bg-brand-blue">
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-          Save KYC
-        </Button>
-      </div>
+      {/* B-075 — admin is read-only on form data; reviews and inline doc
+          approve/revoke are the only writes. The Save button is hidden;
+          handleSave is kept for the legacy re-apply path. */}
+      {reviewDoc && (
+        <InlineDocReviewPanel
+          doc={reviewDoc}
+          open={reviewDocId !== null}
+          onOpenChange={(o) => {
+            if (!o) setReviewDocId(null);
+          }}
+          onStatusChange={handleAdminStatusChange}
+        />
+      )}
     </div>
   );
 }
@@ -725,6 +800,8 @@ function KycLongFormSection({
   onDocUploaded,
   onReapply,
   isReapplying,
+  onView,
+  sectionAdminApproved,
 }: {
   section: KycSection;
   pct: number;
@@ -747,6 +824,10 @@ function KycLongFormSection({
   onDocUploaded: (doc: ServiceDoc) => void;
   onReapply?: () => void;
   isReapplying?: boolean;
+  /** Admin-only: opens the right-slide doc review panel. Undefined hides the View button. */
+  onView?: () => void;
+  /** When true, the AiPrefillBanner shows a small "Approved" indicator. */
+  sectionAdminApproved?: boolean;
 }) {
   const reviewKey =
     section.categoryKey && profileId
@@ -797,6 +878,14 @@ function KycLongFormSection({
             <AiPrefillBanner
               onReapply={onReapply}
               isReapplying={isReapplying}
+              onView={onView}
+              rightAdornment={
+                sectionAdminApproved ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
+                    ✓ Approved
+                  </span>
+                ) : null
+              }
             />
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -815,6 +904,7 @@ function KycLongFormSection({
                     onChange={(v) => setFields(prev => ({ ...prev, [f.key]: v }))}
                     extractions={extractionsByField[f.key] ?? []}
                     sourceDocs={sourceDocsForMarker}
+                    disabled
                   />
                 </div>
               );
@@ -861,6 +951,7 @@ function KycLongFormField({
   onChange,
   extractions,
   sourceDocs,
+  disabled = false,
 }: {
   field: KycField;
   value: unknown;
@@ -873,6 +964,8 @@ function KycLongFormField({
     uploaded_at: string;
     verification_status: string;
   }[];
+  /** B-075 — admin renders the form read-only; disables every input. */
+  disabled?: boolean;
 }) {
   const stringValue = (value ?? "") as string;
 
@@ -898,7 +991,8 @@ function KycLongFormField({
           onChange={(e) => onChange(e.target.value)}
           rows={3}
           placeholder={field.placeholder}
-          className="text-sm resize-none"
+          disabled={disabled}
+          className="text-sm resize-none disabled:opacity-100 disabled:bg-gray-50 disabled:cursor-default"
         />
       ) : field.type === "boolean" ? (
         <select
@@ -908,7 +1002,8 @@ function KycLongFormField({
               e.target.value === "yes" ? true : e.target.value === "no" ? false : null,
             )
           }
-          className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+          disabled={disabled}
+          className="w-full border rounded-md px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:opacity-100 disabled:cursor-default"
         >
           <option value="">— Select —</option>
           <option value="yes">Yes</option>
@@ -918,7 +1013,8 @@ function KycLongFormField({
         <select
           value={stringValue}
           onChange={(e) => onChange(e.target.value || null)}
-          className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+          disabled={disabled}
+          className="w-full border rounded-md px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:opacity-100 disabled:cursor-default"
         >
           <option value="">— Select —</option>
           {(field.options ?? []).map((o) => (
@@ -932,21 +1028,27 @@ function KycLongFormField({
           type="date"
           value={stringValue}
           onChange={(e) => onChange(e.target.value || null)}
-          className="text-sm"
+          disabled={disabled}
+          className="text-sm disabled:opacity-100 disabled:bg-gray-50 disabled:cursor-default"
         />
       ) : field.type === "country" ? (
-        <CountrySelect
-          value={stringValue}
-          onChange={(v) => onChange(v)}
-          placeholder={field.placeholder}
-        />
+        // CountrySelect doesn't accept `disabled`; wrap in a pointer-events
+        // container so admin still sees the value but can't open the picker.
+        <div className={disabled ? "pointer-events-none opacity-90" : ""}>
+          <CountrySelect
+            value={stringValue}
+            onChange={(v) => onChange(v)}
+            placeholder={field.placeholder}
+          />
+        </div>
       ) : (
         <Input
           type="text"
           value={stringValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className="text-sm"
+          disabled={disabled}
+          className="text-sm disabled:opacity-100 disabled:bg-gray-50 disabled:cursor-default"
         />
       )}
       {field.helperText && (
