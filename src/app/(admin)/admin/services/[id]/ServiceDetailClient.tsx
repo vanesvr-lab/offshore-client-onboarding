@@ -9,7 +9,7 @@ import {
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
   AlertTriangle, Download, Eye, MessageSquarePlus, Upload,
-  CheckSquare, Square, Sparkles,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,6 @@ import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
-import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { AuditTrail } from "@/components/admin/AuditTrail";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
@@ -51,6 +50,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AiPrefillBanner } from "@/components/kyc/AiPrefillBanner";
 import { InlineDocReviewPanel, type InlineDocReviewDoc } from "@/components/kyc/InlineDocReviewPanel";
+import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
+import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
+import type { KycDocRowData } from "@/components/kyc/KycDocRow";
+import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
+import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 import {
   KYC_SECTIONS_INDIVIDUAL,
   KYC_SECTIONS_ORGANISATION,
@@ -1254,170 +1258,10 @@ function OwnershipStructure({
   );
 }
 
-// ─── Admin KYC Doc List Panel ─────────────────────────────────────────────────
-
-function AdminKycDocListPanel({
-  profileId,
-  profileName,
-  profileEmail,
-  serviceId,
-  profileDocuments,
-  documentTypes,
-  updateRequests,
-  onRefresh,
-}: {
-  profileId: string;
-  profileName: string | null;
-  profileEmail: string | null;
-  serviceId: string;
-  profileDocuments: ServiceDoc[];
-  documentTypes: DocumentType[];
-  updateRequests: DocumentUpdateRequest[];
-  onRefresh: () => void;
-}) {
-  const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
-  const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const [pendingUploadTypeId, setPendingUploadTypeId] = useState<string | null>(null);
-
-  const kycDocTypes = documentTypes.filter((dt) => isKycDoc(dt.category));
-  const profileDocs = profileDocuments.filter((d) => d.client_profile_id === profileId);
-
-  function getUploaded(dtId: string) {
-    return profileDocs.find((d) => d.document_type_id === dtId);
-  }
-
-  async function handleUpload(dtId: string, file: File) {
-    setUploadingTypeId(dtId);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("documentTypeId", dtId);
-      fd.append("clientProfileId", profileId);
-      const res = await fetch(`/api/services/${serviceId}/documents/upload`, {
-        method: "POST",
-        body: fd,
-      });
-      const data = (await res.json()) as { document?: unknown; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      toast.success("Document uploaded", { position: "top-right" });
-      onRefresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploadingTypeId(null);
-    }
-  }
-
-  const recipients = [
-    { id: profileId, name: profileName ?? "Document owner", email: profileEmail, label: "Document owner" },
-  ];
-
-  const uploadedCount = kycDocTypes.filter((dt) => getUploaded(dt.id)).length;
-
-  return (
-    <>
-      <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
-        {kycDocTypes.map((dt) => {
-          const uploaded = getUploaded(dt.id);
-          const isUploading = uploadingTypeId === dt.id;
-          const aiStatus = uploaded?.verification_status;
-          const adminStatus = uploaded?.admin_status;
-          // Green only when admin has approved. Uploaded-but-unreviewed = neutral.
-          const isApproved = uploaded && adminStatus === "approved";
-
-          return (
-            <div key={dt.id} className="flex items-center justify-between py-1.5 border-b last:border-0 gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                {!uploaded && <Square className="h-3.5 w-3.5 text-gray-300 shrink-0" />}
-                {uploaded && !isApproved && <CheckSquare className="h-3.5 w-3.5 text-gray-500 shrink-0" />}
-                {isApproved && <CheckSquare className="h-3.5 w-3.5 text-green-500 shrink-0" />}
-                <span className="text-xs text-gray-700 truncate">{dt.name}</span>
-                {uploaded && (
-                  <DocumentStatusBadge
-                    aiStatus={aiStatus}
-                    adminStatus={adminStatus}
-                    compact
-                    className="shrink-0"
-                  />
-                )}
-              </div>
-              <div className="shrink-0">
-                {uploaded ? (
-                  <Button
-                    size="sm" variant="ghost"
-                    className="h-6 w-6 p-0"
-                    onClick={() => setDetailDoc({
-                      id: uploaded.id,
-                      file_name: uploaded.file_name,
-                      mime_type: uploaded.mime_type,
-                      uploaded_at: uploaded.uploaded_at,
-                      document_type_id: uploaded.document_type_id,
-                      verification_status: uploaded.verification_status,
-                      verification_result: uploaded.verification_result,
-                      admin_status: uploaded.admin_status,
-                      admin_status_note: uploaded.admin_status_note,
-                      admin_status_at: uploaded.admin_status_at,
-                      document_types: uploaded.document_types,
-                      client_profiles: uploaded.client_profiles,
-                    })}
-                  >
-                    <Eye className="h-3.5 w-3.5 text-gray-400" />
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-6 px-2 text-[10px] gap-1"
-                    disabled={isUploading}
-                    onClick={() => {
-                      setPendingUploadTypeId(dt.id);
-                      uploadInputRef.current?.click();
-                    }}
-                  >
-                    {isUploading
-                      ? <Loader2 className="h-3 w-3 animate-spin" />
-                      : <><Upload className="h-3 w-3" />Upload</>
-                    }
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-[10px] text-gray-400 pt-1">{uploadedCount} of {kycDocTypes.length} uploaded</p>
-
-      {/* Hidden file input */}
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file && pendingUploadTypeId) void handleUpload(pendingUploadTypeId, file);
-          e.target.value = "";
-          setPendingUploadTypeId(null);
-        }}
-      />
-
-      {/* Document detail dialog */}
-      {detailDoc && (
-        <DocumentDetailDialog
-          doc={detailDoc}
-          isAdmin={true}
-          open={!!detailDoc}
-          onOpenChange={(open) => { if (!open) { setDetailDoc(null); onRefresh(); } }}
-          serviceId={serviceId}
-          recipients={recipients}
-          updateRequests={updateRequests.filter((r) => r.document_id === detailDoc.id)}
-          onStatusChange={() => onRefresh()}
-          onRequestSent={() => onRefresh()}
-        />
-      )}
-    </>
-  );
-}
+// B-076 — `AdminKycDocListPanel` was deleted; the per-profile
+// expanded view now uses the shared `KycDocsSummary` +
+// `KycDocsByCategory` components directly inside `PersonCard`, with
+// admin-only `View` click wired to the same `DocumentDetailDialog`.
 
 // ─── Person Card ──────────────────────────────────────────────────────────────
 
@@ -1453,10 +1297,13 @@ function PersonCard({
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
-  const [addRoleValue, setAddRoleValue] = useState<"director" | "shareholder" | "ubo" | "other">("director");
-  const [addSharePct, setAddSharePct] = useState("");
-  const [addingRole, setAddingRole] = useState(false);
-  const [removingRoleId, setRemovingRoleId] = useState<string | null>(null);
+  // B-076 — admin doc upload + detail dialog state, lifted out of the
+  // deleted `AdminKycDocListPanel` so the new shared `KycDocsByCategory`
+  // can reuse the same upload + view affordances per row.
+  const [uploadingDocTypeId, setUploadingDocTypeId] = useState<string | null>(null);
+  const [pendingUploadDocTypeId, setPendingUploadDocTypeId] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
 
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
@@ -1473,11 +1320,54 @@ function PersonCard({
 
   const roleLabels = (combinedRoles ?? [roleRow.role]).join(", ");
 
-  // Roles not yet assigned to this person
-  const assignedRoles = new Set(allRoleRows.map((r) => r.role));
-  const availableRolesToAdd = (["director", "shareholder", "ubo", "other"] as const).filter(
-    (r) => !assignedRoles.has(r)
+  // B-076 — checkbox-style role picker mirrors the client. Visible
+  // roles depend on profile type. Legacy "other" role from the old
+  // [+Add] dropdown is dropped from this surface (rare; admin can
+  // still PATCH via DB if ever needed).
+  const visibleRoleKeys = profile.record_type === "organisation"
+    ? ["director", "shareholder"]
+    : ["director", "shareholder", "ubo"];
+  const ROLE_LABEL: Record<string, string> = {
+    director: "Director",
+    shareholder: "Shareholder",
+    ubo: "UBO",
+  };
+  const ROLE_TONE: Record<string, { active: string; activeHover: string }> = {
+    director: { active: "bg-blue-50 text-blue-700 border-blue-200", activeHover: "hover:bg-blue-100" },
+    shareholder: { active: "bg-purple-50 text-purple-700 border-purple-200", activeHover: "hover:bg-purple-100" },
+    ubo: { active: "bg-amber-50 text-amber-700 border-amber-200", activeHover: "hover:bg-amber-100" },
+  };
+  const selectedRoleKeys = visibleRoleKeys.filter((rk) =>
+    allRoleRows.some((r) => r.role === rk),
   );
+
+  async function toggleRoleAdmin(roleKey: string) {
+    const existing = allRoleRows.find((r) => r.role === roleKey);
+    try {
+      if (existing) {
+        const isLast = allRoleRows.length === 1;
+        if (isLast && !confirm(`Remove ${profile.full_name} from this service?`)) return;
+        const res = await fetch(`/api/admin/services/${serviceId}/roles/${existing.id}`, {
+          method: "DELETE",
+        });
+        const data = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed");
+        toast.success(isLast ? `${profile.full_name} removed` : "Role removed", { position: "top-right" });
+      } else {
+        const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_profile_id: profile.id, role: roleKey }),
+        });
+        const data = (await res.json()) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Failed");
+        toast.success(`${ROLE_LABEL[roleKey] ?? roleKey} role added`, { position: "top-right" });
+      }
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Role update failed", { position: "top-right" });
+    }
+  }
 
   function openEditProfile() {
     setEditName(profile.full_name ?? "");
@@ -1510,47 +1400,103 @@ function PersonCard({
     }
   }
 
-  async function handleRemoveRole(roleId: string, isLastRole: boolean) {
-    if (isLastRole) {
-      if (!confirm(`Remove ${profile.full_name} from this service?`)) return;
+  // B-076 — old handleRemoveRole / handleAddRole + dropdown picker
+  // were replaced by `toggleRoleAdmin` (above) which the shared
+  // `KycRolesPicker` calls per checkbox toggle.
+
+  // B-076 — per-profile KYC doc data builders. Lifted from the deleted
+  // `AdminKycDocListPanel`; consumed by `KycDocsSummary` (status box)
+  // + `KycDocsByCategory` (grouped per-category list).
+  const profileDocs = (profileDocuments ?? []).filter(
+    (d) => d.client_profile_id === profile.id,
+  );
+  const kycDocTypes = (documentTypes ?? []).filter((dt) => isKycDoc(dt.category));
+  const kycDocsByCategory = (() => {
+    const groups: Record<string, DocumentType[]> = {};
+    for (const dt of kycDocTypes) {
+      const cat = dt.category || "additional";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(dt);
     }
-    setRemovingRoleId(roleId);
+    const present = sortKycCategories(Object.keys(groups));
+    return present.map((cat) => ({
+      key: cat,
+      label: kycCategoryLabel(cat),
+      docs: groups[cat].map<KycDocRowData>((dt) => {
+        const uploaded = profileDocs.find((d) => d.document_type_id === dt.id);
+        return {
+          id: uploaded?.id ?? null,
+          document_type_id: dt.id,
+          document_name: dt.name,
+          is_uploaded: !!uploaded,
+          verification_status: uploaded?.verification_status ?? null,
+          admin_status: uploaded?.admin_status ?? null,
+          file_name: uploaded?.file_name ?? null,
+          mime_type: uploaded?.mime_type ?? null,
+          uploaded_at: uploaded?.uploaded_at ?? null,
+          verification_result: (uploaded?.verification_result as Record<string, unknown> | null) ?? null,
+          admin_status_note: uploaded?.admin_status_note ?? null,
+          admin_status_at: uploaded?.admin_status_at ?? null,
+        };
+      }),
+    }));
+  })();
+
+  const totalKycDocs = kycDocsByCategory.reduce((acc, c) => acc + c.docs.length, 0);
+  const totalKycUploaded = kycDocsByCategory.reduce(
+    (acc, c) => acc + c.docs.filter((d) => d.is_uploaded).length,
+    0,
+  );
+
+  async function handleAdminDocUpload(docTypeId: string, file: File) {
+    setUploadingDocTypeId(docTypeId);
     try {
-      const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleId}`, { method: "DELETE" });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success(isLastRole ? `${profile.full_name} removed` : "Role removed", { position: "top-right" });
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("documentTypeId", docTypeId);
+      fd.append("clientProfileId", profile.id);
+      const res = await fetch(`/api/admin/services/${serviceId}/documents/upload`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = (await res.json()) as { document?: unknown; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      toast.success("Document uploaded", { position: "top-right" });
       onRefresh();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove", { position: "top-right" });
+      toast.error(err instanceof Error ? err.message : "Upload failed", { position: "top-right" });
     } finally {
-      setRemovingRoleId(null);
+      setUploadingDocTypeId(null);
     }
   }
 
-  async function handleAddRole() {
-    setAddingRole(true);
-    try {
-      const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_profile_id: profile.id,
-          role: addRoleValue,
-          shareholding_percentage: addRoleValue === "shareholder" && addSharePct ? parseFloat(addSharePct) : null,
-        }),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success(`${addRoleValue} role added`, { position: "top-right" });
-      setAddSharePct("");
-      onRefresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to add role", { position: "top-right" });
-    } finally {
-      setAddingRole(false);
-    }
+  function handleAdminViewDoc(docId: string) {
+    const uploaded = profileDocs.find((d) => d.id === docId);
+    if (!uploaded) return;
+    setDetailDoc({
+      id: uploaded.id,
+      file_name: uploaded.file_name,
+      mime_type: uploaded.mime_type,
+      uploaded_at: uploaded.uploaded_at,
+      document_type_id: uploaded.document_type_id,
+      verification_status: uploaded.verification_status,
+      verification_result: uploaded.verification_result,
+      admin_status: uploaded.admin_status,
+      admin_status_note: uploaded.admin_status_note,
+      admin_status_at: uploaded.admin_status_at,
+      document_types: uploaded.document_types,
+      client_profiles: uploaded.client_profiles,
+    });
   }
+
+  const detailDocRecipients = [
+    {
+      id: profile.id,
+      name: profile.full_name ?? "Document owner",
+      email: profile.email ?? null,
+      label: "Document owner",
+    },
+  ];
 
   async function toggleManage() {
     try {
@@ -1653,106 +1599,113 @@ function PersonCard({
       {expanded && (
         <div className="border-t" onClick={(e) => e.stopPropagation()}>
 
-          {/* Split top section: Profile+Roles (left) | KYC Docs (right) */}
-          <div className="grid grid-cols-2 gap-4 px-4 py-4 border-b">
-            {/* Left: Profile edit + Roles */}
-            <div className="space-y-3">
-              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Profile</p>
-              {!showEditProfile ? (
-                <button onClick={openEditProfile} className="text-xs text-brand-blue hover:underline">✏ Edit email / phone</button>
-              ) : (
-                <div className="space-y-2">
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-medium">Full name</label>
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-medium">Email</label>
-                    <input
-                      type="email"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-medium">Phone</label>
-                    <input
-                      type="text"
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue" disabled={savingProfile} onClick={() => void handleSaveProfile()}>
-                      {savingProfile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Save
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={() => setShowEditProfile(false)}>Cancel</Button>
-                  </div>
-                </div>
-              )}
-
-              <div className="border-t pt-2 space-y-1.5">
-                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Roles</p>
-                {allRoleRows.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm capitalize text-gray-700">{r.role}</span>
-                      {r.shareholding_percentage != null && (
-                        <span className="text-xs text-gray-400">({r.shareholding_percentage}%)</span>
-                      )}
-                    </div>
-                    <button
-                      disabled={removingRoleId === r.id}
-                      onClick={() => void handleRemoveRole(r.id, allRoleRows.length === 1)}
-                      className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
-                    >
-                      {removingRoleId === r.id ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "Remove"}
-                    </button>
-                  </div>
-                ))}
-                {availableRolesToAdd.length > 0 && (
-                  <div className="flex items-center gap-2 pt-1 border-t mt-1">
-                    <select
-                      value={availableRolesToAdd.includes(addRoleValue) ? addRoleValue : (availableRolesToAdd[0] ?? addRoleValue)}
-                      onChange={(e) => setAddRoleValue(e.target.value as typeof addRoleValue)}
-                      className="border rounded px-2 py-1 text-xs flex-1"
-                    >
-                      {availableRolesToAdd.map((r) => (
-                        <option key={r} value={r} className="capitalize">{r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1)}</option>
-                      ))}
-                    </select>
-                    {addRoleValue === "shareholder" && (
-                      <input type="number" min={0} max={100} value={addSharePct} onChange={(e) => setAddSharePct(e.target.value)} placeholder="%" className="border rounded px-2 py-1 text-xs w-14" />
-                    )}
-                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={addingRole} onClick={() => void handleAddRole()}>
-                      {addingRole ? <Loader2 className="h-3 w-3 animate-spin" /> : "+ Add"}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right: KYC documents list */}
-            <div>
-              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">KYC Documents</p>
-              <AdminKycDocListPanel
-                profileId={profile.id}
-                profileName={profile.full_name}
-                profileEmail={profile.email ?? null}
-                serviceId={serviceId}
-                profileDocuments={profileDocuments ?? []}
-                documentTypes={documentTypes ?? []}
-                updateRequests={updateRequests ?? []}
-                onRefresh={onRefresh}
+          {/* B-076 — visual parity with client wizard. Stacked top to
+              bottom: Roles picker → KYC docs status box → grouped
+              category sections. The legacy 2-col PROFILE | KYC DOCUMENTS
+              grid is gone; "Edit email / phone" surfaces as an inline
+              link below the role picker. */}
+          <div className="px-4 py-4 space-y-4 border-b">
+            <div className="flex items-center gap-3 flex-wrap">
+              <KycRolesPicker
+                selectedRoles={selectedRoleKeys}
+                availableRoles={visibleRoleKeys.map((rk) => ({
+                  key: rk,
+                  label: ROLE_LABEL[rk] ?? rk,
+                  activeClass: ROLE_TONE[rk]?.active,
+                  activeHoverClass: ROLE_TONE[rk]?.activeHover,
+                }))}
+                onToggleRole={toggleRoleAdmin}
               />
+              {!showEditProfile && (
+                <button
+                  onClick={openEditProfile}
+                  className="text-xs text-brand-blue hover:underline ml-auto"
+                >
+                  ✏ Edit email / phone
+                </button>
+              )}
             </div>
+
+            {showEditProfile && (
+              <div className="space-y-2 max-w-md border-l-2 border-brand-blue/30 pl-3">
+                <div>
+                  <label className="text-[10px] text-gray-500 font-medium">Full name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 font-medium">Email</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 font-medium">Phone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue" disabled={savingProfile} onClick={() => void handleSaveProfile()}>
+                    {savingProfile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Save
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={() => setShowEditProfile(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
+
+            <KycDocsSummary
+              uploadCount={totalKycUploaded}
+              totalCount={totalKycDocs}
+              byCategory={kycDocsByCategory.map((c) => ({
+                key: c.key,
+                label: c.label,
+                uploaded: c.docs.filter((d) => d.is_uploaded).length,
+                total: c.docs.length,
+              }))}
+              onCategoryClick={(cat) =>
+                document
+                  .getElementById(`admin-docs-${profile.id}-cat-${cat}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+            />
+
+            <KycDocsByCategory
+              anchorPrefix={`admin-docs-${profile.id}`}
+              showAdminControls
+              uploadingDocTypeId={uploadingDocTypeId}
+              categories={kycDocsByCategory}
+              onUploadClick={(docTypeId) => {
+                setPendingUploadDocTypeId(docTypeId);
+                uploadInputRef.current?.click();
+              }}
+              onViewClick={handleAdminViewDoc}
+            />
+
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && pendingUploadDocTypeId) {
+                  void handleAdminDocUpload(pendingUploadDocTypeId, file);
+                }
+                e.target.value = "";
+                setPendingUploadDocTypeId(null);
+              }}
+            />
           </div>
 
           {/* KYC form (below split section) */}
@@ -1774,6 +1727,30 @@ function PersonCard({
                 onDocUploaded={onRefresh}
               />
             </div>
+          )}
+
+          {/* B-076 — admin doc detail dialog (Approve / Reject / Re-run AI
+              / Send Update Request). Same component the deleted
+              AdminKycDocListPanel was already using. */}
+          {detailDoc && (
+            <DocumentDetailDialog
+              doc={detailDoc}
+              isAdmin={true}
+              open={!!detailDoc}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setDetailDoc(null);
+                  onRefresh();
+                }
+              }}
+              serviceId={serviceId}
+              recipients={detailDocRecipients}
+              updateRequests={(updateRequests ?? []).filter(
+                (r) => r.document_id === detailDoc.id,
+              )}
+              onStatusChange={() => onRefresh()}
+              onRequestSent={() => onRefresh()}
+            />
           )}
         </div>
       )}

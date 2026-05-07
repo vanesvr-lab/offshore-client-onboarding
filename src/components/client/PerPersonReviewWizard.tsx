@@ -34,6 +34,7 @@ import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import type { KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
+import { kycCategoryLabel as categoryLabel, KYC_CATEGORY_ORDER as PERSON_CATEGORY_ORDER } from "@/lib/kyc/categories";
 import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { compressIfImage } from "@/lib/imageCompression";
 import { useAutosave } from "@/lib/hooks/useAutosave";
@@ -92,27 +93,8 @@ const ROLE_TOGGLE_TONE: Record<ServicePersonRole, { active: string; activeHover:
  * anchors (`docs-cat-<category>`) let the persistent progress strip
  * jump between sections.
  */
-const CATEGORY_LABELS: Record<string, string> = {
-  identity: "Identity",
-  financial: "Financial",
-  compliance: "Compliance",
-  additional: "Additional",
-  professional: "Professional",
-  tax: "Tax",
-  adverse_media: "Adverse Media",
-  wealth: "Wealth",
-};
-
-function categoryLabel(cat: string): string {
-  return (
-    CATEGORY_LABELS[cat] ??
-    cat
-      .split(/[_\s]+/)
-      .filter(Boolean)
-      .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-      .join(" ")
-  );
-}
+// B-076 — KYC category label helpers moved to `@/lib/kyc/categories`
+// so the admin per-profile view can render the same headings.
 
 // B-055 §3.2 — short labels for the sub-step breadcrumb under the
 // person name. Keep terse so the breadcrumb fits on small viewports.
@@ -609,20 +591,7 @@ export function PerPersonReviewWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [requirements, dueDiligenceLevel]
   );
-  // B-049 §1.2 — bucket per-person doc types by category, only including
-  // doc types whose `scope` is 'person'. The set of categories is dynamic so
-  // adding a new category in admin / seed data automatically grows the list
-  // of sub-steps. Order is preserved to keep a predictable wizard sequence.
-  const PERSON_CATEGORY_ORDER = [
-    "identity",
-    "financial",
-    "compliance",
-    "professional",
-    "tax",
-    "adverse_media",
-    "wealth",
-    "additional",
-  ] as const;
+  // B-076 — PERSON_CATEGORY_ORDER moved to `@/lib/kyc/categories`.
 
   // B-071 — Doc selection precedence:
   //   1. templateDocs has rows for this service template → use ONLY those

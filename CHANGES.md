@@ -15,6 +15,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 4 — Admin per-profile header + doc list use shared components (Claude Code)
+
+The big visual swap. Admin's per-profile expanded view in `/admin/services/[id]` Step 4 now mirrors the client wizard layout — Roles checkbox row → KYC docs status box → grouped IDENTITY / FINANCIAL / COMPLIANCE category sections — with admin extras on each doc row.
+
+- **`PersonCard` in `ServiceDetailClient.tsx`** — the legacy 2-col `PROFILE | KYC DOCUMENTS` grid is gone. Top of the expanded body now stacks (top-to-bottom):
+  1. `KycRolesPicker` (3 buttons individual: Director / Shareholder / UBO; 2 buttons org: Director / Shareholder). Click toggles the role via the existing admin role POST/DELETE endpoints. Optimistic `onRefresh()` after success/failure.
+  2. Inline `✏ Edit email / phone` link (right-aligned). Clicking expands the existing edit form inline below.
+  3. `KycDocsSummary` (status box: `KYC Documents · N of M uploaded` + per-category badges + legend). Click a category badge → scrolls to that section's anchor.
+  4. `KycDocsByCategory showAdminControls` (grouped category cards). Each row carries the existing AI/admin status pill; admin click on `View` opens the rich `DocumentDetailDialog` (Approve / Reject / Re-run AI / Send Update Request / Download); empty rows show `Upload`.
+  5. Long-form accordion (existing `KycLongForm` from B-075) — kept exactly as-is.
+- **NEW `src/lib/kyc/categories.ts`** — `KYC_CATEGORY_LABELS`, `kycCategoryLabel`, `KYC_CATEGORY_ORDER`, `sortKycCategories`. Lifted from the client wizard so admin and client use identical labels and ordering (Identity → Financial → Compliance → Professional → Tax → Adverse Media → Wealth → Additional).
+- **DELETED `AdminKycDocListPanel`** (~165 lines) and the legacy `[role][Remove] + [+Add] dropdown` picker (with its `addRoleValue` / `addSharePct` / `addingRole` / `removingRoleId` state, `handleAddRole`, `handleRemoveRole`, `availableRolesToAdd`). The "other" role is dropped from this surface — rare; can still be set via DB if needed.
+- Admin upload calls `/api/admin/services/[id]/documents/upload` (was `/api/services/...` from the deleted panel — preserves the proper admin code path that sets `admin_status="pending_review"`).
+- Cleaned up unused `CheckSquare` / `Square` icon imports + `DocumentStatusBadge` direct import (now consumed inside `KycDocRow`).
+- Client `PerPersonReviewWizard` migrated to import `categoryLabel` and `PERSON_CATEGORY_ORDER` from the shared `@/lib/kyc/categories` module — no behavior change.
+
+Build passes. Per-doc View status pill polish + verification lands in Batch 5.
+
 ### 2026-05-06 — B-076 Batch 3 — Extract KycRolesPicker (Claude Code)
 
 - **NEW `src/components/kyc/KycRolesPicker.tsx`** — purely presentational checkbox-style roles row. Props: `selectedRoles[]`, `availableRoles[]` (each entry takes optional per-role tone classes for active/hover), `onToggleRole(roleKey) => Promise<void>` (caller owns the API mutation), `disabled`, `hideLabel`. Built-in per-button pending spinner so the caller doesn't have to thread state.
