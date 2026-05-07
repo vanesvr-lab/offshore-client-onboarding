@@ -9,8 +9,6 @@ import {
   ChevronRight,
   CheckCircle2,
   CheckSquare,
-  Eye,
-  FileText,
   Loader2,
   Square,
   Upload,
@@ -34,8 +32,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { computePersonCompletion } from "@/lib/utils/personCompletion";
-import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
+import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
+import type { KycDocRowData } from "@/components/kyc/KycDocRow";
 import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { compressIfImage } from "@/lib/imageCompression";
 import { useAutosave } from "@/lib/hooks/useAutosave";
@@ -1281,99 +1280,23 @@ export function PerPersonReviewWizard({
   const allDocsComplete = personCategories.every((c) => isDocCategoryComplete(c));
   const docNextDisabled = currentSubStep.kind === "doc-list" ? !allDocsComplete : false;
 
-  // ── Sub-step content render ───────────────────────────────────────────────
-  function renderDocCategoryContent(cat: string) {
-    const items = docTypesByCategory[cat] ?? [];
-    return (
-      <div className="border rounded-xl bg-white">
-        <div className="px-5 py-3 border-b flex items-center justify-between">
-          <p className="text-sm font-semibold text-brand-navy uppercase tracking-wide">
-            {categoryLabel(cat)} Documents
-          </p>
-          <span className={`text-xs font-medium ${
-            isDocCategoryComplete(cat) ? "text-green-600" : "text-amber-600"
-          }`}>
-            {uploadedCountFor(cat)} of {items.length} uploaded
-          </span>
-        </div>
-        <div className="divide-y">
-          {items.map((dt) => {
-            const uploaded = getUploaded(dt.id);
-            const isUploading = uploadingTypeId === dt.id;
-            const aiStatus = uploaded?.verification_status;
-            const adminStatus = uploaded?.admin_status;
-            const isApproved = !!(uploaded && adminStatus === "approved");
-            return (
-              <div key={dt.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {!uploaded && <FileText className="h-4 w-4 text-amber-500 shrink-0" />}
-                  {uploaded && !isApproved && <FileText className="h-4 w-4 text-gray-500 shrink-0" />}
-                  {isApproved && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
-                  <span className={`text-sm truncate ${
-                    !uploaded ? "text-amber-700"
-                    : isApproved ? "text-green-700 font-medium"
-                    : "text-gray-700"
-                  }`}>
-                    {dt.name}
-                  </span>
-                  {uploaded && (
-                    <DocumentStatusBadge
-                      aiStatus={aiStatus}
-                      adminStatus={adminStatus}
-                      compact
-                      className="shrink-0"
-                    />
-                  )}
-                </div>
-                <div className="shrink-0 flex items-center gap-3">
-                  {uploaded ? (
-                    <>
-                      <span className="text-sm text-green-700 font-medium hidden sm:inline">Uploaded</span>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-9 px-3 text-sm gap-1.5 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
-                        onClick={() => setDetailDoc({
-                          id: uploaded.id,
-                          file_name: uploaded.file_name,
-                          mime_type: uploaded.mime_type,
-                          uploaded_at: uploaded.uploaded_at,
-                          document_type_id: uploaded.document_type_id,
-                          verification_status: uploaded.verification_status,
-                          verification_result: uploaded.verification_result,
-                          admin_status: uploaded.admin_status,
-                          document_types: uploaded.document_types,
-                        })}
-                        title="View document"
-                        aria-label="View document"
-                      >
-                        <Eye className="h-4 w-4 text-gray-600" />
-                        View
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      className="h-10 px-4 py-2 text-sm font-medium gap-2 rounded-md bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 shadow-none"
-                      disabled={isUploading}
-                      onClick={() => {
-                        setPendingUploadTypeId(dt.id);
-                        uploadInputRef.current?.click();
-                      }}
-                    >
-                      {isUploading
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <><Upload className="h-4 w-4" />Upload</>
-                      }
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+  // B-076 — `renderDocCategoryContent` was rolled into the shared
+  // `KycDocsByCategory` + `KycDocRow` components. `renderAllDocsContent`
+  // builds the row data and hands it to the shared component.
+  function buildDocRowData(dt: DocumentType): KycDocRowData {
+    const uploaded = getUploaded(dt.id);
+    return {
+      id: uploaded?.id ?? null,
+      document_type_id: dt.id,
+      document_name: dt.name,
+      is_uploaded: !!uploaded,
+      verification_status: uploaded?.verification_status ?? null,
+      admin_status: uploaded?.admin_status ?? null,
+      file_name: uploaded?.file_name ?? null,
+      mime_type: uploaded?.mime_type ?? null,
+      uploaded_at: uploaded?.uploaded_at ?? null,
+      verification_result: (uploaded?.verification_result as Record<string, unknown> | null) ?? null,
+    };
   }
 
   function renderContactContent() {
@@ -1398,15 +1321,39 @@ export function PerPersonReviewWizard({
 
   // B-055 §2.1 / §2.2 — render every category vertically stacked, each
   // wrapped in an anchor div the persistent strip can scroll to.
+  // B-076 — uses shared `KycDocsByCategory` + `KycDocRow`.
   function renderAllDocsContent() {
     return (
-      <div className="space-y-4">
-        {personCategories.map((cat) => (
-          <div key={cat} id={`docs-cat-${cat}`} className="scroll-mt-4">
-            {renderDocCategoryContent(cat)}
-          </div>
-        ))}
-      </div>
+      <KycDocsByCategory
+        anchorPrefix="docs"
+        uploadingDocTypeId={uploadingTypeId}
+        categories={personCategories.map((cat) => ({
+          key: cat,
+          label: categoryLabel(cat),
+          docs: (docTypesByCategory[cat] ?? []).map(buildDocRowData),
+        }))}
+        onUploadClick={(docTypeId) => {
+          setPendingUploadTypeId(docTypeId);
+          uploadInputRef.current?.click();
+        }}
+        onViewClick={(docId) => {
+          // Look up the uploaded record from the docs cache and surface
+          // it through the existing detail dialog state.
+          const uploaded = profileDocs.find((d) => d.id === docId);
+          if (!uploaded) return;
+          setDetailDoc({
+            id: uploaded.id,
+            file_name: uploaded.file_name,
+            mime_type: uploaded.mime_type,
+            uploaded_at: uploaded.uploaded_at,
+            document_type_id: uploaded.document_type_id,
+            verification_status: uploaded.verification_status,
+            verification_result: uploaded.verification_result,
+            admin_status: uploaded.admin_status,
+            document_types: uploaded.document_types,
+          });
+        }}
+      />
     );
   }
 

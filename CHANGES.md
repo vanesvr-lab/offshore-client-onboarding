@@ -15,6 +15,15 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 2 — Extract KycDocsByCategory + KycDocRow (Claude Code)
+
+- **NEW `src/components/kyc/KycDocRow.tsx`** — single per-doc row. File icon (state-aware), doc name, optional `DocumentStatusBadge` when uploaded, plus a right-side button (`View` for uploaded, `Upload` for empty). Props expose `showAdminControls` (compact admin density), `onViewClick(docId)`, `onUploadClick(docTypeId)`, and `isUploading`.
+- **NEW `src/components/kyc/KycDocsByCategory.tsx`** — grouped category sections. Each renders a card with header (`{label} Documents` + `N of M uploaded`) and a divided list of `KycDocRow`s. Anchor IDs via `anchorPrefix` so the persistent strip's category badges still scroll-to. No styling differences from the client's previous bespoke render.
+- **`PerPersonReviewWizard.tsx`** — `renderDocCategoryContent` is gone; `renderAllDocsContent` now hands a category descriptor list to `KycDocsByCategory`. New `buildDocRowData` adapter maps `DocumentType` + `ClientServiceDoc` → `KycDocRowData`. Upload + View click handlers preserved (kicks the existing file input + `setDetailDoc` flow).
+- Cleaned up unused `Eye`, `FileText`, `DocumentStatusBadge` imports left over once the inline render moved out.
+
+Build passes. Admin consumer lands in Batch 4.
+
 ### 2026-05-06 — B-076 Batch 1 — Extract KycDocsSummary into shared component (Claude Code)
 
 First of 7 batches lifting client UI bits into shared `src/components/kyc/` so admin's per-profile view in `/admin/services/[id]` Step 4 mirrors the client wizard visually. Admin keeps long-form-collapsed; everything around it matches client.
