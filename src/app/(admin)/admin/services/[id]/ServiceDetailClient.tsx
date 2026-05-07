@@ -47,6 +47,9 @@ import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
 import { CountrySelect } from "@/components/shared/CountrySelect";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { AiPrefillBanner } from "@/components/kyc/AiPrefillBanner";
 import {
   KYC_SECTIONS_INDIVIDUAL,
   KYC_SECTIONS_ORGANISATION,
@@ -561,8 +564,58 @@ function KycLongForm({
     phone: profilePhone ?? kyc.phone ?? "",
   });
   const [saving, setSaving] = useState(false);
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(sections.map(s => s.title)));
+  // B-075 — admin opens with everything collapsed. Vanessa, 2026-05-07:
+  // "by default the page is loaded with all the sections collapsed."
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [localDocs, setLocalDocs] = useState<ServiceDoc[]>(profileDocuments ?? []);
+  const [reapplyingSection, setReapplyingSection] = useState<string | null>(null);
+
+  // B-075 — re-apply: re-pull the most recent extracted value for each field
+  // in `section` and PATCH them into the form. Mirrors the client wizard's
+  // `Re-apply` behaviour. Admin can still trigger this even though they don't
+  // edit the form; useful when a doc has been re-uploaded.
+  async function handleReapplySection(section: KycSection) {
+    const kycId = kyc.id as string | undefined;
+    if (!kycId) return;
+    const payload: Record<string, unknown> = {};
+    for (const f of section.fields) {
+      const rows = extractionsByField[f.key];
+      if (!rows || rows.length === 0) continue;
+      // Prefer the active (non-superseded) extraction; fall back to the most
+      // recent row by extracted_at.
+      const active = rows.find((r) => r.superseded_at === null);
+      const latest =
+        active ??
+        [...rows].sort(
+          (a, b) =>
+            new Date(b.extracted_at).getTime() - new Date(a.extracted_at).getTime(),
+        )[0];
+      if (latest && latest.extracted_value != null) {
+        payload[f.key] = latest.extracted_value;
+      }
+    }
+    if (Object.keys(payload).length === 0) {
+      toast.info("No extracted values to re-apply.", { position: "top-right" });
+      return;
+    }
+    setReapplyingSection(section.title);
+    try {
+      const res = await fetch("/api/profiles/kyc/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kycRecordId: kycId, fields: payload }),
+      });
+      if (!res.ok) throw new Error("Re-apply failed");
+      setFields((prev) => ({ ...prev, ...payload }));
+      toast.success("Re-applied extracted values.", { position: "top-right" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Re-apply failed", {
+        position: "top-right",
+      });
+    } finally {
+      setReapplyingSection(null);
+    }
+  }
 
   // KYC-category doc types for this person's doc slots
   const kycDocTypes = (documentTypes ?? []).filter((dt) => isKycDoc(dt.category));
@@ -636,6 +689,8 @@ function KycLongForm({
             kycDocTypes={kycDocTypes}
             localDocs={localDocs}
             onDocUploaded={handleDocUploaded}
+            onReapply={() => void handleReapplySection(section)}
+            isReapplying={reapplyingSection === section.title}
           />
         );
       })}
@@ -668,6 +723,8 @@ function KycLongFormSection({
   kycDocTypes,
   localDocs,
   onDocUploaded,
+  onReapply,
+  isReapplying,
 }: {
   section: KycSection;
   pct: number;
@@ -688,11 +745,19 @@ function KycLongFormSection({
   kycDocTypes: DocumentType[];
   localDocs: ServiceDoc[];
   onDocUploaded: (doc: ServiceDoc) => void;
+  onReapply?: () => void;
+  isReapplying?: boolean;
 }) {
   const reviewKey =
     section.categoryKey && profileId
       ? `kyc:${profileId}:${section.categoryKey}`
       : null;
+  // Show the AI prefill banner whenever this section has at least one
+  // field with a stored extraction — same trigger condition the client
+  // wizard's IdentityStep uses.
+  const hasExtractions = section.fields.some(
+    (f) => (extractionsByField[f.key] ?? []).length > 0,
+  );
   return (
     <div className="border rounded-lg overflow-hidden">
       <div
@@ -724,17 +789,37 @@ function KycLongFormSection({
         </div>
       </div>
       {isOpen && (
-        <div className="px-4 py-3 space-y-3">
-          {visibleFields(section.fields, fields).map(f => (
-            <KycLongFormField
-              key={f.key}
-              field={f}
-              value={fields[f.key]}
-              onChange={(v) => setFields(prev => ({ ...prev, [f.key]: v }))}
-              extractions={extractionsByField[f.key] ?? []}
-              sourceDocs={sourceDocsForMarker}
+        <div className="px-4 py-4 space-y-4">
+          {section.description && (
+            <p className="text-sm text-gray-600">{section.description}</p>
+          )}
+          {hasExtractions && (
+            <AiPrefillBanner
+              onReapply={onReapply}
+              isReapplying={isReapplying}
             />
-          ))}
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {visibleFields(section.fields, fields).map(f => {
+              // Wide fields span both columns (textarea, country, helper-text fields).
+              const isWide =
+                f.type === "textarea" ||
+                f.type === "country" ||
+                Boolean(f.helperText) ||
+                Boolean(f.showWhen);
+              return (
+                <div key={f.key} className={isWide ? "md:col-span-2" : ""}>
+                  <KycLongFormField
+                    field={f}
+                    value={fields[f.key]}
+                    onChange={(v) => setFields(prev => ({ ...prev, [f.key]: v }))}
+                    extractions={extractionsByField[f.key] ?? []}
+                    sourceDocs={sourceDocsForMarker}
+                  />
+                </div>
+              );
+            })}
+          </div>
           {/* KYC document slots — shown in first section */}
           {(section.title === "Your Identity" || section.title === "Company Details") && profileId && serviceId && kycDocTypes.length > 0 && (
             <div className="mt-1 pt-2 border-t">
@@ -792,8 +877,8 @@ function KycLongFormField({
   const stringValue = (value ?? "") as string;
 
   return (
-    <div>
-      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+    <div className="space-y-1">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
         <span>{field.label}</span>
         {field.required && (
           <span className="text-red-600" aria-hidden="true">*</span>
@@ -808,12 +893,12 @@ function KycLongFormField({
         />
       </label>
       {field.type === "textarea" ? (
-        <textarea
+        <Textarea
           value={stringValue}
           onChange={(e) => onChange(e.target.value)}
-          rows={2}
+          rows={3}
           placeholder={field.placeholder}
-          className="w-full border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="text-sm resize-none"
         />
       ) : field.type === "boolean" ? (
         <select
@@ -823,7 +908,7 @@ function KycLongFormField({
               e.target.value === "yes" ? true : e.target.value === "no" ? false : null,
             )
           }
-          className="border rounded-lg px-3 py-2 text-sm w-full"
+          className="w-full border rounded-md px-3 py-2 text-sm bg-white"
         >
           <option value="">— Select —</option>
           <option value="yes">Yes</option>
@@ -833,7 +918,7 @@ function KycLongFormField({
         <select
           value={stringValue}
           onChange={(e) => onChange(e.target.value || null)}
-          className="border rounded-lg px-3 py-2 text-sm w-full"
+          className="w-full border rounded-md px-3 py-2 text-sm bg-white"
         >
           <option value="">— Select —</option>
           {(field.options ?? []).map((o) => (
@@ -843,11 +928,11 @@ function KycLongFormField({
           ))}
         </select>
       ) : field.type === "date" ? (
-        <input
+        <Input
           type="date"
           value={stringValue}
           onChange={(e) => onChange(e.target.value || null)}
-          className="border rounded-lg px-3 py-2 text-sm w-full"
+          className="text-sm"
         />
       ) : field.type === "country" ? (
         <CountrySelect
@@ -856,12 +941,12 @@ function KycLongFormField({
           placeholder={field.placeholder}
         />
       ) : (
-        <input
+        <Input
           type="text"
           value={stringValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          className="text-sm"
         />
       )}
       {field.helperText && (

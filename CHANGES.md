@@ -15,6 +15,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-075 Batch 3 — Default-collapsed accordion + visual style aligned with client wizard (Claude Code)
+
+Polishes the per-profile KYC long-form to match the client wizard visually while preserving the long-form accordion structure (intentional — admin scrolls instead of next-clicking).
+
+- **`KycLongForm`** — `openSections` defaults to `new Set()` so admin opens the page with all sections collapsed. Click a header → that section expands. Mirrors the per-step "click Next" affordance the client gets.
+- **NEW `src/components/kyc/AiPrefillBanner.tsx`** — extracted shared "Filled from uploaded document" banner. Same Sparkles-iconed blue panel both surfaces use. Optional `onView` (admin-only) and `onReapply` props; `rightAdornment` slot for inline status pills (e.g. an Approved indicator added in Batch 4).
+- Each expanded section now renders: section description (above fields) → `AiPrefillBanner` (when this section has any field-extraction provenance) → 2-column grid of fields → KYC document slots (Identity / Company Details only) → ConnectedNotesHistory.
+- `Re-apply` is wired: pulls the most recent (preferring `superseded_at IS NULL`) `field_extractions` row for each field in the section and PATCHes the values back into the form. Useful when a doc has been re-uploaded.
+- `KycLongFormField` swapped raw `<input>` / `<textarea>` for `Input` / `Textarea` shadcn components. Required-asterisk + Sparkles AI marker + `FieldProvenanceMarker` (B-070) all sit on the label row, matching the client.
+- 2-column grid for narrow inputs; textarea / country / helper-text / `showWhen` follow-ups span both columns. Same density and ordering the client wizard uses inside each step.
+- `View` button on the banner is wired in Batch 4 alongside the inline doc Approve / Revoke flow.
+
+Build passes.
+
 ### 2026-05-06 — B-075 Batch 2 — KycLongForm consumes shared KYC section schema (Claude Code)
 
 Wires admin's `KycLongForm` to `KYC_SECTIONS_INDIVIDUAL` / `KYC_SECTIONS_ORGANISATION` so the per-profile KYC view in `/admin/services/[id]` Step 4 now renders the same field set, with the same labels, in the same order, as the client wizard.
