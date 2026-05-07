@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 2 — Move grouped Documents to end as collapsible (Claude Code)
+
+Per-profile expanded view on `/admin/services/[id]` Step 4 now matches the client wizard order: Identity → Financial → Declarations → Documents (sub-step 6 of 7). Resolves B-077 QA #3 + #5.
+
+- **`KycDocsByCategory` (the full grouped IDENTITY / FINANCIAL / COMPLIANCE list, ~19 docs) moved from the top of the expanded body to the END**, after `KycLongForm`. It now lives inside its own collapsible section with the same accordion visual language as the long-form sections (gray header bar + RAG dot + uploaded count + progress bar + chevron).
+- Default state is collapsed. Clicking the chevron or anywhere on the header expands. Click anywhere along the row expands/collapses (matches B-076 Batch 7 chevron fix).
+- The compact `KycDocsSummary` status box stays at the top for at-a-glance counts. Clicking a category badge in the summary now auto-expands the bottom Documents section (`setDocsExpanded(true)`) and `requestAnimationFrame`-defers the `scrollIntoView` so the anchor exists before scrolling.
+- The hidden `<input ref={uploadInputRef}>` moved alongside `KycDocsByCategory` into the new collapsible. Upload buttons only render inside the expanded block, so the ref is always in the DOM when needed.
+- Section order inside the long form (Identity → Financial → Declarations) was already correct via `KYC_SECTIONS_INDIVIDUAL` in `src/lib/kyc/sections.ts`; no changes there.
+
+Touched: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (PersonCard only).
+
 ### 2026-05-07 — B-077 Batch 1 — Kill duplicate profile name + re-implement vertical containment (Claude Code)
 
 Per-profile expanded card on `/admin/services/[id]` Step 4. Resolves Vanessa's QA #1 + #2 from 2026-05-07.

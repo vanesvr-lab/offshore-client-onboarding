@@ -1293,6 +1293,10 @@ function PersonCard({
   onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
+  // B-077 Batch 2 — grouped Documents collapsible at the end of the
+  // expanded view. Default collapsed to mirror the client wizard, where
+  // the full doc list sits at the very end (sub-step 6 of 7).
+  const [docsExpanded, setDocsExpanded] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -1733,6 +1737,10 @@ function PersonCard({
               </div>
             )}
 
+            {/* B-077 Batch 2 — keep the compact KYC DOCUMENTS status box
+                at the top for at-a-glance counts. Clicking a category
+                still scrolls to the now-relocated grouped list at the
+                bottom (auto-expanding it via setDocsExpanded). */}
             <KycDocsSummary
               uploadCount={totalKycUploaded}
               totalCount={totalKycDocs}
@@ -1742,37 +1750,13 @@ function PersonCard({
                 uploaded: c.docs.filter((d) => d.is_uploaded).length,
                 total: c.docs.length,
               }))}
-              onCategoryClick={(cat) =>
-                document
-                  .getElementById(`admin-docs-${profile.id}-cat-${cat}`)
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
-            />
-
-            <KycDocsByCategory
-              anchorPrefix={`admin-docs-${profile.id}`}
-              showAdminControls
-              uploadingDocTypeId={uploadingDocTypeId}
-              categories={kycDocsByCategory}
-              onUploadClick={(docTypeId) => {
-                setPendingUploadDocTypeId(docTypeId);
-                uploadInputRef.current?.click();
-              }}
-              onViewClick={handleAdminViewDoc}
-            />
-
-            <input
-              ref={uploadInputRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file && pendingUploadDocTypeId) {
-                  void handleAdminDocUpload(pendingUploadDocTypeId, file);
-                }
-                e.target.value = "";
-                setPendingUploadDocTypeId(null);
+              onCategoryClick={(cat) => {
+                setDocsExpanded(true);
+                requestAnimationFrame(() =>
+                  document
+                    .getElementById(`admin-docs-${profile.id}-cat-${cat}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                );
               }}
             />
           </div>
@@ -1795,6 +1779,108 @@ function PersonCard({
                 onSaved={onRefresh}
                 onDocUploaded={onRefresh}
               />
+            </div>
+          )}
+
+          {/* B-077 Batch 2 — full grouped Documents list moved to the
+              END of the per-profile view as a collapsible, mirroring
+              the client wizard's sub-step 6 of 7 placement. Default
+              collapsed; auto-expands when the user clicks a category
+              from the KycDocsSummary at top. */}
+          {totalKycDocs > 0 && (
+            <div className="border rounded-lg overflow-hidden mt-3">
+              <div
+                onClick={() => setDocsExpanded((v) => !v)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDocsExpanded((v) => !v);
+                  }
+                }}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      totalKycUploaded === totalKycDocs
+                        ? "bg-green-500"
+                        : totalKycUploaded > 0
+                        ? "bg-amber-400"
+                        : "bg-red-400"
+                    }`}
+                  />
+                  <span className="text-sm font-medium text-brand-navy">
+                    Documents
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    ({totalKycUploaded} of {totalKycDocs} uploaded)
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          totalKycUploaded === totalKycDocs
+                            ? "bg-green-500"
+                            : totalKycUploaded > 0
+                            ? "bg-amber-400"
+                            : "bg-red-400"
+                        }`}
+                        style={{
+                          width: `${
+                            totalKycDocs > 0
+                              ? Math.round((totalKycUploaded / totalKycDocs) * 100)
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-gray-500 tabular-nums w-8">
+                      {totalKycDocs > 0
+                        ? Math.round((totalKycUploaded / totalKycDocs) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={`h-4 w-4 text-gray-400 transition-transform ${
+                      docsExpanded ? "rotate-180" : ""
+                    }`}
+                  />
+                </div>
+              </div>
+              {docsExpanded && (
+                <div className="px-4 py-4 space-y-4">
+                  <KycDocsByCategory
+                    anchorPrefix={`admin-docs-${profile.id}`}
+                    showAdminControls
+                    uploadingDocTypeId={uploadingDocTypeId}
+                    categories={kycDocsByCategory}
+                    onUploadClick={(docTypeId) => {
+                      setPendingUploadDocTypeId(docTypeId);
+                      uploadInputRef.current?.click();
+                    }}
+                    onViewClick={handleAdminViewDoc}
+                  />
+                  <input
+                    ref={uploadInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file && pendingUploadDocTypeId) {
+                        void handleAdminDocUpload(pendingUploadDocTypeId, file);
+                      }
+                      e.target.value = "";
+                      setPendingUploadDocTypeId(null);
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
