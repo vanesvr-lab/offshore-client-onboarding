@@ -29,9 +29,8 @@ import { AuditTrail } from "@/components/admin/AuditTrail";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
 import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker";
 import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
-import { VerificationBadge } from "@/components/client/VerificationBadge";
 import { normalizeConfidence } from "@/lib/ai/confidence";
-import type { VerificationResult, VerificationStatus } from "@/types";
+import type { VerificationResult } from "@/types";
 import {
   calcSectionCompletion,
   calcKycCompletion,
@@ -48,11 +47,10 @@ import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActio
 import { CountrySelect } from "@/components/shared/CountrySelect";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AiPrefillBanner } from "@/components/kyc/AiPrefillBanner";
-import { InlineDocReviewPanel, type InlineDocReviewDoc } from "@/components/kyc/InlineDocReviewPanel";
+import { AiPrefillBanner, type AiPrefillBannerStatus } from "@/components/kyc/AiPrefillBanner";
 import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
-import type { KycDocRowData } from "@/components/kyc/KycDocRow";
+import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 import {
@@ -383,115 +381,11 @@ function AddProfileDialog({
   );
 }
 
-// ─── KYC document slot (per-person document upload inside KYC sections) ──────
-
-function KycDocSlot({
-  docTypeName,
-  docTypeId,
-  profileId,
-  serviceId,
-  existing,
-  onUploaded,
-}: {
-  docTypeName: string;
-  docTypeId: string;
-  profileId: string;
-  serviceId: string;
-  existing: ServiceDoc | null;
-  onUploaded: (doc: ServiceDoc) => void;
-}) {
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  async function handleUpload(file: File) {
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("documentTypeId", docTypeId);
-      fd.append("clientProfileId", profileId);
-      const res = await fetch(`/api/admin/services/${serviceId}/documents/upload`, {
-        method: "POST",
-        body: fd,
-      });
-      const data = (await res.json()) as { document?: ServiceDoc; error?: string };
-      if (!res.ok || !data.document) throw new Error(data.error ?? "Upload failed");
-      onUploaded(data.document as ServiceDoc);
-      toast.success("Document uploaded", { position: "top-right" });
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Upload failed", { position: "top-right" });
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  return (
-    <div className="flex items-center justify-between py-1.5 border-b last:border-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <FileText className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-        <span className="text-xs text-gray-700 truncate">{docTypeName}</span>
-        {existing && (
-          <VerificationBadge status={existing.verification_status as VerificationStatus} />
-        )}
-      </div>
-      <div className="flex items-center gap-1 shrink-0 ml-2">
-        {existing ? (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-1.5 text-xs gap-0.5"
-              onClick={() => setPreviewOpen(true)}
-            >
-              <Eye className="h-3 w-3" />
-            </Button>
-            <label className="cursor-pointer text-[10px] text-gray-400 hover:text-gray-600 px-1">
-              <input
-                type="file"
-                className="sr-only"
-                accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
-                disabled={uploading}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void handleUpload(f);
-                  e.target.value = "";
-                }}
-              />
-              Replace
-            </label>
-          </>
-        ) : (
-          <label className={`cursor-pointer ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
-            <input
-              type="file"
-              className="sr-only"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
-              disabled={uploading}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handleUpload(f);
-                e.target.value = "";
-              }}
-            />
-            <span className="inline-flex items-center gap-1 border rounded px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 transition-colors">
-              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-              Upload
-            </span>
-          </label>
-        )}
-      </div>
-      {existing && (
-        <DocumentPreviewDialog
-          documentId={existing.id}
-          fileName={existing.file_name ?? "Document"}
-          mimeType={existing.mime_type ?? "application/octet-stream"}
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-        />
-      )}
-    </div>
-  );
-}
+// B-077 Batch 3 — `KycDocSlot` (per-person inline upload row used in
+// the deleted bottom flat doc list) was removed. Admin's per-section
+// surface now shows source-doc rows (read-only View) above each section
+// and a grouped collapsible Documents block at the end with full upload
+// affordances via `KycDocsByCategory`.
 
 // B-075 — KYC section schema is now imported from `@/lib/kyc/sections` so
 // admin and client renderings stay in sync. categoryKey values are
@@ -504,30 +398,27 @@ function KycLongForm({
   profileEmail,
   profilePhone,
   profileId,
-  serviceId,
   profileDocuments,
-  documentTypes,
   recordType,
   dueDiligenceLevel,
   fieldExtractions,
-  onSaved,
-  onDocUploaded,
+  onOpenDocumentDetail,
 }: {
   kyc: KycFull;
   profileName?: string | null;
   profileEmail?: string | null;
   profilePhone?: string | null;
   profileId?: string;
-  serviceId?: string;
   profileDocuments?: ServiceDoc[];
-  documentTypes?: DocumentType[];
   recordType?: string;
   /** B-075 — DD level for field/section gating; defaults to CDD when unknown. */
   dueDiligenceLevel?: string | null;
   /** B-070 — provenance rows for this profile (any field). */
   fieldExtractions?: FieldExtraction[];
-  onSaved: () => void;
-  onDocUploaded?: (doc: ServiceDoc) => void;
+  /** B-077 Batch 3 — open admin DocumentDetailDialog from per-section
+   *  source-doc rows or the AiPrefillBanner View button. PersonCard
+   *  owns the dialog state. */
+  onOpenDocumentDetail?: (docId: string) => void;
 }) {
   const isOrg = recordType === "organisation";
   const ddLevel: KycDueDiligenceLevel =
@@ -580,24 +471,43 @@ function KycLongForm({
     setLocalDocs(profileDocuments ?? []);
   }, [profileDocuments]);
 
-  // B-075 — Inline doc review panel (right-slide). Opens from the
-  // AiPrefillBanner's `View` button. The source doc is the most recent
-  // `field_extractions` row's `source_document_id` for any field in the
-  // section.
-  const [reviewDocId, setReviewDocId] = useState<string | null>(null);
-
+  // B-077 Batch 3 — `findSourceDocForSection` returns the most recent
+  // `field_extractions.source_document_id` for any field in the section
+  // (used by AiPrefillBanner's primary status pill + View button).
+  // `findSourceDocsForSection` returns the unique set, in insertion order
+  // (used by the per-section single-line source-doc rows).
   function findSourceDocForSection(section: KycSection): string | null {
     let best: { docId: string; at: number } | null = null;
     for (const f of section.fields) {
       const rows = extractionsByField[f.key];
       if (!rows) continue;
       for (const row of rows) {
+        if (row.superseded_at !== null) continue;
         if (!row.source_document_id) continue;
         const at = new Date(row.extracted_at).getTime();
         if (!best || at > best.at) best = { docId: row.source_document_id, at };
       }
     }
     return best?.docId ?? null;
+  }
+
+  function findSourceDocsForSection(section: KycSection): ServiceDoc[] {
+    const seen = new Set<string>();
+    const docs: ServiceDoc[] = [];
+    for (const f of section.fields) {
+      const rows = extractionsByField[f.key];
+      if (!rows) continue;
+      for (const row of rows) {
+        if (row.superseded_at !== null) continue;
+        if (!row.source_document_id) continue;
+        if (seen.has(row.source_document_id)) continue;
+        const d = localDocs.find((x) => x.id === row.source_document_id);
+        if (!d) continue;
+        seen.add(row.source_document_id);
+        docs.push(d);
+      }
+    }
+    return docs;
   }
 
   function handleViewSection(section: KycSection) {
@@ -608,47 +518,7 @@ function KycLongForm({
       });
       return;
     }
-    setReviewDocId(docId);
-  }
-
-  const reviewDoc: InlineDocReviewDoc | null = reviewDocId
-    ? (() => {
-        const d = localDocs.find((x) => x.id === reviewDocId);
-        if (!d) return null;
-        return {
-          id: d.id,
-          file_name: d.file_name,
-          mime_type: d.mime_type,
-          uploaded_at: d.uploaded_at,
-          document_type_name: d.document_types?.name ?? null,
-          verification_status: d.verification_status,
-          verification_result: (d.verification_result ?? null) as VerificationResult | null,
-          admin_status: d.admin_status ?? null,
-          admin_status_note: d.admin_status_note ?? null,
-          admin_status_at: d.admin_status_at ?? null,
-        };
-      })()
-    : null;
-
-  function handleAdminStatusChange(next: {
-    admin_status: string | null;
-    admin_status_note: string | null;
-    admin_status_at: string | null;
-  }) {
-    if (!reviewDocId) return;
-    setLocalDocs((prev) =>
-      prev.map((d) =>
-        d.id === reviewDocId
-          ? {
-              ...d,
-              admin_status: next.admin_status,
-              admin_status_note: next.admin_status_note,
-              admin_status_at: next.admin_status_at,
-            }
-          : d,
-      ),
-    );
-    onSaved();
+    onOpenDocumentDetail?.(docId);
   }
 
   // B-075 — re-apply: re-pull the most recent extracted value for each field
@@ -698,16 +568,11 @@ function KycLongForm({
     }
   }
 
-  // KYC-category doc types for this person's doc slots
-  const kycDocTypes = (documentTypes ?? []).filter((dt) => isKycDoc(dt.category));
-
-  function handleDocUploaded(doc: ServiceDoc) {
-    setLocalDocs(prev => {
-      const without = prev.filter(d => d.document_type_id !== doc.document_type_id);
-      return [...without, doc];
-    });
-    onDocUploaded?.(doc);
-  }
+  // B-077 Batch 3 — `kycDocTypes` and `handleDocUploaded` removed
+  // alongside the bottom flat doc list. Doc uploads now happen
+  // exclusively from the grouped Documents collapsible at the end of
+  // the per-profile view (Batch 2), wired through PersonCard's own
+  // `handleAdminDocUpload`.
 
   function toggleSection(title: string) {
     setOpenSections(prev => {
@@ -733,6 +598,11 @@ function KycLongForm({
       {sections.map(section => {
         const pct = sectionPct(section);
         const isOpen = openSections.has(section.title);
+        const sectionSourceDocs = findSourceDocsForSection(section);
+        const primarySourceDocId = findSourceDocForSection(section);
+        const primarySourceDoc = primarySourceDocId
+          ? localDocs.find((d) => d.id === primarySourceDocId) ?? null
+          : null;
         return (
           <KycLongFormSection
             key={section.title}
@@ -745,40 +615,22 @@ function KycLongForm({
             extractionsByField={extractionsByField}
             sourceDocsForMarker={sourceDocsForMarker}
             profileId={profileId}
-            serviceId={serviceId}
-            kycDocTypes={kycDocTypes}
-            localDocs={localDocs}
-            onDocUploaded={handleDocUploaded}
+            sectionSourceDocs={sectionSourceDocs}
+            primarySourceDoc={primarySourceDoc}
+            onOpenDocumentDetail={onOpenDocumentDetail}
             onReapply={() => void handleReapplySection(section)}
             isReapplying={reapplyingSection === section.title}
             onView={
-              findSourceDocForSection(section)
+              primarySourceDocId
                 ? () => handleViewSection(section)
                 : undefined
             }
-            sectionAdminApproved={(() => {
-              const docId = findSourceDocForSection(section);
-              if (!docId) return false;
-              return (
-                localDocs.find((d) => d.id === docId)?.admin_status === "approved"
-              );
-            })()}
           />
         );
       })}
-      {/* B-075 — admin is read-only on form data; reviews and inline doc
-          approve/revoke are the only writes. The Save button is hidden;
-          handleSave is kept for the legacy re-apply path. */}
-      {reviewDoc && (
-        <InlineDocReviewPanel
-          doc={reviewDoc}
-          open={reviewDocId !== null}
-          onOpenChange={(o) => {
-            if (!o) setReviewDocId(null);
-          }}
-          onStatusChange={handleAdminStatusChange}
-        />
-      )}
+      {/* B-077 Batch 3 — InlineDocReviewPanel removed. View now opens
+          PersonCard's DocumentDetailDialog via `onOpenDocumentDetail`
+          for full Approve / Reject / Re-run AI / Send Update Request. */}
     </div>
   );
 }
@@ -798,14 +650,12 @@ function KycLongFormSection({
   extractionsByField,
   sourceDocsForMarker,
   profileId,
-  serviceId,
-  kycDocTypes,
-  localDocs,
-  onDocUploaded,
+  sectionSourceDocs,
+  primarySourceDoc,
+  onOpenDocumentDetail,
   onReapply,
   isReapplying,
   onView,
-  sectionAdminApproved,
 }: {
   section: KycSection;
   pct: number;
@@ -822,16 +672,18 @@ function KycLongFormSection({
     verification_status: string;
   }[];
   profileId?: string;
-  serviceId?: string;
-  kycDocTypes: DocumentType[];
-  localDocs: ServiceDoc[];
-  onDocUploaded: (doc: ServiceDoc) => void;
+  /** B-077 Batch 3 — unique source docs that fed AI extractions for any
+   *  field in this section. Renders as single-line rows above the
+   *  AiPrefillBanner. */
+  sectionSourceDocs: ServiceDoc[];
+  /** B-077 Batch 3 — most recent source doc; backs the banner's status pill + View. */
+  primarySourceDoc: ServiceDoc | null;
+  /** B-077 Batch 3 — opens admin DocumentDetailDialog (lifted to PersonCard). */
+  onOpenDocumentDetail?: (docId: string) => void;
   onReapply?: () => void;
   isReapplying?: boolean;
-  /** Admin-only: opens the right-slide doc review panel. Undefined hides the View button. */
+  /** Admin-only: opens the doc detail dialog. Undefined hides the View button. */
   onView?: () => void;
-  /** When true, the AiPrefillBanner shows a small "Approved" indicator. */
-  sectionAdminApproved?: boolean;
 }) {
   const reviewKey =
     section.categoryKey && profileId
@@ -843,6 +695,16 @@ function KycLongFormSection({
   const hasExtractions = section.fields.some(
     (f) => (extractionsByField[f.key] ?? []).length > 0,
   );
+  // B-077 Batch 3 — derive the AiPrefillBanner status pill from the
+  // primary source doc (admin status takes precedence over AI status).
+  const bannerStatus: AiPrefillBannerStatus | null = primarySourceDoc
+    ? primarySourceDoc.admin_status === "approved"
+      ? "approved"
+      : primarySourceDoc.admin_status === "rejected"
+        ? "rejected"
+        : (primarySourceDoc.verification_status as AiPrefillBannerStatus | null) ??
+          "pending"
+    : null;
   return (
     <div className="border rounded-lg overflow-hidden">
       <div
@@ -881,18 +743,44 @@ function KycLongFormSection({
           {section.description && (
             <p className="text-sm text-gray-600">{section.description}</p>
           )}
+          {/* B-077 Batch 3 — single-line source-doc row(s) for every doc
+              that fed AI extractions in this section. Click View opens
+              the admin DocumentDetailDialog. */}
+          {sectionSourceDocs.length > 0 && (
+            <div className="rounded-lg border bg-white divide-y">
+              {sectionSourceDocs.map((d) => {
+                const rowData: KycDocRowData = {
+                  id: d.id,
+                  document_type_id: d.document_type_id ?? "",
+                  document_name: d.document_types?.name ?? d.file_name ?? "Document",
+                  is_uploaded: true,
+                  verification_status: d.verification_status,
+                  admin_status: d.admin_status ?? null,
+                  file_name: d.file_name,
+                  mime_type: d.mime_type,
+                  uploaded_at: d.uploaded_at,
+                  verification_result: (d.verification_result ?? null) as Record<string, unknown> | null,
+                  admin_status_note: d.admin_status_note ?? null,
+                  admin_status_at: d.admin_status_at ?? null,
+                };
+                return (
+                  <KycDocRow
+                    key={d.id}
+                    doc={rowData}
+                    showAdminControls
+                    onViewClick={(docId) => onOpenDocumentDetail?.(docId)}
+                  />
+                );
+              })}
+            </div>
+          )}
           {hasExtractions && (
             <AiPrefillBanner
               onReapply={onReapply}
               isReapplying={isReapplying}
               onView={onView}
-              rightAdornment={
-                sectionAdminApproved ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
-                    ✓ Approved
-                  </span>
-                ) : null
-              }
+              showStatus={!!primarySourceDoc}
+              documentStatus={bannerStatus}
             />
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -917,25 +805,11 @@ function KycLongFormSection({
               );
             })}
           </div>
-          {/* KYC document slots — shown in first section */}
-          {(section.title === "Your Identity" || section.title === "Company Details") && profileId && serviceId && kycDocTypes.length > 0 && (
-            <div className="mt-1 pt-2 border-t">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Documents</p>
-              <div className="space-y-0">
-                {kycDocTypes.map(dt => (
-                  <KycDocSlot
-                    key={dt.id}
-                    docTypeName={dt.name}
-                    docTypeId={dt.id}
-                    profileId={profileId}
-                    serviceId={serviceId}
-                    existing={localDocs.find(d => d.document_type_id === dt.id) ?? null}
-                    onUploaded={onDocUploaded}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          {/* B-077 Batch 3 — the legacy bottom flat DOCUMENTS list
+              (KycDocSlot loop over kycDocTypes) was deleted. Per-section
+              source-doc rows above the AiPrefillBanner replace it; the
+              full grouped list lives in the collapsible Documents block
+              at the END of the per-profile view (Batch 2). */}
           {reviewKey && (
             <div className="pt-2 border-t mt-2">
               <ConnectedNotesHistory sectionKey={reviewKey} />
@@ -1770,14 +1644,11 @@ function PersonCard({
                 profileEmail={profile.email}
                 profilePhone={profile.phone}
                 profileId={profile.id}
-                serviceId={serviceId}
                 profileDocuments={profileDocuments}
-                documentTypes={documentTypes}
                 recordType={profile.record_type}
                 dueDiligenceLevel={profile.due_diligence_level}
                 fieldExtractions={fieldExtractions ?? []}
-                onSaved={onRefresh}
-                onDocUploaded={onRefresh}
+                onOpenDocumentDetail={handleAdminViewDoc}
               />
             </div>
           )}

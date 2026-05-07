@@ -15,6 +15,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 3 — Per-section source-doc rows + banner View+status pill; remove flat doc list (Claude Code)
+
+Per-profile KYC subsections on `/admin/services/[id]` Step 4 now mirror the client wizard layout exactly. Resolves B-077 QA #6 + #7.
+
+- **Removed** the bottom flat DOCUMENTS list (KycDocSlot loop over all 19 KYC doc types) that lived inside every long-form section. The legacy `KycDocSlot` function and its `Replace`/preview affordances were deleted; uploads now happen exclusively from the bottom collapsible Documents block (B-077 Batch 2) via `KycDocsByCategory`.
+- **Added** per-section single-line source-doc rows above the `AiPrefillBanner`. The rows come from the unique `field_extractions.source_document_id` set across the section's fields (active extractions only — `superseded_at IS NULL`). Each row reuses the shared `KycDocRow` component in admin-controls mode (status pill + View). View opens PersonCard's `DocumentDetailDialog` (Approve / Reject / Re-run AI / Send Update Request) via a new `onOpenDocumentDetail` callback threaded through `KycLongForm` → `KycLongFormSection`.
+- **`AiPrefillBanner`** augmented with `showStatus` + `documentStatus` props plus the existing `onView`. Admin path passes both: status pill (mapped from `verified / flagged / approved / rejected / pending` etc.) + outline View button + Re-apply. Client path stays unchanged (only `onReapply`/`isReapplying`). View button switched from `ghost` to `outline` for visual parity with the per-doc rows above.
+- **`InlineDocReviewPanel`** flow inside `KycLongForm` removed — the rich `DocumentDetailDialog` already lives in `PersonCard`, so the inline panel duplicated functionality and split admin-action UX. The View button on both source-doc rows and the banner now route through PersonCard's dialog. Unused `serviceId`, `documentTypes`, `onSaved`, `onDocUploaded`, `kycDocTypes`, `handleDocUploaded`, `VerificationBadge`, `VerificationStatus` references cleaned up.
+
+Touched: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (KycLongForm + KycLongFormSection + PersonCard call site), `src/components/kyc/AiPrefillBanner.tsx`.
+
 ### 2026-05-07 — B-077 Batch 2 — Move grouped Documents to end as collapsible (Claude Code)
 
 Per-profile expanded view on `/admin/services/[id]` Step 4 now matches the client wizard order: Identity → Financial → Declarations → Documents (sub-step 6 of 7). Resolves B-077 QA #3 + #5.
