@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 1 — Kill duplicate profile name + re-implement vertical containment (Claude Code)
+
+Per-profile expanded card on `/admin/services/[id]` Step 4. Resolves Vanessa's QA #1 + #2 from 2026-05-07.
+
+- **`PersonCard` clickable header** — when `expanded`, the original name + role badges + KYC% bar inside the outer card header are hidden. The sticky banner inside the expanded body becomes the single source of truth for the profile name (no more duplication). Quick actions (Portal access toggle, Resend KYC) and the chevron stay so the header is still a usable collapse target; a small `Click to collapse · scroll for details` hint sits in their place.
+- **Vertical containment rework** — outer expanded body keeps only `border-t`. Sticky banner spans the full width (so it pins flush to the viewport top). Everything below the banner (roles + KYC docs summary + grouped docs + long-form sections) is wrapped in a new `border-l-4 border-gray-200 ml-4 mr-4 my-4 pl-4` container, so the gray rule reads as a clear indent inside the card border instead of merging with it.
+- KycLongForm wrapper lost its redundant `px-4` since the new containment wrapper provides the left padding.
+
+Touched: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (PersonCard only).
+
 ### 2026-05-06 — B-076 Batch 7 — Chevron fix + Review polish + smoke test + close-out (Claude Code)
 
 Final batch of B-076. Closes out the visual-parity work.

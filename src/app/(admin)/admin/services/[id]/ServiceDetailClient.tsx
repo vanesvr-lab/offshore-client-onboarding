@@ -1520,50 +1520,63 @@ function PersonCard({
   return (
     <div className="border rounded-xl overflow-hidden">
       {/* ── Clickable header ─────────────────────────────────────────── */}
+      {/* B-077 — when expanded, the sticky banner inside the body owns the
+          name/role badges/KYC% display, so we hide the duplicate header
+          content here and keep only the chevron + Quick actions. */}
       <div
         className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0 space-y-1.5">
-            {/* Name + type icon + role badges */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {profile.is_representative ? (
-                <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-              ) : profile.record_type === "organisation" ? (
-                <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
-              ) : (
-                <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              )}
-              <span className="text-sm font-medium text-brand-navy truncate">
-                {profile.full_name}
-              </span>
-              {(combinedRoles ?? [roleRow.role]).map((r) => (
-                <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
-                  {r}
-                </span>
-              ))}
-              {!profile.is_representative && (
-                <PersonAggregateReviewBadge
-                  profileId={profile.id}
-                  recordType={profile.record_type}
-                />
-              )}
-            </div>
-
-            {/* KYC progress */}
-            {!profile.is_representative && (
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
-                    style={{ width: `${kycPct}%` }}
-                  />
+            {!expanded && (
+              <>
+                {/* Name + type icon + role badges */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {profile.is_representative ? (
+                    <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                  ) : profile.record_type === "organisation" ? (
+                    <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                  ) : (
+                    <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  )}
+                  <span className="text-sm font-medium text-brand-navy truncate">
+                    {profile.full_name}
+                  </span>
+                  {(combinedRoles ?? [roleRow.role]).map((r) => (
+                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
+                      {r}
+                    </span>
+                  ))}
+                  {!profile.is_representative && (
+                    <PersonAggregateReviewBadge
+                      profileId={profile.id}
+                      recordType={profile.record_type}
+                    />
+                  )}
                 </div>
-                <span className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}>
-                  {kycDone ? "✓ Complete" : `KYC: ${kycPct}%`}
-                </span>
-              </div>
+
+                {/* KYC progress */}
+                {!profile.is_representative && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
+                        style={{ width: `${kycPct}%` }}
+                      />
+                    </div>
+                    <span className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}>
+                      {kycDone ? "✓ Complete" : `KYC: ${kycPct}%`}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {expanded && (
+              <p className="text-[11px] text-gray-400 italic">
+                Click to collapse · scroll for details
+              </p>
             )}
 
             {/* Quick actions */}
@@ -1599,14 +1612,20 @@ function PersonCard({
       </div>
 
       {/* ── Expanded body ────────────────────────────────────────────── */}
+      {/* B-077 Batch 1 — vertical containment. The sticky banner spans
+          the full body width (so it pins to the top of the viewport).
+          Everything below the banner is wrapped in a `border-l-4`
+          container with left padding so the gray rule is clearly
+          visible inside the card edge, mirroring the client wizard's
+          per-profile indent. */}
       {expanded && (
         <div
-          className="border-t border-l-4 border-l-gray-200"
+          className="border-t"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* B-076 — sticky profile banner. Stays visible as admin
-              scrolls through the long-form so it's always clear which
-              user's data is on screen. */}
+          {/* Sticky profile banner — single source of truth for the
+              profile name + role badges + KYC% while expanded. Stays
+              visible as admin scrolls through the long form. */}
           <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 border-b px-4 py-2 flex items-center gap-2 flex-wrap">
             {profile.is_representative ? (
               <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
@@ -1643,12 +1662,18 @@ function PersonCard({
             )}
           </div>
 
+          {/* Vertical containment wrapper — gray rule down the left edge
+              of the entire profile content (B-077 QA #2). The wrapper
+              starts inside the card with margins so the rule reads as a
+              clear indent rather than blending with the card border. */}
+          <div className="border-l-4 border-gray-200 ml-4 mr-4 my-4 pl-4">
+
           {/* B-076 — visual parity with client wizard. Stacked top to
               bottom: Roles picker → KYC docs status box → grouped
               category sections. The legacy 2-col PROFILE | KYC DOCUMENTS
               grid is gone; "Edit email / phone" surfaces as an inline
               link below the role picker. */}
-          <div className="px-4 py-4 space-y-4 border-b">
+          <div className="space-y-4 pb-4 border-b">
             <div className="flex items-center gap-3 flex-wrap">
               <KycRolesPicker
                 selectedRoles={selectedRoleKeys}
@@ -1754,7 +1779,7 @@ function PersonCard({
 
           {/* KYC form (below split section) */}
           {kyc && (
-            <div className="px-4 pb-4 pt-3">
+            <div className="pt-3">
               <KycLongForm
                 kyc={kyc}
                 profileName={profile.full_name}
@@ -1772,6 +1797,8 @@ function PersonCard({
               />
             </div>
           )}
+
+          </div>{/* /vertical containment wrapper (B-077 Batch 1) */}
 
           {/* B-076 — admin doc detail dialog (Approve / Reject / Re-run AI
               / Send Update Request). Same component the deleted
