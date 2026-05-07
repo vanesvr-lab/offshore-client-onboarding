@@ -15,6 +15,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 5 — Per-doc View opens DocumentDetailDialog with admin actions (Claude Code)
+
+The View click on `KycDocsByCategory` rows was already wired in Batch 4 to open the existing `DocumentDetailDialog` (rich admin popup with Approve / Reject / Re-run AI / Send Update Request / Download). This batch verifies the wiring + auto-close on status change.
+
+- **`PersonCard.detailDoc`** — `onStatusChange` now closes the dialog (`setDetailDoc(null)`) in addition to `onRefresh()`. Per the brief: "After Approve → dialog closes, row's pill flips to green Approved."
+- Status-pill mapping confirmed in `DocumentStatusBadge`: `verified` → emerald (ShieldCheck), `flagged` → amber (ShieldAlert), `manual_review` → amber (ShieldQuestion), `pending` → blue spinner (Loader2), `not_run` → gray (ShieldOff). Admin track: `approved` → emerald (UserCheck), `rejected` → red (UserX), `pending_review` → orange (Clock). Compact mode (used by `KycDocRow`) renders both as icon-only with tooltips.
+- Mobile: existing dialog uses `max-w-2xl w-full p-0 max-h-[90vh]` so it fills the viewport at 375px while keeping a desktop max-width.
+- Client view of the same row still shows just `Uploaded · View` (no admin extras): `KycDocRow` flips visual density via `showAdminControls`; client passes `false` (default).
+- DocumentDetailDialog itself gates Admin Review / Request Update sections behind its `isAdmin` prop, so a client opening the same dialog never sees admin actions.
+
+Build passes.
+
 ### 2026-05-06 — B-076 Batch 4 — Admin per-profile header + doc list use shared components (Claude Code)
 
 The big visual swap. Admin's per-profile expanded view in `/admin/services/[id]` Step 4 now mirrors the client wizard layout — Roles checkbox row → KYC docs status box → grouped IDENTITY / FINANCIAL / COMPLIANCE category sections — with admin extras on each doc row.

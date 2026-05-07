@@ -1748,7 +1748,12 @@ function PersonCard({
               updateRequests={(updateRequests ?? []).filter(
                 (r) => r.document_id === detailDoc.id,
               )}
-              onStatusChange={() => onRefresh()}
+              onStatusChange={() => {
+                // B-076 — Approve / Reject closes the dialog and triggers a
+                // parent refresh so the row's status pill flips immediately.
+                setDetailDoc(null);
+                onRefresh();
+              }}
               onRequestSent={() => onRefresh()}
             />
           )}
