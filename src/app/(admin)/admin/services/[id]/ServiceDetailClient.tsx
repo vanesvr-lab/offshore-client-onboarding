@@ -9,7 +9,7 @@ import {
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
   AlertTriangle, Download, Eye, MessageSquarePlus, Upload,
-  CheckSquare, Square,
+  CheckSquare, Square, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,16 @@ import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
+import { CountrySelect } from "@/components/shared/CountrySelect";
+import {
+  KYC_SECTIONS_INDIVIDUAL,
+  KYC_SECTIONS_ORGANISATION,
+  gateSectionForLevel,
+  visibleFields,
+  type KycSection,
+  type KycField,
+  type DueDiligenceLevel as KycDueDiligenceLevel,
+} from "@/lib/kyc/sections";
 
 // ─── Document category helpers ────────────────────────────────────────────────
 
@@ -475,98 +485,10 @@ function KycDocSlot({
   );
 }
 
-type KycField = { key: string; label: string; type: string; options?: { value: string; label: string }[] };
-// B-074 — categoryKey maps to `kyc:<profileId>:<category>` so each section
-// in the admin's KYC long form carries its own SectionReview affordances.
-// Categories must match the 8 keys defined in AdminKycPersonReviewPanel
-// (identity / financial / compliance / professional / tax / adverse_media /
-// wealth / additional). The form covers a subset; the rest had no UI slot in
-// this codebase and no reviews ever landed against them (verified via DB
-// check on 2026-05-06).
-type KycSection = { title: string; fields: KycField[]; categoryKey?: string };
-
-// KYC section fields — Individual
-const KYC_SECTIONS: KycSection[] = [
-  {
-    title: "Your Identity",
-    categoryKey: "identity",
-    fields: [
-      { key: "full_name", label: "Full legal name", type: "text" },
-      { key: "aliases", label: "Aliases / other names", type: "text" },
-      { key: "date_of_birth", label: "Date of birth", type: "date" },
-      { key: "nationality", label: "Nationality", type: "text" },
-      { key: "passport_country", label: "Passport country", type: "text" },
-      { key: "passport_number", label: "Passport number", type: "text" },
-      { key: "passport_expiry", label: "Passport expiry date", type: "date" },
-      { key: "address", label: "Residential address", type: "textarea" },
-      { key: "email", label: "Email address", type: "text" },
-      { key: "phone", label: "Phone number", type: "text" },
-    ],
-  },
-  {
-    title: "Financial",
-    categoryKey: "financial",
-    fields: [
-      { key: "source_of_funds_description", label: "Source of funds", type: "textarea" },
-      { key: "source_of_wealth_description", label: "Source of wealth", type: "textarea" },
-      { key: "tax_identification_number", label: "Tax identification number", type: "text" },
-    ],
-  },
-  {
-    title: "Declarations",
-    categoryKey: "compliance",
-    fields: [
-      { key: "is_pep", label: "Politically Exposed Person (PEP)", type: "boolean" },
-      { key: "pep_details", label: "PEP details", type: "textarea" },
-      { key: "legal_issues_declared", label: "Legal issues declared", type: "boolean" },
-      { key: "legal_issues_details", label: "Legal issue details", type: "textarea" },
-    ],
-  },
-  {
-    title: "Work / Professional Details",
-    categoryKey: "professional",
-    fields: [
-      { key: "occupation", label: "Occupation", type: "text" },
-      { key: "work_address", label: "Work address", type: "textarea" },
-      { key: "work_email", label: "Work email", type: "text" },
-      { key: "work_phone", label: "Work phone", type: "text" },
-    ],
-  },
-];
-
-// KYC section fields — Organisation / Corporation
-const KYC_SECTIONS_ORG: KycSection[] = [
-  {
-    title: "Company Details",
-    categoryKey: "identity",
-    fields: [
-      { key: "full_name", label: "Company name", type: "text" },
-      { key: "company_registration_number", label: "Registration number", type: "text" },
-      { key: "jurisdiction_incorporated", label: "Jurisdiction incorporated", type: "text" },
-      { key: "date_of_incorporation", label: "Date of incorporation", type: "date" },
-      { key: "description_activity", label: "Description of activity", type: "textarea" },
-      { key: "industry_sector", label: "Industry sector", type: "text" },
-      {
-        key: "listed_or_unlisted",
-        label: "Listed / Unlisted",
-        type: "select",
-        options: [
-          { value: "listed", label: "Listed" },
-          { value: "unlisted", label: "Unlisted" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "Tax / Financial",
-    categoryKey: "tax",
-    fields: [
-      { key: "jurisdiction_tax_residence", label: "Jurisdiction of tax residence", type: "text" },
-      { key: "tax_identification_number", label: "Tax identification number", type: "text" },
-      { key: "regulatory_licenses", label: "Regulatory licenses", type: "textarea" },
-    ],
-  },
-];
+// B-075 — KYC section schema is now imported from `@/lib/kyc/sections` so
+// admin and client renderings stay in sync. categoryKey values are
+// preserved so existing `kyc:<profileId>:<category>` review rows continue
+// to display correctly.
 
 function KycLongForm({
   kyc,
@@ -578,6 +500,7 @@ function KycLongForm({
   profileDocuments,
   documentTypes,
   recordType,
+  dueDiligenceLevel,
   fieldExtractions,
   onSaved,
   onDocUploaded,
@@ -591,13 +514,23 @@ function KycLongForm({
   profileDocuments?: ServiceDoc[];
   documentTypes?: DocumentType[];
   recordType?: string;
+  /** B-075 — DD level for field/section gating; defaults to CDD when unknown. */
+  dueDiligenceLevel?: string | null;
   /** B-070 — provenance rows for this profile (any field). */
   fieldExtractions?: FieldExtraction[];
   onSaved: () => void;
   onDocUploaded?: (doc: ServiceDoc) => void;
 }) {
   const isOrg = recordType === "organisation";
-  const sections = isOrg ? KYC_SECTIONS_ORG : KYC_SECTIONS;
+  const ddLevel: KycDueDiligenceLevel =
+    dueDiligenceLevel === "sdd" || dueDiligenceLevel === "edd" ? dueDiligenceLevel : "cdd";
+  const baseSections = isOrg ? KYC_SECTIONS_ORGANISATION : KYC_SECTIONS_INDIVIDUAL;
+  const sections = useMemo(
+    () => baseSections
+      .map((s) => gateSectionForLevel(s, ddLevel))
+      .filter((s): s is KycSection => s !== null),
+    [baseSections, ddLevel],
+  );
 
   // B-070 — group provenance rows by field_key for O(1) marker lookup.
   const extractionsByField = useMemo(() => {
@@ -651,11 +584,14 @@ function KycLongForm({
   }
 
   function sectionPct(section: KycSection): number {
-    const filled = section.fields.filter(f => {
+    // Only count fields the user can currently see (after showWhen gating).
+    const visible = visibleFields(section.fields, fields);
+    if (visible.length === 0) return 0;
+    const filled = visible.filter(f => {
       const v = fields[f.key];
       return v !== null && v !== undefined && v !== "";
     }).length;
-    return Math.round((filled / section.fields.length) * 100);
+    return Math.round((filled / visible.length) * 100);
   }
 
   async function handleSave() {
@@ -789,60 +725,15 @@ function KycLongFormSection({
       </div>
       {isOpen && (
         <div className="px-4 py-3 space-y-3">
-          {section.fields.map(f => (
-            <div key={f.key}>
-              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-                <span>{f.label}</span>
-                <FieldProvenanceMarker
-                  extractions={extractionsByField[f.key] ?? []}
-                  sourceDocs={sourceDocsForMarker}
-                  fieldLabel={f.label}
-                />
-              </label>
-              {f.type === "textarea" ? (
-                <textarea
-                  value={(fields[f.key] as string | null) ?? ""}
-                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  rows={2}
-                  className="w-full border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                />
-              ) : f.type === "boolean" ? (
-                <select
-                  value={fields[f.key] === true ? "yes" : fields[f.key] === false ? "no" : ""}
-                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value === "yes" ? true : e.target.value === "no" ? false : null }))}
-                  className="border rounded-lg px-3 py-2 text-sm w-full"
-                >
-                  <option value="">— Select —</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              ) : f.type === "select" ? (
-                <select
-                  value={(fields[f.key] as string | null) ?? ""}
-                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
-                  className="border rounded-lg px-3 py-2 text-sm w-full"
-                >
-                  <option value="">— Select —</option>
-                  {(f.options ?? []).map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              ) : f.type === "date" ? (
-                <input
-                  type="date"
-                  value={(fields[f.key] as string | null) ?? ""}
-                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value || null }))}
-                  className="border rounded-lg px-3 py-2 text-sm w-full"
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={(fields[f.key] as string | null) ?? ""}
-                  onChange={e => setFields(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                />
-              )}
-            </div>
+          {visibleFields(section.fields, fields).map(f => (
+            <KycLongFormField
+              key={f.key}
+              field={f}
+              value={fields[f.key]}
+              onChange={(v) => setFields(prev => ({ ...prev, [f.key]: v }))}
+              extractions={extractionsByField[f.key] ?? []}
+              sourceDocs={sourceDocsForMarker}
+            />
           ))}
           {/* KYC document slots — shown in first section */}
           {(section.title === "Your Identity" || section.title === "Company Details") && profileId && serviceId && kycDocTypes.length > 0 && (
@@ -869,6 +760,112 @@ function KycLongFormSection({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// B-075 — single field renderer for the admin KYC long form.
+// Handles every type the shared schema supports (text/textarea/date/select/
+// boolean/country) and wires the FieldProvenanceMarker + Sparkles AI marker
+// next to the label so the admin sees the same provenance affordances the
+// client wizard has.
+function KycLongFormField({
+  field,
+  value,
+  onChange,
+  extractions,
+  sourceDocs,
+}: {
+  field: KycField;
+  value: unknown;
+  onChange: (next: unknown) => void;
+  extractions: FieldExtraction[];
+  sourceDocs: {
+    id: string;
+    file_name: string;
+    mime_type: string | null;
+    uploaded_at: string;
+    verification_status: string;
+  }[];
+}) {
+  const stringValue = (value ?? "") as string;
+
+  return (
+    <div>
+      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+        <span>{field.label}</span>
+        {field.required && (
+          <span className="text-red-600" aria-hidden="true">*</span>
+        )}
+        {field.aiExtractable && (
+          <Sparkles className="h-3 w-3 text-blue-500" aria-label="AI-extractable" />
+        )}
+        <FieldProvenanceMarker
+          extractions={extractions}
+          sourceDocs={sourceDocs}
+          fieldLabel={field.label}
+        />
+      </label>
+      {field.type === "textarea" ? (
+        <textarea
+          value={stringValue}
+          onChange={(e) => onChange(e.target.value)}
+          rows={2}
+          placeholder={field.placeholder}
+          className="w-full border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-brand-blue"
+        />
+      ) : field.type === "boolean" ? (
+        <select
+          value={value === true ? "yes" : value === false ? "no" : ""}
+          onChange={(e) =>
+            onChange(
+              e.target.value === "yes" ? true : e.target.value === "no" ? false : null,
+            )
+          }
+          className="border rounded-lg px-3 py-2 text-sm w-full"
+        >
+          <option value="">— Select —</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      ) : field.type === "select" ? (
+        <select
+          value={stringValue}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="border rounded-lg px-3 py-2 text-sm w-full"
+        >
+          <option value="">— Select —</option>
+          {(field.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ) : field.type === "date" ? (
+        <input
+          type="date"
+          value={stringValue}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="border rounded-lg px-3 py-2 text-sm w-full"
+        />
+      ) : field.type === "country" ? (
+        <CountrySelect
+          value={stringValue}
+          onChange={(v) => onChange(v)}
+          placeholder={field.placeholder}
+        />
+      ) : (
+        <input
+          type="text"
+          value={stringValue}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.placeholder}
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+        />
+      )}
+      {field.helperText && (
+        <p className="mt-1 text-xs text-gray-500">{field.helperText}</p>
       )}
     </div>
   );
@@ -914,9 +911,12 @@ function PersonAggregateReviewBadge({
   profileId: string;
   recordType?: string | null;
 }) {
+  // B-075 — KycLongForm now renders 3 individual sections matching the
+  // client wizard (identity / financial / compliance). Legacy `professional`
+  // category review rows still exist in DB but no longer have a slot.
   const cats = recordType === "organisation"
     ? ["identity", "tax"]
-    : ["identity", "financial", "compliance", "professional"];
+    : ["identity", "financial", "compliance"];
   const sectionKeys = cats.map((c) => `kyc:${profileId}:${c}`);
   const { status, reviewedCount } = useAggregateStatus(sectionKeys);
   if (reviewedCount === 0) return null;
@@ -1581,6 +1581,7 @@ function PersonCard({
                 profileDocuments={profileDocuments}
                 documentTypes={documentTypes}
                 recordType={profile.record_type}
+                dueDiligenceLevel={profile.due_diligence_level}
                 fieldExtractions={fieldExtractions ?? []}
                 onSaved={onRefresh}
                 onDocUploaded={onRefresh}

@@ -15,6 +15,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-075 Batch 2 — KycLongForm consumes shared KYC section schema (Claude Code)
+
+Wires admin's `KycLongForm` to `KYC_SECTIONS_INDIVIDUAL` / `KYC_SECTIONS_ORGANISATION` so the per-profile KYC view in `/admin/services/[id]` Step 4 now renders the same field set, with the same labels, in the same order, as the client wizard.
+
+- **`ServiceDetailClient.tsx`** — deleted the local `KycField` / `KycSection` types and the hardcoded `KYC_SECTIONS` / `KYC_SECTIONS_ORG` arrays. Imports the shared schema instead.
+- `KycLongForm` accepts a new `dueDiligenceLevel` prop (defaults to CDD when unknown) and pipes it through `gateSectionForLevel`. SDD profiles no longer see the Declarations section; EDD-only fields (`source_of_wealth_description`, `relationship_history`, `geographic_risk_assessment`) only render at EDD — same gating the client wizard applies.
+- Section completeness percentage now ignores fields hidden by `showWhen` (PEP details, source-of-funds "Other" specify, legal-issues details) so the bar reflects what's actually visible.
+- New `KycLongFormField` helper renders every field type the schema supports — text / textarea / date / select / boolean / **country** (via `CountrySelect`). Sparkles AI marker shows next to `aiExtractable` field labels; `FieldProvenanceMarker` from B-070 still renders alongside.
+- Admin section ordering now matches the client wizard: Identity → Financial Profile → Declarations (4-section "Work / Professional Details" merged into Financial). Organisation: Company Details → Tax / Financial.
+- Missing-on-admin fields now render: `source_of_funds_type`, `source_of_funds_other`, `employer`, `industry`, `relationship_history`, `geographic_risk_assessment` (plus all DD-gated fields the old admin form skipped).
+- Org `description_activity` label is now "Business description" (was "Description of activity") — matches client.
+- `PersonAggregateReviewBadge` no longer aggregates the `professional` category (no longer rendered). Pre-existing professional review rows remain in DB; they just don't have a UI slot.
+- Hardcoded categories were `identity / financial / compliance / professional`. Now: `identity / financial / compliance` for individuals; `identity / tax` for organisations.
+
+Build passes. Visual polish (default-collapsed accordion, input style alignment, "Filled from uploaded document" banner) lands in Batch 3.
+
 ### 2026-05-06 — B-075 Batch 1 — Extract shared KYC section schema (Claude Code)
 
 First of 5 batches aligning admin's `KycLongForm` field schema with client's `KycStepWizard`. Admin stays a long-form accordion (intentional — experienced admins scroll); only the per-profile KYC form rendering changes.
