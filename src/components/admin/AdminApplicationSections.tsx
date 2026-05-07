@@ -110,6 +110,35 @@ export function ConnectedNotesHistory({ sectionKey }: { sectionKey: string }) {
   return <SectionNotesHistory reviews={history} />;
 }
 
+// B-077 Batch 5 — per-key snapshot of latest reviews for the
+// PerProfileReviewSummaryPanel. Uses the context once so callers can
+// iterate keys without violating React's hook rules.
+export function useSectionReviews(sectionKeys: string[]): {
+  applicationId: string;
+  rows: {
+    sectionKey: string;
+    latest: ApplicationSectionReview | null;
+    history: ApplicationSectionReview[];
+  }[];
+  addReview: (review: ApplicationSectionReview) => void;
+} {
+  const ctx = useContext(SectionReviewsContext);
+  if (!ctx) {
+    throw new Error(
+      "useSectionReviews must be used inside AdminApplicationSectionsProvider",
+    );
+  }
+  const rows = sectionKeys.map((sectionKey) => {
+    const history = ctx.reviewsBySection[sectionKey] ?? [];
+    return { sectionKey, latest: history[0] ?? null, history };
+  });
+  return {
+    applicationId: ctx.applicationId,
+    rows,
+    addReview: ctx.addReview,
+  };
+}
+
 // B-069 — aggregate of multiple sections (e.g. one wizard step covers
 // several section_keys). Used by the admin step indicator.
 export function useAggregateStatus(sectionKeys: string[]): {

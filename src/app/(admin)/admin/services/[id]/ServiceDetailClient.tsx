@@ -42,6 +42,7 @@ import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, Doc
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
+import { PerProfileReviewSummaryPanel, type PerProfileSubsection } from "@/components/admin/PerProfileReviewSummaryPanel";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
 import { CountrySelect } from "@/components/shared/CountrySelect";
@@ -733,8 +734,14 @@ function KycLongFormSection({
         : (primarySourceDoc.verification_status as AiPrefillBannerStatus | null) ??
           "pending"
     : null;
+  // B-077 Batch 5 — DOM anchor for the per-profile Review Summary panel
+  // to scroll into view when admin clicks a subsection row.
+  const sectionAnchorId =
+    section.categoryKey && profileId
+      ? `kyc-section-${profileId}-${section.categoryKey}`
+      : undefined;
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border rounded-lg overflow-hidden scroll-mt-32" id={sectionAnchorId}>
       <div
         onClick={onToggle}
         role="button"
@@ -1281,6 +1288,8 @@ function PersonCard({
   // expanded view. Default collapsed to mirror the client wizard, where
   // the full doc list sits at the very end (sub-step 6 of 7).
   const [docsExpanded, setDocsExpanded] = useState(false);
+  // B-077 Batch 5 — per-profile aggregate review side panel.
+  const [reviewSummaryOpen, setReviewSummaryOpen] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -1489,6 +1498,28 @@ function PersonCard({
     },
   ];
 
+  // B-077 Batch 5 — reviewable subsection set per profile, mirrors
+  // PersonAggregateReviewBadge's category list and KycLongForm's
+  // section schema.
+  const kycSubsections: PerProfileSubsection[] = (() => {
+    const cats: { key: string; label: string }[] =
+      profile.record_type === "organisation"
+        ? [
+            { key: "identity", label: "Company Details" },
+            { key: "tax", label: "Tax / Financial" },
+          ]
+        : [
+            { key: "identity", label: "Identity" },
+            { key: "financial", label: "Financial Profile" },
+            { key: "compliance", label: "Declarations" },
+          ];
+    return cats.map((c) => ({
+      key: `kyc:${profile.id}:${c.key}`,
+      label: c.label,
+      anchorId: `kyc-section-${profile.id}-${c.key}`,
+    }));
+  })();
+
   async function toggleManage() {
     try {
       const res = await fetch(`/api/admin/services/${serviceId}/roles/${roleRow.id}`, {
@@ -1634,18 +1665,30 @@ function PersonCard({
               </span>
             ))}
             {!profile.is_representative && (
-              <div className="ml-auto flex items-center gap-2 shrink-0">
-                <div className="w-20 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
-                    style={{ width: `${kycPct}%` }}
-                  />
+              <div className="ml-auto flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                <div className="flex items-center gap-2">
+                  <div className="w-20 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
+                      style={{ width: `${kycPct}%` }}
+                    />
+                  </div>
+                  <span
+                    className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}
+                  >
+                    {kycDone ? "✓ Complete" : `${kycPct}%`}
+                  </span>
                 </div>
-                <span
-                  className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}
-                >
-                  {kycDone ? "✓ Complete" : `${kycPct}%`}
-                </span>
+                {kyc && kycSubsections.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setReviewSummaryOpen(true)}
+                  >
+                    Review {profile.full_name?.split(" ")[0] ?? "profile"}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1908,6 +1951,16 @@ function PersonCard({
           roleLabel={roleLabels}
           onClose={() => setShowInviteDialog(false)}
           onSent={(sentAt) => setInviteSentAt(sentAt)}
+        />
+      )}
+
+      {/* B-077 Batch 5 — per-profile aggregate Review summary panel */}
+      {kyc && kycSubsections.length > 0 && (
+        <PerProfileReviewSummaryPanel
+          open={reviewSummaryOpen}
+          onOpenChange={setReviewSummaryOpen}
+          profileName={profile.full_name ?? "this profile"}
+          subsections={kycSubsections}
         />
       )}
     </div>

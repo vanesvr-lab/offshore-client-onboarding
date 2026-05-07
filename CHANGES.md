@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-077 Batch 5 — Per-profile Review summary side panel + bulk Approve/Flag (Claude Code)
+
+Resolves B-077 QA #4 on `/admin/services/[id]` Step 4. Admin can now bulk-approve or bulk-flag a profile across all KYC subsections from one place.
+
+- **New component** `src/components/admin/PerProfileReviewSummaryPanel.tsx` — right-slide `Sheet`. Shows aggregate badge (derived from `useAggregateStatus`), per-subsection list with status pill + last note + relative time, and bottom Approve all / Flag profile / Cancel buttons. Click a subsection row → closes panel + smooth-scrolls to that section's anchor in the long form.
+- **New hook** `useSectionReviews(sectionKeys)` exposed from `AdminApplicationSections.tsx` so the panel can iterate keys without violating React hook rules. Returns per-key `{ latest, history }` plus `applicationId` and `addReview`.
+- **Bulk actions** issue sequential `POST /api/admin/applications/[id]/section-reviews` calls (no bulk endpoint per the brief's "out of scope"). Approve all only writes to subsections currently `null` or `flagged`. Flag profile writes to every subsection (cross-cutting concern); requires a batch note.
+- **Sticky banner** on `PersonCard` gains a `Review {firstName}` outline button — only visible when the profile has a KYC record + at least one reviewable subsection. Banner uses `flex-wrap justify-end` so the button drops below the KYC% bar on cramped 375px viewports.
+- **`KycLongFormSection`** picks up DOM anchor IDs (`kyc-section-<profileId>-<categoryKey>` + `scroll-mt-32`) so the panel's row clicks land at the section header rather than under the page-sticky service-detail banner.
+- **Subsection set** mirrors `PersonAggregateReviewBadge`: individuals get Identity / Financial Profile / Declarations; organisations get Company Details / Tax / Financial.
+
+Touched: `src/components/admin/PerProfileReviewSummaryPanel.tsx` (new), `src/components/admin/AdminApplicationSections.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (PersonCard + KycLongFormSection).
+
 ### 2026-05-07 — B-077 Batch 4 — Address subdivider inside Identity with Proof of Address row (Claude Code)
 
 Resolves B-077 QA #8 on `/admin/services/[id]` Step 4 per-profile Identity section.
