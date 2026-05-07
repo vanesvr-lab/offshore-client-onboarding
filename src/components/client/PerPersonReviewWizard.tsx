@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { computePersonCompletion } from "@/lib/utils/personCompletion";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
-import { DocumentStatusLegend } from "@/components/shared/DocumentStatusLegend";
+import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { AutosaveIndicator } from "@/components/shared/AutosaveIndicator";
 import { compressIfImage } from "@/lib/imageCompression";
 import { useAutosave } from "@/lib/hooks/useAutosave";
@@ -1560,15 +1560,7 @@ export function PerPersonReviewWizard({
   const showMiddleButton = currentSubStep.kind !== "contact";
   const middleLabel = middleButtonLabel();
 
-  // ── Progress strip ────────────────────────────────────────────────────────
-  function categoryIcon(cat: string) {
-    const cnt = uploadedCountFor(cat);
-    const total = (docTypesByCategory[cat] ?? []).length;
-    if (total === 0) return null;
-    if (cnt === 0) return <span className="text-gray-300">○</span>;
-    if (cnt < total) return <span className="text-amber-500">◔</span>;
-    return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />;
-  }
+  // B-076 — categoryIcon moved into the shared `KycDocsSummary` component.
 
   const showHelperSubtitle = currentSubStep.kind === "doc-list";
 
@@ -1700,58 +1692,29 @@ export function PerPersonReviewWizard({
         )}
       </div>
 
-      {/* KYC progress strip — persistent */}
-      {totalDocsRequired > 0 && (
-        <div className="rounded-lg border bg-white px-4 py-2.5 flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-[11px] text-gray-600 font-semibold uppercase tracking-wide flex items-center gap-1.5">
-            <FileText className="h-3 w-3" />
-            KYC Documents
-            <span className={`ml-1 text-[11px] font-medium normal-case tracking-normal ${
-              totalUploaded === totalDocsRequired ? "text-green-600" : "text-amber-600"
-            }`}>
-              · {totalUploaded} of {totalDocsRequired} uploaded
-            </span>
-          </p>
-          <div className="flex items-center gap-x-4 gap-y-2 text-xs text-gray-600 flex-wrap">
-            {personCategories.map((cat) => {
-              const total = (docTypesByCategory[cat] ?? []).length;
-              if (total === 0) return null;
-              // B-058 §2.3 — badges are always buttons. On the docs step
-              // they scroll to the in-page anchor; on any other sub-step
-              // they navigate to the docs step and the effect above
-              // handles the scroll once it has rendered.
-              const handleClick = () => {
-                if (currentSubStep.kind === "doc-list") {
-                  document
-                    .getElementById(`docs-cat-${cat}`)
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                } else if (docsSubStepIndex >= 0) {
-                  setPendingDocsCategory(cat);
-                  setSubStepIndex(docsSubStepIndex);
-                }
-              };
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={handleClick}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  aria-label={`Jump to ${categoryLabel(cat)} documents`}
-                >
-                  {categoryIcon(cat)}
-                  <span className="font-medium uppercase tracking-wide text-[10px] text-gray-700">
-                    {categoryLabel(cat)}
-                  </span>
-                  <span className="tabular-nums">
-                    ({uploadedCountFor(cat)}/{total})
-                  </span>
-                </button>
-              );
-            })}
-            <DocumentStatusLegend />
-          </div>
-        </div>
-      )}
+      {/* KYC progress strip — persistent. B-076: shared component. */}
+      <KycDocsSummary
+        uploadCount={totalUploaded}
+        totalCount={totalDocsRequired}
+        byCategory={personCategories.map((cat) => ({
+          key: cat,
+          label: categoryLabel(cat),
+          uploaded: uploadedCountFor(cat),
+          total: (docTypesByCategory[cat] ?? []).length,
+        }))}
+        onCategoryClick={(cat) => {
+          // B-058 §2.3 — same nav behavior as before: in-page scroll
+          // when on doc-list, otherwise route to docs step + then scroll.
+          if (currentSubStep.kind === "doc-list") {
+            document
+              .getElementById(`docs-cat-${cat}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else if (docsSubStepIndex >= 0) {
+            setPendingDocsCategory(cat);
+            setSubStepIndex(docsSubStepIndex);
+          }
+        }}
+      />
 
       {/* Sub-step content */}
       <div>

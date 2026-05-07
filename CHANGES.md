@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-06 — B-076 Batch 1 — Extract KycDocsSummary into shared component (Claude Code)
+
+First of 7 batches lifting client UI bits into shared `src/components/kyc/` so admin's per-profile view in `/admin/services/[id]` Step 4 mirrors the client wizard visually. Admin keeps long-form-collapsed; everything around it matches client.
+
+- **NEW `src/components/kyc/KycDocsSummary.tsx`** — presentational component for the persistent "KYC Documents · N of M uploaded" status box with per-category badges (○ / ◔ / ✓) and the existing `DocumentStatusLegend`. Props: `uploadCount`, `totalCount`, `byCategory[]`, `showLegend?`, `onCategoryClick?`. Click-to-jump is opt-in via `onCategoryClick`.
+- **`PerPersonReviewWizard.tsx`** — replaced the inline strip + the local `categoryIcon` helper with `<KycDocsSummary>`. Same scroll-to-anchor / route-then-scroll behavior preserved through the `onCategoryClick` prop.
+- No admin consumer yet; lands in Batch 4.
+
+Build passes.
+
 ### 2026-05-06 — B-075 Batch 5 — Smoke test + cleanup + close-out (Claude Code)
 
 Final batch of B-075. Closes out the long-form/wizard alignment work.
