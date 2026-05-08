@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-080 Batch 1 — Section pills + KYC % inline + thinner border (Claude Code)
+
+Downgraded B-079's full-width colored bands on `/admin/services/[id]` to tight pills around just the section title text. Top-level step rows revert to the pre-B-079 light treatment with a thin `border border-gray-900` outer stroke; only the title sits inside a `#06629c` `rounded-md px-3 py-1` navy pill. Per-profile rows revert similarly with a `#7dbbe3` light-blue pill around just the profile name, and the `KYC: <pct>%` indicator moves up inline next to the profile name + role badges (was its own second line with a redundant progress bar).
+
+- `src/components/admin/ServiceCollapsibleSection.tsx`: collapsed the variant="step" branching back to default behavior except in two places — the title is wrapped in `inline-flex items-center px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium`, and the outer Card border is `border border-gray-900` (1px) instead of `border-2`. All affordances (progress bar `bg-gray-200`, percentage `text-gray-500`, RAG label colors, chevron circle, SectionReviewBadge / SectionReviewButton) revert to their default light-background styling. The B-079 white-tinted overrides are gone, as is the explicit Hide/Show text label on top-level steps (default chevron-only treatment is back).
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`:
+  - PersonCard header reverts to `p-4 cursor-pointer hover:bg-gray-50/70 transition-colors` (pre-B-079); type icons return to their original colored variants (`text-blue-400` / `text-purple-400` / `text-emerald-500`); role badges revert to `bg-brand-navy/10 text-brand-navy`; Portal access pill + Request KYC button revert to gray/outline defaults.
+  - Profile name now wrapped in `inline-flex items-center px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium`.
+  - Inline `KYC: <pct>%` rendered after the role badges with `ml-3 text-xs font-medium`. Color logic: `text-green-600` when 100% (label switches to "✓ KYC Complete"), `text-amber-600` when 0<pct<100, `text-red-500` at 0%.
+  - The redundant second-line KYC progress bar removed entirely; header is now one tighter line.
+  - Hide/Show toggle label switched from `text-brand-navy/80` to `text-gray-500` to match the default row.
+- The `border-l-4 border-[#7dbbe3]` per-profile vertical containment line is unchanged — still ties the profile pill to the expanded content below.
+- KYC subsection headers (Identity / Financial / Declarations / Documents) and the bottom Documents block header (B-077/2) inside the per-profile container — both still `bg-gray-50`, both intentionally untouched.
+- Right-column cards, the top stepper, and the B-078 Save bar — all untouched.
+- Note: `SectionReviewBadge` and `SectionReviewButton` retain the `tone?: "default" | "on-dark"` prop added in B-079 even though no current call site passes `on-dark`. Leaving them in place rather than ripping out the prop, since the on-dark treatment may be reused if a future band-style header returns. No production caller exercises that branch today.
+- `npm run build` passes clean.
+
 ### 2026-05-08 — B-079 close-out — Admin section bands + compact headers (Claude Code)
 
 End of B-079. `/admin/services/[id]` now reads as a clear two-level color hierarchy: navy `#06629c` bands for top-level steps (Company Setup / Financial / Banking / People & KYC / Documents) with a 2px `border-gray-900` outer border and tighter `px-4 py-2` padding to match the top stepper, and light-blue `#7dbbe3` bands for profile expansions inside People & KYC with a matching `border-l-4 border-[#7dbbe3]` vertical containment line. Every band has an explicit `Hide` / `Show` text + chevron affordance on the right. KYC subsection headers (Identity / Financial / Declarations / Documents) and the right-column cards (Audit Trail, Workflow Milestones, Status, Account Service Owner) intentionally unchanged — Vanessa wants to revisit subsection styling as a lighter variant in a later pass.

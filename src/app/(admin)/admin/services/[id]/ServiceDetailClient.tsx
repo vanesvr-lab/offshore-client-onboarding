@@ -1839,12 +1839,14 @@ function PersonCard({
     >
       {/* ── Clickable header ─────────────────────────────────────────── */}
       {/* B-077 — when expanded, the sticky banner inside the body owns the
-          name/role badges/KYC% display, so we hide the duplicate header
-          content here and keep only the chevron + Quick actions.
-          B-079 — profile band painted #7dbbe3 with px-4 py-2 compact
-          padding and an explicit Hide/Show affordance on the right. */}
+          name/role badges/KYC% display, so we keep the header content
+          minimal once expanded.
+          B-080 — full-width #7dbbe3 band downgraded to a tight pill
+          around just the profile name. Row reverts to the pre-B-079
+          gray-50-on-hover treatment; KYC % moves up inline next to the
+          role badges so the header is one line instead of two. */}
       <div
-        className="bg-[#7dbbe3] px-4 py-2 cursor-pointer hover:bg-[#7dbbe3]/90 transition-colors"
+        className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
         onClick={() => {
           // B-078 Batch 6 — collapsing while dirty is treated as a
           // navigation: prompt before discarding.
@@ -1859,23 +1861,32 @@ function PersonCard({
           <div className="flex-1 min-w-0 space-y-1.5">
             {!expanded && (
               <>
-                {/* Name + type icon + role badges */}
+                {/* Name pill + type icon + role badges + inline KYC % */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {profile.is_representative ? (
-                    <Users2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+                    <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                   ) : profile.record_type === "organisation" ? (
-                    <Building2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+                    <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
                   ) : (
-                    <UserCheck className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+                    <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                   )}
-                  <span className="text-sm font-medium text-brand-navy truncate">
+                  <span className="inline-flex items-center px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium truncate">
                     {profile.full_name}
                   </span>
                   {(combinedRoles ?? [roleRow.role]).map((r) => (
-                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-white/70 text-brand-navy border border-brand-navy/15 shrink-0">
+                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
                       {r}
                     </span>
                   ))}
+                  {!profile.is_representative && (
+                    <span
+                      className={`text-xs ml-3 font-medium tabular-nums shrink-0 ${
+                        kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"
+                      }`}
+                    >
+                      {kycDone ? "✓ KYC Complete" : `KYC: ${kycPct}%`}
+                    </span>
+                  )}
                   {!profile.is_representative && (
                     <PersonAggregateReviewBadge
                       profileId={profile.id}
@@ -1883,26 +1894,11 @@ function PersonCard({
                     />
                   )}
                 </div>
-
-                {/* KYC progress */}
-                {!profile.is_representative && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 rounded-full bg-white/40 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${kycDone ? "bg-green-600" : kycPct > 0 ? "bg-amber-500" : "bg-red-500"}`}
-                        style={{ width: `${kycPct}%` }}
-                      />
-                    </div>
-                    <span className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-800" : kycPct > 0 ? "text-amber-800" : "text-red-700"}`}>
-                      {kycDone ? "✓ Complete" : `KYC: ${kycPct}%`}
-                    </span>
-                  </div>
-                )}
               </>
             )}
 
             {expanded && (
-              <p className="text-[11px] text-brand-navy/70 italic">
+              <p className="text-[11px] text-gray-400 italic">
                 Click to collapse · scroll for details
               </p>
             )}
@@ -1912,20 +1908,20 @@ function PersonCard({
               <button
                 onClick={() => void toggleManage()}
                 className={`flex items-center gap-1 text-xs rounded px-2 py-1 transition-colors ${
-                  roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-white/70 text-brand-navy hover:bg-white"
+                  roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                 }`}
               >
                 {roleRow.can_manage ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                 Portal access
               </button>
               {!profile.is_representative && (
-                <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1 bg-white/70 hover:bg-white border-brand-navy/30 text-brand-navy">
+                <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1">
                   <Mail className="h-3 w-3" />
                   {inviteSentAt ? "Resend KYC" : "Request KYC"}
                 </Button>
               )}
               {inviteSentAt && sentDate && (
-                <span className="text-[11px] text-green-800 flex items-center gap-1">
+                <span className="text-[11px] text-green-600 flex items-center gap-1">
                   <Mail className="h-3 w-3" />
                   Sent {sentDate}
                 </span>
@@ -1933,7 +1929,7 @@ function PersonCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 mt-0.5 text-brand-navy/80">
+          <div className="flex items-center gap-1.5 shrink-0 mt-0.5 text-gray-500">
             <span className="text-xs">{expanded ? "Hide" : "Show"}</span>
             <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
           </div>
