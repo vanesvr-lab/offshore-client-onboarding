@@ -13,6 +13,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-08 — B-084 Batch 2 — Button standardization on /admin/services/[id] (Claude Code)
+
+Every `<Button>` on the admin service detail page now reads as one consistent family: `rounded-md` with brand-navy primary, brand-navy outline, brand-navy ghost, red filled destructive, and red outline destructive variants. Status pills, role badges, and B-083 section pills are intentionally untouched.
+
+- `ServiceDetailClient.tsx`: defined `BTN_PRIMARY`, `BTN_OUTLINE`, `BTN_GHOST`, `BTN_DESTRUCTIVE`, `BTN_DESTRUCTIVE_OUTLINE` helper class strings near the top of the file. Applied them to every Button instance — Add Director/Shareholder/UBO triggers, Add Profile dialog footer, Save Ownership, Request KYC, Review {first name}, KYC Save/Cancel bar, the unsaved-changes nav dialog (Cancel/Discard/Save & continue), per-document Approve/Reject/Confirm Reject/Cancel/Preview/Download/Request Update, Save notes (Internal Notes), bottom service-details Cancel/Save changes, and the missing-doc Upload `<span>` row. `tw-merge` (already used by `cn()` inside the Button component) handles the deduplication so later utilities win.
+- `src/components/admin/SectionReviewButton.tsx`: standard tone now renders brand-navy outline rounded-md instead of the gray default. `on-dark` tone (used on the navy step pill in B-079) is unchanged. Affects every "Review" trigger on `/admin/services/[id]` (top-level row pills via `ServiceCollapsibleSection`, profile-level review summary, and inline KYC subsection rows). The legacy `/admin/applications/[id]` page picks up the same look — no functional change.
+- DocumentDetailDialog (shared component used in both client and admin views) is intentionally not touched — keeps the brief's "Do NOT extend button changes outside `/admin/services/[id]`" guardrail.
+
+---
+
 ### 2026-05-08 — B-084 Batch 1 — Auto-update completion % on every save (Claude Code)
 
 Per-profile and aggregate completion percentages on `/admin/services/[id]` now flip immediately after a save without waiting for the RSC roundtrip. Applies the B-065 splice pattern to every save flow on this page.

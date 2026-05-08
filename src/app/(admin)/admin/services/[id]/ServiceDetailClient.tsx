@@ -70,6 +70,22 @@ const KYC_DOC_CATEGORIES = ["identity", "financial", "compliance"] as const;
 const isKycDoc = (category: string | null | undefined): boolean =>
   (KYC_DOC_CATEGORIES as readonly string[]).includes(category ?? "");
 
+// ─── B-084 Batch 2 — button family ────────────────────────────────────────────
+// Single navy/rounded-md family applied across every <Button> on this page.
+// Status pills, role badges, and B-083 section pills are intentionally
+// untouched (they're not buttons). The Button component merges these with
+// its base via tw-merge, so later utility wins.
+const BTN_PRIMARY =
+  "bg-brand-navy hover:bg-brand-blue text-white rounded-md border-transparent";
+const BTN_OUTLINE =
+  "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-md";
+const BTN_GHOST =
+  "bg-transparent hover:bg-gray-100 text-brand-navy hover:text-brand-navy rounded-md border-transparent";
+const BTN_DESTRUCTIVE =
+  "bg-red-600 hover:bg-red-700 text-white border-transparent rounded-md";
+const BTN_DESTRUCTIVE_OUTLINE =
+  "bg-white hover:bg-red-50 text-red-600 hover:text-red-600 border-red-600 rounded-md";
+
 // ─── Section field matchers (mirrors ServiceWizard STEP_SECTION_MATCH) ────────
 
 const SECTION_MATCHERS: Record<string, (section: string | undefined) => boolean> = {
@@ -247,7 +263,7 @@ function AddProfileDialog({
   return (
     <>
       <div onClick={() => setOpen(true)}>{trigger ?? (
-        <Button size="sm" variant="outline" className="gap-1.5">
+        <Button size="sm" variant="outline" className={`gap-1.5 ${BTN_OUTLINE}`}>
           <Plus className="h-3.5 w-3.5" />
           Add {roleTitle}
         </Button>
@@ -375,10 +391,10 @@ function AddProfileDialog({
           </div>
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" size="sm" />}>Cancel</DialogClose>
+            <DialogClose render={<Button variant="outline" size="sm" className={BTN_OUTLINE} />}>Cancel</DialogClose>
             <Button
               size="sm"
-              className="bg-brand-navy hover:bg-brand-blue"
+              className={BTN_PRIMARY}
               disabled={!canSubmit}
               onClick={() => void handleSubmit()}
             >
@@ -1332,7 +1348,7 @@ function OwnershipStructure({
             </span>
             <Button
               size="sm"
-              className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue"
+              className={`h-7 px-3 text-xs ${BTN_PRIMARY}`}
               disabled={saving}
               onClick={() => void handleSave()}
             >
@@ -1952,7 +1968,7 @@ function PersonCard({
               Portal access
             </button>
             {!profile.is_representative && (
-              <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1">
+              <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className={`h-6 text-xs gap-1 ${BTN_OUTLINE}`}>
                 <Mail className="h-3 w-3" />
                 {inviteSentAt ? "Resend KYC" : "Request KYC"}
               </Button>
@@ -2040,7 +2056,7 @@ function PersonCard({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 px-2 text-xs"
+                    className={`h-7 px-2 text-xs ${BTN_OUTLINE}`}
                     onClick={() => setReviewSummaryOpen(true)}
                   >
                     Review {profile.full_name?.split(" ")[0] ?? "profile"}
@@ -2252,7 +2268,7 @@ function PersonCard({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 px-4 text-sm"
+                  className={`h-9 px-4 text-sm ${BTN_OUTLINE}`}
                   disabled={!isDirty || savingKycBar}
                   onClick={handleKycBarCancel}
                 >
@@ -2260,7 +2276,7 @@ function PersonCard({
                 </Button>
                 <Button
                   size="sm"
-                  className="h-9 px-4 text-sm bg-brand-navy hover:bg-brand-blue text-white"
+                  className={`h-9 px-4 text-sm ${BTN_PRIMARY}`}
                   disabled={!isDirty || savingKycBar}
                   onClick={() => void handleKycBarSave()}
                 >
@@ -2352,13 +2368,14 @@ function PersonCard({
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
+              className={BTN_OUTLINE}
               onClick={() => setNavDialog(null)}
             >
               Cancel
             </Button>
             <Button
               variant="outline"
-              className="text-red-700 border-red-300 hover:bg-red-50"
+              className={BTN_DESTRUCTIVE_OUTLINE}
               onClick={() => {
                 const cont = navDialog?.onContinue;
                 handleKycBarCancel();
@@ -2369,7 +2386,7 @@ function PersonCard({
               Discard changes
             </Button>
             <Button
-              className="bg-brand-navy hover:bg-brand-blue text-white"
+              className={BTN_PRIMARY}
               disabled={savingKycBar}
               onClick={async () => {
                 const cont = navDialog?.onContinue;
@@ -2635,7 +2652,7 @@ function RichDocumentCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-2 text-xs text-green-700 border-green-300 hover:bg-green-50 gap-1"
+              className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
               disabled={adminSaving}
               onClick={() => void handleApprove()}
             >
@@ -2645,7 +2662,7 @@ function RichDocumentCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-2 text-xs text-red-700 border-red-300 hover:bg-red-50 gap-1"
+              className={`h-7 px-2 text-xs gap-1 ${BTN_DESTRUCTIVE_OUTLINE}`}
               disabled={adminSaving}
               onClick={() => setShowRejectForm(true)}
             >
@@ -2666,9 +2683,8 @@ function RichDocumentCard({
             />
             <div className="flex gap-1.5">
               <Button
-                variant="outline"
                 size="sm"
-                className="h-6 px-2 text-xs text-red-700 border-red-300 hover:bg-red-50"
+                className={`h-6 px-2 text-xs ${BTN_DESTRUCTIVE}`}
                 disabled={adminSaving || !rejectNote.trim()}
                 onClick={() => void handleReject()}
               >
@@ -2677,7 +2693,7 @@ function RichDocumentCard({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
+                className={`h-6 px-2 text-xs ${BTN_GHOST}`}
                 onClick={() => { setShowRejectForm(false); setRejectNote(""); }}
               >
                 Cancel
@@ -2691,7 +2707,7 @@ function RichDocumentCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs gap-1"
+            className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
             onClick={() => setPreviewOpen(true)}
           >
             <Eye className="h-3 w-3" />
@@ -2700,7 +2716,7 @@ function RichDocumentCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs gap-1"
+            className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
             disabled={downloadLoading}
             onClick={() => void handleDownload()}
           >
@@ -2710,7 +2726,7 @@ function RichDocumentCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs gap-1 text-brand-navy border-brand-navy/30 hover:bg-brand-navy/5"
+            className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
             onClick={() => setRequestDialogOpen(true)}
             disabled={recipients.length === 0}
           >
@@ -2920,7 +2936,7 @@ function AdminDocumentsSection({
                   e.target.value = "";
                 }}
               />
-              <span className="inline-flex items-center gap-1 border rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+              <span className="inline-flex items-center gap-1 border border-brand-navy rounded-md bg-white text-brand-navy px-2.5 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors">
                 {uploading && uploadingTypeId === dt.id ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
@@ -3513,7 +3529,7 @@ export function ServiceDetailClient({
                   onAdded={handleProfileAdded}
                   defaultRole={r}
                   trigger={
-                    <Button size="sm" variant="outline" className="gap-1.5 border-dashed">
+                    <Button size="sm" variant="outline" className={`gap-1.5 border-dashed ${BTN_OUTLINE}`}>
                       <Plus className="h-3.5 w-3.5" />
                       Add {r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1)}
                     </Button>
@@ -3633,7 +3649,7 @@ export function ServiceDetailClient({
               size="sm"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="bg-brand-navy hover:bg-brand-blue"
+              className={BTN_PRIMARY}
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               Save notes
@@ -3908,7 +3924,7 @@ export function ServiceDetailClient({
               size="sm"
               variant="outline"
               onClick={handleCancel}
-              className="h-8 text-xs"
+              className={`h-8 text-xs ${BTN_OUTLINE}`}
             >
               Cancel
             </Button>
@@ -3916,7 +3932,7 @@ export function ServiceDetailClient({
               size="sm"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="h-8 text-xs bg-brand-navy hover:bg-brand-blue"
+              className={`h-8 text-xs ${BTN_PRIMARY}`}
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               Save changes

@@ -36,7 +36,10 @@ export function SectionReviewButton({
         className={
           tone === "on-dark"
             ? "border-white/40 text-white hover:bg-white/10 hover:text-white bg-transparent"
-            : undefined
+            : // B-084 Batch 2 — brand-navy outline for the standard tone so
+              // every Review button on /admin/services/[id] reads as the
+              // same family as the rest of the page.
+              "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-md"
         }
       >
         <ClipboardCheck className="size-3.5" />
