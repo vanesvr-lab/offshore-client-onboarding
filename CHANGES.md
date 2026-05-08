@@ -15,6 +15,33 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-080 close-out — Admin section pills + KYC % inline + thinner border (Claude Code)
+
+End of B-080. `/admin/services/[id]` section headers downgraded from full-width colored bands (B-079) to tight pills around just the title text — `#06629c` for top-level steps, `#7dbbe3` for profile rows, both `rounded-md` with `px-3 py-1`. The rest of each row reverts to its pre-B-079 gray-50 styling, restoring legibility for status pills, progress bars, and Review buttons. Profile rows now show `KYC: <pct>%` inline next to the profile name + role badge (color-coded red / amber / green) instead of on its own line with a redundant progress bar. Top-level step container borders thinned from B-079's 2px stroke to standard `border` (1px) `border-gray-900` to match the rest of the page.
+
+### 2026-05-08 — B-080 Batch 2 — Smoke test + cleanup (Claude Code)
+
+Static verification (CLI cannot drive the UI from terminal — runtime visuals deferred to user):
+
+1. **PASS (static):** Top-level step row bg/hover reverts to default (`hover:bg-gray-50/50`); title sits inside `inline-flex items-center px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium`. Verified via the simplified variant="step" branch in `ServiceCollapsibleSection.tsx`.
+2. **PASS (static):** Outer Card border for variant="step" is `border border-gray-900` (1px), one stroke level matching the default `border border-gray-200` thickness; only the color stays dark. B-079's `border-2` is gone.
+3. **PASS (static):** Status dots, progress bars (`bg-gray-200` track), percentage text (`text-gray-500`), RAG label (`text-green-700` / `text-amber-600` / `text-red-600`), chevron circle (`bg-brand-navy` open / `bg-gray-200` closed), and `SectionReviewBadge` / `SectionReviewButton` all render with default tones — no `tone="on-dark"` is being passed anywhere.
+4. **DEFERRED (UI):** Click any top-level row → expand/collapse. Toggle behavior is the existing `setOpen(!open)` (untouched).
+5. **PASS (static):** PersonCard renders profile name in `inline-flex items-center px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium`; type icon (Building2 / Users2 / UserCheck) sits to the left in original colors; role badges sit to the right with original `bg-brand-navy/10 text-brand-navy`.
+6. **PASS (static):** `KYC: <pct>%` rendered inline after role badges with `ml-3 text-xs font-medium`. The previous second-line block (`<div className="flex items-center gap-2">` containing the KYC progress bar + text) has been removed entirely.
+7. **PASS (static):** KYC color logic — `text-green-600` at 100% (label = "✓ KYC Complete"), `text-amber-600` at 0<pct<100, `text-red-500` at 0% (label = "KYC: 0%").
+8. **PASS (static):** Body buttons (`Portal access`, `Request KYC`, `Sent <date>`) render in their pre-B-079 gray/outline/green styling. The `bg-white/70`, `border-brand-navy/30`, and `text-green-800` overrides from B-079 have all been reverted.
+9. **PASS (static):** `border-l-4 border-[#7dbbe3]` per-profile vertical containment line is unchanged (line 2028 of ServiceDetailClient.tsx).
+10. **PASS (static):** KYC subsection headers (Identity / Financial / Declarations / Documents) at `KycLongFormSection` (line 805) still `bg-gray-50 hover:bg-gray-100`. Files in `src/components/kyc/*` untouched (zero lines in diff).
+11. **PASS (static):** Documents block header at the bottom of each profile (line 2118) untouched — still `bg-gray-50 hover:bg-gray-100`.
+12. **PASS (static):** Sticky Save bar from B-078 (line 2210) untouched — `sticky bottom-0 z-20 -ml-4 mt-3 bg-white/95 ...`. Lives inside the `border-l-4 border-[#7dbbe3]` wrapper, so the vertical line continues through it.
+
+Cleanup:
+- No `console.log` introduced (grep clean across both modified files).
+- No accidental restyle of shared components: zero lines in `src/components/kyc/*` and `src/components/admin/AiPrefillBanner.tsx` in the diff.
+- `SectionReviewBadge.tsx` and `SectionReviewButton.tsx` are unchanged in this batch — the `tone` prop added in B-079 stays in place even though no caller passes `on-dark` after this downgrade. Decision documented in Batch 1 entry above; harmless and reusable if a future band-style header returns. Not extracted to a shared `<SectionTitlePill />` component since each pill (top-level + per-profile) is rendered exactly once in different contexts with different contents — abstraction would not improve readability.
+- `npm run build` passes clean.
+
 ### 2026-05-08 — B-080 Batch 1 — Section pills + KYC % inline + thinner border (Claude Code)
 
 Downgraded B-079's full-width colored bands on `/admin/services/[id]` to tight pills around just the section title text. Top-level step rows revert to the pre-B-079 light treatment with a thin `border border-gray-900` outer stroke; only the title sits inside a `#06629c` `rounded-md px-3 py-1` navy pill. Per-profile rows revert similarly with a `#7dbbe3` light-blue pill around just the profile name, and the `KYC: <pct>%` indicator moves up inline next to the profile name + role badges (was its own second line with a redundant progress bar).
