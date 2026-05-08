@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-078 Batch 3 — Wire Save: KYC fields + roles + banner inline-edit (Claude Code)
+
+The Save / Cancel bar now persists. One PATCH against a new unified endpoint commits every dirty surface on a profile (KYC fields + `client_profiles` columns + role assignments) in a single round-trip; the response carries the new state so the dirty tracker resets without a refetch.
+
+- **New endpoint** `src/app/api/admin/profiles/[id]/kyc-fields/route.ts` — accepts `{ kyc_fields, profile_fields, roles: { service_id, add, remove } }`. Service role + tenant scope; explicit allow-lists on `client_profile_kyc` and `client_profiles` columns. Roles `add` inserts on `profile_service_roles`; `remove` deletes by row id (after confirming `service_id` + `tenant_id`). Email-uniqueness violations surface as 409 from the existing `(tenant_id, lower(email))` constraint. Returns the post-update profile + kyc + roles array.
+- **`ServiceDetailClient.tsx` — `PersonCard`**: `handleKycBarSave` now builds the kyc/profile diff from `dirtyFieldKeys` (split via `PROFILE_FIELD_KEYS`), the roles diff from `draftRoles ↔ savedRoleSet`, and PATCHes the unified endpoint. On success it folds the response into `savedFields` so dirty zeros out, calls `onRefresh`, and toasts "Changes saved." On failure the toast surfaces the server message and `draftFields` stay intact.
+- **Roles editable** — `toggleRoleAdmin` no longer auto-PATCHes; it just updates `draftRoles`. The KycRolesPicker reads from `draftRoles` so toggles re-render instantly. `savedRoleSet` is derived from `allRoleRows` and re-syncs in a `useEffect`.
+- **Banner inline-edit** — replaced the static `<span>{profile.full_name}</span>` with two transparent inputs bound to `draftFields.full_name` and `draftFields.email`. Hover/focus reveal a subtle underline; no separate "Edit email / phone" affordance.
+- **Removed** the legacy `showEditProfile` dialog + `handleSaveProfile()` (which PATCHed `/api/admin/profiles-v2/[id]` directly) — banner inline edit + the bar's unified save replace it.
+
 ### 2026-05-07 — B-078 Batch 2 — Sticky Save / Cancel bar inside per-profile container (Claude Code)
 
 Added a per-profile bottom Save / Cancel bar inside the gray-line vertical containment of the admin per-profile view. Bar is always visible while the profile is expanded, pins to the viewport bottom while scrolling, and only enables its buttons when the profile is dirty. Save is currently a stub that clears local dirty state with a 250ms spinner — Batch 3 wires the real PATCH.

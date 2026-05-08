@@ -1305,11 +1305,6 @@ function PersonCard({
   const [reviewSummaryOpen, setReviewSummaryOpen] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
   // B-076 — admin doc upload + detail dialog state, lifted out of the
   // deleted `AdminKycDocListPanel` so the new shared `KycDocsByCategory`
   // can reuse the same upload + view affordances per row.
@@ -1376,7 +1371,36 @@ function PersonCard({
     });
     return out;
   }, [draftFields, savedFields]);
-  const isDirty = dirtyFieldKeys.length > 0;
+
+  // B-078 Batch 3 — roles tracking. `KycRolesPicker` toggles update
+  // `draftRoles` only; the diff against `savedRoles` is sent in the Save
+  // payload (no auto-PATCH). Visible role keys depend on profile type
+  // (org gets director + shareholder; individuals also get UBO).
+  const visibleRoleKeys = useMemo<string[]>(
+    () =>
+      roleRow.client_profiles?.record_type === "organisation"
+        ? ["director", "shareholder"]
+        : ["director", "shareholder", "ubo"],
+    [roleRow.client_profiles?.record_type],
+  );
+  const savedRoleSet = useMemo<Set<string>>(() => {
+    const s = new Set<string>();
+    for (const r of allRoleRows) {
+      if (visibleRoleKeys.includes(r.role)) s.add(r.role);
+    }
+    return s;
+  }, [allRoleRows, visibleRoleKeys]);
+  const [draftRoles, setDraftRoles] = useState<Set<string>>(savedRoleSet);
+  useEffect(() => {
+    setDraftRoles(new Set(savedRoleSet));
+  }, [savedRoleSet]);
+
+  const isFieldsDirty = dirtyFieldKeys.length > 0;
+  const isRolesDirty = useMemo(() => {
+    if (draftRoles.size !== savedRoleSet.size) return true;
+    return Array.from(draftRoles).some((k) => !savedRoleSet.has(k));
+  }, [draftRoles, savedRoleSet]);
+  const isDirty = isFieldsDirty || isRolesDirty;
   const [savingKycBar, setSavingKycBar] = useState(false);
 
   if (!roleRow.client_profiles) return null;
@@ -1391,13 +1415,10 @@ function PersonCard({
 
   const roleLabels = (combinedRoles ?? [roleRow.role]).join(", ");
 
-  // B-076 — checkbox-style role picker mirrors the client. Visible
-  // roles depend on profile type. Legacy "other" role from the old
-  // [+Add] dropdown is dropped from this surface (rare; admin can
-  // still PATCH via DB if ever needed).
-  const visibleRoleKeys = profile.record_type === "organisation"
-    ? ["director", "shareholder"]
-    : ["director", "shareholder", "ubo"];
+  // B-076 — checkbox-style role picker mirrors the client. Legacy "other"
+  // role is dropped from this surface; admin can still PATCH via DB.
+  // B-078 Batch 3 — `visibleRoleKeys` lifted above the early-return so
+  // it can feed the dirty-tracker hooks. Same values as before.
   const ROLE_LABEL: Record<string, string> = {
     director: "Director",
     shareholder: "Shareholder",
@@ -1408,83 +1429,105 @@ function PersonCard({
     shareholder: { active: "bg-purple-50 text-purple-700 border-purple-200", activeHover: "hover:bg-purple-100" },
     ubo: { active: "bg-amber-50 text-amber-700 border-amber-200", activeHover: "hover:bg-amber-100" },
   };
-  const selectedRoleKeys = visibleRoleKeys.filter((rk) =>
-    allRoleRows.some((r) => r.role === rk),
-  );
 
+  // B-078 Batch 3 — toggle now updates `draftRoles` only. The diff is
+  // committed by the bottom Save bar via `handleKycBarSave`.
   async function toggleRoleAdmin(roleKey: string) {
-    const existing = allRoleRows.find((r) => r.role === roleKey);
-    try {
-      if (existing) {
-        const isLast = allRoleRows.length === 1;
-        if (isLast && !confirm(`Remove ${profile.full_name} from this service?`)) return;
-        const res = await fetch(`/api/admin/services/${serviceId}/roles/${existing.id}`, {
-          method: "DELETE",
-        });
-        const data = (await res.json()) as { error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed");
-        toast.success(isLast ? `${profile.full_name} removed` : "Role removed", { position: "top-right" });
-      } else {
-        const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ client_profile_id: profile.id, role: roleKey }),
-        });
-        const data = (await res.json()) as { error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed");
-        toast.success(`${ROLE_LABEL[roleKey] ?? roleKey} role added`, { position: "top-right" });
-      }
-      onRefresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Role update failed", { position: "top-right" });
-    }
+    setDraftRoles((prev) => {
+      const next = new Set(prev);
+      if (next.has(roleKey)) next.delete(roleKey);
+      else next.add(roleKey);
+      return next;
+    });
   }
 
-  function openEditProfile() {
-    setEditName(profile.full_name ?? "");
-    setEditEmail(profile.email ?? "");
-    setEditPhone(profile.phone ?? "");
-    setShowEditProfile(true);
-  }
-
-  async function handleSaveProfile() {
-    setSavingProfile(true);
-    try {
-      const res = await fetch(`/api/admin/profiles-v2/${profile.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: editName.trim() || undefined,
-          email: editEmail.trim() || null,
-          phone: editPhone.trim() || null,
-        }),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast.success("Profile saved", { position: "top-right" });
-      setShowEditProfile(false);
-      onRefresh();
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to save", { position: "top-right" });
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
-  // B-078 Batch 2 — bottom Save / Cancel bar handlers. Save is a stub
-  // that clears dirty state locally; Batch 3 replaces the body with the
-  // real PATCH against `/api/admin/profiles/[profileId]/kyc-fields`.
-  // Cancel reverts every dirty field on this profile back to the last-
-  // known-from-DB snapshot. Neither writes to the DB until Batch 3.
+  // B-078 Batch 3 — bottom Save / Cancel bar handlers, now wired to the
+  // unified `PATCH /api/admin/profiles/[id]/kyc-fields` endpoint. One
+  // round-trip persists kyc_fields + profile_fields + role diff.
+  // Cancel reverts every dirty field + draft roles back to the last-
+  // known-from-DB snapshot.
+  const PROFILE_FIELD_KEYS = new Set(["full_name", "email", "phone"]);
   async function handleKycBarSave() {
     if (!isDirty || savingKycBar) return;
     setSavingKycBar(true);
     try {
-      // Brief animation so the spinner is visible; Batch 3 replaces this
-      // with a real network round-trip.
-      await new Promise((r) => setTimeout(r, 250));
-      setSavedFields(draftFields);
+      const kycPatch: Record<string, unknown> = {};
+      const profilePatch: Record<string, unknown> = {};
+      for (const k of dirtyFieldKeys) {
+        if (PROFILE_FIELD_KEYS.has(k)) {
+          profilePatch[k] = draftFields[k];
+        } else {
+          kycPatch[k] = draftFields[k];
+        }
+      }
+      // Role diff against the saved set.
+      const rolesAdd: Array<{ service_role_type: "director" | "shareholder" | "ubo" }> = [];
+      const rolesRemove: Array<{ id: string }> = [];
+      if (isRolesDirty) {
+        Array.from(draftRoles).forEach((rk) => {
+          if (!savedRoleSet.has(rk)) {
+            rolesAdd.push({
+              service_role_type: rk as "director" | "shareholder" | "ubo",
+            });
+          }
+        });
+        Array.from(savedRoleSet).forEach((rk) => {
+          if (!draftRoles.has(rk)) {
+            const row = allRoleRows.find((r) => r.role === rk);
+            if (row) rolesRemove.push({ id: row.id });
+          }
+        });
+      }
+
+      const payload: Record<string, unknown> = {};
+      if (Object.keys(kycPatch).length > 0) payload.kyc_fields = kycPatch;
+      if (Object.keys(profilePatch).length > 0) payload.profile_fields = profilePatch;
+      if (rolesAdd.length > 0 || rolesRemove.length > 0) {
+        payload.roles = {
+          service_id: serviceId,
+          add: rolesAdd,
+          remove: rolesRemove,
+        };
+      }
+
+      const res = await fetch(
+        `/api/admin/profiles/${profile.id}/kyc-fields`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const data = (await res.json()) as {
+        error?: string;
+        profile?: { id: string; full_name: string | null; email: string | null; phone: string | null } | null;
+        kyc?: Record<string, unknown> | null;
+        roles?: Array<{ id: string; role: string; service_id: string }>;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+
+      // Reset savedFields from the returned post-update state so the
+      // dirty tracker zeroes out without a second fetch. `onRefresh`
+      // still kicks off the full parent re-fetch so adjacent UI (audit
+      // panel, ownership %, KYC% bar) updates too.
+      const nextSaved: Record<string, unknown> = { ...savedFields };
+      for (const [k, v] of Object.entries(data.kyc ?? {})) {
+        nextSaved[k] = v;
+      }
+      if (data.profile) {
+        nextSaved.full_name = data.profile.full_name ?? "";
+        nextSaved.email = data.profile.email ?? "";
+        nextSaved.phone = data.profile.phone ?? "";
+      }
+      setSavedFields(nextSaved);
+      setDraftFields(nextSaved);
       toast.success("Changes saved.", { position: "top-right" });
+      onRefresh();
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? `Failed to save: ${err.message}` : "Failed to save",
+        { position: "top-right" },
+      );
     } finally {
       setSavingKycBar(false);
     }
@@ -1492,6 +1535,7 @@ function PersonCard({
   function handleKycBarCancel() {
     if (!isDirty || savingKycBar) return;
     setDraftFields(savedFields);
+    setDraftRoles(new Set(savedRoleSet));
     toast.info("Changes discarded.", { position: "top-right" });
   }
 
@@ -1742,7 +1786,10 @@ function PersonCard({
         >
           {/* Sticky profile banner — single source of truth for the
               profile name + role badges + KYC% while expanded. Stays
-              visible as admin scrolls through the long form. */}
+              visible as admin scrolls through the long form.
+              B-078 Batch 3 — name + email are now inline-editable. The
+              inputs share the banner's gray-50 background and underline
+              on focus; click anywhere on the text to start typing. */}
           <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-gray-50/80 border-b px-4 py-2 flex items-center gap-2 flex-wrap">
             {profile.is_representative ? (
               <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
@@ -1751,9 +1798,26 @@ function PersonCard({
             ) : (
               <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
             )}
-            <span className="text-sm font-semibold text-brand-navy truncate">
-              {profile.full_name}
-            </span>
+            <input
+              type="text"
+              aria-label="Profile full name"
+              value={(draftFields.full_name as string) ?? ""}
+              onChange={(e) =>
+                setDraftFields((prev) => ({ ...prev, full_name: e.target.value }))
+              }
+              placeholder="Full legal name"
+              className="text-sm font-semibold text-brand-navy bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-brand-blue focus:outline-none focus:ring-0 px-0 py-0.5 min-w-[120px] max-w-[260px]"
+            />
+            <input
+              type="email"
+              aria-label="Profile email"
+              value={(draftFields.email as string) ?? ""}
+              onChange={(e) =>
+                setDraftFields((prev) => ({ ...prev, email: e.target.value }))
+              }
+              placeholder="email@example.com"
+              className="text-xs text-gray-600 bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-brand-blue focus:outline-none focus:ring-0 px-0 py-0.5 min-w-[140px] max-w-[260px]"
+            />
             {(combinedRoles ?? [roleRow.role]).map((r) => (
               <span
                 key={r}
@@ -1808,7 +1872,7 @@ function PersonCard({
           <div className="space-y-4 pb-4 border-b">
             <div className="flex items-center gap-3 flex-wrap">
               <KycRolesPicker
-                selectedRoles={selectedRoleKeys}
+                selectedRoles={Array.from(draftRoles)}
                 availableRoles={visibleRoleKeys.map((rk) => ({
                   key: rk,
                   label: ROLE_LABEL[rk] ?? rk,
@@ -1817,53 +1881,7 @@ function PersonCard({
                 }))}
                 onToggleRole={toggleRoleAdmin}
               />
-              {!showEditProfile && (
-                <button
-                  onClick={openEditProfile}
-                  className="text-xs text-brand-blue hover:underline ml-auto"
-                >
-                  ✏ Edit email / phone
-                </button>
-              )}
             </div>
-
-            {showEditProfile && (
-              <div className="space-y-2 max-w-md border-l-2 border-brand-blue/30 pl-3">
-                <div>
-                  <label className="text-[10px] text-gray-500 font-medium">Full name</label>
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-500 font-medium">Email</label>
-                  <input
-                    type="email"
-                    value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
-                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-gray-500 font-medium">Phone</label>
-                  <input
-                    type="text"
-                    value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                    className="w-full border rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand-blue mt-0.5"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" className="h-7 px-3 text-xs bg-brand-navy hover:bg-brand-blue" disabled={savingProfile} onClick={() => void handleSaveProfile()}>
-                    {savingProfile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}Save
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={() => setShowEditProfile(false)}>Cancel</Button>
-                </div>
-              </div>
-            )}
 
             {/* B-077 Batch 2 — keep the compact KYC DOCUMENTS status box
                 at the top for at-a-glance counts. Clicking a category
