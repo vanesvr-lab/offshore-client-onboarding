@@ -22,10 +22,10 @@ interface Props {
   // ancestor <AdminApplicationSectionsProvider>.
   sectionKey?: string;
   anchorId?: string;
-  // B-080 — `step` wraps the title in a tight #06629c pill and switches the
-  // outer Card border to a thin dark stroke. Everything else (row bg,
-  // progress bar, RAG label, Show/Hide chevron, Review controls) renders
-  // identically to the default variant. Replaces B-079's full-width band.
+  // B-080 introduced `step` as a tight title pill. B-081 widens that pill
+  // to wrap title + progress bar + percentage + RAG status text. Chevron,
+  // SectionReviewBadge, and SectionReviewButton stay outside the pill on
+  // the regular row background.
   variant?: "default" | "step";
   children: React.ReactNode;
 }
@@ -78,53 +78,74 @@ export function ServiceCollapsibleSection({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex-1 min-w-0 flex items-center justify-between text-left hover:bg-gray-50/50 transition-colors -mx-2 px-2 py-1 rounded"
+          className="flex-1 min-w-0 flex items-center justify-between text-left hover:bg-gray-50/50 transition-colors -mx-2 px-2 py-1 rounded gap-3"
         >
-          {/* Left: icon + title (pill on step variant) + admin badge */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            {icon && <span className="text-gray-400 shrink-0">{icon}</span>}
-            {isStep ? (
-              <span className="inline-flex items-center px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium truncate">
-                {title}
-              </span>
-            ) : (
-              <span className="font-semibold text-brand-navy truncate">{title}</span>
-            )}
-            {adminOnly && (
-              <span className="text-[9px] font-semibold uppercase tracking-wide bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded shrink-0">
-                Admin
-              </span>
-            )}
-          </div>
+          {isStep ? (
+            <span className="inline-flex items-center gap-2.5 px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium min-w-0 max-w-full">
+              {icon && <span className="text-white/80 shrink-0">{icon}</span>}
+              <span className="font-medium truncate">{title}</span>
+              {percentage !== undefined && ragStatus && (
+                <>
+                  {/* Mini progress bar — desktop only when SectionReviewControls is wired,
+                      so the badge + Review button still have room on narrow viewports */}
+                  <div className={`${sectionKey ? "hidden lg:block" : ""} w-24 h-1.5 rounded-full bg-white/20 overflow-hidden shrink-0`}>
+                    <div
+                      className={`h-full rounded-full transition-all ${fillColor}`}
+                      style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                    />
+                  </div>
+                  <span className={`${sectionKey ? "hidden lg:inline" : ""} text-xs text-white/80 w-8 text-right shrink-0`}>
+                    {percentage}%
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-xs text-white shrink-0">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
+                    <span className="hidden sm:inline">{RAG_LABEL[ragStatus]}</span>
+                  </span>
+                </>
+              )}
+            </span>
+          ) : (
+            <>
+              {/* Default variant — title + adminOnly badge on left, progress + RAG on right */}
+              <div className="flex items-center gap-2.5 min-w-0">
+                {icon && <span className="text-gray-400 shrink-0">{icon}</span>}
+                <span className="font-semibold text-brand-navy truncate">{title}</span>
+                {adminOnly && (
+                  <span className="text-[9px] font-semibold uppercase tracking-wide bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded shrink-0">
+                    Admin
+                  </span>
+                )}
+              </div>
 
-          {/* Right: progress + RAG + chevron */}
-          <div className="flex items-center gap-3 ml-4 shrink-0">
-            {percentage !== undefined && ragStatus && (
-              <>
-                {/* Mini progress bar — desktop only, hidden when sectionKey
-                    is wired so the review badge has room on narrow viewports */}
-                <div className={`${sectionKey ? "hidden lg:block" : ""} w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden`}>
-                  <div
-                    className={`h-full rounded-full transition-all ${fillColor}`}
-                    style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
-                  />
-                </div>
-                <span className={`${sectionKey ? "hidden lg:inline" : ""} text-xs text-gray-500 w-8 text-right`}>{percentage}%</span>
-                <span className={`inline-flex items-center gap-1 text-xs ${
-                  ragStatus === "green" ? "text-green-700" :
-                  ragStatus === "amber" ? "text-amber-600" :
-                  "text-red-600"
-                }`}>
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
-                  <span className="hidden sm:inline">{RAG_LABEL[ragStatus]}</span>
-                </span>
-              </>
-            )}
-            <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors ${open ? "bg-brand-navy" : "bg-gray-200 hover:bg-gray-300"}`}>
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180 text-white" : "text-gray-600"}`}
-              />
-            </div>
+              <div className="flex items-center gap-3 ml-4 shrink-0">
+                {percentage !== undefined && ragStatus && (
+                  <>
+                    <div className={`${sectionKey ? "hidden lg:block" : ""} w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden`}>
+                      <div
+                        className={`h-full rounded-full transition-all ${fillColor}`}
+                        style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                      />
+                    </div>
+                    <span className={`${sectionKey ? "hidden lg:inline" : ""} text-xs text-gray-500 w-8 text-right`}>{percentage}%</span>
+                    <span className={`inline-flex items-center gap-1 text-xs ${
+                      ragStatus === "green" ? "text-green-700" :
+                      ragStatus === "amber" ? "text-amber-600" :
+                      "text-red-600"
+                    }`}>
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
+                      <span className="hidden sm:inline">{RAG_LABEL[ragStatus]}</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Chevron — sits outside the pill on step variant */}
+          <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors shrink-0 ${open ? "bg-brand-navy" : "bg-gray-200 hover:bg-gray-300"}`}>
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180 text-white" : "text-gray-600"}`}
+            />
           </div>
         </button>
 

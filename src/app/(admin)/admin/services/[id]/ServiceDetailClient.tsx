@@ -1839,12 +1839,14 @@ function PersonCard({
     >
       {/* ── Clickable header ─────────────────────────────────────────── */}
       {/* B-077 — when expanded, the sticky banner inside the body owns the
-          name/role badges/KYC% display, so we keep the header content
-          minimal once expanded.
+          name/role badges/KYC% display, so the pill content shrinks to
+          icon + name + Hide chevron once expanded.
           B-080 — full-width #7dbbe3 band downgraded to a tight pill
-          around just the profile name. Row reverts to the pre-B-079
-          gray-50-on-hover treatment; KYC % moves up inline next to the
-          role badges so the header is one line instead of two. */}
+          around just the profile name; KYC % moved inline.
+          B-081 — pill widened to wrap icon + name + role badges + KYC %
+          + aggregate review badge + Show/Hide toggle. Quick actions
+          (Portal access / Request KYC) sit outside the pill on regular
+          row background. */}
       <div
         className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
         onClick={() => {
@@ -1857,31 +1859,29 @@ function PersonCard({
           setExpanded(!expanded);
         }}
       >
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0 space-y-1.5">
-            {!expanded && (
-              <>
-                {/* Name pill + type icon + role badges + inline KYC % */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {profile.is_representative ? (
-                    <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                  ) : profile.record_type === "organisation" ? (
-                    <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
-                  ) : (
-                    <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  )}
-                  <span className="inline-flex items-center px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium truncate">
-                    {profile.full_name}
-                  </span>
+        <div className="space-y-1.5">
+          {/* Wide pill: icon + name + (extras when collapsed) + Show/Hide */}
+          <div className="flex items-center">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium min-w-0 max-w-full flex-wrap">
+              {profile.is_representative ? (
+                <Users2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+              ) : profile.record_type === "organisation" ? (
+                <Building2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+              ) : (
+                <UserCheck className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+              )}
+              <span className="font-medium truncate">{profile.full_name}</span>
+              {!expanded && (
+                <>
                   {(combinedRoles ?? [roleRow.role]).map((r) => (
-                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
+                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-white/70 text-brand-navy shrink-0">
                       {r}
                     </span>
                   ))}
                   {!profile.is_representative && (
                     <span
-                      className={`text-xs ml-3 font-medium tabular-nums shrink-0 ${
-                        kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"
+                      className={`text-xs font-medium tabular-nums shrink-0 ${
+                        kycDone ? "text-green-700" : kycPct > 0 ? "text-amber-700" : "text-red-600"
                       }`}
                     >
                       {kycDone ? "✓ KYC Complete" : `KYC: ${kycPct}%`}
@@ -1893,45 +1893,43 @@ function PersonCard({
                       recordType={profile.record_type}
                     />
                   )}
-                </div>
-              </>
-            )}
-
-            {expanded && (
-              <p className="text-[11px] text-gray-400 italic">
-                Click to collapse · scroll for details
-              </p>
-            )}
-
-            {/* Quick actions */}
-            <div className="flex items-center flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => void toggleManage()}
-                className={`flex items-center gap-1 text-xs rounded px-2 py-1 transition-colors ${
-                  roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                }`}
-              >
-                {roleRow.can_manage ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                Portal access
-              </button>
-              {!profile.is_representative && (
-                <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1">
-                  <Mail className="h-3 w-3" />
-                  {inviteSentAt ? "Resend KYC" : "Request KYC"}
-                </Button>
+                </>
               )}
-              {inviteSentAt && sentDate && (
-                <span className="text-[11px] text-green-600 flex items-center gap-1">
-                  <Mail className="h-3 w-3" />
-                  Sent {sentDate}
+              {expanded && (
+                <span className="text-[11px] italic font-normal text-brand-navy/70 shrink-0">
+                  scroll for details
                 </span>
               )}
-            </div>
+              <span className="ml-2 inline-flex items-center gap-1 text-xs text-brand-navy/80 shrink-0">
+                {expanded ? "Hide" : "Show"}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+              </span>
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 mt-0.5 text-gray-500">
-            <span className="text-xs">{expanded ? "Hide" : "Show"}</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          {/* Quick actions — outside pill, on regular row background */}
+          <div className="flex items-center flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => void toggleManage()}
+              className={`flex items-center gap-1 text-xs rounded px-2 py-1 transition-colors ${
+                roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              }`}
+            >
+              {roleRow.can_manage ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+              Portal access
+            </button>
+            {!profile.is_representative && (
+              <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1">
+                <Mail className="h-3 w-3" />
+                {inviteSentAt ? "Resend KYC" : "Request KYC"}
+              </Button>
+            )}
+            {inviteSentAt && sentDate && (
+              <span className="text-[11px] text-green-600 flex items-center gap-1">
+                <Mail className="h-3 w-3" />
+                Sent {sentDate}
+              </span>
+            )}
           </div>
         </div>
       </div>

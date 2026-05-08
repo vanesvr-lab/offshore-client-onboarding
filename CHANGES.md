@@ -15,6 +15,27 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-081 — Extend admin section pills width (Claude Code)
+
+Top-level step pills on `/admin/services/[id]` now extend through the RAG status text (`● Complete` / `● Partial` / `● Incomplete`); profile-level pills extend through the Show/Hide toggle. Affordances to the right of those points (chevron-circle button, `SectionReviewBadge`, `SectionReviewButton` on top-level) stay on the row's regular background.
+
+- `src/components/admin/ServiceCollapsibleSection.tsx`: when `variant="step"`, the pill now wraps `[icon][title][progress bar][percentage][RAG dot + label]` in a single `inline-flex items-center gap-2.5 px-3 py-1 rounded-md bg-[#06629c] text-white` span. Affordances inside the pill use white-on-navy variants — progress bar track `bg-white/20`, percentage `text-white/80`, RAG label `text-white` (dot keeps its saturated `bg-green-500` / `bg-amber-400` / `bg-red-500` for high contrast on navy). Chevron-circle button + `SectionReviewControls` stay outside the pill on the gray-50 row. The chevron also moved from inside the right-side flex group to a dedicated sibling so it can sit outside the wide pill cleanly.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`: PersonCard pill widened to wrap `[type icon][profile name][role badges][KYC %][PersonAggregateReviewBadge][Show/Hide chevron]`. Role badges switched to `bg-white/70 text-brand-navy` (was `bg-brand-navy/10`) so they read on light blue. KYC % colors bumped one shade darker (`text-green-700` / `text-amber-700` / `text-red-600`) for legibility on `#7dbbe3`. The `flex items-start gap-3` two-column layout (left=content / right=Hide-Show) is gone; a single `space-y-1.5` stack now hosts the wide pill on top and the Quick actions row (Portal access / Request KYC / Sent date) underneath. Quick actions row keeps its `e.stopPropagation()`, so its buttons still don't toggle the row.
+- When the profile row is expanded, the pill collapses to `[icon][name][italic 'scroll for details'][Hide ▾]` so it doesn't duplicate the sticky banner inside the body.
+- Vertical containment line per profile, KYC subsection headers, the Documents block header at the bottom of each profile, the right-column cards, the top stepper, and the B-078 Save bar are all unchanged.
+- `border border-gray-900` outer stroke from B-080 unchanged. `rounded-md` + `px-3 py-1` pill shape from B-080 unchanged.
+
+Smoke test (static; runtime visuals deferred to user):
+
+1. **PASS (static):** Top-level step pill renders `[#06629c] rounded-md px-3 py-1` and contains title + progress bar + percentage + RAG label. Chevron + `SectionReviewControls` sit outside.
+2. **DEFERRED (UI):** Click any top-level row → expands. Pill shape preserved (chevron rotates, pill stays same size).
+3. **PASS (static):** Profile pill renders `[#7dbbe3] rounded-md px-3 py-1` and contains type icon + name + role badges + KYC % + `PersonAggregateReviewBadge` + Hide/Show chevron. Quick actions row sits outside on regular row bg.
+4. **DEFERRED (UI):** Click profile row → expands. Pill content swaps to `icon + name + 'scroll for details' + Hide ▾`; pill stays same shape.
+5. **PASS (static):** `KycLongFormSection` (line 805) untouched — still `bg-gray-50 hover:bg-gray-100`. Files in `src/components/kyc/*` untouched (zero lines in diff).
+6. **PASS (static):** `npm run build` passes clean.
+
+No `console.log` introduced; no shared component (`KycRolesPicker`, `KycDocsByCategory`, `AiPrefillBanner`, `KycDocRow`) restyled.
+
 ### 2026-05-08 — B-080 close-out — Admin section pills + KYC % inline + thinner border (Claude Code)
 
 End of B-080. `/admin/services/[id]` section headers downgraded from full-width colored bands (B-079) to tight pills around just the title text — `#06629c` for top-level steps, `#7dbbe3` for profile rows, both `rounded-md` with `px-3 py-1`. The rest of each row reverts to its pre-B-079 gray-50 styling, restoring legibility for status pills, progress bars, and Review buttons. Profile rows now show `KYC: <pct>%` inline next to the profile name + role badge (color-coded red / amber / green) instead of on its own line with a redundant progress bar. Top-level step container borders thinned from B-079's 2px stroke to standard `border` (1px) `border-gray-900` to match the rest of the page.
