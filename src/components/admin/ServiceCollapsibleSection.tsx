@@ -22,11 +22,13 @@ interface Props {
   // ancestor <AdminApplicationSectionsProvider>.
   sectionKey?: string;
   anchorId?: string;
-  // B-080 introduced `step` as a tight title pill. B-081 widened the pill
-  // to include progress + percentage + RAG label. B-082 pulls the
-  // Show/Hide chevron inside the pill (between % and ● Complete) and
-  // drops the chevron-circle sibling, so only the SectionReviewBadge +
-  // SectionReviewButton stay outside on the row's regular background.
+  // B-080 introduced `step` as a tight title pill. Subsequent passes
+  // widened it: B-081 added progress + RAG, B-082 pulled the Show/Hide
+  // chevron inside, B-083 makes the pill a full-width flex container
+  // with `justify-between` so the title hugs the left edge and the
+  // controls cluster (progress → % → ● Complete → Show ▾) hugs the
+  // right edge. SectionReviewBadge + SectionReviewButton remain
+  // siblings outside the pill on the row's regular background.
   variant?: "default" | "step";
   children: React.ReactNode;
 }
@@ -82,13 +84,18 @@ export function ServiceCollapsibleSection({
           className="flex-1 min-w-0 flex items-center justify-between text-left hover:bg-gray-50/50 transition-colors -mx-2 px-2 py-1 rounded gap-3"
         >
           {isStep ? (
-            <span className="inline-flex items-center gap-2.5 px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium min-w-0 max-w-full">
-              {icon && <span className="text-white/80 shrink-0">{icon}</span>}
-              <span className="font-medium truncate">{title}</span>
+            <span className="flex flex-1 items-center justify-between gap-3 px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium min-w-0">
+              {/* Left: title pinned to left edge */}
+              <span className="inline-flex items-center gap-2 min-w-0">
+                {icon && <span className="text-white/80 shrink-0">{icon}</span>}
+                <span className="font-medium truncate">{title}</span>
+              </span>
+              {/* Right cluster: progress → % → ● Complete → Show ▾ */}
               {percentage !== undefined && ragStatus && (
-                <>
-                  {/* Mini progress bar — desktop only when SectionReviewControls is wired,
-                      so the badge + Review button still have room on narrow viewports */}
+                <span className="inline-flex items-center gap-2.5 shrink-0">
+                  {/* Mini progress bar — desktop only when SectionReviewControls
+                      is wired, so the badge + Review button still have room on
+                      narrow viewports. */}
                   <div className={`${sectionKey ? "hidden lg:block" : ""} w-24 h-1.5 rounded-full bg-white/20 overflow-hidden shrink-0`}>
                     <div
                       className={`h-full rounded-full transition-all ${fillColor}`}
@@ -98,16 +105,15 @@ export function ServiceCollapsibleSection({
                   <span className={`${sectionKey ? "hidden lg:inline" : ""} text-xs text-white w-8 text-right shrink-0`}>
                     {percentage}%
                   </span>
-                  {/* Show/Hide toggle — sits between % and ● Complete (B-082) */}
-                  <span className="inline-flex items-center gap-1 text-xs text-white/90 shrink-0">
-                    {open ? "Hide" : "Show"}
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
-                  </span>
                   <span className="inline-flex items-center gap-1 text-xs text-white shrink-0">
                     <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
                     <span className="hidden sm:inline">{RAG_LABEL[ragStatus]}</span>
                   </span>
-                </>
+                  <span className="inline-flex items-center gap-1 text-xs text-white/90 shrink-0">
+                    {open ? "Hide" : "Show"}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+                  </span>
+                </span>
               )}
             </span>
           ) : (

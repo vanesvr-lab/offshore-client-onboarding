@@ -15,6 +15,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-083 — Section pills full-width with justify-between layout (Claude Code)
+
+Top-level + profile-level pills on `/admin/services/[id]` now span the full row width up to the right-side affordances (Approved/Flagged badge + Review button on top-level; `PersonAggregateReviewBadge` on profile). Inside, flex `justify-between` pushes the title to the left edge and the controls cluster to the right edge with empty navy / light-blue space between. Top-level right-cluster order: progress → 100% → ● Complete → Show ▾ (Complete swapped back before Show ▾, opposite of B-082).
+
+- `src/components/admin/ServiceCollapsibleSection.tsx`: when `variant="step"`, the pill is now `flex flex-1 items-center justify-between gap-3 px-3 py-1 rounded-md bg-[#06629c] text-white text-sm font-medium min-w-0`. Inner structure splits into a left `<span>` (icon + truncating title with `min-w-0`) and a right `<span>` cluster (`shrink-0`). The right cluster contains, in order: progress bar (`bg-white/20` track, fillColor unchanged), percentage `text-white w-8 text-right`, RAG dot + label (`text-white`, dot keeps its saturated colour), and the Show/Hide chevron + text (`text-white/90`). Default-variant rendering unchanged.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`: PersonCard pill upgraded to `flex flex-1 items-center justify-between gap-3 px-3 py-1 rounded-md bg-[#7dbbe3] ...`. Left cluster (icon + name + role badges + KYC % when collapsed; "scroll for details" italic when expanded) sits on the left with `min-w-0` and the truncating name; Show/Hide toggle on the right with `shrink-0`. `PersonAggregateReviewBadge` moved out of the pill into a sibling `<span>` so it sits on the regular row background to the right of the pill, mirroring how `SectionReviewBadge` sits outside the top-level pill. Quick actions row (Portal access / Request KYC / Sent date) unchanged on the regular row underneath, still `e.stopPropagation()` guarded.
+- Click-target unchanged: outer `p-4 cursor-pointer` div on PersonCard and the existing `<button>` on `ServiceCollapsibleSection` still own the toggle. `PersonAggregateReviewBadge` is purely visual (returns `null` when no reviews exist) — no interactive children to need stopPropagation.
+- Pill shape (`rounded-md`, `px-3 py-1`) unchanged; outer border thicknesses (`border-gray-900` step / `border-gray-200` default) unchanged.
+
+Smoke test (static; runtime visuals deferred to user):
+
+1. **PASS (static):** Top-level pill is `flex flex-1 ... justify-between` — title at left edge, right cluster (progress → % → ● Complete → Show ▾) at right edge.
+2. **PASS (static):** Right-cluster order matches brief: progress bar → percentage → RAG dot + label → Show/Hide. Complete is now BEFORE Show, opposite of B-082.
+3. **PASS (static):** SectionReviewBadge + SectionReviewButton still render as a sibling outside the button on the gray-50 row, untouched.
+4. **DEFERRED (UI):** Click row → expand. Pill width preserved (still `flex-1`); chevron rotates; Show/Hide label flips.
+5. **PASS (static):** Profile pill is `flex flex-1 ... justify-between` — left cluster (icon + name + role + KYC %) at left edge, Show/Hide at right edge.
+6. **PASS (static):** `PersonAggregateReviewBadge` rendered as sibling outside the pill on the regular row background. The badge returns `null` when no reviews exist, so collapsed-and-unreviewed profiles cleanly show just the pill with empty light-blue space on the right.
+7. **PASS (static):** `KycLongFormSection` (line 805) and shared `src/components/kyc/*` files untouched.
+8. **PASS (static):** `npm run build` passes clean.
+
+No `console.log` introduced; no shared component (`KycRolesPicker`, `KycDocsByCategory`, `AiPrefillBanner`, `KycDocRow`) restyled.
+
 ### 2026-05-08 — B-082 — Extend top-level pill to right-side affordances + reorder Complete (Claude Code)
 
 Top-level step pills on `/admin/services/[id]` now extend through the Show/Hide chevron and `● Complete` status, ending right before the Approved/Flagged review pill. `● Complete` moved from between the percentage and the chevron (B-081) to after the chevron, restoring its pre-B-081 right-side position. Approved/Flagged pill + Review button stay on the row's regular background. Profile pills unchanged.

@@ -1838,15 +1838,16 @@ function PersonCard({
       className="border rounded-xl overflow-hidden scroll-mt-32"
     >
       {/* ── Clickable header ─────────────────────────────────────────── */}
-      {/* B-077 — when expanded, the sticky banner inside the body owns the
-          name/role badges/KYC% display, so the pill content shrinks to
-          icon + name + Hide chevron once expanded.
-          B-080 — full-width #7dbbe3 band downgraded to a tight pill
-          around just the profile name; KYC % moved inline.
-          B-081 — pill widened to wrap icon + name + role badges + KYC %
-          + aggregate review badge + Show/Hide toggle. Quick actions
-          (Portal access / Request KYC) sit outside the pill on regular
-          row background. */}
+      {/* B-080..B-082 evolved a #7dbbe3 pill from a tight wrapper around
+          the name to a content-width row containing name + roles + KYC%
+          + aggregate badge + Show/Hide.
+          B-083 — pill becomes a full-width flex justify-between
+          container: left cluster (icon + name + role badges + KYC%)
+          hugs the left edge, Show/Hide hugs the right edge with empty
+          light-blue space between. PersonAggregateReviewBadge moves
+          OUTSIDE the pill, mirroring how SectionReviewBadge sits
+          outside the top-level pill. Quick actions row stays on the
+          regular row background underneath. */}
       <div
         className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
         onClick={() => {
@@ -1860,51 +1861,58 @@ function PersonCard({
         }}
       >
         <div className="space-y-1.5">
-          {/* Wide pill: icon + name + (extras when collapsed) + Show/Hide */}
-          <div className="flex items-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium min-w-0 max-w-full flex-wrap">
-              {profile.is_representative ? (
-                <Users2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
-              ) : profile.record_type === "organisation" ? (
-                <Building2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
-              ) : (
-                <UserCheck className="h-3.5 w-3.5 text-brand-navy shrink-0" />
-              )}
-              <span className="font-medium truncate">{profile.full_name}</span>
-              {!expanded && (
-                <>
-                  {(combinedRoles ?? [roleRow.role]).map((r) => (
-                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-white/70 text-brand-navy shrink-0">
-                      {r}
-                    </span>
-                  ))}
-                  {!profile.is_representative && (
-                    <span
-                      className={`text-xs font-medium tabular-nums shrink-0 ${
-                        kycDone ? "text-green-700" : kycPct > 0 ? "text-amber-700" : "text-red-600"
-                      }`}
-                    >
-                      {kycDone ? "✓ KYC Complete" : `KYC: ${kycPct}%`}
-                    </span>
-                  )}
-                  {!profile.is_representative && (
-                    <PersonAggregateReviewBadge
-                      profileId={profile.id}
-                      recordType={profile.record_type}
-                    />
-                  )}
-                </>
-              )}
-              {expanded && (
-                <span className="text-[11px] italic font-normal text-brand-navy/70 shrink-0">
-                  scroll for details
-                </span>
-              )}
-              <span className="ml-2 inline-flex items-center gap-1 text-xs text-brand-navy/80 shrink-0">
+          {/* Top row: full-width pill + PersonAggregateReviewBadge sibling */}
+          <div className="flex items-center gap-2">
+            <span className="flex flex-1 items-center justify-between gap-3 px-3 py-1 rounded-md bg-[#7dbbe3] text-brand-navy text-sm font-medium min-w-0">
+              {/* Left cluster — icon + name + role + KYC% (collapsed only) */}
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                {profile.is_representative ? (
+                  <Users2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+                ) : profile.record_type === "organisation" ? (
+                  <Building2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+                ) : (
+                  <UserCheck className="h-3.5 w-3.5 text-brand-navy shrink-0" />
+                )}
+                <span className="font-medium truncate">{profile.full_name}</span>
+                {!expanded && (
+                  <>
+                    {(combinedRoles ?? [roleRow.role]).map((r) => (
+                      <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-white/70 text-brand-navy shrink-0">
+                        {r}
+                      </span>
+                    ))}
+                    {!profile.is_representative && (
+                      <span
+                        className={`text-xs font-medium tabular-nums shrink-0 ${
+                          kycDone ? "text-green-700" : kycPct > 0 ? "text-amber-700" : "text-red-600"
+                        }`}
+                      >
+                        {kycDone ? "✓ KYC Complete" : `KYC: ${kycPct}%`}
+                      </span>
+                    )}
+                  </>
+                )}
+                {expanded && (
+                  <span className="text-[11px] italic font-normal text-brand-navy/70 shrink-0">
+                    scroll for details
+                  </span>
+                )}
+              </span>
+
+              {/* Right: Show/Hide toggle */}
+              <span className="inline-flex items-center gap-1 text-xs text-brand-navy/80 shrink-0">
                 {expanded ? "Hide" : "Show"}
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
               </span>
             </span>
+
+            {/* Aggregate review badge — sibling on regular row background */}
+            {!profile.is_representative && (
+              <PersonAggregateReviewBadge
+                profileId={profile.id}
+                recordType={profile.record_type}
+              />
+            )}
           </div>
 
           {/* Quick actions — outside pill, on regular row background */}
