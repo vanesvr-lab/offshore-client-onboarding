@@ -252,10 +252,34 @@ export default async function ServiceDetailPage({
           .limit(100)
       : { data: [] as ServiceAuditEntry[] };
 
-  // Merge service + document audit rows, sort by created_at DESC, cap at 100.
+  // B-078 Batch 6 — pull client_profile audit rows for every profile
+  // assigned to this service so the panel surfaces `profile_kyc_updated`
+  // events (admin Save bar writes one row per save event).
+  const profileIdsForAudit = ((rolesRes.data ?? []) as Array<{
+    client_profile_id: string | null;
+  }>)
+    .map((r) => r.client_profile_id)
+    .filter((v): v is string => !!v);
+  const profileIdsUnique = Array.from(new Set(profileIdsForAudit));
+  const auditProfilesRes =
+    profileIdsUnique.length > 0
+      ? await supabase
+          .from("audit_log")
+          .select(
+            "id, created_at, actor_id, actor_name, actor_role, action, entity_type, entity_id, previous_value, new_value, detail",
+          )
+          .eq("entity_type", "client_profile")
+          .in("entity_id", profileIdsUnique)
+          .order("created_at", { ascending: false })
+          .limit(100)
+      : { data: [] as ServiceAuditEntry[] };
+
+  // Merge service + document + client_profile audit rows, sort by
+  // created_at DESC, cap at 100.
   const mergedAuditEntries = [
     ...((auditRes.data ?? []) as unknown as ServiceAuditEntry[]),
     ...((auditDocsRes.data ?? []) as unknown as ServiceAuditEntry[]),
+    ...((auditProfilesRes.data ?? []) as unknown as ServiceAuditEntry[]),
   ]
     .sort(
       (a, b) =>

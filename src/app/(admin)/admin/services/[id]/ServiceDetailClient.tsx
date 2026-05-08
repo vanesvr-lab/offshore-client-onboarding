@@ -1484,6 +1484,82 @@ function PersonCard({
   const isDirty = isFieldsDirty || isRolesDirty;
   const [savingKycBar, setSavingKycBar] = useState(false);
 
+  // B-078 Batch 6 — navigation guard. When this profile has unsaved
+  // changes, intercept (a) tab close / refresh via `beforeunload`, and
+  // (b) clicks on `<a>` tags within the page (Next.js link clicks) plus
+  // (c) clicks on a different profile's card header. Browser refresh
+  // prompt is the only one we get for free; the in-page intercepts open
+  // a 3-button dialog (Save & continue / Discard / Cancel).
+  const [navDialog, setNavDialog] = useState<null | {
+    onContinue: () => void;
+  }>(null);
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+  // Intercept link clicks within the document while this profile is dirty.
+  // When the click lands on an `<a href>` outside this person card, we
+  // prevent navigation and show the unsaved-changes dialog instead.
+  useEffect(() => {
+    if (!isDirty) return;
+    const cardSelector = `#person-card-${roleRow.client_profiles?.id}`;
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const link = target.closest("a[href]") as HTMLAnchorElement | null;
+      if (!link) return;
+      const ownCard = target.closest(cardSelector);
+      if (ownCard) return; // links inside this card don't trigger guard
+      // Only intercept in-app navigation; allow modifier-clicks / new-tab.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (link.target === "_blank") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const href = link.getAttribute("href");
+      setNavDialog({
+        onContinue: () => {
+          if (href) window.location.href = href;
+        },
+      });
+    }
+    document.addEventListener("click", onDocClick, true);
+    return () => document.removeEventListener("click", onDocClick, true);
+  }, [isDirty, roleRow.client_profiles?.id]);
+  // Intercept clicks on other profiles' card headers while this profile
+  // is dirty. The other PersonCard's header has `cursor-pointer` and
+  // sits inside `#person-card-<id>`. We don't know which profile was
+  // clicked from here — we just prompt and let the user re-click after
+  // resolving. Keeps the behaviour minimal: if dirty and you clicked
+  // outside the dirty card on another card, show the dialog.
+  useEffect(() => {
+    if (!isDirty) return;
+    const ownCardSelector = `#person-card-${roleRow.client_profiles?.id}`;
+    function onCardClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const otherCard = target.closest(
+        '[id^="person-card-"]',
+      ) as HTMLElement | null;
+      if (!otherCard) return;
+      const own = target.closest(ownCardSelector);
+      if (own) return;
+      // Only intercept clicks on the other card's header (not its body
+      // when expanded). Header is the direct child with `cursor-pointer`.
+      const header = target.closest(".cursor-pointer");
+      if (!header || !otherCard.contains(header)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setNavDialog({ onContinue: () => {} });
+    }
+    document.addEventListener("click", onCardClick, true);
+    return () => document.removeEventListener("click", onCardClick, true);
+  }, [isDirty, roleRow.client_profiles?.id]);
+
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
   const kyc = kycForHook;
@@ -1767,7 +1843,15 @@ function PersonCard({
           content here and keep only the chevron + Quick actions. */}
       <div
         className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          // B-078 Batch 6 — collapsing while dirty is treated as a
+          // navigation: prompt before discarding.
+          if (expanded && isDirty) {
+            setNavDialog({ onContinue: () => setExpanded(false) });
+            return;
+          }
+          setExpanded(!expanded);
+        }}
       >
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0 space-y-1.5">
@@ -2222,6 +2306,54 @@ function PersonCard({
           subsections={kycSubsections}
         />
       )}
+
+      {/* B-078 Batch 6 — unsaved-changes dialog. Shown when admin tries
+          to leave a dirty profile (in-page link click, click on a
+          different person card, or collapse the chevron). */}
+      <Dialog open={!!navDialog} onOpenChange={(open) => { if (!open) setNavDialog(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Unsaved changes for {profile.full_name ?? "this profile"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            You&rsquo;ve made changes to this profile that haven&rsquo;t been saved.
+            What would you like to do?
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setNavDialog(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              className="text-red-700 border-red-300 hover:bg-red-50"
+              onClick={() => {
+                const cont = navDialog?.onContinue;
+                handleKycBarCancel();
+                setNavDialog(null);
+                cont?.();
+              }}
+            >
+              Discard changes
+            </Button>
+            <Button
+              className="bg-brand-navy hover:bg-brand-blue text-white"
+              disabled={savingKycBar}
+              onClick={async () => {
+                const cont = navDialog?.onContinue;
+                await handleKycBarSave();
+                setNavDialog(null);
+                cont?.();
+              }}
+            >
+              {savingKycBar ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+              Save &amp; continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

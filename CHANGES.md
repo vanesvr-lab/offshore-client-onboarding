@@ -15,6 +15,45 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-078 close-out — Admin full edit rights on /admin/services/[id] (Claude Code)
+
+End of B-078. Admin per-profile view in `/admin/services/[id]` Step 4 is now fully editable: KYC long-form fields, role assignments, profile banner (name + email), and document Replace all flow through one Save / Cancel bar centered to section width. Navigation guard prevents loss of unsaved changes. Every save event writes to `audit_log` via the B-077/7 helper. Per-section doc rows now use category-based visibility instead of extraction-only — fixes the bug where uploaded docs didn't show as source docs unless they had AI extractions.
+
+Smoke test (deferred to user — I can't drive the UI from CLI):
+
+1. `/admin/services/[id]` → expand a profile → edit Full legal name in the sticky banner → click Save → reload page → name persists
+2. Edit DOB + passport number + a role checkbox together → Save → all three persist in one round-trip
+3. Edit a field → Cancel → field reverts, no `audit_log` entry written
+4. Edit a field → close tab → browser warns
+5. Edit a field → click another profile's card header → unsaved-changes dialog appears with Save & continue / Discard / Cancel
+6. Click Save & continue → previous profile saves, then admin can switch
+7. Open a profile with no Certified Passport Copy uploaded → Identity section shows an empty-state "Certified Passport Copy — Upload" row
+8. Click Upload on the empty-state row → file picker → upload completes → row swaps to View
+9. Click View on an uploaded doc → DocumentDetailDialog → Replace → confirm → upload → doc list shows new file
+10. Audit Trail panel shows entries for `profile_kyc_updated` and `document_replaced`
+
+**Dev server restart** to clear `.next` cache after the cross-cutting refactor:
+```
+pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev
+```
+
+Resolves: tech debt #25 (re-resolved correctly — prior B-076/B-074 resolution made the admin view parallel + read-only, B-078 makes it fully editable inline).
+
+### 2026-05-07 — B-078 Batch 6 — Audit writes + nav guard + smoke test (Claude Code)
+
+Final B-078 batch wires audit + unsaved-changes guard.
+
+- **Audit (kyc-fields)** — `/api/admin/profiles/[id]/kyc-fields` now snapshots the pre-update `client_profile_kyc` + roles, applies the diff, then writes one `audit_log` row per save event: `action: "profile_kyc_updated"`, `entity_type: "client_profile"`, `entity_id: profileId`. `previous_value` + `new_value` carry only the changed keys; `detail` lists `service_id`, `fields_changed`, `roles_added`, `roles_removed`. Skipped when nothing meaningfully changed.
+- **Audit display** — `src/app/(admin)/admin/services/[id]/page.tsx` adds a third audit query keyed on `entity_type: "client_profile"` for every profile assigned to this service. Results merge with the existing service + document queries before the 100-row cap.
+- **Audit (replace)** — already wired in Batch 5.
+- **Nav guard** — `PersonCard` installs three intercepts when `isDirty`:
+  1. `beforeunload` — browser warns on tab close / refresh
+  2. Document-level capture on `<a href>` clicks outside the dirty card — opens the unsaved-changes dialog instead of letting Next.js navigate
+  3. Document-level capture on clicks landing on a different profile's `cursor-pointer` header — same dialog
+  Plus the dirty profile's own collapse chevron triggers the dialog when expanded.
+- **Dialog** — 3-button modal: `Save & continue` (brand-navy), `Discard changes` (outline-red), `Cancel` (outline). Save runs `handleKycBarSave` then proceeds; Discard runs `handleKycBarCancel` and proceeds; Cancel just closes.
+- Smoke test deferred to user — see close-out above.
+
 ### 2026-05-07 — B-078 Batch 5 — Document Replace via DocumentDetailDialog (admin path) (Claude Code)
 
 `DocumentDetailDialog` already had a `Replace Document` button gated on `onDocumentReplaced` + `serviceId` + `doc.document_type_id`, but the admin caller in `/admin/services/[id]` never wired the prop, so admins couldn't see it. Wire-up complete; the admin path now writes `document_replaced` to `audit_log`.
@@ -4591,6 +4630,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 9 (partial) | AI assistant messages hardcoded | 2026-04-07 | Still hardcoded in `ApplicationStatusPanel`, but the new Knowledge Base feeds the real document verification AI prompts so the AI now has actual regulatory context. The status-panel chat is separately a UI placeholder. |
 | 14 | No tests | 2026-05-04 | B-051: Vitest + Playwright + MSW. 155 unit/integration tests pass; 7 Playwright specs scaffolded for the client onboarding wizard, KYC invite flow, autosave retry, and KYC resend rate limit. CI gates `lint`/`build`/`test` on every push and PR; E2E job gated by `run-e2e` label or main-branch push. |
 | 19 | Sidebar has no mobile collapse | 2026-05-04 | B-052: client `Sidebar` now renders inside a `Sheet` drawer below `md:` (state in new `ClientShell`, opened from a burger button in `Header`). Wizard pages, KYC fill, dashboard, applications/[id], and services/[id] all reflow cleanly at 375px. Document upload gains a native camera capture path on mobile. Admin sidebar deferred — see #20. |
-| 25 | Admin KYC view is parallel, not inline read-only mirror | 2026-05-06 | B-074: review affordances are now inline in `KycLongForm` on `/admin/services/[id]` (each section row carries a `SectionReviewBadge` + `SectionReviewButton` + `ConnectedNotesHistory`). The parallel `AdminKycPersonReviewPanel` was deleted; the legacy `/admin/applications/[id]` page also dropped its panel usage. Same `kyc:<profileId>:<category>` keys, no data migration. `KycStepWizard` also gained a `readOnly` prop the brief asked for, even though the admin path uses `KycLongForm` rather than the wizard. |
+| 25 | Admin KYC view is parallel, not inline read-only mirror | 2026-05-07 | B-074 made the inline review affordances appear inside `KycLongForm` but kept every field hardcoded `disabled`, treating admin as a read-only reviewer. **B-078 corrects that** — admin now has full edit rights on `/admin/services/[id]` Step 4: KYC long-form fields are typeable, role assignments toggle through the same dirty tracker, the sticky banner is inline-editable for full_name + email, and document Replace is wired into `DocumentDetailDialog`. One Save / Cancel bar per profile commits everything via `PATCH /api/admin/profiles/[id]/kyc-fields`; nav guard prevents losing changes; `audit_log` writes `profile_kyc_updated` per save event and `document_replaced` per replace. Per-section doc-row visibility was also corrected to category-based instead of extraction-only — fixes the bug where uploaded docs didn't show as source docs unless they had AI extractions. |
 | 16 | Shell `ANTHROPIC_API_KEY=""` overrode `.env.local` | 2026-04-19 | B-031: `package.json` `dev` script now prefixes `unset ANTHROPIC_API_KEY &&` so `.env.local` always wins. |
 

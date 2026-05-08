@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 type ServiceRoleType = "director" | "shareholder" | "ubo" | "other";
 
@@ -147,7 +148,7 @@ export async function PATCH(
   // any of the three target tables.
   const { data: profile, error: lookupError } = await supabase
     .from("client_profiles")
-    .select("id")
+    .select("id, full_name, email, phone")
     .eq("id", profileId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -156,6 +157,24 @@ export async function PATCH(
   }
   if (!profile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+  }
+
+  // B-078 Batch 6 — capture pre-update state for the audit_log row.
+  const { data: preKyc } = await supabase
+    .from("client_profile_kyc")
+    .select("*")
+    .eq("client_profile_id", profileId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  let preRoles: Array<{ id: string; role: string; service_id: string }> = [];
+  if (body.roles && body.roles.service_id) {
+    const { data: rolesData } = await supabase
+      .from("profile_service_roles")
+      .select("id, role, service_id")
+      .eq("client_profile_id", profileId)
+      .eq("service_id", body.roles.service_id)
+      .eq("tenant_id", tenantId);
+    preRoles = (rolesData ?? []) as typeof preRoles;
   }
 
   // ── client_profile_kyc ──────────────────────────────────────────────────
@@ -280,6 +299,60 @@ export async function PATCH(
       .eq("service_id", body.roles.service_id)
       .eq("tenant_id", tenantId);
     updatedRoles = (data ?? []) as typeof updatedRoles;
+  }
+
+  // B-078 Batch 6 — one audit_log row per save event. `previous_value`
+  // and `new_value` carry the diff, NOT the whole record, so the trail
+  // stays compact. `detail.fields_changed` lists every dirty key the
+  // client sent so reviewers can see the surface area at a glance.
+  const kycPrev: Record<string, unknown> = {};
+  const kycNew: Record<string, unknown> = {};
+  for (const key of Object.keys(body.kyc_fields ?? {})) {
+    if (!KYC_FIELD_ALLOWED.has(key)) continue;
+    kycPrev[key] = (preKyc as Record<string, unknown> | null)?.[key] ?? null;
+    kycNew[key] = (updatedKyc as Record<string, unknown> | null)?.[key] ?? null;
+  }
+  const profilePrev: Record<string, unknown> = {};
+  const profileNew: Record<string, unknown> = {};
+  for (const key of Object.keys(body.profile_fields ?? {})) {
+    if (!PROFILE_FIELD_ALLOWED.has(key)) continue;
+    profilePrev[key] =
+      (profile as Record<string, unknown> | null)?.[key] ?? null;
+    profileNew[key] =
+      (updatedProfile as Record<string, unknown> | null)?.[key] ?? null;
+  }
+  const fieldsChanged = [
+    ...Object.keys(kycNew),
+    ...Object.keys(profileNew),
+  ];
+  const rolesChanged =
+    body.roles &&
+    ((body.roles.add?.length ?? 0) > 0 ||
+      (body.roles.remove?.length ?? 0) > 0);
+  if (fieldsChanged.length > 0 || rolesChanged) {
+    await writeAuditLog(supabase, {
+      actor_id: session.user.id,
+      actor_role: "admin",
+      action: "profile_kyc_updated",
+      entity_type: "client_profile",
+      entity_id: profileId,
+      previous_value: {
+        kyc_fields: kycPrev,
+        profile_fields: profilePrev,
+        roles: preRoles.map((r) => ({ id: r.id, role: r.role })),
+      },
+      new_value: {
+        kyc_fields: kycNew,
+        profile_fields: profileNew,
+        roles: updatedRoles.map((r) => ({ id: r.id, role: r.role })),
+      },
+      detail: {
+        service_id: body.roles?.service_id ?? null,
+        fields_changed: fieldsChanged,
+        roles_added: body.roles?.add?.map((a) => a.service_role_type) ?? [],
+        roles_removed: body.roles?.remove?.length ?? 0,
+      },
+    });
   }
 
   return NextResponse.json({
