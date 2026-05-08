@@ -13,6 +13,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-08 — B-085 — Service-level Documents filter + dedupe + upload-based count (Claude Code)
+
+The Documents section under the service-level pill on `/admin/services/[id]` now lists only docs tied to the company entity. KYC-per-person docs (Passport, CV, Proof of Residential Address, Source of Funds declarations, etc.) drop out of this section and continue to live in each profile's per-profile Documents block (B-077/2). The list is deduped by `document_type_id`. Header reads `Documents (X of Y uploaded) · Z% · Not started/Partial/Complete`.
+
+**Schema field used:** `document_types.scope` already exists (added in B-049 `20260301000006_document_scope_flag.sql`) with values `'person' | 'application'`. Service-level filter uses `scope === 'application'`. **No migration added.**
+
+- `ServiceDetailClient.tsx`: parent computes `serviceDocTypes` (active rows with `scope='application'`), `serviceLevelDocs` (uploads matching those types), `documentsUploadedCount` / `documentsExpectedCount`, and `documentsPct` as upload-based (replaces the old `calcDocumentsCompletion` verification-status metric — also removed the now-stale import). RAG + status label tracked alongside (`Not started` for 0, `Partial` for 1-99%, `Complete` at 100%).
+- `AdminDocumentsSection`: rewritten to take the filtered `documentTypes` directly. Renders a single deduped `KycDocRow` list (uploaded → View → opens `DocumentDetailDialog`; missing → Upload empty-state via a hidden file input). Dedupe Map keeps the most-recent upload per `document_type_id`; surfaces a small "N duplicate upload(s) collapsed" hint when the underlying data has duplicates.
+- Bottom Documents block (B-077/2) inside each profile's expanded view is **untouched** — still shows every KYC doc per person via `KycDocsByCategory`.
+- `RichDocumentCard` (and its three helpers `verificationStatusBadge` / `adminStatusBadge` / `formatShortDate`) deleted — only used by the old service-level list. The denser `KycDocRow + DocumentDetailDialog` flow matches per-profile UX.
+- `ServiceCollapsibleSection`: added optional `statusLabelOverride` prop so the Documents pill can render `Not started` instead of the default `Incomplete` without changing other sections' wording.
+
+**Follow-up flag:** if the page surfaces "1 duplicate upload(s) collapsed" for any service, there's a duplicate row in the underlying `documents` table (or a duplicate `document_type` binding) worth cleaning up at the data layer. Out of scope for this brief.
+
+---
+
 ### 2026-05-08 — B-084 close-out — auto-completion + button family + per-section allow-list (Claude Code)
 
 All three QA issues on `/admin/services/[id]` resolved in one brief: completion percentages flip immediately on every save (Batch 1), every button reads as one navy/rounded family (Batch 2), and per-section doc rows narrow to the doc(s) that actually verify each section's fields (Batch 3). Bottom Documents block (B-077/2) and KYC subsection header styling intentionally untouched. `npm run build` green after each batch.

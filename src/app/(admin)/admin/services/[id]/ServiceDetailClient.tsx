@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ChevronDown, CheckCircle, XCircle, FileText,
+  ArrowLeft, ChevronDown, CheckCircle, XCircle,
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
-  AlertTriangle, Download, Eye, MessageSquarePlus, Upload,
+  AlertTriangle,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,15 +26,11 @@ import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { AuditTrail } from "@/components/admin/AuditTrail";
-import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
 import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker";
-import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRequestDialog";
-import { normalizeConfidence } from "@/lib/ai/confidence";
 import type { VerificationResult } from "@/types";
 import {
   calcSectionCompletion,
   calcKycCompletion,
-  calcDocumentsCompletion,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
@@ -79,10 +75,6 @@ const BTN_PRIMARY =
   "bg-brand-navy hover:bg-brand-blue text-white rounded-md border-transparent";
 const BTN_OUTLINE =
   "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-md";
-const BTN_GHOST =
-  "bg-transparent hover:bg-gray-100 text-brand-navy hover:text-brand-navy rounded-md border-transparent";
-const BTN_DESTRUCTIVE =
-  "bg-red-600 hover:bg-red-700 text-white border-transparent rounded-md";
 const BTN_DESTRUCTIVE_OUTLINE =
   "bg-white hover:bg-red-50 text-red-600 hover:text-red-600 border-red-600 rounded-md";
 
@@ -2390,400 +2382,37 @@ function PersonCard({
   );
 }
 
-// ─── Admin Documents Section ──────────────────────────────────────────────────
-
-function verificationStatusBadge(status: string) {
-  const map: Record<string, string> = {
-    verified: "bg-green-50 text-green-700 border-green-200",
-    flagged: "bg-amber-50 text-amber-700 border-amber-200",
-    rejected: "bg-red-50 text-red-700 border-red-200",
-    manual_review: "bg-purple-50 text-purple-700 border-purple-200",
-    pending: "bg-gray-100 text-gray-500 border-gray-200",
-  };
-  const cls = map[status] ?? map.pending;
-  const icon = status === "verified" ? "✓" : status === "flagged" ? "⚠" : status === "rejected" ? "✗" : "○";
-  return (
-    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border capitalize ${cls}`}>
-      {icon} {status.replace(/_/g, " ")}
-    </span>
-  );
-}
-
-function adminStatusBadge(status: string | null) {
-  if (status === "approved") return <span className="text-[10px] text-green-700 font-medium">✓ Approved</span>;
-  if (status === "rejected") return <span className="text-[10px] text-red-700 font-medium">✗ Rejected</span>;
-  return <span className="text-[10px] text-gray-400">○ Pending review</span>;
-}
-
-function formatShortDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function RichDocumentCard({
-  doc,
-  serviceId,
-  requests,
-  recipients,
-  onUpdateRequestAdded,
-}: {
-  doc: ServiceDoc;
-  serviceId: string;
-  requests: DocumentUpdateRequest[];
-  recipients: Array<{ id: string; name: string; email: string | null; label: string }>;
-  onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
-}) {
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
-  const [showRejectForm, setShowRejectForm] = useState(false);
-  const [rejectNote, setRejectNote] = useState("");
-  const [adminSaving, setAdminSaving] = useState(false);
-  const [adminStatus, setAdminStatus] = useState(doc.admin_status);
-  const [adminStatusNote, setAdminStatusNote] = useState(doc.admin_status_note);
-  const [adminStatusAt, setAdminStatusAt] = useState(doc.admin_status_at);
-  const [extractedOpen, setExtractedOpen] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [downloadLoading, setDownloadLoading] = useState(false);
-
-  const verResult = doc.verification_result as VerificationResult | null;
-  const flags = verResult?.flags ?? [];
-  const ruleResults = verResult?.rule_results ?? [];
-  const extractedFields = verResult?.extracted_fields ?? {};
-  const confidence = verResult?.confidence_score;
-  const passedRules = ruleResults.filter((r) => r.passed).length;
-  const typeName = doc.document_types?.name ?? "Document";
-
-  async function handleApprove() {
-    setAdminSaving(true);
-    try {
-      const res = await fetch(`/api/admin/documents/library/${doc.id}/review`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "approved" }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      setAdminStatus("approved");
-      setAdminStatusAt(new Date().toISOString());
-    } catch {
-      toast.error("Failed to approve");
-    } finally {
-      setAdminSaving(false);
-    }
-  }
-
-  async function handleReject() {
-    if (!rejectNote.trim()) return;
-    setAdminSaving(true);
-    try {
-      const res = await fetch(`/api/admin/documents/library/${doc.id}/review`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "rejected", note: rejectNote.trim() }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      setAdminStatus("rejected");
-      setAdminStatusNote(rejectNote.trim());
-      setAdminStatusAt(new Date().toISOString());
-      setShowRejectForm(false);
-      setRejectNote("");
-    } catch {
-      toast.error("Failed to reject");
-    } finally {
-      setAdminSaving(false);
-    }
-  }
-
-  async function fetchDownloadUrl() {
-    if (downloadUrl) return downloadUrl;
-    setDownloadLoading(true);
-    try {
-      const res = await fetch(`/api/documents/${doc.id}/download`);
-      const data = (await res.json()) as { url?: string };
-      const url = data.url ?? null;
-      setDownloadUrl(url);
-      return url;
-    } catch {
-      return null;
-    } finally {
-      setDownloadLoading(false);
-    }
-  }
-
-  async function handleDownload() {
-    const url = await fetchDownloadUrl();
-    if (url) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = doc.file_name ?? "document";
-      a.target = "_blank";
-      a.click();
-    }
-  }
-
-  // Most recent request for this doc
-  const latestRequest = requests[0] ?? null;
-  const hasMoreRequests = requests.length > 1;
-
-  return (
-    <div className="border rounded-xl overflow-hidden">
-      {/* Header row */}
-      <div className="px-4 py-3 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <FileText className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium text-brand-navy">{typeName}</span>
-              {verificationStatusBadge(doc.verification_status)}
-              {adminStatusBadge(adminStatus)}
-            </div>
-            <p className="text-[11px] text-gray-400">
-              Uploaded {formatShortDate(doc.uploaded_at)}
-              {doc.client_profiles?.full_name ? ` · ${doc.client_profiles.full_name}` : ""}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* AI verification line */}
-      {verResult && (
-        <div className="px-4 pb-2 space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs text-gray-400 font-medium">AI:</span>
-            {confidence !== undefined && (
-              <span className="text-xs font-medium text-gray-700">{normalizeConfidence(confidence)}% confidence</span>
-            )}
-            {ruleResults.length > 0 && (
-              <span className={`text-xs font-medium ${passedRules === ruleResults.length ? "text-green-600" : "text-red-600"}`}>
-                {passedRules}/{ruleResults.length} rules passed
-              </span>
-            )}
-            {flags.length > 0 && (
-              <span className="text-xs text-amber-600 flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" />
-                {flags.length} flag{flags.length !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-
-          {/* Flags */}
-          {flags.length > 0 && (
-            <div className="space-y-1">
-              {flags.map((flag, i) => (
-                <p key={i} className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
-                  ⚠ {flag}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {/* Failed rules */}
-          {ruleResults.filter((r) => !r.passed).length > 0 && (
-            <div className="space-y-1">
-              {ruleResults.filter((r) => !r.passed).map((rr) => (
-                <div key={rr.rule_number} className="rounded bg-red-50 border border-red-100 px-2 py-1.5 text-xs space-y-0.5">
-                  <p className="font-medium text-red-700">{rr.rule_number}. {rr.rule_text}</p>
-                  {rr.explanation && <p className="text-gray-600">{rr.explanation}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Extracted fields (collapsible) */}
-          {Object.keys(extractedFields).length > 0 && (
-            <div>
-              <button
-                onClick={() => setExtractedOpen(!extractedOpen)}
-                className="text-xs text-brand-blue hover:underline flex items-center gap-1"
-              >
-                <ChevronDown className={`h-3 w-3 transition-transform ${extractedOpen ? "rotate-180" : ""}`} />
-                {extractedOpen ? "Hide" : "Show"} extracted fields
-              </button>
-              {extractedOpen && (
-                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-                  {Object.entries(extractedFields).map(([k, v]) => (
-                    <div key={k} className="text-[11px]">
-                      <span className="text-gray-400 capitalize">{k.replace(/_/g, " ")}:</span>{" "}
-                      <span className="text-gray-700 font-medium">{String(v ?? "—")}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Admin review + actions */}
-      <div className="px-4 pb-3 space-y-2 border-t pt-2">
-        {/* Status + approve/reject */}
-        {adminStatus === "approved" && (
-          <p className="text-xs text-green-700 flex items-center gap-1">
-            <CheckCircle className="h-3.5 w-3.5" />
-            Approved {formatShortDate(adminStatusAt)}
-          </p>
-        )}
-        {adminStatus === "rejected" && (
-          <div className="text-xs text-red-700 space-y-0.5">
-            <p className="flex items-center gap-1">
-              <XCircle className="h-3.5 w-3.5" />
-              Rejected {formatShortDate(adminStatusAt)}
-            </p>
-            {adminStatusNote && <p className="text-gray-500 ml-5">Reason: {adminStatusNote}</p>}
-          </div>
-        )}
-
-        {adminStatus !== "approved" && adminStatus !== "rejected" && !showRejectForm && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
-              disabled={adminSaving}
-              onClick={() => void handleApprove()}
-            >
-              <CheckCircle className="h-3 w-3" />
-              Approve
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className={`h-7 px-2 text-xs gap-1 ${BTN_DESTRUCTIVE_OUTLINE}`}
-              disabled={adminSaving}
-              onClick={() => setShowRejectForm(true)}
-            >
-              <XCircle className="h-3 w-3" />
-              Reject
-            </Button>
-          </div>
-        )}
-        {showRejectForm && (
-          <div className="space-y-1.5">
-            <textarea
-              value={rejectNote}
-              onChange={(e) => setRejectNote(e.target.value)}
-              placeholder="Rejection reason (required)"
-              rows={2}
-              className="w-full text-xs border rounded-lg px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-blue"
-              autoFocus
-            />
-            <div className="flex gap-1.5">
-              <Button
-                size="sm"
-                className={`h-6 px-2 text-xs ${BTN_DESTRUCTIVE}`}
-                disabled={adminSaving || !rejectNote.trim()}
-                onClick={() => void handleReject()}
-              >
-                Confirm Reject
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`h-6 px-2 text-xs ${BTN_GHOST}`}
-                onClick={() => { setShowRejectForm(false); setRejectNote(""); }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Preview / Download / Request Update */}
-        <div className="flex items-center gap-1.5 flex-wrap pt-1">
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
-            onClick={() => setPreviewOpen(true)}
-          >
-            <Eye className="h-3 w-3" />
-            Preview
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
-            disabled={downloadLoading}
-            onClick={() => void handleDownload()}
-          >
-            {downloadLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
-            Download
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-7 px-2 text-xs gap-1 ${BTN_OUTLINE}`}
-            onClick={() => setRequestDialogOpen(true)}
-            disabled={recipients.length === 0}
-          >
-            <MessageSquarePlus className="h-3 w-3" />
-            Request Update
-          </Button>
-        </div>
-
-        {/* Latest update request */}
-        {latestRequest && (
-          <div className="mt-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 space-y-0.5">
-            <p className="text-[11px] text-blue-700 flex items-center gap-1">
-              <Mail className="h-3 w-3" />
-              Update requested {formatShortDate(latestRequest.sent_at)}
-              {latestRequest.requested_by_name ? ` by ${latestRequest.requested_by_name}` : ""}
-            </p>
-            <p className="text-xs text-gray-600 italic line-clamp-2">&ldquo;{latestRequest.note}&rdquo;</p>
-            {hasMoreRequests && (
-              <p className="text-[10px] text-blue-500">+{requests.length - 1} more request{requests.length - 1 !== 1 ? "s" : ""}</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Preview dialog */}
-      <DocumentPreviewDialog
-        documentId={doc.id}
-        fileName={doc.file_name ?? "Document"}
-        mimeType={doc.mime_type ?? "application/octet-stream"}
-        uploadedAt={doc.uploaded_at}
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-      />
-
-      {/* Request update dialog */}
-      {requestDialogOpen && (
-        <DocumentUpdateRequestDialog
-          documentId={doc.id}
-          documentTypeName={typeName}
-          serviceId={serviceId}
-          recipients={recipients}
-          verificationFlags={flags}
-          open={requestDialogOpen}
-          onOpenChange={setRequestDialogOpen}
-          onSent={onUpdateRequestAdded}
-        />
-      )}
-    </div>
-  );
-}
 
 function AdminDocumentsSection({
   serviceId,
   documents,
+  documentTypes,
   updateRequests,
   roles,
-  requirements,
   onDocumentAdded,
   onUpdateRequestAdded,
   onRefresh,
 }: {
   serviceId: string;
+  /** B-085 — already filtered to service-level (`scope='application'`)
+   *  by the parent so this section doesn't double-filter. */
   documents: ServiceDoc[];
+  /** B-085 — service-level doc types (`scope='application'` AND active),
+   *  used both as the universe of expected docs and as the dedupe key. */
+  documentTypes: DocumentType[];
   updateRequests: DocumentUpdateRequest[];
   roles: RoleWithProfile[];
-  requirements: DueDiligenceRequirement[];
   onDocumentAdded: (doc: ServiceDoc) => void;
   onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
   onRefresh: () => void;
 }) {
   const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadDocTypeId, setPendingUploadDocTypeId] = useState<string | null>(null);
+  // B-085 — DocumentDetailDialog state lifted in here so KycDocRow View
+  // can open it (mirrors PersonCard's pattern for per-profile docs).
+  const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
 
   // Build requests map: document_id → sorted requests
   const requestsByDoc = new Map<string, DocumentUpdateRequest[]>();
@@ -2793,10 +2422,12 @@ function AdminDocumentsSection({
     requestsByDoc.set(req.document_id, arr);
   }
 
-  // Build recipients for a given doc: owner + representative
+  // B-085 — recipients for service-level docs default to every
+  // representative + can_manage member. Service-level docs typically
+  // have no `client_profile_id`, so the per-doc-owner branch is
+  // effectively skipped.
   function getRecipients(doc: ServiceDoc) {
     const recipients: Array<{ id: string; name: string; email: string | null; label: string }> = [];
-    // Document owner (person with matching client_profile_id)
     if (doc.client_profile_id) {
       const ownerRole = roles.find((r) => r.client_profiles?.id === doc.client_profile_id);
       if (ownerRole?.client_profiles) {
@@ -2808,7 +2439,6 @@ function AdminDocumentsSection({
         });
       }
     }
-    // Representatives (is_representative=true with can_manage)
     for (const r of roles) {
       if (r.client_profiles?.is_representative && r.client_profiles.id !== doc.client_profile_id) {
         const alreadyAdded = recipients.some((rr) => rr.id === r.client_profiles!.id);
@@ -2822,7 +2452,6 @@ function AdminDocumentsSection({
         }
       }
     }
-    // If no owner found but doc exists, try any can_manage person
     if (recipients.length === 0) {
       const manager = roles.find((r) => r.can_manage && r.client_profiles);
       if (manager?.client_profiles) {
@@ -2837,23 +2466,34 @@ function AdminDocumentsSection({
     return recipients;
   }
 
-  // Required doc types that haven't been uploaded yet
-  const uploadedTypeIds = new Set(documents.map((d) => d.document_type_id).filter(Boolean));
-  const missingDocTypes = requirements
-    .filter((r) => r.requirement_type === "document" && r.document_type_id && !uploadedTypeIds.has(r.document_type_id))
-    .map((r) => ({
-      id: r.document_type_id!,
-      name: (r.document_types as unknown as { name: string } | null)?.name ?? r.label ?? "Document",
-      category: "",
-    }));
+  // B-085 — dedupe by `document_type_id`. If the same type was uploaded
+  // twice (seed-data duplicate or accidental double-bind in the template
+  // table), the rendered list shows it once; pick the most recent upload
+  // by `uploaded_at`. Underlying `documents` array stays untouched so
+  // audit / verification flows can still reference both rows.
+  const uploadByTypeId = new Map<string, ServiceDoc>();
+  for (const d of documents) {
+    if (!d.document_type_id) continue;
+    const existing = uploadByTypeId.get(d.document_type_id);
+    if (
+      !existing ||
+      new Date(d.uploaded_at).getTime() > new Date(existing.uploaded_at).getTime()
+    ) {
+      uploadByTypeId.set(d.document_type_id, d);
+    }
+  }
+  // B-085 — if the underlying data has duplicate doc_type uploads, log
+  // once for follow-up data cleanup (Vanessa: see CHANGES.md note).
+  const dedupedTypeCount = uploadByTypeId.size;
+  const hasDuplicates = documents.length > dedupedTypeCount;
 
-  // Flagged documents
-  const flaggedDocs = documents.filter((d) => {
+  // Flagged docs (across the deduped uploads only).
+  const flaggedDocs = Array.from(uploadByTypeId.values()).filter((d) => {
     const vr = d.verification_result as VerificationResult | null;
     return (vr?.flags?.length ?? 0) > 0 || (vr?.rule_results ?? []).some((r) => !r.passed);
   });
 
-  async function handleMissingDocUpload(typeId: string, file: File) {
+  async function handleAdminDocUpload(typeId: string, file: File) {
     setUploadingTypeId(typeId);
     setUploading(true);
     try {
@@ -2876,63 +2516,74 @@ function AdminDocumentsSection({
     }
   }
 
+  function openDetail(docId: string) {
+    const upload = documents.find((d) => d.id === docId);
+    if (upload) setDetailDoc(upload as unknown as DocumentDetailDoc);
+  }
+
   return (
     <div className="pt-4 space-y-3">
-      {/* Uploaded documents */}
-      {documents.length === 0 && missingDocTypes.length === 0 && (
-        <p className="text-sm text-gray-400">No documents uploaded yet.</p>
-      )}
-
-      {documents.map((doc) => (
-        <RichDocumentCard
-          key={doc.id}
-          doc={doc}
-          serviceId={serviceId}
-          requests={requestsByDoc.get(doc.id) ?? []}
-          recipients={getRecipients(doc)}
-          onUpdateRequestAdded={(req) => {
-            onUpdateRequestAdded(req);
-            onRefresh();
-          }}
-        />
-      ))}
-
-      {/* Missing / required docs */}
-      {missingDocTypes.map((dt) => (
-        <div key={dt.id} className="border rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-start gap-2.5 min-w-0">
-            <FileText className="h-4 w-4 text-gray-300 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm text-gray-600">{dt.name}</p>
-              <p className="text-[11px] text-gray-400">Required · {dt.category}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] px-1.5 py-0.5 rounded border text-gray-400 border-gray-200">○ Not uploaded</span>
-            <label className={`cursor-pointer ${uploading && uploadingTypeId === dt.id ? "opacity-60 pointer-events-none" : ""}`}>
-              <input
-                type="file"
-                className="sr-only"
-                accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
-                disabled={uploading}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void handleMissingDocUpload(dt.id, file);
-                  e.target.value = "";
+      {documentTypes.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          No service-level documents configured for this template.
+        </p>
+      ) : (
+        <div className="rounded-lg border bg-white divide-y">
+          {documentTypes.map((dt) => {
+            const upload = uploadByTypeId.get(dt.id);
+            const rowData: KycDocRowData = upload
+              ? {
+                  id: upload.id,
+                  document_type_id: dt.id,
+                  document_name: dt.name,
+                  is_uploaded: true,
+                  verification_status: upload.verification_status,
+                  admin_status: upload.admin_status ?? null,
+                  file_name: upload.file_name,
+                  mime_type: upload.mime_type,
+                  uploaded_at: upload.uploaded_at,
+                  verification_result: (upload.verification_result ?? null) as Record<string, unknown> | null,
+                  admin_status_note: upload.admin_status_note ?? null,
+                  admin_status_at: upload.admin_status_at ?? null,
+                }
+              : {
+                  id: null,
+                  document_type_id: dt.id,
+                  document_name: dt.name,
+                  is_uploaded: false,
+                };
+            return (
+              <KycDocRow
+                key={dt.id}
+                doc={rowData}
+                showAdminControls
+                isUploading={uploadingTypeId === dt.id}
+                onViewClick={openDetail}
+                onUploadClick={(docTypeId) => {
+                  setPendingUploadDocTypeId(docTypeId);
+                  uploadInputRef.current?.click();
                 }}
               />
-              <span className="inline-flex items-center gap-1 border border-brand-navy rounded-md bg-white text-brand-navy px-2.5 py-1.5 text-xs font-medium hover:bg-gray-50 transition-colors">
-                {uploading && uploadingTypeId === dt.id ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Upload className="h-3 w-3" />
-                )}
-                Upload
-              </span>
-            </label>
-          </div>
+            );
+          })}
         </div>
-      ))}
+      )}
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+        className="hidden"
+        disabled={uploading}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && pendingUploadDocTypeId) {
+            void handleAdminDocUpload(pendingUploadDocTypeId, file);
+          }
+          e.target.value = "";
+          setPendingUploadDocTypeId(null);
+        }}
+      />
 
       {/* Flagged summary */}
       {flaggedDocs.length > 0 && (
@@ -2955,6 +2606,46 @@ function AdminDocumentsSection({
             })}
           </div>
         </div>
+      )}
+
+      {/* B-085 — heads-up when the data layer has duplicate doc_type uploads. */}
+      {hasDuplicates && (
+        <p className="text-[11px] text-gray-400 italic">
+          Note: {documents.length - dedupedTypeCount} duplicate upload(s) collapsed in this list. Source data may need cleanup.
+        </p>
+      )}
+
+      {/* B-085 — admin doc detail dialog (Approve / Reject / Replace / Send
+          Update Request / Re-run AI). Shared with per-profile docs. */}
+      {detailDoc && (
+        <DocumentDetailDialog
+          doc={detailDoc}
+          isAdmin={true}
+          open={!!detailDoc}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDetailDoc(null);
+              onRefresh();
+            }
+          }}
+          serviceId={serviceId}
+          recipients={getRecipients(detailDoc as unknown as ServiceDoc)}
+          updateRequests={(updateRequests ?? []).filter(
+            (r) => r.document_id === detailDoc.id,
+          )}
+          onStatusChange={() => {
+            setDetailDoc(null);
+            onRefresh();
+          }}
+          onRequestSent={(req) => {
+            if (req) onUpdateRequestAdded(req as DocumentUpdateRequest);
+            onRefresh();
+          }}
+          onDocumentReplaced={() => {
+            setDetailDoc(null);
+            onRefresh();
+          }}
+        />
       )}
     </div>
   );
@@ -3049,9 +2740,12 @@ export function ServiceDetailClient({
     setService(initialService);
   }, [initialService]);
 
-  // Split documents by category: KYC/profile docs go inside person cards; corporate stays in Documents section
+  // B-085 — KYC/profile docs go inside person cards; service-level docs
+  // (scope='application') flow into the Documents section via `serviceLevelDocs`
+  // computed below. The `corporateDocs` category-heuristic was lossy
+  // (Reference Letters, Source-of-Funds Declarations etc. with applies_to='both'
+  // bled in / out unpredictably) and has been retired.
   const profileDocs = documents.filter((d) => isKycDoc(d.document_types?.category));
-  const corporateDocs = documents.filter((d) => !isKycDoc(d.document_types?.category));
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>(
     service.service_details ?? {}
   );
@@ -3116,7 +2810,52 @@ export function ServiceDetailClient({
   const kycPct = hasDirector ? calcKycCompletion(kycPersons).percentage : 0;
   const peopleKycPct = typedRoles.length === 0 ? 0 : hasDirector ? kycPct : Math.round(kycPct * 0.5);
 
-  const documentsPct = calcDocumentsCompletion(documents).percentage;
+  // B-085 — service-level Documents pill. Universe is every active
+  // `document_types` row with `scope='application'` (B-049 backfill: org-only
+  // docs become service-level by default; KYC-per-person docs stay
+  // `scope='person'`). Pct is upload-based and deduped by `document_type_id`
+  // so the same type uploaded twice still counts once. KYC docs that used to
+  // bleed into this pill via category-match are now filtered out — they live
+  // in the per-profile Documents block (B-077/2) instead.
+  const serviceDocTypes = useMemo(
+    () =>
+      (documentTypes ?? []).filter(
+        (dt) => dt.scope === "application" && dt.is_active !== false,
+      ),
+    [documentTypes],
+  );
+  const serviceDocTypeIds = useMemo(
+    () => new Set(serviceDocTypes.map((dt) => dt.id)),
+    [serviceDocTypes],
+  );
+  const serviceLevelDocs = useMemo(
+    () =>
+      documents.filter(
+        (d) => !!d.document_type_id && serviceDocTypeIds.has(d.document_type_id),
+      ),
+    [documents, serviceDocTypeIds],
+  );
+  const uploadedServiceTypeIds = useMemo(() => {
+    const out = new Set<string>();
+    for (const d of serviceLevelDocs) {
+      if (d.document_type_id) out.add(d.document_type_id);
+    }
+    return out;
+  }, [serviceLevelDocs]);
+  const documentsUploadedCount = uploadedServiceTypeIds.size;
+  const documentsExpectedCount = serviceDocTypes.length;
+  const documentsPct =
+    documentsExpectedCount > 0
+      ? Math.round((documentsUploadedCount / documentsExpectedCount) * 100)
+      : 0;
+  const documentsRag: RagStatus =
+    documentsPct >= 100 ? "green" : documentsPct > 0 ? "amber" : "red";
+  const documentsStatusLabel =
+    documentsPct >= 100
+      ? "Complete"
+      : documentsPct > 0
+        ? "Partial"
+        : "Not started";
 
   // ── Field change handler ──────────────────────────────────────────────────
 
@@ -3572,20 +3311,24 @@ export function ServiceDetailClient({
         </ServiceCollapsibleSection>
 
         {/* ── Section 5: Documents ─────────────────────────────────────────── */}
+        {/* B-085 — title carries upload-based count (X of Y uploaded).
+            Pct + RAG dot are upload-based too. KYC-per-person docs are
+            filtered out — they live in the per-profile Documents block. */}
         <ServiceCollapsibleSection
-          title={`Documents (${corporateDocs.length})`}
+          title={`Documents (${documentsUploadedCount} of ${documentsExpectedCount} uploaded)`}
           percentage={documentsPct}
-          ragStatus={ragFromPct(documentsPct)}
+          ragStatus={documentsRag}
+          statusLabelOverride={documentsStatusLabel}
           sectionKey="documents"
           anchorId="step-documents"
           variant="step"
         >
           <AdminDocumentsSection
             serviceId={service.id}
-            documents={corporateDocs}
+            documents={serviceLevelDocs}
+            documentTypes={serviceDocTypes}
             updateRequests={updateRequests}
             roles={typedRoles}
-            requirements={requirements}
             onDocumentAdded={(doc) => setDocuments((prev) => [...prev, doc])}
             onUpdateRequestAdded={(req) => setUpdateRequests((prev) => [req, ...prev])}
             onRefresh={handleRolesRefresh}

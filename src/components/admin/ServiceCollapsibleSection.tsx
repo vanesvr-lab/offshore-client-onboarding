@@ -30,6 +30,11 @@ interface Props {
   // right edge. SectionReviewBadge + SectionReviewButton remain
   // siblings outside the pill on the row's regular background.
   variant?: "default" | "step";
+  /** B-085 — opt-in override for the right-cluster status text. When set,
+   *  used in place of the default RAG_LABEL[ragStatus] mapping. Lets the
+   *  service-level Documents pill show "Not started" / "Partial" /
+   *  "Complete" without affecting other sections' "Incomplete" wording. */
+  statusLabelOverride?: string;
   children: React.ReactNode;
 }
 
@@ -55,6 +60,7 @@ export function ServiceCollapsibleSection({
   sectionKey,
   anchorId,
   variant = "default",
+  statusLabelOverride,
   children,
 }: Props) {
   // Default open if not complete
@@ -107,7 +113,7 @@ export function ServiceCollapsibleSection({
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs text-white shrink-0">
                     <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
-                    <span className="hidden sm:inline">{RAG_LABEL[ragStatus]}</span>
+                    <span className="hidden sm:inline">{statusLabelOverride ?? RAG_LABEL[ragStatus]}</span>
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs text-white/90 shrink-0">
                     {open ? "Hide" : "Show"}
@@ -145,7 +151,7 @@ export function ServiceCollapsibleSection({
                       "text-red-600"
                     }`}>
                       <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
-                      <span className="hidden sm:inline">{RAG_LABEL[ragStatus]}</span>
+                      <span className="hidden sm:inline">{statusLabelOverride ?? RAG_LABEL[ragStatus]}</span>
                     </span>
                   </>
                 )}
