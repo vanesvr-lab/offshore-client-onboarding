@@ -13,6 +13,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-08 — B-084 close-out — auto-completion + button family + per-section allow-list (Claude Code)
+
+All three QA issues on `/admin/services/[id]` resolved in one brief: completion percentages flip immediately on every save (Batch 1), every button reads as one navy/rounded family (Batch 2), and per-section doc rows narrow to the doc(s) that actually verify each section's fields (Batch 3). Bottom Documents block (B-077/2) and KYC subsection header styling intentionally untouched. `npm run build` green after each batch.
+
+---
+
+### 2026-05-08 — B-084 Batch 3 — Per-section doc allow-list (Claude Code)
+
+Per-section source-doc rows now narrow from "every doc in the matching category" to "only the doc(s) that actually verify the section's fields". Identity (individual) shows only Certified Passport Copy above the Address subdivider; the Address subdivider keeps Proof of Residential Address. Other category-matching docs continue to render in the bottom Documents block (B-077/2 — unchanged).
+
+- `src/lib/kyc/sections.ts`: extended `KycSection` with `sourceDocTypeNames?: string[]` (matched against `document_types.name`, case-insensitive). Set on the two identity-bearing sections: individual Identity → `["Certified Passport Copy"]`, organisation Company Details → `["Certificate of Incorporation"]`. Financial / Declarations / Tax-Financial intentionally left empty — those sections have no canonical source doc.
+- `ServiceDetailClient.tsx`: replaced category-based `findSectionDocs(categoryKey)` from B-078/4 with name-based allow-list `findSectionDocs(allowedNames)`. Empty allow-list = no per-section rows. Dropped the `ADDRESS_DOC_NAME_RE` / `isAddressDocType` heuristic split — the Address subdivider now reads from a dedicated `ADDRESS_SUBDIVIDER_DOC_NAMES` constant (`["Proof of Residential Address"]`).
+- Bottom Documents block (`KycDocsByCategory`, fed by `kycDocsByCategory`) is unchanged — admin still sees every doc in the relevant category there.
+
+---
+
 ### 2026-05-08 — B-084 Batch 2 — Button standardization on /admin/services/[id] (Claude Code)
 
 Every `<Button>` on the admin service detail page now reads as one consistent family: `rounded-md` with brand-navy primary, brand-navy outline, brand-navy ghost, red filled destructive, and red outline destructive variants. Status pills, role badges, and B-083 section pills are intentionally untouched.

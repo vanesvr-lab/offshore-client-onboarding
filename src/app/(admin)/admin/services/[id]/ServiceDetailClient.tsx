@@ -530,23 +530,24 @@ function KycLongForm({
     return best?.docId ?? null;
   }
 
-  // B-078 Batch 4 — replace AI-extraction-keyed `findSourceDocsForFields`
-  // with category-based visibility. Every uploaded doc whose
-  // `document_type.category` matches the section's `categoryKey` shows
-  // as a row above the AiPrefillBanner regardless of whether AI fed
-  // extractions for it. Required doc types in the same category that
-  // aren't uploaded yet render as empty-state rows with an Upload
-  // button.
-  function findSectionDocs(categoryKey: string): {
+  // B-084 Batch 3 — per-section doc allow-list (replaces B-078/4's
+  // category-match). `allowedNames` is `KycSection.sourceDocTypeNames`
+  // (or the hardcoded address subdivider list below). Only the docs
+  // that actually verify a section's fields show as source-doc rows;
+  // other category-matching docs continue to live in the bottom
+  // Documents block. Empty `allowedNames` = no per-section rows.
+  function findSectionDocs(allowedNames: string[]): {
     uploaded: ServiceDoc[];
     missing: DocumentType[];
   } {
-    const inCategory = (documentTypes ?? []).filter(
-      (dt) => (dt.category ?? "") === categoryKey,
+    if (allowedNames.length === 0) return { uploaded: [], missing: [] };
+    const allowed = new Set(allowedNames.map((n) => n.toLowerCase()));
+    const types = (documentTypes ?? []).filter((dt) =>
+      allowed.has(dt.name.toLowerCase()),
     );
     const uploaded: ServiceDoc[] = [];
     const missing: DocumentType[] = [];
-    for (const dt of inCategory) {
+    for (const dt of types) {
       const upload = localDocs.find((d) => d.document_type_id === dt.id);
       if (upload) uploaded.push(upload);
       else missing.push(dt);
@@ -554,15 +555,11 @@ function KycLongForm({
     return { uploaded, missing };
   }
 
-  // B-077 Batch 4 → B-078 Batch 4 — split docs in the Identity section so
-  // address-related types (Proof of Address / Proof of Residential
-  // Address) sit inside the Address subdivider, while passport / other
-  // identity docs stay above it. The category is the same (`identity`),
-  // so the split is heuristic: name contains "address" or "residence".
-  const ADDRESS_DOC_NAME_RE = /address|residence|residential/i;
-  function isAddressDocType(name: string | null | undefined): boolean {
-    return !!name && ADDRESS_DOC_NAME_RE.test(name);
-  }
+  // B-084 Batch 3 — Address subdivider inside the individual Identity
+  // section keeps its dedicated allow-list. Decoupled from the section's
+  // own sourceDocTypeNames so admin sees Passport above and Proof of
+  // Residential Address inside the Address subdivider.
+  const ADDRESS_SUBDIVIDER_DOC_NAMES = ["Proof of Residential Address"];
 
   function handleViewSection(section: KycSection) {
     const docId = findSourceDocForSection(section);
@@ -657,29 +654,17 @@ function KycLongForm({
         const pct = sectionPct(section);
         const isOpen = openSections.has(section.title);
         const isIdentityIndividual = section.title === "Your Identity";
-        // B-078 Batch 4 — category-based partition of uploaded vs missing
-        // doc types for this section. Identity (individual) splits the
-        // result by name so Proof of (Residential) Address rows render
-        // inside the Address subdivider only.
-        const { uploaded: catUploaded, missing: catMissing } = findSectionDocs(
-          section.categoryKey,
-        );
-        const sectionUploaded = isIdentityIndividual
-          ? catUploaded.filter(
-              (d) => !isAddressDocType(d.document_types?.name ?? null),
-            )
-          : catUploaded;
-        const sectionMissing = isIdentityIndividual
-          ? catMissing.filter((dt) => !isAddressDocType(dt.name))
-          : catMissing;
-        const addressUploaded = isIdentityIndividual
-          ? catUploaded.filter((d) =>
-              isAddressDocType(d.document_types?.name ?? null),
-            )
-          : [];
-        const addressMissing = isIdentityIndividual
-          ? catMissing.filter((dt) => isAddressDocType(dt.name))
-          : [];
+        // B-084 Batch 3 — per-section allow-list (`sourceDocTypeNames`).
+        // Sections without an allow-list render no source-doc rows; admin
+        // consults the bottom Documents block for those.
+        const { uploaded: sectionUploaded, missing: sectionMissing } =
+          findSectionDocs(section.sourceDocTypeNames ?? []);
+        // Address subdivider lives only inside individual Identity. Uses
+        // its own allow-list so the Passport row above stays clean.
+        const { uploaded: addressUploaded, missing: addressMissing } =
+          isIdentityIndividual
+            ? findSectionDocs(ADDRESS_SUBDIVIDER_DOC_NAMES)
+            : { uploaded: [] as ServiceDoc[], missing: [] as DocumentType[] };
         const primarySourceDocId = findSourceDocForSection(section);
         const primarySourceDoc = primarySourceDocId
           ? localDocs.find((d) => d.id === primarySourceDocId) ?? null

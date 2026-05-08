@@ -66,6 +66,15 @@ export interface KycSection {
   cddOrAbove?: boolean;
   /** Show whole section only at EDD. */
   eddOnly?: boolean;
+  /**
+   * B-084 Batch 3 — per-section doc allow-list (matched by `document_types.name`).
+   * Replaces B-078/4's category-match. Only the docs that actually verify a
+   * section's fields render as the section's source-doc rows; the bottom
+   * Documents block continues to show every doc by category.
+   *
+   * Empty / undefined = no per-section source-doc rows for this section.
+   */
+  sourceDocTypeNames?: string[];
 }
 
 // ─── Individual ─────────────────────────────────────────────────────────────
@@ -76,6 +85,9 @@ export const KYC_SECTIONS_INDIVIDUAL: KycSection[] = [
     description:
       "Please provide your identity information and upload your passport and proof of address.",
     categoryKey: "identity",
+    // B-084 Batch 3 — Identity's pre-Address fields are passport-only. The
+    // Address subdivider has its own allow-list inside ServiceDetailClient.
+    sourceDocTypeNames: ["Certified Passport Copy"],
     fields: [
       { key: "full_name", label: "Full legal name", type: "text", required: true, placeholder: "As it appears on your passport", aiExtractable: true },
       { key: "aliases", label: "Aliases / other names", type: "text", placeholder: "Maiden name, nicknames, etc." },
@@ -223,6 +235,10 @@ export const KYC_SECTIONS_ORGANISATION: KycSection[] = [
     title: "Company Details",
     description: "Provide information about the company entity.",
     categoryKey: "identity",
+    // B-084 Batch 3 — org identity is verified by the Certificate of
+    // Incorporation. Other corporate docs surface in the bottom Documents
+    // block, not as per-section source-doc rows.
+    sourceDocTypeNames: ["Certificate of Incorporation"],
     fields: [
       { key: "full_name", label: "Company name", type: "text", required: true, placeholder: "Legal entity name" },
       { key: "company_registration_number", label: "Registration number", type: "text", required: true, placeholder: "Company registration number" },
