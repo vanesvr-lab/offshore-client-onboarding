@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-078 Batch 5 — Document Replace via DocumentDetailDialog (admin path) (Claude Code)
+
+`DocumentDetailDialog` already had a `Replace Document` button gated on `onDocumentReplaced` + `serviceId` + `doc.document_type_id`, but the admin caller in `/admin/services/[id]` never wired the prop, so admins couldn't see it. Wire-up complete; the admin path now writes `document_replaced` to `audit_log`.
+
+- `ServiceDetailClient.tsx` — `PersonCard` now passes `clientProfileIdForReplace={profile.id}` and `onDocumentReplaced` to `DocumentDetailDialog`. Replace closes the dialog and triggers `onRefresh` so the per-section row + bottom Documents-block row both flip to the new file's status pill.
+- `DocumentDetailDialog` — admin Replace flow: `window.confirm("Replace {doc name}? The previous version will be marked superseded but kept for audit.")` before upload, then PATCHes the new admin route (`/api/admin/services/[id]/documents/upload`) carrying `clientProfileId` so the upsert lookup hits the right row. Client-side replace path keeps using the existing `can_manage`-gated `/api/services/[id]/documents/upload` route.
+- `/api/admin/services/[id]/documents/upload/route.ts` — selects `file_name, mime_type` on the existing-row lookup, then writes a `writeAuditLog` row when the path is a replace: `action: "document_replaced"`, `entity_type: "document"`, `entity_id: doc.id`, with previous + new file_name/mime_type and detail (`service_id`, `document_type_id`, `client_profile_id`). Note: the upsert overwrites the storage object via `upsert: true`, so the prior file is not separately recoverable — the audit row preserves the prior file_name + size as the primary trail.
+
 ### 2026-05-07 — B-078 Batch 4 — Per-section doc rows: category-based + empty-state Upload (Claude Code)
 
 Per-section source-doc rows in the admin per-profile view no longer require an AI extraction to appear. Visibility now keys on `document_types.category` matching the section's `categoryKey`, so a hand-typed profile with a real Passport upload still surfaces it as a row with View. Required doc types in the same category that aren't uploaded yet render as empty-state rows with an Upload button.

@@ -2187,6 +2187,14 @@ function PersonCard({
                 onRefresh();
               }}
               onRequestSent={() => onRefresh()}
+              clientProfileIdForReplace={profile.id}
+              onDocumentReplaced={() => {
+                // B-078 Batch 5 — Replace closes the dialog and the parent
+                // re-fetches so the per-section + Documents-block rows
+                // both flip to the new file's status pill.
+                setDetailDoc(null);
+                onRefresh();
+              }}
             />
           )}
         </div>

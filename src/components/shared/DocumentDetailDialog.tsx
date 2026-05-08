@@ -53,6 +53,10 @@ interface Props {
   onRequestSent?: (req: DocumentUpdateRequest) => void;
   /** If provided, shows "Replace Document" upload */
   onDocumentReplaced?: (newDoc: Partial<DocumentDetailDoc>) => void;
+  /** Admin only: when set, the replace flow PATCHes via the admin route
+   *  (which writes `document_replaced` to `audit_log`) and scopes the
+   *  upload to the supplied client profile. */
+  clientProfileIdForReplace?: string;
 }
 
 function formatDate(str: string | null | undefined): string {
@@ -71,6 +75,7 @@ export function DocumentDetailDialog({
   onStatusChange,
   onRequestSent,
   onDocumentReplaced,
+  clientProfileIdForReplace,
 }: Props) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -217,6 +222,18 @@ export function DocumentDetailDialog({
 
   async function handleReplace(file: File) {
     if (!serviceId || !doc.document_type_id) return;
+
+    // B-078 Batch 5 — confirmation step before overwriting an admin-side
+    // upload. The current `documents` row is updated in place (file_path
+    // + file_name) and the prior file_name is captured in `audit_log`
+    // for traceability — there is no separate "old version" object.
+    if (isAdmin) {
+      const confirmed = window.confirm(
+        `Replace ${typeName}? The previous version will be marked superseded but kept for audit.`,
+      );
+      if (!confirmed) return;
+    }
+
     setReplacing(true);
 
     // B-037 — compress images client-side before hitting Vercel.
@@ -242,10 +259,18 @@ export function DocumentDetailDialog({
       const fd = new FormData();
       fd.append("file", uploadFile);
       fd.append("documentTypeId", doc.document_type_id);
-      const res = await fetch(`/api/services/${serviceId}/documents/upload`, {
-        method: "POST",
-        body: fd,
-      });
+      // B-078 Batch 5 — admin uses the admin upload route (writes audit_log
+      // + accepts a `clientProfileId` so it scopes to the right profile's
+      // document row). Client-side replace path keeps using the
+      // `can_manage`-gated route as before.
+      const isAdminPath = isAdmin && !!clientProfileIdForReplace;
+      if (isAdminPath) {
+        fd.append("clientProfileId", clientProfileIdForReplace);
+      }
+      const url = isAdminPath
+        ? `/api/admin/services/${serviceId}/documents/upload`
+        : `/api/services/${serviceId}/documents/upload`;
+      const res = await fetch(url, { method: "POST", body: fd });
       // Read as text first so a non-JSON body (e.g. a 413 HTML page) doesn't throw.
       const raw = await res.text();
       let data: { document?: Partial<DocumentDetailDoc>; error?: string } = {};

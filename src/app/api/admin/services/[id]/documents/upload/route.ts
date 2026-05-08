@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { verifyDocument } from "@/lib/ai/verifyDocument";
 import { recordAiExtractionProvenance } from "@/lib/ai/recordProvenance";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { AiExtractionField, VerificationRules } from "@/types";
 
 const ALLOWED_MIME_TYPES = [
@@ -75,7 +76,7 @@ export async function POST(
   // Upsert: one active document per type per service
   const { data: existing } = await supabase
     .from("documents")
-    .select("id")
+    .select("id, file_name, mime_type")
     .eq("service_id", serviceId)
     .eq("document_type_id", documentTypeId)
     .eq("tenant_id", tenantId)
@@ -110,6 +111,31 @@ export async function POST(
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     doc = data;
+    // B-078 Batch 5 — replace path. Storage upsert + row update preserved
+    // the row id; the storage object is overwritten so the previous file
+    // is not separately recoverable. Audit captures the prior file_name +
+    // size so the old version is at least named in the trail.
+    await writeAuditLog(supabase, {
+      actor_id: session.user.id,
+      actor_role: "admin",
+      action: "document_replaced",
+      entity_type: "document",
+      entity_id: doc.id as string,
+      previous_value: {
+        file_name: existing.file_name,
+        mime_type: existing.mime_type,
+      },
+      new_value: {
+        file_name: file.name,
+        mime_type: file.type,
+        file_size: file.size,
+      },
+      detail: {
+        service_id: serviceId,
+        document_type_id: documentTypeId,
+        client_profile_id: clientProfileId,
+      },
+    });
   } else {
     const { data, error } = await supabase
       .from("documents")
