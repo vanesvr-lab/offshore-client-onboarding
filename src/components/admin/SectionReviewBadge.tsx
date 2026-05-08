@@ -7,6 +7,10 @@ import type { SectionReviewStatus } from "@/types";
 interface Props {
   status: SectionReviewStatus | null;
   className?: string;
+  // B-079 — when rendered on a dark band (top-level step header), use a
+  // translucent white treatment so all four states stay legible without
+  // bleeding through to the navy underneath.
+  tone?: "default" | "on-dark";
 }
 
 const VARIANTS: Record<
@@ -35,14 +39,16 @@ const VARIANTS: Record<
   },
 };
 
-export function SectionReviewBadge({ status, className }: Props) {
+const ON_DARK_CLASSES = "bg-white/15 text-white border border-white/30";
+
+export function SectionReviewBadge({ status, className, tone = "default" }: Props) {
   const variant = VARIANTS[status ?? "none"];
   const Icon = variant.Icon;
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        variant.classes,
+        tone === "on-dark" ? ON_DARK_CLASSES : variant.classes,
         className,
       )}
     >

@@ -15,6 +15,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-079 Batch 1 — Section bands + compact headers + black border (Claude Code)
+
+`/admin/services/[id]` now reads as a clear two-level color hierarchy. Top-level steps (Company Setup / Financial / Banking / People & KYC / Documents) render as solid `#06629c` navy bands with white text, `px-4 py-2` compact padding, a 2px `border-gray-900` outer border, and an explicit `Hide` / `Show` text affordance next to the chevron. Per-profile bands inside People & KYC paint solid `#7dbbe3` light-blue with dark text and the same Hide/Show affordance; the `border-l-4` containment line down each profile is also `#7dbbe3` so band + container read as one unit.
+
+- `src/components/admin/ServiceCollapsibleSection.tsx`: added `variant?: "default" | "step"` prop. When `variant="step"`, paints navy band, swaps progress bar / percentage / RAG label to white-tinted, hides the bottom border under the header (the band itself defines the divide), and adds the Hide/Show label. SectionReviewBadge + SectionReviewButton receive `tone="on-dark"` so they remain legible.
+- `src/components/admin/SectionReviewBadge.tsx`: added `tone?: "default" | "on-dark"` prop. `on-dark` renders all four states (`approved` / `flagged` / `rejected` / `none`) with `bg-white/15 text-white border border-white/30` so the navy band doesn't bleed through.
+- `src/components/admin/SectionReviewButton.tsx`: added `tone?: "default" | "on-dark"` prop. `on-dark` switches the trigger button to `border-white/40 text-white hover:bg-white/10 bg-transparent`.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`:
+  - Passed `variant="step"` to the 5 step sections (Company Setup, Financial, Banking, People & KYC, Documents). Internal Notes, Risk Assessment, Milestones, Audit Trail intentionally keep the default light treatment.
+  - PersonCard clickable header re-skinned: `bg-[#7dbbe3] px-4 py-2`, type icon switched to `text-brand-navy`, role badges to `bg-white/70 text-brand-navy border border-brand-navy/15`, KYC progress track to `bg-white/40` with darker fills/text for legibility, "Click to collapse" hint to `text-brand-navy/70`, Portal access pill + Request KYC button switched to white-on-blue surfaces, "Hide / Show" text + chevron always rendered on the right.
+  - Per-profile vertical containment line: `border-gray-200` → `border-[#7dbbe3]`.
+- KYC subsection headers (Identity / Financial / Declarations / Documents) inside the per-profile container intentionally untouched (still `bg-gray-50`) — Vanessa wants to revisit those as a lighter variant later. The collapsible Documents block at the bottom of each profile (B-077/2) also keeps its `bg-gray-50` header; it sits inside the existing `border-l-4 border-[#7dbbe3]` wrapper so the vertical line continues unbroken through it.
+- Right-column cards (Audit Trail, Workflow Milestones, Status, Account Service Owner) and the top stepper unchanged — those are deliberately out of scope.
+- `npm run build` passes clean. Smoke test moves to Batch 2.
+
 ### 2026-05-07 — B-078 close-out — Admin full edit rights on /admin/services/[id] (Claude Code)
 
 End of B-078. Admin per-profile view in `/admin/services/[id]` Step 4 is now fully editable: KYC long-form fields, role assignments, profile banner (name + email), and document Replace all flow through one Save / Cancel bar centered to section width. Navigation guard prevents loss of unsaved changes. Every save event writes to `audit_log` via the B-077/7 helper. Per-section doc rows now use category-based visibility instead of extraction-only — fixes the bug where uploaded docs didn't show as source docs unless they had AI extractions.

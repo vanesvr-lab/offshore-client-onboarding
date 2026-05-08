@@ -12,6 +12,9 @@ interface Props {
   sectionLabel: string;
   currentStatus: SectionReviewStatus | null;
   onReviewSaved: (review: ApplicationSectionReview) => void;
+  // B-079 — switches the trigger button to a translucent-white outline so
+  // it reads as a band-level affordance on the navy step header.
+  tone?: "default" | "on-dark";
 }
 
 export function SectionReviewButton({
@@ -20,6 +23,7 @@ export function SectionReviewButton({
   sectionLabel,
   currentStatus,
   onReviewSaved,
+  tone = "default",
 }: Props) {
   const [open, setOpen] = useState(false);
   return (
@@ -29,6 +33,11 @@ export function SectionReviewButton({
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
+        className={
+          tone === "on-dark"
+            ? "border-white/40 text-white hover:bg-white/10 hover:text-white bg-transparent"
+            : undefined
+        }
       >
         <ClipboardCheck className="size-3.5" />
         Review

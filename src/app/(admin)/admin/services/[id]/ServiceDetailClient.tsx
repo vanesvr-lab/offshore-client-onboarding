@@ -1840,9 +1840,11 @@ function PersonCard({
       {/* ── Clickable header ─────────────────────────────────────────── */}
       {/* B-077 — when expanded, the sticky banner inside the body owns the
           name/role badges/KYC% display, so we hide the duplicate header
-          content here and keep only the chevron + Quick actions. */}
+          content here and keep only the chevron + Quick actions.
+          B-079 — profile band painted #7dbbe3 with px-4 py-2 compact
+          padding and an explicit Hide/Show affordance on the right. */}
       <div
-        className="p-4 cursor-pointer hover:bg-gray-50/70 transition-colors"
+        className="bg-[#7dbbe3] px-4 py-2 cursor-pointer hover:bg-[#7dbbe3]/90 transition-colors"
         onClick={() => {
           // B-078 Batch 6 — collapsing while dirty is treated as a
           // navigation: prompt before discarding.
@@ -1860,17 +1862,17 @@ function PersonCard({
                 {/* Name + type icon + role badges */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {profile.is_representative ? (
-                    <Users2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                    <Users2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
                   ) : profile.record_type === "organisation" ? (
-                    <Building2 className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                    <Building2 className="h-3.5 w-3.5 text-brand-navy shrink-0" />
                   ) : (
-                    <UserCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <UserCheck className="h-3.5 w-3.5 text-brand-navy shrink-0" />
                   )}
                   <span className="text-sm font-medium text-brand-navy truncate">
                     {profile.full_name}
                   </span>
                   {(combinedRoles ?? [roleRow.role]).map((r) => (
-                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-brand-navy/10 text-brand-navy shrink-0">
+                    <span key={r} className="text-[10px] capitalize px-1.5 py-0.5 rounded bg-white/70 text-brand-navy border border-brand-navy/15 shrink-0">
                       {r}
                     </span>
                   ))}
@@ -1885,13 +1887,13 @@ function PersonCard({
                 {/* KYC progress */}
                 {!profile.is_representative && (
                   <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                    <div className="w-24 h-1.5 rounded-full bg-white/40 overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
+                        className={`h-full rounded-full ${kycDone ? "bg-green-600" : kycPct > 0 ? "bg-amber-500" : "bg-red-500"}`}
                         style={{ width: `${kycPct}%` }}
                       />
                     </div>
-                    <span className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}>
+                    <span className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-800" : kycPct > 0 ? "text-amber-800" : "text-red-700"}`}>
                       {kycDone ? "✓ Complete" : `KYC: ${kycPct}%`}
                     </span>
                   </div>
@@ -1900,7 +1902,7 @@ function PersonCard({
             )}
 
             {expanded && (
-              <p className="text-[11px] text-gray-400 italic">
+              <p className="text-[11px] text-brand-navy/70 italic">
                 Click to collapse · scroll for details
               </p>
             )}
@@ -1910,20 +1912,20 @@ function PersonCard({
               <button
                 onClick={() => void toggleManage()}
                 className={`flex items-center gap-1 text-xs rounded px-2 py-1 transition-colors ${
-                  roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  roleRow.can_manage ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-white/70 text-brand-navy hover:bg-white"
                 }`}
               >
                 {roleRow.can_manage ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                 Portal access
               </button>
               {!profile.is_representative && (
-                <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1">
+                <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className="h-6 text-xs gap-1 bg-white/70 hover:bg-white border-brand-navy/30 text-brand-navy">
                   <Mail className="h-3 w-3" />
                   {inviteSentAt ? "Resend KYC" : "Request KYC"}
                 </Button>
               )}
               {inviteSentAt && sentDate && (
-                <span className="text-[11px] text-green-600 flex items-center gap-1">
+                <span className="text-[11px] text-green-800 flex items-center gap-1">
                   <Mail className="h-3 w-3" />
                   Sent {sentDate}
                 </span>
@@ -1931,9 +1933,10 @@ function PersonCard({
             </div>
           </div>
 
-          {!profile.is_representative && kyc && (
-            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform shrink-0 mt-1 ${expanded ? "rotate-180" : ""}`} />
-          )}
+          <div className="flex items-center gap-1.5 shrink-0 mt-0.5 text-brand-navy/80">
+            <span className="text-xs">{expanded ? "Hide" : "Show"}</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </div>
         </div>
       </div>
 
@@ -2025,7 +2028,7 @@ function PersonCard({
               starts inside the card with margins so the rule reads as a
               clear indent rather than blending with the card border. */}
           <div
-            className="border-l-4 border-gray-200 ml-4 mr-4 my-4 pl-4"
+            className="border-l-4 border-[#7dbbe3] ml-4 mr-4 my-4 pl-4"
             data-profile-id={profile.id}
           >
 
@@ -3338,6 +3341,7 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(companySetupPct)}
           sectionKey="company_setup"
           anchorId="step-company-setup"
+          variant="step"
         >
           {companyFields.length === 0 ? (
             <p className="text-sm text-gray-400">No company setup fields for this template.</p>
@@ -3358,6 +3362,7 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(financialPct)}
           sectionKey="financial"
           anchorId="step-financial"
+          variant="step"
         >
           {financialFields.length === 0 ? (
             <p className="text-sm text-gray-400">No financial fields for this template.</p>
@@ -3378,6 +3383,7 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(bankingPct)}
           sectionKey="banking"
           anchorId="step-banking"
+          variant="step"
         >
           {bankingFields.length === 0 ? (
             <p className="text-sm text-gray-400">No banking fields for this template.</p>
@@ -3398,6 +3404,7 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(peopleKycPct)}
           sectionKey="people"
           anchorId="step-people-kyc"
+          variant="step"
         >
           <div className="pt-4">
             {/* B-077 Batch 6a — Add Director / Shareholder / UBO buttons
@@ -3476,6 +3483,7 @@ export function ServiceDetailClient({
           ragStatus={ragFromPct(documentsPct)}
           sectionKey="documents"
           anchorId="step-documents"
+          variant="step"
         >
           <AdminDocumentsSection
             serviceId={service.id}
