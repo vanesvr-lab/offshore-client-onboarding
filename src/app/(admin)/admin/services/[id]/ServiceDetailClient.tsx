@@ -407,10 +407,13 @@ function KycLongForm({
   kyc,
   profileId,
   profileDocuments,
+  documentTypes,
   recordType,
   dueDiligenceLevel,
   fieldExtractions,
   onOpenDocumentDetail,
+  onSectionDocUpload,
+  uploadingDocTypeId,
   fields,
   setFields,
   onAfterReapply,
@@ -418,6 +421,10 @@ function KycLongForm({
   kyc: KycFull;
   profileId?: string;
   profileDocuments?: ServiceDoc[];
+  /** B-078 Batch 4 — full doc type list for the service so per-section
+   *  rows can render uploaded + missing categories without depending on
+   *  AI extractions. */
+  documentTypes?: DocumentType[];
   recordType?: string;
   /** B-075 — DD level for field/section gating; defaults to CDD when unknown. */
   dueDiligenceLevel?: string | null;
@@ -427,6 +434,10 @@ function KycLongForm({
    *  source-doc rows or the AiPrefillBanner View button. PersonCard
    *  owns the dialog state. */
   onOpenDocumentDetail?: (docId: string) => void;
+  /** B-078 Batch 4 — Upload click on an empty-state per-section row
+   *  bubbles up so PersonCard can drive its existing file picker. */
+  onSectionDocUpload?: (docTypeId: string) => void;
+  uploadingDocTypeId?: string | null;
   /** B-078 Batch 1 — fields state lifted to PersonCard for per-profile
    *  dirty tracking. KycLongForm is now controlled. */
   fields: Record<string, unknown>;
@@ -503,30 +514,39 @@ function KycLongForm({
     return best?.docId ?? null;
   }
 
-  function findSourceDocsForFields(fieldKeys: string[]): ServiceDoc[] {
-    const seen = new Set<string>();
-    const docs: ServiceDoc[] = [];
-    for (const key of fieldKeys) {
-      const rows = extractionsByField[key];
-      if (!rows) continue;
-      for (const row of rows) {
-        if (row.superseded_at !== null) continue;
-        if (!row.source_document_id) continue;
-        if (seen.has(row.source_document_id)) continue;
-        const d = localDocs.find((x) => x.id === row.source_document_id);
-        if (!d) continue;
-        seen.add(row.source_document_id);
-        docs.push(d);
-      }
+  // B-078 Batch 4 — replace AI-extraction-keyed `findSourceDocsForFields`
+  // with category-based visibility. Every uploaded doc whose
+  // `document_type.category` matches the section's `categoryKey` shows
+  // as a row above the AiPrefillBanner regardless of whether AI fed
+  // extractions for it. Required doc types in the same category that
+  // aren't uploaded yet render as empty-state rows with an Upload
+  // button.
+  function findSectionDocs(categoryKey: string): {
+    uploaded: ServiceDoc[];
+    missing: DocumentType[];
+  } {
+    const inCategory = (documentTypes ?? []).filter(
+      (dt) => (dt.category ?? "") === categoryKey,
+    );
+    const uploaded: ServiceDoc[] = [];
+    const missing: DocumentType[] = [];
+    for (const dt of inCategory) {
+      const upload = localDocs.find((d) => d.document_type_id === dt.id);
+      if (upload) uploaded.push(upload);
+      else missing.push(dt);
     }
-    return docs;
+    return { uploaded, missing };
   }
 
-  // B-077 Batch 4 — split source docs for the Identity section so the
-  // Proof of Residential Address row renders inside the Address
-  // subdivider (only feeds the `address` field) while Passport-fed docs
-  // stay at the top of the section.
-  const ADDRESS_FIELD_KEYS = ["address"];
+  // B-077 Batch 4 → B-078 Batch 4 — split docs in the Identity section so
+  // address-related types (Proof of Address / Proof of Residential
+  // Address) sit inside the Address subdivider, while passport / other
+  // identity docs stay above it. The category is the same (`identity`),
+  // so the split is heuristic: name contains "address" or "residence".
+  const ADDRESS_DOC_NAME_RE = /address|residence|residential/i;
+  function isAddressDocType(name: string | null | undefined): boolean {
+    return !!name && ADDRESS_DOC_NAME_RE.test(name);
+  }
 
   function handleViewSection(section: KycSection) {
     const docId = findSourceDocForSection(section);
@@ -621,19 +641,28 @@ function KycLongForm({
         const pct = sectionPct(section);
         const isOpen = openSections.has(section.title);
         const isIdentityIndividual = section.title === "Your Identity";
-        // B-077 Batch 4 — for Identity, pull address-fed source docs out
-        // of the section-top set so they only render inside the Address
-        // subdivider. Other sections see the full unique set.
-        const allSectionFieldKeys = section.fields.map((f) => f.key);
-        const nonAddressFieldKeys = isIdentityIndividual
-          ? allSectionFieldKeys.filter((k) => !ADDRESS_FIELD_KEYS.includes(k))
-          : allSectionFieldKeys;
-        const sectionSourceDocs = findSourceDocsForFields(nonAddressFieldKeys);
-        const sectionDocIdSet = new Set(sectionSourceDocs.map((d) => d.id));
-        const addressSourceDocs = isIdentityIndividual
-          ? findSourceDocsForFields(ADDRESS_FIELD_KEYS).filter(
-              (d) => !sectionDocIdSet.has(d.id),
+        // B-078 Batch 4 — category-based partition of uploaded vs missing
+        // doc types for this section. Identity (individual) splits the
+        // result by name so Proof of (Residential) Address rows render
+        // inside the Address subdivider only.
+        const { uploaded: catUploaded, missing: catMissing } = findSectionDocs(
+          section.categoryKey,
+        );
+        const sectionUploaded = isIdentityIndividual
+          ? catUploaded.filter(
+              (d) => !isAddressDocType(d.document_types?.name ?? null),
             )
+          : catUploaded;
+        const sectionMissing = isIdentityIndividual
+          ? catMissing.filter((dt) => !isAddressDocType(dt.name))
+          : catMissing;
+        const addressUploaded = isIdentityIndividual
+          ? catUploaded.filter((d) =>
+              isAddressDocType(d.document_types?.name ?? null),
+            )
+          : [];
+        const addressMissing = isIdentityIndividual
+          ? catMissing.filter((dt) => isAddressDocType(dt.name))
           : [];
         const primarySourceDocId = findSourceDocForSection(section);
         const primarySourceDoc = primarySourceDocId
@@ -651,10 +680,14 @@ function KycLongForm({
             extractionsByField={extractionsByField}
             sourceDocsForMarker={sourceDocsForMarker}
             profileId={profileId}
-            sectionSourceDocs={sectionSourceDocs}
-            addressSourceDocs={addressSourceDocs}
+            sectionUploadedDocs={sectionUploaded}
+            sectionMissingDocTypes={sectionMissing}
+            addressUploadedDocs={addressUploaded}
+            addressMissingDocTypes={addressMissing}
             primarySourceDoc={primarySourceDoc}
             onOpenDocumentDetail={onOpenDocumentDetail}
+            onSectionDocUpload={onSectionDocUpload}
+            uploadingDocTypeId={uploadingDocTypeId}
             onReapply={() => void handleReapplySection(section)}
             isReapplying={reapplyingSection === section.title}
             onView={
@@ -687,10 +720,14 @@ function KycLongFormSection({
   extractionsByField,
   sourceDocsForMarker,
   profileId,
-  sectionSourceDocs,
-  addressSourceDocs = [],
+  sectionUploadedDocs,
+  sectionMissingDocTypes,
+  addressUploadedDocs = [],
+  addressMissingDocTypes = [],
   primarySourceDoc,
   onOpenDocumentDetail,
+  onSectionDocUpload,
+  uploadingDocTypeId,
   onReapply,
   isReapplying,
   onView,
@@ -710,19 +747,23 @@ function KycLongFormSection({
     verification_status: string;
   }[];
   profileId?: string;
-  /** B-077 Batch 3 — unique source docs that fed AI extractions for any
-   *  field in this section. Renders as single-line rows above the
-   *  AiPrefillBanner. For Identity (individual), address-only docs are
-   *  filtered out and surface in the subdivider instead. */
-  sectionSourceDocs: ServiceDoc[];
-  /** B-077 Batch 4 — source docs unique to the `address` field (e.g.
-   *  Proof of Residential Address). Only populated for the Identity
-   *  section; rendered inside the Address subdivider above the textarea. */
-  addressSourceDocs?: ServiceDoc[];
+  /** B-078 Batch 4 — uploaded docs whose `document_type.category`
+   *  matches this section. Render above the AiPrefillBanner with View. */
+  sectionUploadedDocs: ServiceDoc[];
+  /** B-078 Batch 4 — required doc types in this section's category that
+   *  have no upload yet. Render as empty-state rows with Upload. */
+  sectionMissingDocTypes: DocumentType[];
+  /** B-078 Batch 4 — Identity-only address split: address-named uploads. */
+  addressUploadedDocs?: ServiceDoc[];
+  /** B-078 Batch 4 — Identity-only address split: missing address types. */
+  addressMissingDocTypes?: DocumentType[];
   /** B-077 Batch 3 — most recent source doc; backs the banner's status pill + View. */
   primarySourceDoc: ServiceDoc | null;
   /** B-077 Batch 3 — opens admin DocumentDetailDialog (lifted to PersonCard). */
   onOpenDocumentDetail?: (docId: string) => void;
+  /** B-078 Batch 4 — Upload click on an empty-state row. */
+  onSectionDocUpload?: (docTypeId: string) => void;
+  uploadingDocTypeId?: string | null;
   onReapply?: () => void;
   isReapplying?: boolean;
   /** Admin-only: opens the doc detail dialog. Undefined hides the View button. */
@@ -792,12 +833,15 @@ function KycLongFormSection({
           {section.description && (
             <p className="text-sm text-gray-600">{section.description}</p>
           )}
-          {/* B-077 Batch 3 — single-line source-doc row(s) for every doc
-              that fed AI extractions in this section. Click View opens
-              the admin DocumentDetailDialog. */}
-          {sectionSourceDocs.length > 0 && (
+          {/* B-078 Batch 4 — single-line per-section doc rows. Uploaded
+              docs render with View; missing required types render as
+              empty-state rows with Upload. Both come from a category
+              match (`document_types.category === section.categoryKey`)
+              instead of AI extractions, so a hand-typed profile with a
+              real upload still surfaces as a source-doc row. */}
+          {(sectionUploadedDocs.length > 0 || sectionMissingDocTypes.length > 0) && (
             <div className="rounded-lg border bg-white divide-y">
-              {sectionSourceDocs.map((d) => {
+              {sectionUploadedDocs.map((d) => {
                 const rowData: KycDocRowData = {
                   id: d.id,
                   document_type_id: d.document_type_id ?? "",
@@ -818,6 +862,23 @@ function KycLongFormSection({
                     doc={rowData}
                     showAdminControls
                     onViewClick={(docId) => onOpenDocumentDetail?.(docId)}
+                  />
+                );
+              })}
+              {sectionMissingDocTypes.map((dt) => {
+                const rowData: KycDocRowData = {
+                  id: null,
+                  document_type_id: dt.id,
+                  document_name: dt.name,
+                  is_uploaded: false,
+                };
+                return (
+                  <KycDocRow
+                    key={`missing-${dt.id}`}
+                    doc={rowData}
+                    showAdminControls
+                    isUploading={uploadingDocTypeId === dt.id}
+                    onUploadClick={(docTypeId) => onSectionDocUpload?.(docTypeId)}
                   />
                 );
               })}
@@ -887,9 +948,10 @@ function KycLongFormSection({
                     <h4 className="text-sm font-semibold text-gray-700">
                       Address
                     </h4>
-                    {addressSourceDocs.length > 0 && (
+                    {(addressUploadedDocs.length > 0 ||
+                      addressMissingDocTypes.length > 0) && (
                       <div className="rounded-lg border bg-white divide-y">
-                        {addressSourceDocs.map((d) => {
+                        {addressUploadedDocs.map((d) => {
                           const rowData: KycDocRowData = {
                             id: d.id,
                             document_type_id: d.document_type_id ?? "",
@@ -915,6 +977,25 @@ function KycLongFormSection({
                               showAdminControls
                               onViewClick={(docId) =>
                                 onOpenDocumentDetail?.(docId)
+                              }
+                            />
+                          );
+                        })}
+                        {addressMissingDocTypes.map((dt) => {
+                          const rowData: KycDocRowData = {
+                            id: null,
+                            document_type_id: dt.id,
+                            document_name: dt.name,
+                            is_uploaded: false,
+                          };
+                          return (
+                            <KycDocRow
+                              key={`missing-${dt.id}`}
+                              doc={rowData}
+                              showAdminControls
+                              isUploading={uploadingDocTypeId === dt.id}
+                              onUploadClick={(docTypeId) =>
+                                onSectionDocUpload?.(docTypeId)
                               }
                             />
                           );
@@ -1914,10 +1995,16 @@ function PersonCard({
                 kyc={kyc}
                 profileId={profile.id}
                 profileDocuments={profileDocuments}
+                documentTypes={documentTypes}
                 recordType={profile.record_type}
                 dueDiligenceLevel={profile.due_diligence_level}
                 fieldExtractions={fieldExtractions ?? []}
                 onOpenDocumentDetail={handleAdminViewDoc}
+                onSectionDocUpload={(docTypeId) => {
+                  setPendingUploadDocTypeId(docTypeId);
+                  uploadInputRef.current?.click();
+                }}
+                uploadingDocTypeId={uploadingDocTypeId}
                 fields={draftFields}
                 setFields={setDraftFields}
                 onAfterReapply={(patched) =>

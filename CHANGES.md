@@ -15,6 +15,15 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-07 — B-078 Batch 4 — Per-section doc rows: category-based + empty-state Upload (Claude Code)
+
+Per-section source-doc rows in the admin per-profile view no longer require an AI extraction to appear. Visibility now keys on `document_types.category` matching the section's `categoryKey`, so a hand-typed profile with a real Passport upload still surfaces it as a row with View. Required doc types in the same category that aren't uploaded yet render as empty-state rows with an Upload button.
+
+- `ServiceDetailClient.tsx` — replaced `findSourceDocsForFields(fieldKeys)` with `findSectionDocs(categoryKey)` returning `{ uploaded: ServiceDoc[], missing: DocumentType[] }`. `findSourceDocForSection` and `extractionsByField` are kept intact — the field-level FieldPrefillIcon still depends on them.
+- Identity (individual) keeps the Address subdivider split. The split is now name-based (`/address|residence|residential/i`) since both passport and address docs share `category: "identity"`. Address-named uploads + missing types render inside the subdivider; passport-like rows stay above.
+- New props on `KycLongForm` / `KycLongFormSection`: `documentTypes`, `onSectionDocUpload`, `uploadingDocTypeId`, plus `sectionUploadedDocs` / `sectionMissingDocTypes` / `addressUploadedDocs` / `addressMissingDocTypes` replacing the legacy `sectionSourceDocs` / `addressSourceDocs`.
+- Empty-state rows reuse `KycDocRow` with `is_uploaded: false` and route Upload clicks back through `PersonCard`'s existing `pendingUploadDocTypeId` + `uploadInputRef` pipeline (same pipe `KycDocsByCategory` already uses for the bottom Documents block).
+
 ### 2026-05-07 — B-078 Batch 3 — Wire Save: KYC fields + roles + banner inline-edit (Claude Code)
 
 The Save / Cancel bar now persists. One PATCH against a new unified endpoint commits every dirty surface on a profile (KYC fields + `client_profiles` columns + role assignments) in a single round-trip; the response carries the new state so the dirty tracker resets without a refetch.
