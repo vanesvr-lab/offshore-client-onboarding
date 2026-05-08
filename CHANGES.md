@@ -13,6 +13,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-08 — B-084 Batch 1 — Auto-update completion % on every save (Claude Code)
+
+Per-profile and aggregate completion percentages on `/admin/services/[id]` now flip immediately after a save without waiting for the RSC roundtrip. Applies the B-065 splice pattern to every save flow on this page.
+
+- `ServiceDetailClient.tsx`: lifted `roles` into local state with a `useEffect` prop-sync; mirrored the same prop-sync for `documents`, `updateRequests`, and `service` (parallels `PersonCard.localDocs` from B-075). `typedRoles` is now an alias for the stateful `roles`.
+- Added `handleProfileSaved(profileId, kyc, profile)` callback that splices the post-update kyc + client_profiles fields returned by `PATCH /api/admin/profiles/[id]/kyc-fields` directly into the parent's `roles` state — so `peopleKycPct` and the per-profile pill recompute before `router.refresh()` lands.
+- `PersonCard.handleKycBarSave`: invokes `onProfileSaved` after the splice into `savedFields`, alongside the existing `onRefresh` (router.refresh).
+- `PersonCard`: per-profile `kycPct` now derives from `savedFields` (the post-save snapshot) instead of the prop, so the in-card "✓ Complete" / "KYC: X%" pill flips instantly on Save.
+- `handleSave` (service_details PATCH): added `router.refresh()` as belt-and-suspenders for any server-rendered side data (audit trail, etc.).
+
+---
+
 ## Recent Changes
 
 ### 2026-05-08 — B-083 — Section pills full-width with justify-between layout (Claude Code)

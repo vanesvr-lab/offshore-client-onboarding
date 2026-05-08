@@ -1364,6 +1364,7 @@ function PersonCard({
   defaultExpanded,
   fieldExtractions,
   onRefresh,
+  onProfileSaved,
 }: {
   roleRow: RoleWithProfile;
   allRoleRows: RoleWithProfile[];
@@ -1376,6 +1377,18 @@ function PersonCard({
   /** B-070 — provenance rows already filtered to this profile. */
   fieldExtractions?: FieldExtraction[];
   onRefresh: () => void;
+  /** B-084 Batch 1 — splice updated kyc/profile back into the parent's
+   *  roles state so the per-profile and aggregate completion % flip
+   *  before the RSC refresh lands. */
+  onProfileSaved?: (
+    profileId: string,
+    updatedKyc: Record<string, unknown> | null,
+    updatedProfile: {
+      full_name: string | null;
+      email: string | null;
+      phone: string | null;
+    } | null,
+  ) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   // B-077 Batch 2 — grouped Documents collapsible at the end of the
@@ -1562,7 +1575,11 @@ function PersonCard({
 
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
-  const kyc = kycForHook;
+  // B-084 Batch 1 — derive `kyc` from `savedFields` (post-save splice)
+  // instead of the prop `kycForHook`. `savedFields` already mirrors the
+  // last-known DB state and gets updated immediately on Save, so the
+  // per-profile pill flips without waiting for the parent re-fetch.
+  const kyc = savedFields as KycFull;
   const kycPct = calcKycPct(kyc);
   const kycDone = kyc?.kyc_journey_completed === true;
 
@@ -1678,6 +1695,14 @@ function PersonCard({
       }
       setSavedFields(nextSaved);
       setDraftFields(nextSaved);
+      // B-084 Batch 1 — splice the post-save kyc + profile rows into the
+      // parent so `peopleKycPct` and the per-profile pill recompute with
+      // the new data without waiting for the RSC roundtrip below.
+      onProfileSaved?.(
+        profile.id,
+        (data.kyc as Record<string, unknown> | null) ?? null,
+        data.profile ?? null,
+      );
       toast.success("Changes saved.", { position: "top-right" });
       onRefresh();
     } catch (err: unknown) {
@@ -2999,6 +3024,29 @@ export function ServiceDetailClient({
   const [service, setService] = useState(initialService);
   const [documents, setDocuments] = useState(initialDocuments);
   const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
+  // B-084 Batch 1 — lift roles to state so per-profile saves can splice
+  // updated kyc/profile fields directly into the parent without waiting
+  // for the RSC roundtrip from `router.refresh()`. Sync from prop on
+  // every server re-fetch so external mutations (refresh button, other
+  // tabs) still flow through.
+  const [roles, setRoles] = useState<RoleWithProfile[]>(
+    initialRoles as unknown as RoleWithProfile[],
+  );
+  useEffect(() => {
+    setRoles(initialRoles as unknown as RoleWithProfile[]);
+  }, [initialRoles]);
+  // B-084 Batch 1 — sync documents/updateRequests/service from props on
+  // server re-fetch. Mirrors the B-075 pattern already used for
+  // PersonCard's `localDocs` (line 492).
+  useEffect(() => {
+    setDocuments(initialDocuments);
+  }, [initialDocuments]);
+  useEffect(() => {
+    setUpdateRequests(initialUpdateRequests);
+  }, [initialUpdateRequests]);
+  useEffect(() => {
+    setService(initialService);
+  }, [initialService]);
 
   // Split documents by category: KYC/profile docs go inside person cards; corporate stays in Documents section
   const profileDocs = documents.filter((d) => isKycDoc(d.document_types?.category));
@@ -3023,7 +3071,9 @@ export function ServiceDetailClient({
   const [auditActorFilter, setAuditActorFilter] = useState("all");
   const [auditActionFilter, setAuditActionFilter] = useState("all");
 
-  const typedRoles = (initialRoles as unknown as RoleWithProfile[]);
+  // B-084 Batch 1 — `typedRoles` is now an alias for the stateful `roles`
+  // so callers below pick up live splices from `handleProfileSaved`.
+  const typedRoles = roles;
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
   // Deduplicate roles by profile ID — collect all roles per profile
@@ -3088,6 +3138,9 @@ export function ServiceDetailClient({
       if (!res.ok) throw new Error(data.error ?? "Failed");
       setService((prev) => ({ ...prev, service_details: serviceDetails }));
       setPendingChanges(false);
+      // B-084 Batch 1 — belt-and-suspenders: server-rendered side data
+      // (audit trail, derived counts on the page object) refreshes too.
+      router.refresh();
       toast.success("Service details saved");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
@@ -3215,6 +3268,44 @@ export function ServiceDetailClient({
   function handleRolesRefresh() {
     router.refresh();
   }
+
+  // B-084 Batch 1 — per-profile save splice. PersonCard's `handleKycBarSave`
+  // calls this on success with the post-update kyc/profile rows returned
+  // from `PATCH /api/admin/profiles/[id]/kyc-fields`. Splicing into the
+  // parent's `roles` state lets `peopleKycPct` (and the per-profile pill)
+  // recompute immediately, before the RSC refresh lands.
+  const handleProfileSaved = useCallback(
+    (
+      profileId: string,
+      updatedKyc: Record<string, unknown> | null,
+      updatedProfile: {
+        full_name: string | null;
+        email: string | null;
+        phone: string | null;
+      } | null,
+    ) => {
+      setRoles((prev) =>
+        prev.map((r) => {
+          if (!r.client_profiles || r.client_profiles.id !== profileId) return r;
+          const nextKyc = updatedKyc
+            ? [updatedKyc as KycFull]
+            : r.client_profiles.client_profile_kyc;
+          return {
+            ...r,
+            client_profiles: {
+              ...r.client_profiles,
+              full_name:
+                updatedProfile?.full_name ?? r.client_profiles.full_name,
+              email: updatedProfile?.email ?? r.client_profiles.email,
+              phone: updatedProfile?.phone ?? r.client_profiles.phone,
+              client_profile_kyc: nextKyc,
+            },
+          };
+        }),
+      );
+    },
+    [],
+  );
 
   function handleProfileAdded(profileId?: string) {
     if (profileId) setNewlyAddedProfileId(profileId);
@@ -3457,6 +3548,7 @@ export function ServiceDetailClient({
                       defaultExpanded={!!pid && pid === newlyAddedProfileId}
                       fieldExtractions={personFieldExtractions}
                       onRefresh={handleRolesRefresh}
+                      onProfileSaved={handleProfileSaved}
                     />
                   );
                 })}
