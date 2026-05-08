@@ -22,10 +22,11 @@ interface Props {
   // ancestor <AdminApplicationSectionsProvider>.
   sectionKey?: string;
   anchorId?: string;
-  // B-080 introduced `step` as a tight title pill. B-081 widens that pill
-  // to wrap title + progress bar + percentage + RAG status text. Chevron,
-  // SectionReviewBadge, and SectionReviewButton stay outside the pill on
-  // the regular row background.
+  // B-080 introduced `step` as a tight title pill. B-081 widened the pill
+  // to include progress + percentage + RAG label. B-082 pulls the
+  // Show/Hide chevron inside the pill (between % and ● Complete) and
+  // drops the chevron-circle sibling, so only the SectionReviewBadge +
+  // SectionReviewButton stay outside on the row's regular background.
   variant?: "default" | "step";
   children: React.ReactNode;
 }
@@ -94,8 +95,13 @@ export function ServiceCollapsibleSection({
                       style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
                     />
                   </div>
-                  <span className={`${sectionKey ? "hidden lg:inline" : ""} text-xs text-white/80 w-8 text-right shrink-0`}>
+                  <span className={`${sectionKey ? "hidden lg:inline" : ""} text-xs text-white w-8 text-right shrink-0`}>
                     {percentage}%
+                  </span>
+                  {/* Show/Hide toggle — sits between % and ● Complete (B-082) */}
+                  <span className="inline-flex items-center gap-1 text-xs text-white/90 shrink-0">
+                    {open ? "Hide" : "Show"}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs text-white shrink-0">
                     <span className={`h-2 w-2 rounded-full shrink-0 ${RAG_DOT[ragStatus]}`} />
@@ -141,12 +147,17 @@ export function ServiceCollapsibleSection({
             </>
           )}
 
-          {/* Chevron — sits outside the pill on step variant */}
-          <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors shrink-0 ${open ? "bg-brand-navy" : "bg-gray-200 hover:bg-gray-300"}`}>
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180 text-white" : "text-gray-600"}`}
-            />
-          </div>
+          {/* Default-variant chevron-circle. Step variant pulls its
+              chevron inside the pill, so this sibling only renders on
+              the light-header sections (Internal Notes, Risk
+              Assessment, Milestones, Audit Trail). */}
+          {!isStep && (
+            <div className={`h-6 w-6 rounded-full flex items-center justify-center transition-colors shrink-0 ${open ? "bg-brand-navy" : "bg-gray-200 hover:bg-gray-300"}`}>
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180 text-white" : "text-gray-600"}`}
+              />
+            </div>
+          )}
         </button>
 
         {sectionKey && (

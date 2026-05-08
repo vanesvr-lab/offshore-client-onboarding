@@ -15,6 +15,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-082 — Extend top-level pill to right-side affordances + reorder Complete (Claude Code)
+
+Top-level step pills on `/admin/services/[id]` now extend through the Show/Hide chevron and `● Complete` status, ending right before the Approved/Flagged review pill. `● Complete` moved from between the percentage and the chevron (B-081) to after the chevron, restoring its pre-B-081 right-side position. Approved/Flagged pill + Review button stay on the row's regular background. Profile pills unchanged.
+
+- `src/components/admin/ServiceCollapsibleSection.tsx`: when `variant="step"`, the pill now renders `[icon][title][progress bar][percentage][Show/Hide chevron+text][● Complete label]` in that order. Show/Hide is `inline-flex items-center gap-1 text-xs text-white/90` with the existing `ChevronDown` rotating on open. Percentage colour bumped from `text-white/80` to `text-white` per brief; everything else inside the pill keeps the white-on-navy treatment from B-081 (`bg-white/20` track, saturated `bg-green-500` / `bg-amber-400` / `bg-red-500` dot, `text-white` label).
+- The chevron-circle sibling (`h-6 w-6 rounded-full ...`) now only renders for the default variant — the step pill houses its own chevron inline. Default-variant sections (Internal Notes, Risk Assessment, Milestones, Audit Trail) keep the round circle and unchanged behaviour.
+- `SectionReviewControls` (Approved/Flagged badge + Review button) still rendered as a sibling outside the button on the gray-50 row, untouched.
+- Profile-level pill in `ServiceDetailClient.tsx` left alone — B-081 already wraps icon + name + role badges + KYC % + `PersonAggregateReviewBadge` + Show/Hide. Confirmed it matches the brief; no rework.
+- Toggle behaviour preserved: clicking anywhere inside the button (including the pill) flips `open`. `SectionReviewButton` still calls its own `e.stopPropagation()` because it lives outside the button as a sibling.
+
+Smoke test (static; runtime visuals deferred to user):
+
+1. **PASS (static):** Top-level pill renders title → progress → % → Show/Hide → `● Complete` in that order, all inside `bg-[#06629c] rounded-md px-3 py-1`.
+2. **PASS (static):** Element ordering matches brief — `● Complete` is now AFTER the chevron, not before like in B-081.
+3. **DEFERRED (UI):** Click any top-level row → `open` flips, label flips Show/Hide, chevron rotates. Behaviour wired through the same `setOpen(!open)` as B-076/7.
+4. **PASS (static):** Affordance styling on white-on-navy — track `bg-white/20`, percentage `text-white`, Show/Hide text `text-white/90`, RAG label `text-white`. Saturated dot colours (`bg-green-500`/`bg-amber-400`/`bg-red-500`) preserved for legibility.
+5. **PASS (static):** Profile pill in `ServiceDetailClient.tsx` (line ~1850) untouched in this batch — still wraps icon + name + role badges + KYC % + agg-badge + Show/Hide chevron, with Quick actions row outside on gray-50.
+6. **PASS (static):** `KycLongFormSection` (line 805) untouched — still `bg-gray-50 hover:bg-gray-100`. Files in `src/components/kyc/*` untouched (zero lines in diff).
+7. **PASS (static):** `npm run build` passes clean.
+
+No `console.log` introduced; no shared component (`KycRolesPicker`, `KycDocsByCategory`, `AiPrefillBanner`, `KycDocRow`) restyled.
+
 ### 2026-05-08 — B-081 — Extend admin section pills width (Claude Code)
 
 Top-level step pills on `/admin/services/[id]` now extend through the RAG status text (`● Complete` / `● Partial` / `● Incomplete`); profile-level pills extend through the Show/Hide toggle. Affordances to the right of those points (chevron-circle button, `SectionReviewBadge`, `SectionReviewButton` on top-level) stay on the row's regular background.
