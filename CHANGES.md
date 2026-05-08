@@ -15,6 +15,31 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## Recent Changes
 
+### 2026-05-08 — B-079 close-out — Admin section bands + compact headers (Claude Code)
+
+End of B-079. `/admin/services/[id]` now reads as a clear two-level color hierarchy: navy `#06629c` bands for top-level steps (Company Setup / Financial / Banking / People & KYC / Documents) with a 2px `border-gray-900` outer border and tighter `px-4 py-2` padding to match the top stepper, and light-blue `#7dbbe3` bands for profile expansions inside People & KYC with a matching `border-l-4 border-[#7dbbe3]` vertical containment line. Every band has an explicit `Hide` / `Show` text + chevron affordance on the right. KYC subsection headers (Identity / Financial / Declarations / Documents) and the right-column cards (Audit Trail, Workflow Milestones, Status, Account Service Owner) intentionally unchanged — Vanessa wants to revisit subsection styling as a lighter variant in a later pass.
+
+### 2026-05-08 — B-079 Batch 2 — Smoke test + cleanup (Claude Code)
+
+Static verification (CLI cannot drive the UI from terminal — runtime visuals deferred to user):
+
+1. **PASS (static):** All 5 step sections (Company Setup, Financial, Banking, People & KYC, Documents) pass `variant="step"` to `ServiceCollapsibleSection`; component renders navy `#06629c` band, white text, 2px `border-gray-900`, `Hide`/`Show` label.
+2. **DEFERRED (UI):** Click `Hide` on a top-level step → collapse + label flip. Toggle behavior is the existing B-076/7 logic (untouched); the label is wired via `open` state.
+3. **PASS (static):** Each PersonCard header now uses `bg-[#7dbbe3] px-4 py-2` with dark text + `Hide`/`Show` text + chevron, matching top-level structure with profile-level color.
+4. **PASS (static):** `border-l-4 border-gray-200` → `border-l-4 border-[#7dbbe3]` confirmed at the per-profile containment wrapper.
+5. **DEFERRED (UI):** Visual legibility of pills, progress bars, percentages, Review buttons on both bands. SectionReviewBadge / SectionReviewButton both received `tone="on-dark"` for the navy band; profile band re-skinned role badges + Portal access pill + Request KYC button to white-on-blue surfaces.
+6. **PASS (static):** `KycLongFormSection` (line 805 of ServiceDetailClient.tsx) untouched — still `bg-gray-50 hover:bg-gray-100`. Files in `src/components/kyc/*` untouched (zero lines in the diff).
+7. **PASS (static):** Documents block at the bottom of each profile (line 2118) untouched — still `bg-gray-50 hover:bg-gray-100`. It sits inside the existing `border-l-4 border-[#7dbbe3]` wrapper, so the vertical line continues unbroken.
+8. **DEFERRED (UI):** Visual rhythm match between top-level step header and the top stepper. Padding compressed from `px-5 py-4` → `px-4 py-2` per brief.
+9. **PASS (static):** Sticky bottom Save bar from B-078 (line 2210) untouched — `sticky bottom-0 z-20 -ml-4 mt-3 bg-white/95 ...`. Bands sit above it in DOM order; no new positioning collision.
+10. **PASS (static):** `AdminApplicationStepIndicator` at line 3324 unchanged.
+
+Cleanup:
+- No `console.log` introduced (grep clean).
+- No accidental restyle of shared components: `KycRolesPicker`, `KycDocsByCategory`, `AiPrefillBanner`, `KycDocRow` all untouched (zero lines in `src/components/kyc/*` and `src/components/admin/AiPrefillBanner.tsx` in the diff).
+- Used arbitrary Tailwind color syntax (`bg-[#06629c]`, `bg-[#7dbbe3]`, `border-[#7dbbe3]`) rather than registering named colors in `tailwind.config.ts`. Trade-off: keeps the change to four files (component + two badge/button + the page) without a compile-time config touch; if these colors get reused outside this page, promote to named tokens then.
+- `npm run build` passes clean.
+
 ### 2026-05-08 — B-079 Batch 1 — Section bands + compact headers + black border (Claude Code)
 
 `/admin/services/[id]` now reads as a clear two-level color hierarchy. Top-level steps (Company Setup / Financial / Banking / People & KYC / Documents) render as solid `#06629c` navy bands with white text, `px-4 py-2` compact padding, a 2px `border-gray-900` outer border, and an explicit `Hide` / `Show` text affordance next to the chevron. Per-profile bands inside People & KYC paint solid `#7dbbe3` light-blue with dark text and the same Hide/Show affordance; the `border-l-4` containment line down each profile is also `#7dbbe3` so band + container read as one unit.
