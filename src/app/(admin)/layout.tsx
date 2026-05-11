@@ -19,7 +19,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const userName = user?.full_name ?? session.user.name;
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-gray-50">
       <Header userName={userName} />
       <div className="flex flex-1 min-h-0">
         <Sidebar role="admin" userName={userName} />

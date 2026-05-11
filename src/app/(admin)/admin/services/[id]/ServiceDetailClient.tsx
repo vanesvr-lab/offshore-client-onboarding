@@ -8,7 +8,7 @@ import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle,
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
-  AlertTriangle,
+  AlertTriangle, Eye,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
+import { PersonSummaryDialog, type SummarySection } from "@/components/shared/PersonSummaryDialog";
+import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
@@ -791,7 +793,7 @@ function KycLongFormSection({
     return v != null && v !== "";
   });
   return (
-    <div className="border rounded-lg overflow-hidden scroll-mt-32" id={sectionAnchorId}>
+    <div className="border rounded-lg overflow-hidden scroll-mt-52" id={sectionAnchorId}>
       <div
         onClick={onToggle}
         role="button"
@@ -1366,6 +1368,7 @@ function PersonCard({
   serviceId,
   profileDocuments,
   documentTypes,
+  requirements,
   updateRequests,
   defaultExpanded,
   fieldExtractions,
@@ -1378,6 +1381,9 @@ function PersonCard({
   serviceId: string;
   profileDocuments?: ServiceDoc[];
   documentTypes?: DocumentType[];
+  /** B-090 — fed through so View Summary's shared dialog can render
+   *  the missing-docs section identically to the client wizard. */
+  requirements?: DueDiligenceRequirement[];
   updateRequests?: DocumentUpdateRequest[];
   defaultExpanded?: boolean;
   /** B-070 — provenance rows already filtered to this profile. */
@@ -1405,6 +1411,12 @@ function PersonCard({
   const [reviewSummaryOpen, setReviewSummaryOpen] = useState(false);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [inviteSentAt, setInviteSentAt] = useState<string | null>(roleRow.invite_sent_at ?? null);
+  // B-090 — local View Summary dialog. Opens the shared
+  // PersonSummaryDialog; per-section Edit affordances close it and
+  // smooth-scroll to the matching kyc-section anchor (handleSummaryEdit
+  // below). State stays local to the card so each profile manages its
+  // own modal independently.
+  const [summaryOpen, setSummaryOpen] = useState(false);
   // B-076 — admin doc upload + detail dialog state, lifted out of the
   // deleted `AdminKycDocListPanel` so the new shared `KycDocsByCategory`
   // can reuse the same upload + view affordances per row.
@@ -1866,7 +1878,7 @@ function PersonCard({
   return (
     <div
       id={`person-card-${profile.id}`}
-      className="border rounded-xl overflow-hidden scroll-mt-32"
+      className="border rounded-xl overflow-hidden scroll-mt-52"
     >
       {/* ── Clickable header ─────────────────────────────────────────── */}
       {/* B-080..B-082 evolved a #7dbbe3 pill from a tight wrapper around
@@ -1961,6 +1973,17 @@ function PersonCard({
               <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className={`h-6 text-xs gap-1 ${BTN_OUTLINE}`}>
                 <Mail className="h-3 w-3" />
                 {inviteSentAt ? "Resend KYC" : "Request KYC"}
+              </Button>
+            )}
+            {!profile.is_representative && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSummaryOpen(true)}
+                className={`h-6 text-xs gap-1 ${BTN_OUTLINE}`}
+              >
+                <Eye className="h-3 w-3" />
+                View Summary
               </Button>
             )}
             {inviteSentAt && sentDate && (
@@ -2391,6 +2414,71 @@ function PersonCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* B-090 — shared PersonSummaryDialog. Adapts roleRow → ServicePerson
+            and ServiceDoc[] → ClientServiceDoc[] so the same dialog used by
+            the client wizard renders here. onEdit closes the modal,
+            expands the card if collapsed, and smooth-scrolls to the
+            matching kyc-section anchor (or to `identity` for "any"). */}
+      {summaryOpen && (() => {
+        const summaryPerson: ServicePerson = {
+          id: roleRow.id,
+          role: roleRow.role,
+          shareholding_percentage: roleRow.shareholding_percentage ?? null,
+          can_manage: roleRow.can_manage,
+          invite_sent_at: roleRow.invite_sent_at ?? null,
+          invite_sent_by_name: null,
+          client_profiles: {
+            id: profile.id,
+            full_name: profile.full_name,
+            email: profile.email,
+            phone: profile.phone,
+            due_diligence_level: profile.due_diligence_level,
+            record_type: profile.record_type,
+            client_profile_kyc: kycForHook as Record<string, unknown> | null,
+          },
+        };
+        const summaryDocs: ClientServiceDoc[] = (profileDocuments ?? []).map((d) => ({
+          id: d.id,
+          file_name: d.file_name,
+          mime_type: d.mime_type,
+          verification_status: d.verification_status,
+          verification_result: d.verification_result,
+          admin_status: d.admin_status,
+          prefill_dismissed_at: null,
+          uploaded_at: d.uploaded_at,
+          document_type_id: d.document_type_id,
+          client_profile_id: d.client_profile_id,
+          document_types: d.document_types
+            ? { name: d.document_types.name, category: d.document_types.category }
+            : null,
+        }));
+        function handleSummaryEdit(section: SummarySection) {
+          setSummaryOpen(false);
+          if (!expanded) setExpanded(true);
+          const target = section === "any"
+            ? `kyc-section-${profile.id}-identity`
+            : `kyc-section-${profile.id}-${section}`;
+          // Wait a frame so the expansion DOM update lands first before
+          // scrollIntoView measures the target's position.
+          requestAnimationFrame(() => {
+            document.getElementById(target)?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          });
+        }
+        return (
+          <PersonSummaryDialog
+            person={summaryPerson}
+            documents={summaryDocs}
+            documentTypes={documentTypes ?? []}
+            requirements={requirements ?? []}
+            onClose={() => setSummaryOpen(false)}
+            onEdit={handleSummaryEdit}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -3091,17 +3179,23 @@ export function ServiceDetailClient({
       initialReviews={sectionReviews}
     >
     <div>
-      {/* Back */}
+      {/* ── B-090 Sticky shell: back link + title row + stage strip + step
+            indicator all pin together at top-0 of <main>. Background
+            matches the page (bg-gray-50) so scrolling content underneath
+            doesn't bleed through; -mx-8 px-8 extends the bg to the
+            edges of <main> beyond the page's p-8 padding so the shadow
+            spans the full content width. ──────────────────────────── */}
+      <div className="sticky top-0 z-30 bg-gray-50 -mx-8 px-8 pt-3 pb-3 shadow-sm">
       <Link
         href="/admin/services"
-        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-navy mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-navy mb-3"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to services
       </Link>
 
-      {/* ── Sticky Header ────────────────────────────────────────────────── */}
-      <div className="bg-white border rounded-xl px-5 py-4 mb-6 sticky top-0 z-30 shadow-sm">
+      {/* ── Title + stage strip (formerly sticky on its own) ────────────── */}
+      <div className="bg-white border rounded-xl px-5 py-4 mb-3 shadow-sm">
         {/* Title + Save/Cancel */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="min-w-0">
@@ -3169,12 +3263,14 @@ export function ServiceDetailClient({
       </div>
 
       {/* B-073 — wizard-shaped step indicator with smooth-scroll anchors */}
-      <div className="mb-4 rounded-lg border bg-white px-4 py-3">
+      <div className="rounded-lg border bg-white px-4 py-3">
         <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} />
       </div>
+      </div>
+      {/* ── End sticky shell ────────────────────────────────────────────── */}
 
       {/* ── Two-column layout ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
 
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
       {/* Each section is its own boxed Card; outer container provides spacing only */}
@@ -3297,6 +3393,7 @@ export function ServiceDetailClient({
                       serviceId={service.id}
                       profileDocuments={personProfileDocs}
                       documentTypes={documentTypes}
+                      requirements={requirements}
                       updateRequests={updateRequests}
                       defaultExpanded={!!pid && pid === newlyAddedProfileId}
                       fieldExtractions={personFieldExtractions}
@@ -3487,7 +3584,13 @@ export function ServiceDetailClient({
       </div>{/* End left column */}
 
       {/* ── RIGHT: Sidebar (col-span-1) ─────────────────────────────────── */}
-      <div className="space-y-3">
+      {/* B-090 — at lg+ the whole rail pins as one block; if content is
+            taller than the viewport, an internal scrollbar appears inside
+            the rail. top-[200px] is the approximate height of the sticky
+            shell above (back link + title card + stage strip + step
+            indicator); Vanessa can tune visually if needed. On <lg the
+            rail stacks below the main column with normal scrolling. */}
+      <div className="lg:sticky lg:top-[200px] lg:self-start lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto space-y-3">
 
         {/* ── Status Change ───────────────────────────────────────────────── */}
         <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
