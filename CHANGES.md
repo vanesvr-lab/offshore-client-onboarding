@@ -13,20 +13,6 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-### 2026-05-11 — B-088 — Section header pill spans full card width on step variant (Claude Code)
-
-`/admin/services/[id]` — each of the 5 step section cards (Company Setup, Financial, Banking, People & KYC, Documents) is now a single rounded rectangle of solid blue: the pill spans the card edge-to-edge with no inner gutter. The Approved/Flagged/Not reviewed badge + Review button move out of the card and sit as a sibling on the right, on the page background.
-
-- `ServiceCollapsibleSection` ([src/components/admin/ServiceCollapsibleSection.tsx](src/components/admin/ServiceCollapsibleSection.tsx)): rewrote the `variant="step"` branch only. Outer wrapper is now a flex row (`flex items-stretch gap-3`) containing the Card (`flex-1`) and `SectionReviewControls` (sibling). The pill becomes the inside of a `block w-full` button; the previous `<div className="flex items-center px-5 py-4 gap-2">` row + `-mx-2 px-2 py-1` hit-area wrapper are deleted. Pill loses its own `rounded-md` (Card's `overflow-hidden` + rounded corners clip it cleanly). Pill padding shifts `px-3 py-1` → `px-5 py-3` so it provides its own vertical mass and internal text doesn't kiss the corners.
-- `anchorId` moved from the Card to the outer flex wrapper so `AdminApplicationStepIndicator` anchors still resolve to the row.
-- Right-cluster logic (mini progress bar with `hidden lg:block` gate, % number, ● Complete RAG dot/label, Show▾ chevron) copied into the new structure verbatim — no responsive behaviour changes.
-- Step + default branches are now two clean returns (early-return for `isStep`). Default-variant rows (Internal Notes, Risk Assessment, Milestones, Audit Trail) are byte-identical to pre-B-088 — same Card outline, same chevron-circle, same hover row.
-- `SectionReviewControls` itself unchanged — only its render location moved. `ServiceDetailClient.tsx` call sites (5 `variant="step"` usages at lines 3190, 3211, 3232, 3253, 3337) consume the same prop API.
-
-`npm run build` clean (lint + type check). Smoke test deferred to Vanessa post-dev-server-restart.
-
----
-
 ### 2026-05-11 — B-087 — Admin KYC red labels + required-only subsection % (Claude Code)
 
 Two follow-ups from B-086, applied to the admin's KYC long-form path (`KycLongFormField` in `ServiceDetailClient.tsx`).
