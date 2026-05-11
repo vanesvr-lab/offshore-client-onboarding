@@ -1,4 +1,5 @@
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
+import { visibleFields, type KycSection } from "@/lib/kyc/sections";
 
 export type SectionCompletion = {
   percentage: number;
@@ -120,6 +121,36 @@ export function calcSectionCompletion(
   const filled = required.filter((f) => {
     const v = serviceDetails[f.key];
     return Array.isArray(v) ? v.some((x) => x != null && x !== "") : v != null && v !== "";
+  }).length;
+  const pct = Math.round((filled / required.length) * 100);
+  return { percentage: pct, ragStatus: toRag(pct) };
+}
+
+/**
+ * Required-only completion % for a single KYC subsection (Identity, Financial
+ * Profile, Declarations, Company Details, Tax & Financial). Mirrors the
+ * service-section convention (`calcSectionCompletion`):
+ *   - Counts only fields marked `required: true` and currently visible after
+ *     `showWhen` gating (e.g. "Please specify" only when Source of funds = Other).
+ *   - Returns 0 when the subsection has zero required visible fields, to match
+ *     "nothing is mandatory yet" rather than "everything is done".
+ *   - Required field with array value uses `v.some(x => x != null && x !== "")`,
+ *     matching B-086's array-emptiness convention.
+ *
+ * DD-level gating (`cddOrAbove` / `eddOnly`) is the caller's job — pass a
+ * section already filtered via `gateSectionForLevel`.
+ */
+export function calcKycSectionRequiredPct(
+  section: KycSection,
+  values: Record<string, unknown>
+): SectionCompletion {
+  const visible = visibleFields(section.fields, values);
+  const required = visible.filter((f) => f.required);
+  if (required.length === 0) return { percentage: 0, ragStatus: "red" };
+  const filled = required.filter((f) => {
+    const v = values[f.key];
+    if (Array.isArray(v)) return v.some((x) => x != null && x !== "");
+    return v != null && v !== "";
   }).length;
   const pct = Math.round((filled / required.length) * 100);
   return { percentage: pct, ragStatus: toRag(pct) };

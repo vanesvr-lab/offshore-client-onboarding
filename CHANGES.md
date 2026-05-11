@@ -13,6 +13,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-11 — B-087 — Admin KYC red labels + required-only subsection % (Claude Code)
+
+Two follow-ups from B-086, applied to the admin's KYC long-form path (`KycLongFormField` in `ServiceDetailClient.tsx`).
+
+- New shared util `calcKycSectionRequiredPct` in [src/lib/utils/serviceCompletion.ts](src/lib/utils/serviceCompletion.ts): required-only, visible-after-`showWhen` gating, returns 0% when no required field exists, array-aware via `v.some(x => x != null && x !== "")`. Mirrors the service-section convention (`calcSectionCompletion`). DD-level gating stays the caller's job — pass a section already filtered via `gateSectionForLevel`.
+- Admin `KycLongForm.sectionPct` ([ServiceDetailClient.tsx](src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx)): swapped from inline all-visible-fields calc to the new util. Financial Profile in Vanessa's QA case drops from 38% → ~25%, reflecting only mandatory work; "Additional context: Salary" no longer pads the bar.
+- Admin `KycLongFormField`: added optional `sectionHasData` prop. Label renders red (`text-red-600` instead of `text-gray-900`) when `required && empty && sectionHasData`. Empty check is array-aware (`Array.isArray(v) && !v.some(x => x != null && x !== "")`). Asterisks + `FieldProvenanceMarker` + Sparkles AI marker render unchanged — additive only.
+- `KycLongFormSection`: computes `sectionHasData` once per section from its visible fields (post-`showWhen`) and passes it through to every `KycLongFormField`. Stateless, recomputed each render — saved data hydrates state, so an in-progress section flips empty requireds red on every reload.
+- Aggregate `calcKycPct` / `calcKycCompletion` (person-card header) intentionally untouched per Vanessa's call.
+- Client legacy long-forms (`IndividualKycForm.tsx`, `OrganisationKycForm.tsx`): audited — they have no per-subsection % computation (they delegate to `useFieldValidation` / `ValidatedLabel` for red-on-touch). No wiring needed; flagged here as the audit result.
+
+`npm run build` clean (lint + type check). Smoke test deferred to Vanessa post-dev-server-restart.
+
+---
+
 ### 2026-05-11 — B-086 — Mandatory-field completion + red-label persistence (Claude Code)
 
 Fixed two related bugs with one underlying root cause (broken array-emptiness check `v.length > 0` treating `["", "", ""]` as filled). Section completion percentages now drop correctly when required slots are cleared, and empty required labels render in red after the section has been touched on every page load.

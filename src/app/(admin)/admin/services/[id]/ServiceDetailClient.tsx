@@ -31,6 +31,7 @@ import type { VerificationResult } from "@/types";
 import {
   calcSectionCompletion,
   calcKycCompletion,
+  calcKycSectionRequiredPct,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
@@ -630,14 +631,7 @@ function KycLongForm({
   }
 
   function sectionPct(section: KycSection): number {
-    // Only count fields the user can currently see (after showWhen gating).
-    const visible = visibleFields(section.fields, fields);
-    if (visible.length === 0) return 0;
-    const filled = visible.filter(f => {
-      const v = fields[f.key];
-      return v !== null && v !== undefined && v !== "";
-    }).length;
-    return Math.round((filled / visible.length) * 100);
+    return calcKycSectionRequiredPct(section, fields).percentage;
   }
 
   return (
@@ -788,6 +782,14 @@ function KycLongFormSection({
     section.categoryKey && profileId
       ? `kyc-section-${profileId}-${section.categoryKey}`
       : undefined;
+  // B-087 — has the subsection been touched at all? Mirrors the B-086
+  // pattern: any visible field has a non-empty value → flip empty
+  // requireds' labels red. Stateless, recomputed each render.
+  const sectionHasData = visibleFields(section.fields, fields).some((f) => {
+    const v = fields[f.key];
+    if (Array.isArray(v)) return v.some((x) => x != null && x !== "");
+    return v != null && v !== "";
+  });
   return (
     <div className="border rounded-lg overflow-hidden scroll-mt-32" id={sectionAnchorId}>
       <div
@@ -902,6 +904,7 @@ function KycLongFormSection({
                     onChange={(v) => setFields(prev => ({ ...prev, [f.key]: v }))}
                     extractions={extractionsByField[f.key] ?? []}
                     sourceDocs={sourceDocsForMarker}
+                    sectionHasData={sectionHasData}
                   />
                 </div>
               );
@@ -1037,6 +1040,7 @@ function KycLongFormField({
   extractions,
   sourceDocs,
   disabled = false,
+  sectionHasData = false,
 }: {
   field: KycField;
   value: unknown;
@@ -1051,12 +1055,21 @@ function KycLongFormField({
   }[];
   /** B-075 — admin renders the form read-only; disables every input. */
   disabled?: boolean;
+  /** B-087 — flips empty required labels red once the section has data. */
+  sectionHasData?: boolean;
 }) {
   const stringValue = (value ?? "") as string;
+  // B-087 — match B-086's empty-required convention: array-aware emptiness
+  // check, gated on `sectionHasData` so a fresh subsection stays default.
+  const empty =
+    value == null ||
+    value === "" ||
+    (Array.isArray(value) && !value.some((x) => x != null && x !== ""));
+  const missing = !!field.required && empty && !!sectionHasData;
 
   return (
     <div className="space-y-1">
-      <label className="flex items-center gap-1.5 text-sm font-medium text-gray-900">
+      <label className={`flex items-center gap-1.5 text-sm font-medium ${missing ? "text-red-600" : "text-gray-900"}`}>
         <span>{field.label}</span>
         {field.required && (
           <span className="text-red-600" aria-hidden="true">*</span>
