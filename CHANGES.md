@@ -13,6 +13,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-11 — B-086 — Mandatory-field completion + red-label persistence (Claude Code)
+
+Fixed two related bugs with one underlying root cause (broken array-emptiness check `v.length > 0` treating `["", "", ""]` as filled). Section completion percentages now drop correctly when required slots are cleared, and empty required labels render in red after the section has been touched on every page load.
+
+- `calcServiceDetailsCompletion` / `calcSectionCompletion` ([src/lib/utils/serviceCompletion.ts](src/lib/utils/serviceCompletion.ts)): all four array branches now use `v.some(x => x != null && x !== "")` instead of `v.length > 0`. This single change cascades through every call site (admin services list, admin service detail, admin queue, client dashboard, client service detail, `/api/services/[id]/validate`) — Company Setup section % drops correctly when all three Proposed Names are cleared, or when Proposed Name 1 (the only required slot) is cleared with Names 2/3 still set.
+- `DynamicServiceForm` `anyFilled` + `isEmptyRequired` ([src/components/shared/DynamicServiceForm.tsx](src/components/shared/DynamicServiceForm.tsx)): same array-emptiness fix.
+- `DynamicServiceForm` text_array (`isProposedNames` branch): per-slot label now renders red text when the slot is required + empty + `anyFilled`. Mirrors the rest of the form's red-label heuristic. Map variable renamed `v` → `slotVal` to avoid shadowing. Non-`isProposedNames` text_array branch (Option 1 / Option 2 / ...) intentionally left alone — out of scope.
+- KYC `OrgField` (both copies — [src/components/client/PerPersonReviewWizard.tsx](src/components/client/PerPersonReviewWizard.tsx) and [src/components/kyc/KycStepWizard.tsx](src/components/kyc/KycStepWizard.tsx)): added optional `sectionHasData` prop; label text goes red when `required && empty && sectionHasData`. Each `*Step` component (`CompanyDetailsStep`, `CorporateTaxStep`) computes `sectionHasData` once at the top from its own rendered field set via a local `hasAnyValue(form, visibleKeys)` helper and passes it to every `OrgField`. The inline Listed/Unlisted `<select>` gets the same treatment (red asterisk + red label when empty + section touched) — required to satisfy the brief's smoke test #5.
+- Trigger semantics unchanged: `anyFilled` / `sectionHasData` are stateless and recomputed each render from current form values. No new state, no persisted "touched" flag.
+
+**Follow-up flag:** `OrgField` and the new `hasAnyValue` helper are near-duplicated across `PerPersonReviewWizard.tsx` and `KycStepWizard.tsx`. Consolidation candidate for a future brief.
+
+`npm run build` clean (lint + type check). Smoke test deferred to Vanessa post-dev-server-restart per CLAUDE.md.
+
+---
+
 ### 2026-05-08 — B-085 — Service-level Documents filter + dedupe + upload-based count (Claude Code)
 
 The Documents section under the service-level pill on `/admin/services/[id]` now lists only docs tied to the company entity. KYC-per-person docs (Passport, CV, Proof of Residential Address, Source of Funds declarations, etc.) drop out of this section and continue to live in each profile's per-profile Documents block (B-077/2). The list is deduped by `document_type_id`. Header reads `Documents (X of Y uploaded) · Z% · Not started/Partial/Complete`.

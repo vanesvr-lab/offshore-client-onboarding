@@ -335,6 +335,7 @@ function OrgField({
   type = "text",
   placeholder,
   required,
+  sectionHasData,
 }: {
   label: string;
   fieldKey: keyof KycRecord;
@@ -343,10 +344,14 @@ function OrgField({
   type?: string;
   placeholder?: string;
   required?: boolean;
+  sectionHasData?: boolean;
 }) {
+  const v = form[fieldKey];
+  const empty = v == null || v === "";
+  const missing = !!(required && empty && sectionHasData);
   return (
     <div className="space-y-1">
-      <Label className="text-sm font-medium text-gray-900">
+      <Label className={`text-sm font-medium ${missing ? "text-red-600" : "text-gray-900"}`}>
         {label}{required && <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>}
       </Label>
       {type === "textarea" ? (
@@ -370,7 +375,27 @@ function OrgField({
   );
 }
 
+function hasAnyValue(form: Partial<KycRecord>, keys: (keyof KycRecord)[]): boolean {
+  return keys.some((k) => {
+    const v = form[k] as unknown;
+    if (Array.isArray(v)) return v.some((x) => x != null && x !== "");
+    return v != null && v !== "";
+  });
+}
+
 function CompanyDetailsStep({ form, onChange }: { form: Partial<KycRecord>; onChange: (f: Partial<KycRecord>) => void }) {
+  const visibleKeys: (keyof KycRecord)[] = [
+    "full_name",
+    "company_registration_number",
+    "jurisdiction_incorporated",
+    "date_of_incorporation",
+    "industry_sector",
+    "listed_or_unlisted",
+    "description_activity",
+  ];
+  const sectionHasData = hasAnyValue(form, visibleKeys);
+  const listedEmpty = form.listed_or_unlisted == null;
+  const listedMissing = listedEmpty && sectionHasData;
   return (
     <div className="space-y-5">
       <div>
@@ -378,13 +403,15 @@ function CompanyDetailsStep({ form, onChange }: { form: Partial<KycRecord>; onCh
         <p className="text-sm text-gray-600">Provide information about the company entity.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <OrgField label="Company name" fieldKey="full_name" form={form} onChange={onChange} required placeholder="Legal entity name" />
-        <OrgField label="Registration number" fieldKey="company_registration_number" form={form} onChange={onChange} required placeholder="Company registration number" />
-        <OrgField label="Jurisdiction of incorporation" fieldKey="jurisdiction_incorporated" form={form} onChange={onChange} required placeholder="e.g. Mauritius" />
-        <OrgField label="Date of incorporation" fieldKey="date_of_incorporation" form={form} onChange={onChange} type="date" required />
-        <OrgField label="Industry sector" fieldKey="industry_sector" form={form} onChange={onChange} placeholder="e.g. Financial Services" />
+        <OrgField label="Company name" fieldKey="full_name" form={form} onChange={onChange} required sectionHasData={sectionHasData} placeholder="Legal entity name" />
+        <OrgField label="Registration number" fieldKey="company_registration_number" form={form} onChange={onChange} required sectionHasData={sectionHasData} placeholder="Company registration number" />
+        <OrgField label="Jurisdiction of incorporation" fieldKey="jurisdiction_incorporated" form={form} onChange={onChange} required sectionHasData={sectionHasData} placeholder="e.g. Mauritius" />
+        <OrgField label="Date of incorporation" fieldKey="date_of_incorporation" form={form} onChange={onChange} type="date" required sectionHasData={sectionHasData} />
+        <OrgField label="Industry sector" fieldKey="industry_sector" form={form} onChange={onChange} sectionHasData={sectionHasData} placeholder="e.g. Financial Services" />
         <div className="space-y-1">
-          <Label className="text-sm">Listed or unlisted</Label>
+          <Label className={`text-sm font-medium ${listedMissing ? "text-red-600" : "text-gray-900"}`}>
+            Listed or unlisted<span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+          </Label>
           <select
             value={(form.listed_or_unlisted as string) ?? ""}
             onChange={(e) => onChange({ listed_or_unlisted: (e.target.value || null) as "listed" | "unlisted" | null })}
@@ -396,7 +423,7 @@ function CompanyDetailsStep({ form, onChange }: { form: Partial<KycRecord>; onCh
           </select>
         </div>
         <div className="md:col-span-2">
-          <OrgField label="Business description" fieldKey="description_activity" form={form} onChange={onChange} type="textarea" placeholder="Describe the company's main activities" />
+          <OrgField label="Business description" fieldKey="description_activity" form={form} onChange={onChange} type="textarea" sectionHasData={sectionHasData} placeholder="Describe the company's main activities" />
         </div>
       </div>
     </div>
@@ -404,6 +431,12 @@ function CompanyDetailsStep({ form, onChange }: { form: Partial<KycRecord>; onCh
 }
 
 function CorporateTaxStep({ form, onChange }: { form: Partial<KycRecord>; onChange: (f: Partial<KycRecord>) => void }) {
+  const visibleKeys: (keyof KycRecord)[] = [
+    "jurisdiction_tax_residence",
+    "tax_identification_number",
+    "regulatory_licenses",
+  ];
+  const sectionHasData = hasAnyValue(form, visibleKeys);
   return (
     <div className="space-y-5">
       <div>
@@ -411,10 +444,10 @@ function CorporateTaxStep({ form, onChange }: { form: Partial<KycRecord>; onChan
         <p className="text-sm text-gray-600">Provide tax residency and financial details.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <OrgField label="Tax residency jurisdiction" fieldKey="jurisdiction_tax_residence" form={form} onChange={onChange} placeholder="e.g. Mauritius" />
-        <OrgField label="Tax identification number" fieldKey="tax_identification_number" form={form} onChange={onChange} placeholder="TIN or equivalent" />
+        <OrgField label="Tax residency jurisdiction" fieldKey="jurisdiction_tax_residence" form={form} onChange={onChange} sectionHasData={sectionHasData} placeholder="e.g. Mauritius" />
+        <OrgField label="Tax identification number" fieldKey="tax_identification_number" form={form} onChange={onChange} sectionHasData={sectionHasData} placeholder="TIN or equivalent" />
         <div className="md:col-span-2">
-          <OrgField label="Regulatory licences" fieldKey="regulatory_licenses" form={form} onChange={onChange} type="textarea" placeholder="List any regulatory licences held" />
+          <OrgField label="Regulatory licences" fieldKey="regulatory_licenses" form={form} onChange={onChange} type="textarea" sectionHasData={sectionHasData} placeholder="List any regulatory licences held" />
         </div>
       </div>
     </div>

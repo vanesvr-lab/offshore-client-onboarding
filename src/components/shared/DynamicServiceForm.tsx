@@ -68,13 +68,13 @@ export function DynamicServiceForm({
   // Detect partial fill: if any visible field has a value, show red for empty required fields
   const anyFilled = fields.filter(isVisible).some((f) => {
     const v = values[f.key];
-    return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
+    return Array.isArray(v) ? v.some((x) => x != null && x !== "") : v != null && v !== "";
   });
 
   function isEmptyRequired(field: ServiceField): boolean {
     if (!anyFilled || !field.required) return false;
     const v = values[field.key];
-    return Array.isArray(v) ? v.length === 0 : v == null || v === "";
+    return Array.isArray(v) ? !v.some((x) => x != null && x !== "") : v == null || v === "";
   }
 
   // Group fields by section
@@ -266,13 +266,15 @@ export function DynamicServiceForm({
             {/* B-048 §4 — each option capped at max-w-md so the column of
                 inputs stays compact (e.g. proposed company names). */}
             <div className="space-y-3">
-              {padded.map((v: string, i: number) => {
+              {padded.map((slotVal: string, i: number) => {
                 const required = itemRequired(i);
                 const tooltip = itemTooltip(i);
+                const slotEmpty = slotVal == null || slotVal === "";
+                const slotMissing = required && slotEmpty && anyFilled;
                 return (
                   <div key={i} className="space-y-1.5">
                     {isProposedNames && (
-                      <Label className="text-sm flex items-center gap-1">
+                      <Label className={`text-sm flex items-center gap-1 ${slotMissing ? "text-red-600" : ""}`}>
                         {itemLabel(i)}
                         {required && <span className="text-red-600">*</span>}
                         {tooltip && <FieldTooltip content={tooltip} />}
@@ -280,7 +282,7 @@ export function DynamicServiceForm({
                     )}
                     <Input
                       placeholder={isProposedNames ? "" : itemLabel(i)}
-                      value={v}
+                      value={slotVal}
                       onChange={(e) => {
                         const next = [...padded];
                         next[i] = e.target.value;

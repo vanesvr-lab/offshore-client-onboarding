@@ -19,7 +19,7 @@ export function calcServiceDetailsCompletion(
   if (required.length === 0) {
     const anyFilled = serviceFields.some((f) => {
       const v = serviceDetails[f.key];
-      if (Array.isArray(v)) return v.length > 0;
+      if (Array.isArray(v)) return v.some((x) => x != null && x !== "");
       return v != null && v !== "";
     });
     const pct = serviceFields.length === 0 ? 100 : anyFilled ? 100 : 0;
@@ -27,7 +27,7 @@ export function calcServiceDetailsCompletion(
   }
   const filled = required.filter((f) => {
     const v = serviceDetails[f.key];
-    if (Array.isArray(v)) return v.length > 0;
+    if (Array.isArray(v)) return v.some((x) => x != null && x !== "");
     return v != null && v !== "";
   });
   const pct = Math.round((filled.length / required.length) * 100);
@@ -112,14 +112,14 @@ export function calcSectionCompletion(
   if (required.length === 0) {
     const anyFilled = fields.some((f) => {
       const v = serviceDetails[f.key];
-      return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
+      return Array.isArray(v) ? v.some((x) => x != null && x !== "") : v != null && v !== "";
     });
     const pct = anyFilled ? 100 : 0;
     return { percentage: pct, ragStatus: toRag(pct) };
   }
   const filled = required.filter((f) => {
     const v = serviceDetails[f.key];
-    return Array.isArray(v) ? v.length > 0 : v != null && v !== "";
+    return Array.isArray(v) ? v.some((x) => x != null && x !== "") : v != null && v !== "";
   }).length;
   const pct = Math.round((filled / required.length) * 100);
   return { percentage: pct, ragStatus: toRag(pct) };
