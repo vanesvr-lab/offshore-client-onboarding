@@ -135,14 +135,24 @@ function mapJumpTargetToSection(
   }
 }
 
-export function PersonSummaryDialog({
+/** B-091 — Extracted body so the service-level summary modal can render
+ *  per-profile content inline without nesting another Dialog. The
+ *  PersonSummaryDialog wrapper below is a thin Dialog shell around this. */
+export interface PersonSummaryBodyProps {
+  person: ServicePerson;
+  documents: ClientServiceDoc[];
+  documentTypes: DocumentType[];
+  requirements: DueDiligenceRequirement[];
+  onEdit: (section: SummarySection) => void;
+}
+
+export function PersonSummaryBody({
   person,
   documents,
   documentTypes,
   requirements,
-  onClose,
   onEdit,
-}: PersonSummaryDialogProps) {
+}: PersonSummaryBodyProps) {
   const profileId = person.client_profiles?.id ?? "";
   const isOrganisation = person.client_profiles?.record_type === "organisation";
   const personDocs = documents
@@ -171,6 +181,28 @@ export function PersonSummaryDialog({
     }));
   const kycRecord = mapToReviewKycRecord(person);
   const ddLevel = (person.client_profiles?.due_diligence_level as DueDiligenceLevel | null) ?? "cdd";
+
+  return (
+    <ReviewStep
+      kycRecord={kycRecord}
+      documents={personDocs}
+      documentTypes={documentTypes}
+      dueDiligenceLevel={ddLevel}
+      requirements={requirements}
+      form={kycRecord}
+      onJumpTo={(target) => onEdit(mapJumpTargetToSection(target, isOrganisation))}
+    />
+  );
+}
+
+export function PersonSummaryDialog({
+  person,
+  documents,
+  documentTypes,
+  requirements,
+  onClose,
+  onEdit,
+}: PersonSummaryDialogProps) {
   const personName = person.client_profiles?.full_name ?? "Person";
 
   return (
@@ -180,14 +212,12 @@ export function PersonSummaryDialog({
           <DialogTitle>{personName} — Summary</DialogTitle>
         </DialogHeader>
         <div className="pt-2">
-          <ReviewStep
-            kycRecord={kycRecord}
-            documents={personDocs}
+          <PersonSummaryBody
+            person={person}
+            documents={documents}
             documentTypes={documentTypes}
-            dueDiligenceLevel={ddLevel}
             requirements={requirements}
-            form={kycRecord}
-            onJumpTo={(target) => onEdit(mapJumpTargetToSection(target, isOrganisation))}
+            onEdit={onEdit}
           />
         </div>
         <div className="flex justify-end gap-2 pt-3 border-t">

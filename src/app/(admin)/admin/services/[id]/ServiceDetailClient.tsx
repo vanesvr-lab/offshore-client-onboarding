@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { InviteKycDialog } from "@/components/shared/InviteKycDialog";
 import { PersonSummaryDialog, type SummarySection } from "@/components/shared/PersonSummaryDialog";
+import { ServiceSummaryDialog } from "@/components/admin/ServiceSummaryDialog";
 import type { ServicePerson, ClientServiceDoc } from "@/app/(client)/services/[id]/page";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
@@ -2867,6 +2868,24 @@ export function ServiceDetailClient({
   const [auditActorFilter, setAuditActorFilter] = useState("all");
   const [auditActionFilter, setAuditActionFilter] = useState("all");
 
+  // B-091 — service-level View Summary modal state
+  const [serviceSummaryOpen, setServiceSummaryOpen] = useState(false);
+  function handleServiceSummaryEdit(target: string) {
+    setServiceSummaryOpen(false);
+    // Per-profile expansion state lives inside each PersonCard, so for
+    // `kyc-section-{profileId}-…` anchors we fall back to scrolling to the
+    // profile card itself; the admin then clicks Show to reach the section.
+    // (Documented trade-off in the brief — simpler than lifting per-card
+    // expand state out into the page scope.)
+    const kycMatch = target.match(/^kyc-section-(.+)-(?:identity|financial|compliance|tax)$/);
+    const finalTarget = kycMatch ? `person-card-${kycMatch[1]}` : target;
+    requestAnimationFrame(() => {
+      document
+        .getElementById(finalTarget)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   // B-084 Batch 1 — `typedRoles` is now an alias for the stateful `roles`
   // so callers below pick up live splices from `handleProfileSaved`.
   const typedRoles = roles;
@@ -2888,7 +2907,29 @@ export function ServiceDetailClient({
       profileRolesMap.set(r.id, { person: r, roles: [r.role], allRoleRows: [r] });
     }
   }
-  const uniqueRoles = Array.from(profileRolesMap.values());
+  // B-091 — sort People & KYC list so most-action-needed profiles surface
+  // first: portal-access cluster on top, then KYC % ascending (lower = more
+  // work outstanding), then alphabetical name as the predictable tiebreaker.
+  // Profiles with no KYC record sort as 0% so they float to the top of
+  // their portal-access group.
+  function computeKycPctForProfile(person: RoleWithProfile): number {
+    const raw = person.client_profiles?.client_profile_kyc;
+    const kyc = (Array.isArray(raw) ? raw[0] ?? null : raw) as KycFull | null;
+    return calcKycPct(kyc);
+  }
+  const uniqueRoles = Array.from(profileRolesMap.values()).sort((a, b) => {
+    const aPortal = a.allRoleRows.some((r) => r.can_manage) ? 1 : 0;
+    const bPortal = b.allRoleRows.some((r) => r.can_manage) ? 1 : 0;
+    if (aPortal !== bPortal) return bPortal - aPortal;
+
+    const aKyc = computeKycPctForProfile(a.person);
+    const bKyc = computeKycPctForProfile(b.person);
+    if (aKyc !== bKyc) return aKyc - bKyc;
+
+    const aName = a.person.client_profiles?.full_name ?? "";
+    const bName = b.person.client_profiles?.full_name ?? "";
+    return aName.localeCompare(bName);
+  });
 
   // ── Section completion ────────────────────────────────────────────────────
 
@@ -3592,6 +3633,20 @@ export function ServiceDetailClient({
             rail stacks below the main column with normal scrolling. */}
       <div className="lg:sticky lg:top-[200px] lg:self-start lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto space-y-3">
 
+        {/* B-091 — service-level View Summary entry point. Lives at the
+              very top of the right rail so it's the first action visible
+              once the rail pins (B-090). Falls back to a generic label
+              when the service has no number assigned. */}
+        <Button
+          onClick={() => setServiceSummaryOpen(true)}
+          className={`w-full justify-center h-10 ${BTN_PRIMARY}`}
+        >
+          <Eye className="h-4 w-4 mr-1.5" />
+          {service.service_number
+            ? `View Summary for ${service.service_number}`
+            : "View Service Summary"}
+        </Button>
+
         {/* ── Status Change ───────────────────────────────────────────────── */}
         <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</p>
@@ -3787,6 +3842,21 @@ export function ServiceDetailClient({
 
       {/* Bottom padding for fixed bar */}
       {pendingChanges && <div className="h-16" />}
+
+      {/* B-091 — service-level summary modal */}
+      {serviceSummaryOpen && (
+        <ServiceSummaryDialog
+          service={service}
+          serviceFields={serviceFields}
+          serviceDetails={serviceDetails}
+          uniqueRoles={uniqueRoles}
+          documents={documents}
+          documentTypes={documentTypes}
+          requirements={requirements}
+          onClose={() => setServiceSummaryOpen(false)}
+          onEdit={handleServiceSummaryEdit}
+        />
+      )}
     </div>
     </AdminApplicationSectionsProvider>
   );

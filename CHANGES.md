@@ -13,6 +13,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-11 — B-091 — Profile sort + service-level summary modal (Claude Code)
+
+`/admin/services/[id]` — two related additions on top of B-090.
+
+- **Profile sort** (`uniqueRoles` in [ServiceDetailClient.tsx](src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx)): Portal access on top, then KYC % ascending, alphabetical tiebreaker. Profiles with no KYC record sort as 0 % (top within their group). New inline helper `computeKycPctForProfile` flattens `client_profile_kyc` array-or-object shapes through the existing `calcKycPct`.
+- **Service-level summary modal:** new [`src/components/admin/ServiceSummaryDialog.tsx`](src/components/admin/ServiceSummaryDialog.tsx). `max-w-4xl` Dialog renders Company Setup / Financial / Banking as read-only field grids (sections with zero matching template fields render nothing), Profiles as collapsible rows, and Documents as a flat list grouped `Service Documents` first then per-profile `{Name}'s Documents`. Each section header has a Lucide `Pencil` Edit affordance that closes the modal and routes through `onEdit(target)`. Empty field values render `Not provided` in `text-red-500 italic`; empty docs render `No documents uploaded yet`.
+- **PersonSummaryDialog body extracted:** [`src/components/shared/PersonSummaryDialog.tsx`](src/components/shared/PersonSummaryDialog.tsx) now exports a thin `PersonSummaryBody` component containing the per-profile `<ReviewStep>` invocation. The original `PersonSummaryDialog` is now a Dialog wrapper around `PersonSummaryBody`. ServiceSummaryDialog reuses `PersonSummaryBody` inside each expanded profile row — no copy-paste of the ReviewStep wiring.
+- **Right-rail button:** new `View Summary for {service_number}` button (fallback `View Service Summary` when number is null) at the very top of the sticky right rail, above Status. Uses the existing `BTN_PRIMARY` brand-navy class for visual consistency. State (`serviceSummaryOpen`) lives in `ServiceDetailClient` alongside other top-level page state; dialog renders conditionally near the page bottom as a sibling to the other dialogs.
+- **Edit-pencil routing (`handleServiceSummaryEdit`):** for `step-*` and `person-card-*` anchors → close modal + `requestAnimationFrame` → `scrollIntoView`. For `kyc-section-{profileId}-{identity|financial|compliance|tax}` anchors → strip the trailing section suffix via regex, scroll to `person-card-{profileId}` instead.
+
+Per-profile expand from inside the service modal: chose the **simpler** approach — KYC-section edits scroll to the collapsed person card; admin clicks Show inside the card to reveal the section. The "lifted-expansion state" alternative would require plumbing per-card expand state up into the page scope (PersonCard owns its own `expanded` state today via `useState` at the component root), which is an unbounded refactor for marginal UX win. Trade-off documented here per the brief.
+
+Smoke test: deferred to Vanessa post-dev-server-restart. The sort, modal open/close, button label fallback, and inner ReviewStep reuse all type-check and the production build is clean.
+`npm run build` clean.
+
+---
+
 ### 2026-05-11 — B-090 — Sticky top bar + sticky right rail + admin View Summary (Claude Code)
 
 `/admin/services/[id]` — three navigation/visibility fixes bundled into one batch.
