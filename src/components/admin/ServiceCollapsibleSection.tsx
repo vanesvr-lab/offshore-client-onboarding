@@ -83,7 +83,7 @@ export function ServiceCollapsibleSection({
           : "overflow-hidden scroll-mt-24 border border-gray-200 shadow-sm"
       }
     >
-      <div className="flex items-center px-5 py-4 gap-2">
+      <div className={`flex items-center gap-2 ${isStep ? "px-2 py-2" : "px-5 py-4"}`}>
         <button
           type="button"
           onClick={() => setOpen(!open)}

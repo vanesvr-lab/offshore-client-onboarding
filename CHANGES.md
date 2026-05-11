@@ -13,6 +13,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-11 — B-089 — Step-variant section card hugs pill tightly (Claude Code)
+
+Step-variant section cards on `/admin/services/[id]` (Company Setup, Financial, Banking, People & KYC, Documents) now use `px-2 py-2` outer row padding (8 / 8 px) instead of `px-5 py-4` (20 / 16 px) — the card hugs the pill with minimal breathing room. Pill width, pill height, pill rounded corners, SectionReviewControls position, and the gap between cards are all unchanged. Default-variant rows (Internal Notes, Risk Assessment, Milestones, Audit Trail) keep their original `px-5 py-4` padding.
+
+- `ServiceCollapsibleSection.tsx`: row className becomes `flex items-center gap-2 ${isStep ? "px-2 py-2" : "px-5 py-4"}`. No other edits.
+
+Smoke test: deferred to Vanessa post-dev-server-restart.
+`npm run build` clean.
+
+Note for follow-up: `CardContent` body padding stays `pt-3 pb-4 px-5` per brief instruction — if the now-tighter header (8 px) looks visibly stepped relative to the 20 px body padding, Vanessa can decide in a follow-up whether body padding should match. Not changed in this brief.
+
+---
+
 ### 2026-05-11 — B-087 — Admin KYC red labels + required-only subsection % (Claude Code)
 
 Two follow-ups from B-086, applied to the admin's KYC long-form path (`KycLongFormField` in `ServiceDetailClient.tsx`).
