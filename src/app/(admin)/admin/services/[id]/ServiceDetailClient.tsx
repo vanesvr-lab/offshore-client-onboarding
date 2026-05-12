@@ -3711,20 +3711,24 @@ export function ServiceDetailClient({
             </span>
           </div>
 
-          {/* Row 3 — updated-on-by (fallback: created-on by system) */}
+          {/* Row 3 — updated-on-by (B-095: no more "by system" fallback —
+              when the audit row is service_created we render "Created on …";
+              when it's status_changed we render "Status updated on …";
+              and if no audit row exists at all we render just the date.
+              "Unknown user" would only appear if a new code path forgot to
+              call writeAuditLog — treat that as a regression flag. */}
           <p className="text-xs text-gray-500">
             {lastStatusChange ? (
               <>
-                Status updated on{" "}
+                {lastStatusChange.action === "status_changed" ? "Status updated" : "Created"} on{" "}
                 <span className="text-gray-700">{formatDate(lastStatusChange.created_at)}</span>{" "}
                 by{" "}
-                <span className="text-gray-700">{lastStatusChange.actor_name ?? "system"}</span>
+                <span className="text-gray-700">{lastStatusChange.actor_name ?? "Unknown user"}</span>
               </>
             ) : (
               <>
                 Created on{" "}
-                <span className="text-gray-700">{formatDate(service.created_at)}</span>{" "}
-                by <span className="text-gray-700">system</span>
+                <span className="text-gray-700">{formatDate(service.created_at)}</span>
               </>
             )}
           </p>

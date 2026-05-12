@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function POST(
   request: Request,
@@ -78,6 +79,18 @@ export async function POST(
     linked_to_type: "process",
     linked_to_id: params.id,
     linked_by: session.user.id,
+  });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "process_document_uploaded",
+    entity_type: "process",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: { document_id: docRecord.id, document_type_id: documentTypeId },
+    detail: { file_name: file.name },
   });
 
   revalidatePath(`/admin/clients/${process.client_id}/processes/${params.id}`);

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { Resend } from "resend";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -123,6 +124,26 @@ export async function POST(
         </div>
       </div>
     `,
+  });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "document_update_requested",
+    entity_type: "document",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: {
+      request_id: requestRow.id,
+      service_id: body.service_id,
+      sent_to_profile_id: body.sent_to_profile_id,
+    },
+    detail: {
+      file_name: doc.file_name,
+      sent_to_email: profile.email,
+      note: body.note.trim(),
+    },
   });
 
   if (emailError) {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** DELETE /api/admin/profiles/[id]/requirement-overrides/[reqId] — Reinstate a DD requirement */
 export async function DELETE(
@@ -28,6 +29,17 @@ export async function DELETE(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "requirement_override_removed",
+    entity_type: "client_profile",
+    entity_id: profileId,
+    previous_value: { requirement_id: requirementId },
+    new_value: null,
+  });
 
   return NextResponse.json({ ok: true });
 }

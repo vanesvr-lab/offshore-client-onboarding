@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function PATCH(
   request: Request,
@@ -31,6 +32,13 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
+  const { data: existing } = await supabase
+    .from("client_profiles")
+    .select(ALLOWED.join(","))
+    .eq("id", params.id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
   updates.updated_at = new Date().toISOString();
 
   const { error } = await supabase
@@ -42,6 +50,28 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  const previous: Record<string, unknown> = {};
+  if (existing) {
+    const before = existing as unknown as Record<string, unknown>;
+    for (const key of Object.keys(updates)) {
+      if (key === "updated_at") continue;
+      previous[key] = before[key] ?? null;
+    }
+  }
+  const newValue: Record<string, unknown> = { ...updates };
+  delete newValue.updated_at;
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "profile_updated",
+    entity_type: "client_profile",
+    entity_id: params.id,
+    previous_value: previous,
+    new_value: newValue,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 function getServicePrefix(templateName: string): string {
   const name = templateName.toLowerCase();
@@ -106,9 +107,38 @@ export async function POST(request: Request) {
     const { error: rolesErr } = await supabase.from("profile_service_roles").insert(roleRows);
     if (rolesErr) {
       // Service created but roles failed — don't roll back, just report
+      await writeAuditLog(supabase, {
+        actor_id: session.user.id,
+        actor_role: "admin",
+        actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+        action: "service_created",
+        entity_type: "service",
+        entity_id: service.id,
+        previous_value: null,
+        new_value: {
+          service_number: serviceNumber,
+          service_template_id: body.service_template_id,
+          status: "draft",
+        },
+      });
       return NextResponse.json({ id: service.id, warning: `Service created but roles failed: ${rolesErr.message}` });
     }
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "service_created",
+    entity_type: "service",
+    entity_id: service.id,
+    previous_value: null,
+    new_value: {
+      service_number: serviceNumber,
+      service_template_id: body.service_template_id,
+      status: "draft",
+    },
+  });
 
   return NextResponse.json({ id: service.id });
 }

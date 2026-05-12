@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { recordFieldProvenance } from "@/lib/ai/recordProvenance";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function PATCH(
   request: Request,
@@ -85,6 +86,20 @@ export async function PATCH(
       source: "admin_override",
     });
   }
+
+  const auditNewValue: Record<string, unknown> = { ...updates };
+  delete auditNewValue.updated_at;
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "profile_kyc_updated",
+    entity_type: "client_profile",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: auditNewValue,
+  });
 
   return NextResponse.json({ success: true });
 }

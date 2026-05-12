@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** PATCH /api/admin/document-types/[id] — Update a document type */
 export async function PATCH(
@@ -35,6 +36,12 @@ export async function PATCH(
 
   const supabase = createAdminClient();
 
+  const { data: existing } = await supabase
+    .from("document_types")
+    .select(ALLOWED.join(","))
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("document_types")
     .update(patch)
@@ -43,6 +50,23 @@ export async function PATCH(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  const previous: Record<string, unknown> = {};
+  const before = (existing ?? null) as unknown as Record<string, unknown> | null;
+  for (const key of Object.keys(patch)) {
+    previous[key] = before?.[key] ?? null;
+  }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "document_type_updated",
+    entity_type: "document_type",
+    entity_id: id,
+    previous_value: previous,
+    new_value: patch,
+  });
 
   return NextResponse.json({ ok: true });
 }

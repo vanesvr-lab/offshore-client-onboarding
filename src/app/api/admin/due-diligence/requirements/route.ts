@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { DueDiligenceRequirement } from "@/types";
 
 const CUMULATIVE: Record<string, string[]> = {
@@ -96,6 +97,22 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "dd_requirement_created",
+    entity_type: "due_diligence_requirement",
+    entity_id: data.id,
+    previous_value: null,
+    new_value: {
+      id: data.id,
+      level: body.level,
+      requirement_type: body.requirement_type,
+      label: body.label.trim(),
+    },
+  });
 
   return NextResponse.json({ id: data.id });
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function POST(
   request: Request,
@@ -18,8 +19,15 @@ export async function POST(
   const supabase = createAdminClient();
   const now = new Date().toISOString();
 
-  // End the current active period if there is one
+  let previousManagerAdminId: string | null = null;
   if (currentManagerId) {
+    const { data: prev } = await supabase
+      .from("client_account_managers")
+      .select("admin_id")
+      .eq("id", currentManagerId)
+      .maybeSingle();
+    previousManagerAdminId = (prev as { admin_id?: string } | null)?.admin_id ?? null;
+
     const { error } = await supabase
       .from("client_account_managers")
       .update({ ended_at: now })
@@ -37,6 +45,21 @@ export async function POST(
     assigned_by: session.user.id,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "account_manager_changed",
+    entity_type: "client",
+    entity_id: params.id,
+    previous_value: { admin_id: previousManagerAdminId },
+    new_value: { admin_id: adminId },
+    detail: {
+      previous_manager_id: previousManagerAdminId,
+      new_manager_id: adminId,
+    },
+  });
 
   revalidatePath(`/admin/clients/${params.id}`);
   return NextResponse.json({ success: true });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -57,6 +58,22 @@ export async function POST(request: Request) {
     .single();
 
   if (roleErr) return NextResponse.json({ error: roleErr.message }, { status: 500 });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "profile_created",
+    entity_type: "client_profile",
+    entity_id: kycRecord.id,
+    previous_value: null,
+    new_value: {
+      id: kycRecord.id,
+      full_name: body.fullName,
+      record_type: "individual",
+      role: body.role,
+    },
+  });
 
   revalidatePath(`/admin/clients/${body.clientId}`);
   return NextResponse.json({ kycRecord, profileRole });

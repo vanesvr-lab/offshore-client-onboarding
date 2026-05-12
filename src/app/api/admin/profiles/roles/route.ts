@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { ProfileRole } from "@/types";
 
 export async function GET(request: Request) {
@@ -58,5 +59,22 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "profile_role_added",
+    entity_type: "client_profile",
+    entity_id: body.kycRecordId,
+    previous_value: null,
+    new_value: {
+      role_id: (data as ProfileRole).id,
+      role: body.role,
+      shareholding_percentage: body.shareholdingPercentage ?? null,
+    },
+    detail: { role: body.role },
+  });
+
   return NextResponse.json({ role: data as ProfileRole });
 }

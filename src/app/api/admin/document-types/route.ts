@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** POST /api/admin/document-types — Create a new document type */
 export async function POST(request: Request) {
@@ -53,6 +54,22 @@ export async function POST(request: Request) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "document_type_created",
+    entity_type: "document_type",
+    entity_id: data.id,
+    previous_value: null,
+    new_value: {
+      id: data.id,
+      name: body.name.trim(),
+      category: body.category,
+      scope,
+    },
+  });
 
   return NextResponse.json({ id: data.id });
 }

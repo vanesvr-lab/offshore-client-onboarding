@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -98,6 +99,22 @@ export async function POST(request: Request) {
   if (links.length > 0) {
     await supabase.from("document_links").insert(links);
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "process_started",
+    entity_type: "process",
+    entity_id: process.id,
+    previous_value: null,
+    new_value: {
+      id: process.id,
+      client_id: clientId,
+      process_template_id: processTemplateId,
+      status: "collecting",
+    },
+  });
 
   revalidatePath(`/admin/clients/${clientId}`);
   return NextResponse.json({

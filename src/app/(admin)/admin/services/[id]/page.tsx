@@ -155,6 +155,9 @@ export default async function ServiceDetailPage({
 
     // Audit log entries for this service. Document audit rows (entity_type
     // "document") are pulled in via the parallel query below and merged.
+    // B-095 — also pulls service_created rows so the right-rail Status card
+    // can render "Created on … by <admin>" once a service exists in
+    // audit_log; no more hardcoded "by system" fallback.
     supabase
       .from("audit_log")
       .select("id, created_at, actor_id, actor_name, actor_role, action, entity_type, entity_id, previous_value, new_value, detail")
@@ -287,13 +290,14 @@ export default async function ServiceDetailPage({
     )
     .slice(0, 100);
 
-  // B-093 — find the most recent status_changed row for this service. The
-  // right-rail Status card reads it for the "Status updated on <date> by
-  // <name>" line. auditRes is already sorted DESC and scoped to
-  // entity_type='service' / entity_id=service.id, so a simple .find is fine.
+  // B-093 / B-095 — find the most recent activity row for this service for
+  // the right-rail Status card. We accept both `status_changed` (post-B-093)
+  // and `service_created` (post-B-095 forward-write or B-095 backfill) so
+  // that even brand-new services that haven't had a status change yet show
+  // "Created on <date> by <admin>" instead of the old hardcoded "by system".
   const lastStatusChange =
     ((auditRes.data ?? []) as unknown as ServiceAuditEntry[]).find(
-      (e) => e.action === "status_changed",
+      (e) => e.action === "status_changed" || e.action === "service_created",
     ) ?? null;
 
   const templateActions = (templateActionsRes.data ?? []) as unknown as ServiceTemplateAction[];

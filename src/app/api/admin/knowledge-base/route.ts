@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 // GET /api/admin/knowledge-base — list all entries (with optional filters)
 export async function GET(request: Request) {
@@ -70,6 +71,17 @@ export async function POST(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "kb_entry_created",
+    entity_type: "kb_entry",
+    entity_id: (data as { id: string }).id,
+    previous_value: null,
+    new_value: { id: (data as { id: string }).id, title, category },
+  });
 
   revalidatePath("/admin/settings/knowledge-base");
   return NextResponse.json({ entry: data });

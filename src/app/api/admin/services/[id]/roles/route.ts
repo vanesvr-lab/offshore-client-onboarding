@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** POST /api/admin/services/[id]/roles — Link an existing profile or create a new one */
 export async function POST(
@@ -134,6 +135,18 @@ export async function POST(
       { status: error.code === "23505" ? 409 : 500 }
     );
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "service_role_assigned",
+    entity_type: "service",
+    entity_id: id,
+    previous_value: null,
+    new_value: { role_id: data.id, role: body.role, client_profile_id: profileId },
+    detail: { role: body.role, profile_id: profileId },
+  });
 
   return NextResponse.json({ id: data.id, client_profile_id: profileId });
 }

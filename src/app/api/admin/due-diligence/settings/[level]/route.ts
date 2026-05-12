@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function PATCH(
   request: Request,
@@ -30,12 +31,36 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
+  const { data: existing } = await supabase
+    .from("due_diligence_settings")
+    .select(allowed.join(","))
+    .eq("level", params.level)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("due_diligence_settings")
     .update(update)
     .eq("level", params.level);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const previous: Record<string, unknown> = {};
+  const before = (existing ?? null) as unknown as Record<string, unknown> | null;
+  for (const key of Object.keys(update)) {
+    previous[key] = before?.[key] ?? null;
+  }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "dd_settings_updated",
+    entity_type: "due_diligence_settings",
+    entity_id: null,
+    previous_value: previous,
+    new_value: update,
+    detail: { level: params.level },
+  });
 
   return NextResponse.json({ success: true });
 }

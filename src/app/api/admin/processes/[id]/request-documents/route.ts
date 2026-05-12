@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -100,6 +101,21 @@ export async function POST(
         </div>
       </div>
     `,
+  });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "process_documents_requested",
+    entity_type: "process",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: {
+      process_document_ids: processDocumentIds,
+      requested_at: now,
+    },
+    detail: { document_names: docNames, email: ownerEmail },
   });
 
   return NextResponse.json({ success: true, emailSent: true });

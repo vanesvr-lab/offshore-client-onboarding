@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function GET(
   _request: Request,
@@ -51,10 +52,10 @@ export async function PATCH(
 
   const supabase = createAdminClient();
 
-  // Fetch process to get client_id for revalidation
+  // Fetch process to get client_id for revalidation + previous values for audit
   const { data: proc } = await supabase
     .from("client_processes")
-    .select("client_id")
+    .select("client_id, status, notes")
     .eq("id", params.id)
     .single();
 
@@ -64,6 +65,22 @@ export async function PATCH(
     .eq("id", params.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const previous: Record<string, unknown> = {};
+  for (const key of Object.keys(updates)) {
+    previous[key] = (proc as Record<string, unknown> | null)?.[key] ?? null;
+  }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "process_updated",
+    entity_type: "process",
+    entity_id: params.id,
+    previous_value: previous,
+    new_value: updates,
+  });
 
   if (proc?.client_id) revalidatePath(`/admin/clients/${proc.client_id}`);
   return NextResponse.json({ success: true });

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import { SignJWT } from "jose";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -89,10 +90,23 @@ export async function POST(
     );
   }
 
+  const sentAt = new Date().toISOString();
   await supabase
     .from("clients")
-    .update({ invite_sent_at: new Date().toISOString() })
+    .update({ invite_sent_at: sentAt })
     .eq("id", params.id);
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "client_invite_sent",
+    entity_type: "client",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: { sent_at: sentAt },
+    detail: { email },
+  });
 
   revalidatePath(`/admin/clients/${params.id}`);
   return NextResponse.json({ success: true, emailId: emailResult?.id });

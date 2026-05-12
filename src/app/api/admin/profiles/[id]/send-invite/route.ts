@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -132,6 +133,18 @@ export async function POST(
       invite_sent_by: session.user.id,
     })
     .eq("id", params.id);
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "profile_invite_sent",
+    entity_type: "client_profile",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: { sent_at: sentAt },
+    detail: { email: record.email },
+  });
 
   return NextResponse.json({ success: true, sentAt });
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 interface CreateClientBody {
   fullName: string;
@@ -134,6 +135,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: orgKycError.message }, { status: 500 });
     }
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "client_created",
+    entity_type: "client",
+    entity_id: clientData.id,
+    previous_value: null,
+    new_value: {
+      id: clientData.id,
+      company_name: companyName,
+      client_type: clientType,
+    },
+  });
 
   revalidatePath("/admin/clients");
   revalidatePath("/admin/dashboard");

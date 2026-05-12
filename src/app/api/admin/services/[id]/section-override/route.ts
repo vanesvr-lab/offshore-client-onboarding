@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** POST /api/admin/services/[id]/section-override — Upsert a RAG section override */
 export async function POST(
@@ -27,6 +28,14 @@ export async function POST(
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
+  const { data: existing } = await supabase
+    .from("service_section_overrides")
+    .select("override_status, admin_note")
+    .eq("service_id", id)
+    .eq("section_key", body.section_key)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("service_section_overrides")
     .upsert(
@@ -45,6 +54,24 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "service_section_override_set",
+    entity_type: "service",
+    entity_id: id,
+    previous_value: (existing as Record<string, unknown> | null) ?? null,
+    new_value: {
+      override_status: body.override_status,
+      admin_note: body.admin_note ?? null,
+    },
+    detail: {
+      section_key: body.section_key,
+      override: body.override_status,
+    },
+  });
 
   return NextResponse.json({ ok: true });
 }

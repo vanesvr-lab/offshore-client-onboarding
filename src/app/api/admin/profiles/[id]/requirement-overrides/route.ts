@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** POST /api/admin/profiles/[id]/requirement-overrides — Waive a DD requirement for a profile */
 export async function POST(
@@ -54,6 +55,20 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "requirement_override_added",
+    entity_type: "client_profile",
+    entity_id: profileId,
+    previous_value: null,
+    new_value: {
+      requirement_id: body.requirement_id,
+      reason: body.reason?.trim() || null,
+    },
+  });
 
   return NextResponse.json({ override: data });
 }

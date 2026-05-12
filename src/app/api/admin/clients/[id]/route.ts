@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 const ALLOWED_FIELDS = [
   "company_name",
@@ -34,12 +35,40 @@ export async function PATCH(
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
-  const { error } = await createAdminClient()
+  const supabase = createAdminClient();
+
+  const { data: existing } = await supabase
+    .from("clients")
+    .select(ALLOWED_FIELDS.join(","))
+    .eq("id", params.id)
+    .maybeSingle();
+
+  const { error } = await supabase
     .from("clients")
     .update(updates)
     .eq("id", params.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const previous: Record<string, unknown> = {};
+  if (existing) {
+    const before = existing as unknown as Record<string, unknown>;
+    for (const key of Object.keys(updates)) {
+      previous[key] = before[key] ?? null;
+    }
+  }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "client_updated",
+    entity_type: "client",
+    entity_id: params.id,
+    previous_value: previous,
+    new_value: updates,
+  });
+
   revalidatePath("/admin/clients");
   revalidatePath(`/admin/clients/${params.id}`);
   return NextResponse.json({ success: true });

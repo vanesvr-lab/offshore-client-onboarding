@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 /** POST /api/admin/role-requirements — Add a document type requirement for a role */
 export async function POST(request: Request) {
@@ -55,6 +56,21 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "role_requirement_created",
+    entity_type: "role_requirement",
+    entity_id: data.id,
+    previous_value: null,
+    new_value: {
+      id: data.id,
+      role: body.role,
+      document_type_id: body.document_type_id,
+    },
+  });
 
   return NextResponse.json({ id: data.id });
 }

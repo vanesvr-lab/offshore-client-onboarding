@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { KYC_PREFILLABLE_FIELDS } from "@/lib/constants/prefillFields";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import type { AiExtractionField } from "@/types";
 
 interface PatchBody {
@@ -89,6 +90,17 @@ export async function PATCH(
     .eq("id", params.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await writeAuditLog(supabase, {
+    actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
+    action: "document_type_rules_updated",
+    entity_type: "document_type",
+    entity_id: params.id,
+    previous_value: null,
+    new_value: update,
+  });
 
   revalidatePath("/admin/settings/rules");
 

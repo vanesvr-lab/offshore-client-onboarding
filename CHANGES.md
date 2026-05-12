@@ -13,6 +13,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-12 — B-095 — Audit-log coverage sweep + service-created backfill (Claude Code)
+
+Closed the audit-coverage gap that caused the right-rail Status card to read "Created on <date> by system" on existing services.
+
+- Added `writeAuditLog` calls to every admin mutation route that didn't already audit — Tier A (operational data: services, clients, profiles, roles, invites, applications, processes, document-update requests) and Tier B (configuration: document types, KB, role requirements, templates, due diligence). Action-name table in the brief; each call passes `actor_name: session.user.name ?? session.user.email ?? "Unknown user"` (no DB lookups, per B-094).
+- Skipped routes that already audit (the 16 listed in the brief), `migrations/*`, and `audit-trail/route.ts` (read-only).
+- Brief-table drift noted (routes that didn't have the listed HTTP method, so the row was skipped): `profiles-v2/[id]` no DELETE handler; `document-types/[id]` no DELETE; `role-requirements/[id]` no PATCH; `due-diligence/requirements/[id]` no PATCH. Created entities still audit on POST/PATCH where the handlers exist. `clients/[id]/account-manager` is actually POST (brief listed PATCH) — minor verb drift, kept the audit since the intent is unchanged.
+- Migrations:
+  - `20260512152321_audit_backfill_entity_created.sql` — accidentally pushed empty (created via `supabase migration new` then writing failed before the file was saved). Tracked as a no-op on prod.
+  - `20260512152400_audit_backfill_entity_created_data.sql` — the actual backfill: inserts `service_created`, `client_created`, and `profile_created` audit rows for every existing services / clients / client_profiles row that doesn't already have one, attributed to `Jane Doe`, timestamped at `entity.created_at`. Looks up Jane via `public.users` (new auth table) first, falls back to `public.profiles` (legacy). Pushed via `npm run db:push`; `db:status` confirms Local + Remote match for both.
+- B-093 Status card query in [services/[id]/page.tsx](src/app/(admin)/admin/services/[id]/page.tsx) broadened from "find first `status_changed`" to "find first row whose action is `status_changed` or `service_created`". Display in [ServiceDetailClient.tsx](src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx) flips between "Status updated" and "Created" based on the row's `action`. The hardcoded fallback `"by system"` string is **removed entirely** — if no audit row is found at all (only happens mid-create), the line just shows the date without an actor. `"Unknown user"` is now the regression flag if a new code path forgets to call `writeAuditLog`.
+
+Tech debt: deferred a `buildAuditDiff(before, after, fields)` helper to standardise `previous_value` / `new_value` snapshots across routes — entry added to [docs/tech-debt.md](docs/tech-debt.md).
+
+Smoke test: deferred to Vanessa (per CLAUDE.md "test in browser" rule — no dev server restart in this brief). Forward-write paths exercised by `npm run build` (type check + lint clean). Backfill verified via `db:status` paired Local + Remote.
+`npm run build` clean. `npm run db:status` confirms migrations pushed.
+
+---
+
 ### 2026-05-12 — B-094 — Eliminate "System" attribution from audit trail (Claude Code)
 
 Audit trail was showing many entries as "System" because the `writeAuditLog` utility didn't accept an `actor_name` parameter — every caller wrote `actor_name = null`, and the [AuditTrail.tsx](src/components/admin/AuditTrail.tsx) fallback (`entry.actor_name || entry.profiles?.full_name || "System"`) surfaced the null as **System**.
