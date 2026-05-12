@@ -14,7 +14,7 @@
 Three small visual / wording changes:
 
 1. **Status badge font.** The right-rail Status card displays the current-status badge (`Verification`, `In Review`, etc.) at `text-xs` (12 px) while the surrounding `"Current status:"` label is `text-sm` (14 px). Vanessa wants them matched at `text-sm` so the badge reads as a peer of the label, not a footnote.
-2. **"Account Service Owner" → "Assigned Officer".** Pure label rename in the right rail. The dropdown is already sourced from `admin_users` (verified — see `page.tsx:152`). When future roles (officer, supervisor, super-user) are added, those will need a separate data model; out of scope here per Vanessa's explicit call.
+2. **"Account Service Owner" → "Assigned Officer" + fix broken dropdown.** Label rename in the right rail; PLUS fix a latent bug — the dropdown query at `page.tsx:152` filters by a `tenant_id` column that doesn't exist on `admin_users`, so the dropdown silently renders empty. Removing the bad filter restores the 3 admins (Jane Doe, Sarah Mitchell, Tony Stark) that exist in the DB. When future roles (officer, supervisor, super-user) are added, those will need a separate data model; out of scope here per Vanessa's explicit call.
 3. **Pill-shaped buttons + tighter horizontal padding.** Across the whole admin portal — and, because the cleanest path is a single change to the shared `Button` component, the client portal too. Reference screenshots from Vanessa showed fully-rounded pill buttons with comfortable but not overstuffed horizontal padding.
 
 After this brief: Status badge reads same size as its label; the panel title says "Assigned Officer"; every `<Button>` in the app is pill-shaped with one Tailwind step less horizontal padding.
@@ -46,16 +46,16 @@ Find the Status card section (around line ~3650-3672 after B-093 landed). The cu
 
 Change `text-xs` → `text-sm`. Keep everything else identical. Result: the badge sits at the same visual weight as the `"Current status:"` label next to it.
 
-## Step 2 — Rename "Account Service Owner" → "Assigned Officer"
+## Step 2 — Rename label + fix broken dropdown query
 
-Same file as Step 1, around line ~3800.
+### 2a. Label rename
+
+In [`ServiceDetailClient.tsx`](src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx) around line ~3800:
 
 ```diff
 -<p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Service Owner</p>
 +<p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned Officer</p>
 ```
-
-No other code changes needed. The dropdown source is already `admin_users` ([`page.tsx:152`](src/app/(admin)/admin/services/[id]/page.tsx:152)). The `_assigned_admin_id` field name stays — it's an internal identifier; the UI label is what users see.
 
 Quick grep to confirm no other places use the old label:
 
@@ -63,7 +63,28 @@ Quick grep to confirm no other places use the old label:
 grep -rn "Account Service Owner" --include='*.tsx' src/
 ```
 
-If matches exist elsewhere (e.g., a different panel header), rename those too for consistency. If none, this step is done.
+If matches exist elsewhere (e.g., a different panel header, a related component), rename those too for consistency.
+
+### 2b. Fix the broken dropdown query
+
+The dropdown today renders empty even though there are 3 admins in the DB (Jane Doe, Sarah Mitchell, Tony Stark). Root cause verified against live data: the query at [`page.tsx:152-154`](src/app/(admin)/admin/services/[id]/page.tsx:152) filters by a `tenant_id` column that doesn't exist on `admin_users`. The `admin_users` table only has `id, user_id, created_at` — no `tenant_id`. The filter throws a Postgres error and the page silently swallows it, leaving the dropdown empty.
+
+Fix: drop the non-existent filter.
+
+```diff
+   // Admin users for manager dropdown
+   supabase
+     .from("admin_users")
+-    .select("user_id, users(full_name, email)")
+-    .eq("tenant_id", tenantId),
++    .select("user_id, users(full_name, email)"),
+```
+
+`admin_users` is global (not tenant-scoped). All admins are eligible to be Assigned Officer. If multi-tenant scoping of officers is needed in the future, that's a separate schema change (add `tenant_id` column + migration) — out of scope here.
+
+After this, the dropdown should populate with the 3 existing admin users. Verify by opening any `/admin/services/[id]` page after the change.
+
+The `_assigned_admin_id` field on `service_details` (where the selected user_id is stored) stays as-is — it's an internal identifier, not a UI string.
 
 ## Step 3 — Pill-shape every Button (shared component)
 
@@ -162,7 +183,7 @@ If any text gets clipped or any button visibly breaks because of the tighter pad
 Three visual changes bundled.
 
 - **Status badge size:** bumped current-status badge in the right-rail Status card from `text-xs` to `text-sm` — same visual weight as the "Current status:" label.
-- **"Account Service Owner" → "Assigned Officer":** label rename only. Dropdown source is already `admin_users` (verified). Underlying `service_details._assigned_admin_id` field name unchanged.
+- **"Account Service Owner" → "Assigned Officer" + dropdown fix:** label rename in the right rail. Removed an `.eq("tenant_id", tenantId)` filter from the dropdown's admin-users query at `page.tsx:152` — that column doesn't exist on `admin_users` so the query was failing silently and the dropdown was rendering empty. After the fix, all 3 existing admins surface. Underlying `service_details._assigned_admin_id` field name unchanged.
 - **Pill-shaped buttons (global):** `Button` component default radius `rounded-lg` → `rounded-full`; size variants' radii updated; horizontal padding shaved by one Tailwind step per variant. Plus `BTN_PRIMARY` / `BTN_OUTLINE` / `BTN_DESTRUCTIVE_OUTLINE` constants in `ServiceDetailClient.tsx` (used 22 times) flipped `rounded-md` → `rounded-full`. Inline `rounded-md` / `rounded-lg` on buttons across admin pages swept and updated. Client portal also picks up the change (single source of truth in the shared Button component).
 
 Smoke test: <pass/fail notes from Step 6>.
