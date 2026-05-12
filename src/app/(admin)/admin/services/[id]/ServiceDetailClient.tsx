@@ -794,7 +794,7 @@ function KycLongFormSection({
     return v != null && v !== "";
   });
   return (
-    <div className="border rounded-lg overflow-hidden scroll-mt-52" id={sectionAnchorId}>
+    <div className="border rounded-lg overflow-hidden scroll-mt-80" id={sectionAnchorId}>
       <div
         onClick={onToggle}
         role="button"
@@ -1879,7 +1879,7 @@ function PersonCard({
   return (
     <div
       id={`person-card-${profile.id}`}
-      className="border rounded-xl overflow-hidden scroll-mt-52"
+      className="border rounded-xl overflow-hidden scroll-mt-80"
     >
       {/* ── Clickable header ─────────────────────────────────────────── */}
       {/* B-080..B-082 evolved a #7dbbe3 pill from a tight wrapper around
@@ -3631,7 +3631,7 @@ export function ServiceDetailClient({
             shell above (back link + title card + stage strip + step
             indicator); Vanessa can tune visually if needed. On <lg the
             rail stacks below the main column with normal scrolling. */}
-      <div className="lg:sticky lg:top-[200px] lg:self-start lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto space-y-3">
+      <div className="lg:sticky lg:top-[300px] lg:self-start lg:max-h-[calc(100vh-320px)] lg:overflow-y-auto space-y-3">
 
         {/* B-091 — service-level View Summary entry point. Lives at the
               very top of the right rail so it's the first action visible

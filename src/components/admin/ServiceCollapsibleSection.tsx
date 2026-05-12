@@ -79,8 +79,8 @@ export function ServiceCollapsibleSection({
       id={anchorId}
       className={
         isStep
-          ? "overflow-hidden scroll-mt-52 border border-gray-900 shadow-sm"
-          : "overflow-hidden scroll-mt-52 border border-gray-200 shadow-sm"
+          ? "overflow-hidden scroll-mt-80 border border-gray-900 shadow-sm"
+          : "overflow-hidden scroll-mt-80 border border-gray-200 shadow-sm"
       }
     >
       <div className={`flex items-center gap-2 ${isStep ? "px-2 py-2" : "px-5 py-4"}`}>

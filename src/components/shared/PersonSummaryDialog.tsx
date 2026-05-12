@@ -207,7 +207,7 @@ export function PersonSummaryDialog({
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto z-[100]">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto z-[100]">
         <DialogHeader>
           <DialogTitle>{personName} — Summary</DialogTitle>
         </DialogHeader>

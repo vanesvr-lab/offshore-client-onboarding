@@ -426,7 +426,7 @@ export function ServiceSummaryDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto z-[100]">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto z-[100]">
         <DialogHeader>
           <DialogTitle>
             {service.service_templates?.name ?? "Service"} — {titleSuffix}

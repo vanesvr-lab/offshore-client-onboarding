@@ -13,6 +13,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-12 — B-092 — Fix scroll landing + widen summary modals (Claude Code)
+
+Tactical visual fix following B-090 / B-091.
+
+- `scroll-mt-52` → `scroll-mt-80` (208 px → 320 px) on every section anchor: [ServiceCollapsibleSection.tsx](src/components/admin/ServiceCollapsibleSection.tsx) (both step + default branches), `KycLongFormSection`, `PersonCard` (both in [ServiceDetailClient.tsx](src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx)). The sticky top bar is ~290 px tall, so the previous 208 px margin left the target section behind the bar — every Edit click visually landed on the next section. Bumping to 320 px clears the bar with a small buffer.
+- Right rail offset: `lg:top-[200px]` → `lg:top-[300px]`, `lg:max-h-[calc(100vh-220px)]` → `lg:max-h-[calc(100vh-320px)]`. Same 20 px buffer between the bar bottom and the rail top, at the corrected offset.
+- [PersonSummaryDialog.tsx](src/components/shared/PersonSummaryDialog.tsx) width: `max-w-3xl` → `max-w-5xl` (768 px → 1024 px).
+- [ServiceSummaryDialog.tsx](src/components/admin/ServiceSummaryDialog.tsx) width: `max-w-4xl` → `max-w-5xl` (896 px → 1024 px). Both modals now share one width; long field labels in the read-only grids no longer trigger horizontal scroll.
+
+No auto-expand on landing — Vanessa explicitly chose the no-auto-expand option (B-092 Q1=a). Admin still clicks Show to expand the target subsection after the scroll lands.
+
+`npm run build` clean. Manual smoke test pending after dev-server restart.
+
+---
+
 ### 2026-05-11 — B-091 — Profile sort + service-level summary modal (Claude Code)
 
 `/admin/services/[id]` — two related additions on top of B-090.
