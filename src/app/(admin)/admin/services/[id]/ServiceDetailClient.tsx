@@ -54,6 +54,7 @@ import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
+import { formatDate } from "@/lib/utils/formatters";
 import {
   KYC_SECTIONS_INDIVIDUAL,
   KYC_SECTIONS_ORGANISATION,
@@ -2773,6 +2774,30 @@ interface Props {
   substance: ServiceSubstance | null;
   // B-070 — provenance rows for the per-field marker UI in KYC views.
   fieldExtractions: FieldExtraction[];
+  // B-093 — most recent status_changed audit row for this service. Used by
+  // the right-rail Status card to render "Status updated on <date> by
+  // <name>". Null when status has never been changed since service creation.
+  lastStatusChange: ServiceAuditEntry | null;
+}
+
+// B-093 — canonical forward chain for the Status card's "Move to <next>"
+// button. Mirrors the existing stage strip at the top of the page.
+// pending_action and rejected are off-path side states — they have no
+// "next" in the forward chain and render the button disabled.
+const FORWARD_CHAIN = [
+  "draft",
+  "in_progress",
+  "submitted",
+  "in_review",
+  "verification",
+  "approved",
+] as const;
+type ForwardStage = (typeof FORWARD_CHAIN)[number];
+
+function getNextStage(current: string): ForwardStage | null {
+  const idx = (FORWARD_CHAIN as readonly string[]).indexOf(current);
+  if (idx === -1 || idx === FORWARD_CHAIN.length - 1) return null;
+  return FORWARD_CHAIN[idx + 1];
 }
 
 const STATUS_OPTIONS = [
@@ -2813,6 +2838,7 @@ export function ServiceDetailClient({
   actionsByKey,
   substance,
   fieldExtractions,
+  lastStatusChange,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -3050,10 +3076,30 @@ export function ServiceDetailClient({
       if (!res.ok) throw new Error(data.error ?? "Failed");
       setService((prev) => ({ ...prev, status: status as typeof prev.status }));
       toast.success("Status updated");
+      // B-093 — refresh so the page re-fetches the latest status_changed
+      // audit row written by the PATCH route; the Status card's
+      // "updated on <date> by <name>" line reflects it on the next render.
+      router.refresh();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
       setUpdatingStatus(false);
+    }
+  }
+
+  // B-093 — Stage Override confirmation flow. Selecting a non-current
+  // value from the override <select> stages the target here; the
+  // confirmation Dialog renders when this is non-null. Confirming runs
+  // updateStatus; cancelling clears the state.
+  const [pendingOverride, setPendingOverride] = useState<string | null>(null);
+  function requestOverride(target: string) {
+    if (!target || target === service.status) return;
+    setPendingOverride(target);
+  }
+  function confirmOverride() {
+    if (pendingOverride) {
+      void updateStatus(pendingOverride);
+      setPendingOverride(null);
     }
   }
 
@@ -3647,29 +3693,107 @@ export function ServiceDetailClient({
             : "View Service Summary"}
         </Button>
 
-        {/* ── Status Change ───────────────────────────────────────────────── */}
-        <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
+        {/* ── Status Change (B-093) ───────────────────────────────────────
+              Four-row layout: label → current status badge → "updated on
+              <date> by <name>" → action row (forward Move + Override
+              dropdown). Forward button advances along FORWARD_CHAIN;
+              greyed at terminals. Override fires a confirmation Dialog
+              before applying. */}
+        <div className="bg-white border rounded-xl px-4 py-3 space-y-2">
+          {/* Row 1 — label */}
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</p>
+
+          {/* Row 2 — current status */}
           <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-700">Current status:</span>
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadgeClass(service.status)}`}>
               {service.status.replace(/_/g, " ")}
             </span>
-            <div className="relative flex-1">
-              <select
-                value={service.status}
-                onChange={(e) => void updateStatus(e.target.value)}
-                disabled={updatingStatus}
-                className="w-full h-8 rounded-lg border border-gray-200 pl-2 pr-6 text-xs appearance-none bg-white cursor-pointer"
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-            </div>
-            {updatingStatus && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
           </div>
+
+          {/* Row 3 — updated-on-by (fallback: created-on by system) */}
+          <p className="text-xs text-gray-500">
+            {lastStatusChange ? (
+              <>
+                Status updated on{" "}
+                <span className="text-gray-700">{formatDate(lastStatusChange.created_at)}</span>{" "}
+                by{" "}
+                <span className="text-gray-700">{lastStatusChange.actor_name ?? "system"}</span>
+              </>
+            ) : (
+              <>
+                Created on{" "}
+                <span className="text-gray-700">{formatDate(service.created_at)}</span>{" "}
+                by <span className="text-gray-700">system</span>
+              </>
+            )}
+          </p>
+
+          {/* Row 4 — actions */}
+          {(() => {
+            const nextStage = getNextStage(service.status);
+            const isTerminal = nextStage === null;
+            const nextLabel = (nextStage ?? "approved").replace(/_/g, " ");
+            return (
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  onClick={() => nextStage && void updateStatus(nextStage)}
+                  disabled={isTerminal || updatingStatus}
+                  className={`flex-1 h-9 text-xs capitalize ${BTN_PRIMARY} ${isTerminal ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  Move to {nextLabel}
+                </Button>
+
+                <div className="relative">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      requestOverride(e.target.value);
+                      e.currentTarget.value = "";
+                    }}
+                    disabled={updatingStatus}
+                    className="h-9 rounded-md border border-gray-300 bg-white pl-2.5 pr-6 text-xs cursor-pointer appearance-none hover:bg-gray-50"
+                  >
+                    <option value="">Stage Override</option>
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s} disabled={s === service.status}>
+                        {s.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                </div>
+
+                {updatingStatus && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+              </div>
+            );
+          })()}
         </div>
+
+        {/* B-093 — Override confirmation dialog. Forward "Move to" doesn't
+             need confirmation (normal flow); only overrides do. */}
+        <Dialog open={pendingOverride !== null} onOpenChange={(open) => { if (!open) setPendingOverride(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Override status?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-gray-600">
+              This will change status from{" "}
+              <span className="font-semibold capitalize">{service.status.replace(/_/g, " ")}</span>{" "}
+              to{" "}
+              <span className="font-semibold capitalize">{(pendingOverride ?? "").replace(/_/g, " ")}</span>.{" "}
+              Use this for corrections only — normal flow advances via the &quot;Move to&quot; button.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPendingOverride(null)}>
+                Cancel
+              </Button>
+              <Button onClick={confirmOverride} className={BTN_PRIMARY}>
+                Override
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* ── Account Service Owner ───────────────────────────────────────── */}
         <div className="bg-white border rounded-xl px-4 py-3 space-y-3">

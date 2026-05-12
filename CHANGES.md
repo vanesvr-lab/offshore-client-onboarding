@@ -13,6 +13,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-12 — B-093 — Right-rail Status card redesign (Claude Code)
+
+`/admin/services/[id]` right rail — Status card restructured into 4 rows.
+
+- **New layout, 4 rows:** STATUS label → "Current status: \<badge\>" → "Status updated on \<date\> by \<name\>" → `Move to <next>` button + `Stage Override` dropdown. Markup lives in [ServiceDetailClient.tsx](src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx) at the top of the right rail; replaces the prior 1-row badge + flat `<select>`.
+- **Forward-motion button** advances along the canonical chain (`draft → in_progress → submitted → in_review → verification → approved`). `pending_action` and `rejected` are off-path. Greyed at terminals + off-path; label stays `Move to Approved` so the layout doesn't shift. `getNextStage` helper added next to `STATUS_OPTIONS`.
+- **Stage Override** is a native `<select>` (no DropdownMenu wrapper exists in this codebase per CLAUDE.md gotchas — falling back to native per brief Step 2 guidance). Lists all 8 statuses with the current one disabled; selecting any other value stages a `pendingOverride` and opens a confirmation `Dialog` (reusing the existing `@/components/ui/dialog` per brief Step 4) with Cancel + Override buttons. Forward "Move to" still has no confirmation — safe normal flow.
+- **Audit-log write added** to [PATCH /api/admin/services/[id]/route.ts](src/app/api/admin/services/[id]/route.ts). Previously this route didn't log status changes at all (no DB trigger on `services` either — verified via grep across `supabase/migrations/` and `supabase/schema.sql`). Each `status` patch now: looks up the previous status, runs the update, looks up the actor's `users.full_name`, and inserts an `audit_log` row with `action='status_changed'`, `entity_type='service'`, `entity_id=service.id`, `actor_role='admin'`, `actor_name=<full_name>`, `previous_value={status}`, `new_value={status}`. Non-status patches are untouched — no extra writes for milestones, `service_details`, etc.
+- **`lastStatusChange` prop** threaded into `ServiceDetailClient` from [page.tsx](src/app/(admin)/admin/services/[id]/page.tsx). Derived from the existing `auditRes` (already scoped to `entity_type='service' AND entity_id=:id` ORDER BY created_at DESC LIMIT 100) by `.find(e => e.action === 'status_changed')`; no extra query. Falls back to `"Created on <service.created_at> by system"` when null.
+- **`updateStatus` now calls `router.refresh()`** after the toast so the newly-written audit row flows back through the RSC roundtrip and the "updated on / by" line refreshes without a manual reload.
+
+**Action-string predicate verification:** brief asked to verify against live data. Verified instead via source: no DB trigger writes service status rows (`supabase/schema.sql` only has `log_application_status_change` for `applications`); the prior PATCH route at `/api/admin/services/[id]/route.ts` had no audit insert. So no live status-change rows exist yet — first one will be written by this brief's PATCH change using the mirror-of-applications string `'status_changed'`. The `.find` in page.tsx looks for that exact string.
+
+**Tech debt — B-093 follow-up.** The Status card currently reads the most-recent status-change row from `audit_log` on every page render (filtered from the existing 100-row fetch — no extra query, but the fetch itself still scans). Consider denormalising `status_changed_at` / `status_changed_by` columns onto `services` via migration + trigger so the page can read them with the rest of the row. Out of scope for this brief.
+
+Smoke test pending after dev-server restart (Vanessa). `npm run build` clean.
+
+---
+
 ### 2026-05-12 — B-092 — Fix scroll landing + widen summary modals (Claude Code)
 
 Tactical visual fix following B-090 / B-091.

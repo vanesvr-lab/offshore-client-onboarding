@@ -287,6 +287,15 @@ export default async function ServiceDetailPage({
     )
     .slice(0, 100);
 
+  // B-093 — find the most recent status_changed row for this service. The
+  // right-rail Status card reads it for the "Status updated on <date> by
+  // <name>" line. auditRes is already sorted DESC and scoped to
+  // entity_type='service' / entity_id=service.id, so a simple .find is fine.
+  const lastStatusChange =
+    ((auditRes.data ?? []) as unknown as ServiceAuditEntry[]).find(
+      (e) => e.action === "status_changed",
+    ) ?? null;
+
   const templateActions = (templateActionsRes.data ?? []) as unknown as ServiceTemplateAction[];
   let actionInstances = (existingActionsRes.data ?? []) as unknown as ServiceAction[];
   const haveKeys = new Set(actionInstances.map((a) => a.action_key));
@@ -341,6 +350,7 @@ export default async function ServiceDetailPage({
         actionsByKey={actionsByKey}
         substance={substance}
         fieldExtractions={(fieldExtractionsRes.data ?? []) as unknown as FieldExtraction[]}
+        lastStatusChange={lastStatusChange}
       />
     </div>
   );
