@@ -147,11 +147,12 @@ export default async function ServiceDetailPage({
       .eq("is_deleted", false)
       .order("full_name"),
 
-    // Admin users for manager dropdown
+    // Admin users for manager dropdown — admin_users is global (no tenant_id
+    // column). All admins are eligible Assigned Officers; future role-scoped
+    // filtering needs a separate schema change.
     supabase
       .from("admin_users")
-      .select("user_id, users(full_name, email)")
-      .eq("tenant_id", tenantId),
+      .select("user_id, users(full_name, email)"),
 
     // Audit log entries for this service. Document audit rows (entity_type
     // "document") are pulled in via the parallel query below and merged.

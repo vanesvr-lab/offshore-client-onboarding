@@ -39,7 +39,7 @@ export function SectionReviewButton({
             : // B-084 Batch 2 — brand-navy outline for the standard tone so
               // every Review button on /admin/services/[id] reads as the
               // same family as the rest of the page.
-              "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-md"
+              "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-full"
         }
       >
         <ClipboardCheck className="size-3.5" />

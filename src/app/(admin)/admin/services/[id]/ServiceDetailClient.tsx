@@ -72,16 +72,16 @@ const isKycDoc = (category: string | null | undefined): boolean =>
   (KYC_DOC_CATEGORIES as readonly string[]).includes(category ?? "");
 
 // ─── B-084 Batch 2 — button family ────────────────────────────────────────────
-// Single navy/rounded-md family applied across every <Button> on this page.
+// Single navy/pill family applied across every <Button> on this page.
 // Status pills, role badges, and B-083 section pills are intentionally
 // untouched (they're not buttons). The Button component merges these with
 // its base via tw-merge, so later utility wins.
 const BTN_PRIMARY =
-  "bg-brand-navy hover:bg-brand-blue text-white rounded-md border-transparent";
+  "bg-brand-navy hover:bg-brand-blue text-white rounded-full border-transparent";
 const BTN_OUTLINE =
-  "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-md";
+  "bg-white hover:bg-gray-50 text-brand-navy hover:text-brand-navy border-brand-navy rounded-full";
 const BTN_DESTRUCTIVE_OUTLINE =
-  "bg-white hover:bg-red-50 text-red-600 hover:text-red-600 border-red-600 rounded-md";
+  "bg-white hover:bg-red-50 text-red-600 hover:text-red-600 border-red-600 rounded-full";
 
 // ─── Section field matchers (mirrors ServiceWizard STEP_SECTION_MATCH) ────────
 
@@ -3706,7 +3706,7 @@ export function ServiceDetailClient({
           {/* Row 2 — current status */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-700">Current status:</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusBadgeClass(service.status)}`}>
+            <span className={`text-sm px-2 py-0.5 rounded-full font-medium capitalize ${statusBadgeClass(service.status)}`}>
               {service.status.replace(/_/g, " ")}
             </span>
           </div>
@@ -3799,9 +3799,9 @@ export function ServiceDetailClient({
           </DialogContent>
         </Dialog>
 
-        {/* ── Account Service Owner ───────────────────────────────────────── */}
+        {/* ── Assigned Officer ────────────────────────────────────────────── */}
         <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Account Service Owner</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned Officer</p>
           <div className="relative">
             <select
               value={assignedAdminId ?? ""}

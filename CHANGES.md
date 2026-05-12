@@ -13,6 +13,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-12 — B-096 — Right-rail polish + pill-shaped buttons (Claude Code)
+
+Three visual changes bundled.
+
+- **Status badge size:** bumped current-status badge in the right-rail Status card from `text-xs` to `text-sm` (`ServiceDetailClient.tsx:3709`) — same visual weight as the "Current status:" label.
+- **"Account Service Owner" → "Assigned Officer" + dropdown fix:** label + comment renamed in the right rail (`ServiceDetailClient.tsx:3802-3804`). Removed an `.eq("tenant_id", tenantId)` filter from the dropdown's admin-users query (`page.tsx:152-154`) — `admin_users` has no `tenant_id` column, so the query was failing silently and the dropdown was rendering empty. After the fix, all 3 existing admins surface (Jane Doe, Sarah Mitchell, Tony Stark). Underlying `service_details._assigned_admin_id` field name unchanged.
+- **Pill-shaped buttons (global):** `Button` component base radius `rounded-lg` → `rounded-full` (`src/components/ui/button.tsx`). Size-variant radii (`xs`, `sm`, `icon-xs`, `icon-sm`) flipped from `rounded-[min(var(--radius-md),Npx)]` → `rounded-full`. Horizontal padding shaved one Tailwind step per variant: `default` `px-2.5`→`px-2`, `xs` `px-2`→`px-1.5`, `sm` `px-2.5`→`px-2`, `lg` `px-2.5`→`px-2`. `in-data-[slot=button-group]:rounded-lg` overrides preserved (grouped buttons stay non-pill by design). `BTN_PRIMARY` / `BTN_OUTLINE` / `BTN_DESTRUCTIVE_OUTLINE` constants in `ServiceDetailClient.tsx` (22 call sites) flipped `rounded-md` → `rounded-full`. Inline `rounded-md` on `<Button>` in `SectionReviewButton.tsx:42` swept. Client portal also picks up the change via the shared Button component.
+
+**Sweep notes:** three inline `rounded-lg` matches left unchanged because they're segmented controls / card list items, not pill-shape CTAs — per brief, "tab-style" buttons keep their existing radius:
+
+- `src/app/(admin)/admin/settings/templates/page.tsx:207` — full-width template-list card button
+- `src/components/admin/DueDiligenceSettingsManager.tsx:157` — Document/Field segmented toggle
+- `src/components/admin/CreateProfileDialog.tsx:83` — Individual/Organisation segmented toggle
+
+Padding kept at the reduced value for every size variant — no variant clipped or kissed the pill edge in the build.
+
+Smoke test deferred to user (dev server not auto-restarted per CLAUDE.md). `npm run build` clean.
+
+---
+
 ### 2026-05-12 — B-095 — Audit-log coverage sweep + service-created backfill (Claude Code)
 
 Closed the audit-coverage gap that caused the right-rail Status card to read "Created on <date> by system" on existing services.
