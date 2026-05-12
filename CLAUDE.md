@@ -79,6 +79,14 @@ Work is organized into numbered batches using the format `B-XXX` (e.g., B-025, B
 - In CHANGES.md: `## B-027 — KYC document layout rework (done YYYY-MM-DD)`
 - In commits: normal messages, no batch ID
 
+## Tech Debt Log
+
+Items deferred during brief work are tracked in `docs/tech-debt.md` — a
+single canonical list, newest at the top. Briefs that spawn a follow-up
+should append an entry there (not bury it in CHANGES.md). When a tech debt
+item is resolved, strike it through (`~~…~~`) so the history stays visible
+for ~30 days, then it can be removed.
+
 ## Tech Stack
 
 - **Framework**: Next.js 14 App Router, TypeScript, `src/` directory

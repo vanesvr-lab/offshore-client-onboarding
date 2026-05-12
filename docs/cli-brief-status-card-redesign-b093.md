@@ -209,11 +209,9 @@ If the existing function does `setService((prev) => ({ ...prev, status: status }
 
 ## Step 6 — Tech debt note
 
-Add a CHANGES.md follow-up flag (separate paragraph after the B-093 entry):
+The follow-up item (denormalising `status_changed_at` / `status_changed_by` onto `services`) is **already logged** in [`docs/tech-debt.md`](docs/tech-debt.md) under the 2026-05-12 entry. Do **not** add a duplicate note in CHANGES.md and do **not** open a separate brief for it in B-093 — the tech-debt file is the canonical place.
 
-> **Tech debt — B-093 follow-up.** The Status card currently reads the most-recent status-change actor + timestamp from `audit_log` on every render. For a hot page, that's an extra query. Consider denormalising `status_changed_at` / `status_changed_by` columns onto `services` via migration + trigger update so the page can read them with the rest of the row. Out of scope for this brief.
-
-Do **not** open a separate brief for this in B-093. Just leave the note for a future planning pass.
+If you discover any additional follow-ups while implementing B-093 that should be deferred (e.g. obvious refactors, unrelated cleanups), append them to `docs/tech-debt.md` in the same batch — newest at the top, follow the existing entry's format.
 
 ## Step 7 — Smoke test (manual; document in CHANGES.md)
 
@@ -245,7 +243,7 @@ If 1–10 fails, fix in the same batch.
 - **Override dropdown** lists all 8 status values; the current status is disabled; selecting any other value opens a confirmation AlertDialog before applying.
 - **Status updated on / by** queries the most recent `audit_log` row for `entity_type='service' AND entity_id=service.id` matching the status-change action predicate. Falls back to "Created on <service.created_at> by system" when no audit row exists. Query added in `page.tsx`; result threaded into `ServiceDetailClient` via new `lastStatusChange` prop.
 
-**Tech debt — follow-up:** consider denormalising `status_changed_at` / `status_changed_by` columns onto `services` so the page doesn't have to run a separate audit-log query for this card. Out of scope for B-093.
+Tech debt for this brief is logged in [`docs/tech-debt.md`](docs/tech-debt.md) — do not duplicate the note here.
 
 Smoke test: <pass/fail from Step 7>.
 `npm run build` clean.
