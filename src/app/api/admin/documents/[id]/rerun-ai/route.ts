@@ -143,6 +143,7 @@ export async function POST(
     await supabase.from("audit_log").insert({
       actor_id: session.user.id,
       actor_role: "admin",
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "document_ai_rerun",
       entity_type: "document",
       entity_id: params.id,

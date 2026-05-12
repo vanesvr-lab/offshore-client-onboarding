@@ -6,6 +6,9 @@
 // audit_log columns relevant to admin actions on a service:
 //   actor_id        — uuid of acting user
 //   actor_role      — "admin" | "client" | "system"
+//   actor_name      — snapshot of the actor's display name at write time
+//                     (B-094 — required so the audit trail UI never falls
+//                     back to "System" for app-layer writes)
 //   action          — short identifier ("section_review_saved", etc.)
 //   entity_type     — "service" | "document" | "application" | …
 //   entity_id       — id of the entity that the action applies to
@@ -18,6 +21,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export interface WriteAuditLogParams {
   actor_id: string;
   actor_role?: "admin" | "client" | "system";
+  // B-094 — required. Callers pass
+  //   session.user.name ?? session.user.email ?? "Unknown user"
+  // so we never write null and the UI never falls back to "System".
+  actor_name: string;
   action: string;
   entity_type: string;
   entity_id: string | null;
@@ -39,6 +46,7 @@ export async function writeAuditLog(
   const { error } = await supabase.from("audit_log").insert({
     actor_id: params.actor_id,
     actor_role: params.actor_role ?? "admin",
+    actor_name: params.actor_name,
     action: params.action,
     entity_type: params.entity_type,
     entity_id: params.entity_id,

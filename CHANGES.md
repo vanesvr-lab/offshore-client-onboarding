@@ -13,6 +13,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-12 — B-094 — Eliminate "System" attribution from audit trail (Claude Code)
+
+Audit trail was showing many entries as "System" because the `writeAuditLog` utility didn't accept an `actor_name` parameter — every caller wrote `actor_name = null`, and the [AuditTrail.tsx](src/components/admin/AuditTrail.tsx) fallback (`entry.actor_name || entry.profiles?.full_name || "System"`) surfaced the null as **System**.
+
+- **`writeAuditLog` utility now requires `actor_name: string`** ([src/lib/audit/writeAuditLog.ts](src/lib/audit/writeAuditLog.ts)). TypeScript flags every missed caller — that's the regression net.
+- **All 5 `writeAuditLog` call sites updated** (8 total invocations across the routes): `section-reviews`, `profiles/[id]/kyc-fields`, `services/[id]/substance` (×2), `services/[id]/actions` (×2), `services/[id]/documents/upload`. Each passes `session.user.name ?? session.user.email ?? "Unknown user"`.
+- **Inline status-change insert in [services/[id]/route.ts](src/app/api/admin/services/[id]/route.ts) simplified** — dropped the `users` table lookup added in B-093 + uses `session.user.name` directly. Saves one round-trip per status change.
+- **Sanity grep caught 11 more inline `audit_log` inserts that weren't passing `actor_name`** — all updated in the same brief: `kyc/[clientId]/dismiss-flag`, `kyc/submit` (system auto-approve — actor_name set to `'system'` to match `actor_role`), `admin/clients/[id]/due-diligence`, `admin/applications/[id]/stage` (also was missing `actor_role`), `admin/applications/[id]` (improved `?? null` to full fallback chain), `admin/documents/[id]/override` (missing `actor_role` too), `admin/documents/library/[id]/review`, `admin/documents/[id]/admin-status`, `admin/documents/[id]/rerun-ai`, `admin/profiles/[id]`, `send-email` (missing `actor_role`), `applications/[id]/submit` (client route — actor_role set to `"client"`). `admin/clients/[id]/delete` was already passing `actor_name`; left untouched.
+- **Migration: [20260512145046_audit_actor_name_fix.sql](supabase/migrations/20260512145046_audit_actor_name_fix.sql).** Two parts: (1) backfills `actor_name = 'Jane Doe'` on every existing row where it was null (Vanessa's call — testing data); (2) hardens `get_actor_info()` so when `auth.uid()` is null (service-role connections that bypass RLS), it falls back to session-local config (`app.actor_id` / `app.actor_role` / `app.actor_name`) before defaulting to `'system'`. Idempotent; `CREATE OR REPLACE FUNCTION` reuses the existing signature. Pushed via `npm run db:push`; `db:status` shows Local = Remote (19/19) with no drift.
+- **Schema design** kept option (a): `actor_id + actor_name` snapshot at write time. Historically accurate; no display-time join needed. Vanessa's call.
+
+UI fallback in `AuditTrail.tsx` (`actor_name || profiles?.full_name || "System"`) **intentionally left as-is** — it now serves as a regression flag if a future code path forgets to pass `actor_name`. Hard rule per brief.
+
+Tech debt: separate entry in [docs/tech-debt.md](docs/tech-debt.md) under 2026-05-12 for the `setActorContext` helper that admin routes would call before mutations. Future-proofing for DB-trigger audit writes — currently unused because no `services` trigger writes audit_log.
+
+Smoke test pending after dev-server restart (Vanessa). `npm run build` clean. `npm run db:status` confirms migration pushed cleanly.
+
+---
+
 ### 2026-05-12 — B-093 — Right-rail Status card redesign (Claude Code)
 
 `/admin/services/[id]` right rail — Status card restructured into 4 rows.

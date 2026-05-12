@@ -46,6 +46,7 @@ export async function PATCH(
     await supabase.from("audit_log").insert({
       actor_id: session.user.id,
       actor_role: "admin",
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "profile_dd_level_changed",
       entity_type: "kyc_record",
       entity_id: params.id,

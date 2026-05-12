@@ -50,7 +50,7 @@ export async function PATCH(
         application_id: params.id,
         actor_id: session.user.id,
         actor_role: "admin",
-        actor_name: session.user.name ?? null,
+        actor_name: session.user.name ?? session.user.email ?? "Unknown user",
         action: "field_updated",
         entity_type: "application",
         entity_id: params.id,

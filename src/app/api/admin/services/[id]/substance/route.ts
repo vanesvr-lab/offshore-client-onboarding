@@ -171,6 +171,7 @@ export async function PUT(
       await writeAuditLog(supabase, {
         actor_id: session.user.id,
         actor_role: "admin",
+        actor_name: session.user.name ?? session.user.email ?? "Unknown user",
         action: before
           ? "substance_review_updated"
           : "substance_review_saved",
@@ -203,6 +204,7 @@ export async function PUT(
     await writeAuditLog(supabase, {
       actor_id: session.user.id,
       actor_role: "admin",
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "substance_review_saved",
       entity_type: "service",
       entity_id: id,

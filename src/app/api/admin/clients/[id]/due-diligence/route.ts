@@ -44,6 +44,7 @@ export async function PATCH(
     await supabase.from("audit_log").insert({
       actor_id: session.user.id,
       actor_role: "admin",
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "due_diligence_level_changed",
       entity_type: "client",
       entity_id: params.id,

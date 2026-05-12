@@ -96,6 +96,7 @@ export async function POST(request: Request) {
       await supabase.from("audit_log").insert({
         actor_id: null,
         actor_role: "system",
+        actor_name: "system",
         action: "kyc_auto_approved",
         entity_type: "client",
         entity_id: clientId,

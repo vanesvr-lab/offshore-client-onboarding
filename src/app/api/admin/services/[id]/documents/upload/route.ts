@@ -118,6 +118,7 @@ export async function POST(
     await writeAuditLog(supabase, {
       actor_id: session.user.id,
       actor_role: "admin",
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "document_replaced",
       entity_type: "document",
       entity_id: doc.id as string,

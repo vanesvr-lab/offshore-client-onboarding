@@ -39,6 +39,8 @@ export async function PATCH(
   await supabase.from("audit_log").insert({
     application_id: doc.application_id,
     actor_id: session.user.id,
+    actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
     action: "document_override",
     detail: { document_id: params.id, verdict, note: note || null },
   });

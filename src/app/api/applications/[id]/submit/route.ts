@@ -41,6 +41,8 @@ export async function POST(
   await supabase.from("audit_log").insert({
     application_id: params.id,
     actor_id: session.user.id,
+    actor_role: "client",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
     action: "application_submitted",
     detail: { previous_status: app.status },
   });

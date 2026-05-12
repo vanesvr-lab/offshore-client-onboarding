@@ -208,6 +208,7 @@ export async function PATCH(
       await writeAuditLog(supabase, {
         actor_id: session.user.id,
         actor_role: "admin",
+        actor_name: session.user.name ?? session.user.email ?? "Unknown user",
         action: "service_action_updated",
         entity_type: "service",
         entity_id: id,
@@ -248,6 +249,7 @@ export async function PATCH(
   await writeAuditLog(supabase, {
     actor_id: session.user.id,
     actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
     action: "service_action_updated",
     entity_type: "service",
     entity_id: id,

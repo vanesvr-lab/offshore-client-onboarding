@@ -333,6 +333,7 @@ export async function PATCH(
     await writeAuditLog(supabase, {
       actor_id: session.user.id,
       actor_role: "admin",
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "profile_kyc_updated",
       entity_type: "client_profile",
       entity_id: profileId,

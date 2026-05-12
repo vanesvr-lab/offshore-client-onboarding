@@ -85,6 +85,7 @@ export async function PATCH(
   await supabase.from("audit_log").insert({
     actor_id: session.user.id,
     actor_role: "admin",
+    actor_name: session.user.name ?? session.user.email ?? "Unknown user",
     action:
       body.status === "approved" ? "document_approved" : "document_approval_revoked",
     entity_type: "document",

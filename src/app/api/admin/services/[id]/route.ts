@@ -62,18 +62,14 @@ export async function PATCH(
   }
 
   if ("status" in patch && previousStatus !== patch.status) {
-    const { data: actor } = await supabase
-      .from("users")
-      .select("full_name")
-      .eq("id", session.user.id)
-      .maybeSingle();
-    const actorName =
-      (actor as { full_name: string | null } | null)?.full_name?.trim() || null;
-
+    // B-094 — use session.user.name from the NextAuth JWT (already set in
+    // src/lib/auth.ts) instead of a separate users-table lookup. Saves one
+    // round-trip per status change and stays correct even when
+    // users.full_name is null but the session has an email fallback.
     const { error: auditError } = await supabase.from("audit_log").insert({
       actor_id: session.user.id,
       actor_role: "admin",
-      actor_name: actorName,
+      actor_name: session.user.name ?? session.user.email ?? "Unknown user",
       action: "status_changed",
       entity_type: "service",
       entity_id: id,
