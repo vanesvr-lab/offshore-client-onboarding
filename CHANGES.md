@@ -13,6 +13,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-12 — B-097 — Document validity tracking + KYC Documents tab (Claude Code)
+
+Four additions on `/admin/services/[id]`:
+
+- **Per-doc expiry caption.** Every document row (service-level, per-profile, per-section) now shows `Uploaded <date> • Good until <date> [Valid|Expired]` (or `Never expires`). Resolution lives in a single helper at `src/lib/documents/computeExpiry.ts` and walks: `documents.expiry_date` (manual / OCR) → `document_types.valid_for_months` + `uploaded_at` → never. Compute-at-display only; nothing stored.
+- **Manual expiry override.** `DocumentDetailDialog` (`src/components/shared/DocumentDetailDialog.tsx`) gains a `<input type="date">` with Save / Clear, gated to admins. Save PATCHes `/api/admin/documents/[id]/admin-status` with `{ expiry_date }` and writes an `audit_log` row with `action: 'document_expiry_updated'`, `previous_value` / `new_value` capturing the change. Clearing sends `null` and the helper falls back to the type-level rule.
+- **`valid_for_months` on document types.** Editable input on `/admin/settings/document-types` (`DocumentTypesManager.tsx`); POST + PATCH routes (`src/app/api/admin/document-types/route.ts` and `[id]/route.ts`) accept it with a 1–120 range guard. PATCH route already audits via `writeAuditLog`; the new field is now in its captured set automatically because it joined the `ALLOWED` array.
+- **Documents section tabs.** `AdminDocumentsSection` in `ServiceDetailClient.tsx` now opens with a `Service Docs (X/Y)` / `KYC Documents (N)` tab pair. New `src/components/admin/KycDocumentsTable.tsx` flattens every (profile × KYC doc type) pair into a sortable table: Profile / Doc type / Filename / Uploaded / Good until / Status / Actions. Filters at the top: Profile, Doc Type, Status (Valid / Expired / Never expires / Missing). Missing rows render an Upload button wired to `/api/admin/services/[id]/documents/upload` with `clientProfileId`. Not paginated (POC scale, ≤ ~60 rows).
+
+Migration `supabase/migrations/20260512192412_document_validity_period.sql` adds nullable `document_types.valid_for_months INT` with a comment, then backfills 3 months for Proof of Address / Utility Bill / Bank Reference Letter / Reference Letter, and 12 months for Source of Funds / Wealth / Declaration. Pushed via `npm run db:push`; `db:status` paired Local + Remote clean. The first push of the migration went through empty (file written after `migration new` but before content was saved); repaired via `npx supabase migration repair --status reverted` and re-pushed with content.
+
+Touched data plumbing so expiry inputs flow through:
+
+- `src/app/(admin)/admin/services/[id]/page.tsx`: `documents` query selects `expiry_date` + joins `document_types(valid_for_months)`. `ServiceDoc` type widened to match.
+- `src/app/(client)/services/[id]/page.tsx`: same widening for `ClientServiceDoc` so the client portal's wizard / summary keep typechecking.
+- `ServiceSummaryDialog.tsx` + `PerPersonReviewWizard.tsx`: pass `expiry_date` + `valid_for_months` through when shaping `ClientServiceDoc`.
+- `src/components/kyc/KycDocRow.tsx`: row reflowed into a `flex-col` so the caption sits under the filename/badge cluster; expiry computed from new `expiry_date` + `valid_for_months` fields on `KycDocRowData`.
+
+`npm run build` clean. Smoke test deferred to Vanessa.
+
+---
+
 ### 2026-05-12 — B-096 — Right-rail polish + pill-shaped buttons (Claude Code)
 
 Three visual changes bundled.

@@ -302,6 +302,13 @@ export interface DocumentType {
   scope?: DocumentScope;
   description: string | null;
   validity_period_days: number | null;
+  /**
+   * B-097 — How many months a document of this type remains valid after
+   * `documents.uploaded_at`. NULL means either "never expires" or "expiry
+   * comes from documents.expiry_date" (e.g. passport OCR). The compute
+   * helper at `src/lib/documents/computeExpiry.ts` walks both fields.
+   */
+  valid_for_months?: number | null;
   ai_verification_rules: Record<string, unknown> | null;
   /** Plain-English numbered rules typed by admin in Settings → Verification Rules. */
   verification_rules_text?: string | null;

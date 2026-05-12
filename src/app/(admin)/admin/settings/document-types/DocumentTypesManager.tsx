@@ -41,6 +41,8 @@ const EMPTY_FORM = {
   applies_to: "both" as "individual" | "organisation" | "both",
   scope: "person" as DocumentScope,
   description: "",
+  /** B-097 — null = never expires (or comes from documents.expiry_date). */
+  valid_for_months: null as number | null,
 };
 
 function DocumentTypeForm({
@@ -109,6 +111,26 @@ function DocumentTypeForm({
             placeholder="Optional description"
           />
         </div>
+        <div className="col-span-2 space-y-1">
+          <Label className="text-xs">Valid for (months)</Label>
+          <Input
+            type="number"
+            min={1}
+            max={120}
+            value={form.valid_for_months ?? ""}
+            onChange={(e) =>
+              setForm((p) => ({
+                ...p,
+                valid_for_months: e.target.value ? Number(e.target.value) : null,
+              }))
+            }
+            placeholder="e.g. 3 — leave blank for never expires"
+            className="text-sm w-44"
+          />
+          <p className="text-[11px] text-gray-500 leading-snug">
+            Blank = never expires (or expiry from OCR / manual override, e.g. passport).
+          </p>
+        </div>
       </div>
       <div className="flex gap-2 pt-1">
         <Button
@@ -150,6 +172,15 @@ function DocTypeRow({
           >
             {(dt.scope ?? "person") === "application" ? "Service" : "KYC"}
           </span>
+          {dt.valid_for_months != null ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+              {dt.valid_for_months}mo validity
+            </span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 italic">
+              no fixed validity
+            </span>
+          )}
         </div>
         {dt.description && <p className="text-xs text-gray-400 truncate">{dt.description}</p>}
       </div>
@@ -306,6 +337,7 @@ export function DocumentTypesManager({ documentTypes: initial }: Props) {
                           applies_to: dt.applies_to as "individual" | "organisation" | "both",
                           scope: (dt.scope ?? "person") as DocumentScope,
                           description: dt.description ?? "",
+                          valid_for_months: dt.valid_for_months ?? null,
                         }}
                         onSave={(form) => void handleUpdate(dt.id, form)}
                         onCancel={() => setEditingId(null)}

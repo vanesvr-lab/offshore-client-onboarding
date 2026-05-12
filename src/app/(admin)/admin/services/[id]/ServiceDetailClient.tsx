@@ -52,6 +52,7 @@ import { AiPrefillBanner, type AiPrefillBannerStatus } from "@/components/kyc/Ai
 import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
+import { KycDocumentsTable } from "@/components/admin/KycDocumentsTable";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 import { formatDate } from "@/lib/utils/formatters";
@@ -854,6 +855,8 @@ function KycLongFormSection({
                   verification_result: (d.verification_result ?? null) as Record<string, unknown> | null,
                   admin_status_note: d.admin_status_note ?? null,
                   admin_status_at: d.admin_status_at ?? null,
+                  expiry_date: d.expiry_date,
+                  valid_for_months: d.document_types?.valid_for_months ?? null,
                 };
                 return (
                   <KycDocRow
@@ -969,6 +972,8 @@ function KycLongFormSection({
                                 | null,
                             admin_status_note: d.admin_status_note ?? null,
                             admin_status_at: d.admin_status_at ?? null,
+                            expiry_date: d.expiry_date,
+                            valid_for_months: d.document_types?.valid_for_months ?? null,
                           };
                           return (
                             <KycDocRow
@@ -1778,6 +1783,8 @@ function PersonCard({
           verification_result: (uploaded?.verification_result as Record<string, unknown> | null) ?? null,
           admin_status_note: uploaded?.admin_status_note ?? null,
           admin_status_at: uploaded?.admin_status_at ?? null,
+          expiry_date: uploaded?.expiry_date ?? null,
+          valid_for_months: dt.valid_for_months ?? null,
         };
       }),
     }));
@@ -2449,10 +2456,15 @@ function PersonCard({
           admin_status: d.admin_status,
           prefill_dismissed_at: null,
           uploaded_at: d.uploaded_at,
+          expiry_date: d.expiry_date,
           document_type_id: d.document_type_id,
           client_profile_id: d.client_profile_id,
           document_types: d.document_types
-            ? { name: d.document_types.name, category: d.document_types.category }
+            ? {
+                name: d.document_types.name,
+                category: d.document_types.category,
+                valid_for_months: d.document_types.valid_for_months ?? null,
+              }
             : null,
         }));
         function handleSummaryEdit(section: SummarySection) {
@@ -2490,6 +2502,8 @@ function AdminDocumentsSection({
   serviceId,
   documents,
   documentTypes,
+  kycDocs,
+  kycDocTypes,
   updateRequests,
   roles,
   onDocumentAdded,
@@ -2503,12 +2517,18 @@ function AdminDocumentsSection({
   /** B-085 — service-level doc types (`scope='application'` AND active),
    *  used both as the universe of expected docs and as the dedupe key. */
   documentTypes: DocumentType[];
+  /** B-097 — all KYC docs (scope='person') across every profile in this service. */
+  kycDocs: ServiceDoc[];
+  /** B-097 — KYC doc types (scope='person', active). */
+  kycDocTypes: DocumentType[];
   updateRequests: DocumentUpdateRequest[];
   roles: RoleWithProfile[];
   onDocumentAdded: (doc: ServiceDoc) => void;
   onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
   onRefresh: () => void;
 }) {
+  // B-097 — Service Docs / KYC Documents tab toggle.
+  const [docTab, setDocTab] = useState<"service" | "kyc">("service");
   const [uploadingTypeId, setUploadingTypeId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -2620,13 +2640,54 @@ function AdminDocumentsSection({
   }
 
   function openDetail(docId: string) {
-    const upload = documents.find((d) => d.id === docId);
+    // B-097 — also search the KYC docs surfaced via the KycDocumentsTable tab.
+    const upload =
+      documents.find((d) => d.id === docId) ??
+      kycDocs.find((d) => d.id === docId);
     if (upload) setDetailDoc(upload as unknown as DocumentDetailDoc);
   }
 
+  const serviceUploadedCount = uploadByTypeId.size;
+  const kycUploadedCount = kycDocs.length;
+
   return (
     <div className="pt-4 space-y-3">
-      {documentTypes.length === 0 ? (
+      {/* B-097 — Service Docs / KYC Documents tab pair. */}
+      <div className="flex gap-1 border-b">
+        <button
+          type="button"
+          onClick={() => setDocTab("service")}
+          className={
+            docTab === "service"
+              ? "border-b-2 border-brand-navy text-brand-navy px-3 py-2 text-sm font-medium -mb-px"
+              : "text-gray-500 hover:text-brand-navy px-3 py-2 text-sm"
+          }
+        >
+          Service Docs ({serviceUploadedCount}/{documentTypes.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setDocTab("kyc")}
+          className={
+            docTab === "kyc"
+              ? "border-b-2 border-brand-navy text-brand-navy px-3 py-2 text-sm font-medium -mb-px"
+              : "text-gray-500 hover:text-brand-navy px-3 py-2 text-sm"
+          }
+        >
+          KYC Documents ({kycUploadedCount})
+        </button>
+      </div>
+
+      {docTab === "kyc" ? (
+        <KycDocumentsTable
+          serviceId={serviceId}
+          docs={kycDocs}
+          docTypes={kycDocTypes}
+          roles={roles}
+          onViewClick={openDetail}
+          onUploaded={onRefresh}
+        />
+      ) : documentTypes.length === 0 ? (
         <p className="text-sm text-gray-400">
           No service-level documents configured for this template.
         </p>
@@ -2648,6 +2709,8 @@ function AdminDocumentsSection({
                   verification_result: (upload.verification_result ?? null) as Record<string, unknown> | null,
                   admin_status_note: upload.admin_status_note ?? null,
                   admin_status_at: upload.admin_status_at ?? null,
+                  expiry_date: upload.expiry_date,
+                  valid_for_months: dt.valid_for_months ?? null,
                 }
               : {
                   id: null,
@@ -2688,8 +2751,8 @@ function AdminDocumentsSection({
         }}
       />
 
-      {/* Flagged summary */}
-      {flaggedDocs.length > 0 && (
+      {/* Flagged summary — service tab only. */}
+      {docTab === "service" && flaggedDocs.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
@@ -2712,7 +2775,7 @@ function AdminDocumentsSection({
       )}
 
       {/* B-085 — heads-up when the data layer has duplicate doc_type uploads. */}
-      {hasDuplicates && (
+      {docTab === "service" && hasDuplicates && (
         <p className="text-[11px] text-gray-400 italic">
           Note: {documents.length - dedupedTypeCount} duplicate upload(s) collapsed in this list. Source data may need cleanup.
         </p>
@@ -3002,6 +3065,26 @@ export function ServiceDetailClient({
         (d) => !!d.document_type_id && serviceDocTypeIds.has(d.document_type_id),
       ),
     [documents, serviceDocTypeIds],
+  );
+
+  // B-097 — KYC doc types (scope='person', active) + uploaded docs flat across profiles.
+  const kycDocTypes = useMemo(
+    () =>
+      (documentTypes ?? []).filter(
+        (dt) => (dt.scope ?? "person") === "person" && dt.is_active !== false,
+      ),
+    [documentTypes],
+  );
+  const kycDocTypeIds = useMemo(
+    () => new Set(kycDocTypes.map((dt) => dt.id)),
+    [kycDocTypes],
+  );
+  const kycDocs = useMemo(
+    () =>
+      documents.filter(
+        (d) => !!d.document_type_id && kycDocTypeIds.has(d.document_type_id),
+      ),
+    [documents, kycDocTypeIds],
   );
   const uploadedServiceTypeIds = useMemo(() => {
     const out = new Set<string>();
@@ -3524,6 +3607,8 @@ export function ServiceDetailClient({
             serviceId={service.id}
             documents={serviceLevelDocs}
             documentTypes={serviceDocTypes}
+            kycDocs={kycDocs}
+            kycDocTypes={kycDocTypes}
             updateRequests={updateRequests}
             roles={typedRoles}
             onDocumentAdded={(doc) => setDocuments((prev) => [...prev, doc])}

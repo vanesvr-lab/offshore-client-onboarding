@@ -14,6 +14,7 @@ import { DocumentUpdateRequestDialog } from "@/components/admin/DocumentUpdateRe
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { compressIfImage } from "@/lib/imageCompression";
 import { normalizeConfidence } from "@/lib/ai/confidence";
+import { computeDocumentExpiry } from "@/lib/documents/computeExpiry";
 import type { DocumentUpdateRequest } from "@/app/(admin)/admin/services/[id]/page";
 import type { VerificationResult } from "@/types";
 
@@ -28,7 +29,9 @@ export interface DocumentDetailDoc {
   admin_status?: string | null;
   admin_status_note?: string | null;
   admin_status_at?: string | null;
-  document_types?: { name: string; category?: string } | null;
+  /** B-097 — manual override / OCR-extracted expiry. */
+  expiry_date?: string | null;
+  document_types?: { name: string; category?: string; valid_for_months?: number | null } | null;
   client_profiles?: { full_name: string | null } | null;
 }
 
@@ -97,6 +100,18 @@ export function DocumentDetailDialog({
   const [aiStatus, setAiStatus] = useState<string | null>(doc.verification_status ?? null);
   const [aiVerResult, setAiVerResult] = useState<Record<string, unknown> | null>(doc.verification_result ?? null);
   const [rerunning, setRerunning] = useState(false);
+
+  // B-097 — manual expiry override state.
+  const initialExpiryYmd = doc.expiry_date ? doc.expiry_date.slice(0, 10) : "";
+  const [expiryDateValue, setExpiryDateValue] = useState<string>(initialExpiryYmd);
+  const [savedExpiry, setSavedExpiry] = useState<string | null>(doc.expiry_date ?? null);
+  const [savingExpiry, setSavingExpiry] = useState(false);
+
+  useEffect(() => {
+    const ymd = doc.expiry_date ? doc.expiry_date.slice(0, 10) : "";
+    setExpiryDateValue(ymd);
+    setSavedExpiry(doc.expiry_date ?? null);
+  }, [doc.expiry_date]);
 
   // Sync AI status when doc prop changes
   useEffect(() => {
@@ -193,6 +208,30 @@ export function DocumentDetailDialog({
       toast.error("Failed to reject");
     } finally {
       setAdminSaving(false);
+    }
+  }
+
+  // B-097 — save expiry override. Send `expiry_date: null` to clear back to
+  // the type-level rule. The route audits as `document_expiry_updated`.
+  async function handleSaveExpiry(target: string | null) {
+    setSavingExpiry(true);
+    try {
+      const res = await fetch(`/api/admin/documents/${doc.id}/admin-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expiry_date: target }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setSavedExpiry(target);
+      setExpiryDateValue(target ? target.slice(0, 10) : "");
+      toast.success(target ? "Expiry date updated" : "Expiry override cleared", {
+        position: "top-right",
+      });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update expiry");
+    } finally {
+      setSavingExpiry(false);
     }
   }
 
@@ -524,6 +563,72 @@ export function DocumentDetailDialog({
                   )}
                 </section>
               )}
+
+              {/* B-097 — Expiry override (admin only). */}
+              {isAdmin && (() => {
+                const validForMonths = doc.document_types?.valid_for_months ?? null;
+                const expiryInfo = computeDocumentExpiry(
+                  { expiry_date: savedExpiry, uploaded_at: doc.uploaded_at },
+                  { valid_for_months: validForMonths },
+                );
+                const helperText = savedExpiry
+                  ? validForMonths
+                    ? `Manually set. Clear to fall back to the ${validForMonths}-month rule.`
+                    : "Manually set. Clear to fall back to never expires."
+                  : validForMonths
+                    ? `No manual override. Default: uploaded date + ${validForMonths} months.`
+                    : "No manual override. This document never expires by default.";
+                const dirty = expiryDateValue !== (savedExpiry ? savedExpiry.slice(0, 10) : "");
+                return (
+                  <section className="border rounded-lg p-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Expiry</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="date"
+                        value={expiryDateValue}
+                        onChange={(e) => setExpiryDateValue(e.target.value)}
+                        disabled={savingExpiry}
+                        className="text-sm border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                      />
+                      <Button
+                        variant="outline" size="sm"
+                        className="h-8 px-3 text-xs"
+                        disabled={savingExpiry || !dirty || !expiryDateValue}
+                        onClick={() => void handleSaveExpiry(expiryDateValue || null)}
+                      >
+                        {savingExpiry ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Save
+                      </Button>
+                      {savedExpiry && (
+                        <Button
+                          variant="outline" size="sm"
+                          className="h-8 px-3 text-xs text-red-700 border-red-300 hover:bg-red-50"
+                          disabled={savingExpiry}
+                          onClick={() => void handleSaveExpiry(null)}
+                        >
+                          Clear
+                        </Button>
+                      )}
+                      <span
+                        className={
+                          expiryInfo.status === "expired"
+                            ? "bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                            : expiryInfo.status === "never_expires"
+                              ? "bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] italic"
+                              : "bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                        }
+                      >
+                        {expiryInfo.status === "expired"
+                          ? "Expired"
+                          : expiryInfo.status === "never_expires"
+                            ? "Never expires"
+                            : "Valid"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">{helperText}</p>
+                  </section>
+                );
+              })()}
 
               {/* Request Update (admin only) */}
               {isAdmin && recipients.length > 0 && (

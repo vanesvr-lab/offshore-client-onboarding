@@ -1263,6 +1263,9 @@ export function PerPersonReviewWizard({
       mime_type: uploaded?.mime_type ?? null,
       uploaded_at: uploaded?.uploaded_at ?? null,
       verification_result: (uploaded?.verification_result as Record<string, unknown> | null) ?? null,
+      // B-097 — expiry caption inputs.
+      expiry_date: (uploaded as unknown as { expiry_date?: string | null } | undefined)?.expiry_date ?? null,
+      valid_for_months: dt.valid_for_months ?? null,
     };
   }
 
@@ -1798,10 +1801,15 @@ export function PerPersonReviewWizard({
                 admin_status: updated.admin_status ?? null,
                 prefill_dismissed_at: null,
                 uploaded_at: updated.uploaded_at,
+                expiry_date: updated.expiry_date ?? null,
                 document_type_id: dtId,
                 client_profile_id: profileId,
                 document_types: updated.document_types
-                  ? { name: updated.document_types.name, category: updated.document_types.category ?? "" }
+                  ? {
+                      name: updated.document_types.name,
+                      category: updated.document_types.category ?? "",
+                      valid_for_months: updated.document_types.valid_for_months ?? null,
+                    }
                   : null,
               };
               return [...without, asClientDoc];

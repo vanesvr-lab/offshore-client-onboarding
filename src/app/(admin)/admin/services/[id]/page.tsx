@@ -20,9 +20,11 @@ export type ServiceDoc = {
   admin_status_at: string | null;
   mime_type: string | null;
   uploaded_at: string;
+  /** B-097 — manual override or OCR-extracted expiry; null falls back to type-level rule. */
+  expiry_date: string | null;
   document_type_id: string | null;
   client_profile_id: string | null;
-  document_types: { id?: string; name: string; category: string } | null;
+  document_types: { id?: string; name: string; category: string; valid_for_months: number | null } | null;
   client_profiles: { id: string; full_name: string | null } | null;
 };
 
@@ -125,8 +127,8 @@ export default async function ServiceDetailPage({
       .select(`
         id, file_name, file_path, verification_status, verification_result,
         admin_status, admin_status_note, admin_status_by, admin_status_at,
-        mime_type, uploaded_at, document_type_id, client_profile_id,
-        document_types(id, name, category),
+        mime_type, uploaded_at, expiry_date, document_type_id, client_profile_id,
+        document_types(id, name, category, valid_for_months),
         client_profiles(id, full_name)
       `)
       .eq("service_id", id)

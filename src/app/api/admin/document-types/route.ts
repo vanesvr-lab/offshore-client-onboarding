@@ -16,10 +16,22 @@ export async function POST(request: Request) {
     applies_to?: string;
     scope?: string;
     description?: string;
+    valid_for_months?: number | null;
   };
 
   if (!body.name?.trim() || !body.category) {
     return NextResponse.json({ error: "name and category are required" }, { status: 400 });
+  }
+
+  if (
+    body.valid_for_months !== undefined &&
+    body.valid_for_months !== null &&
+    (typeof body.valid_for_months !== "number" || !Number.isFinite(body.valid_for_months) || body.valid_for_months < 1 || body.valid_for_months > 120)
+  ) {
+    return NextResponse.json(
+      { error: "valid_for_months must be an integer 1-120 or null" },
+      { status: 400 },
+    );
   }
 
   const scope = body.scope === "application" ? "application" : "person";
@@ -45,6 +57,7 @@ export async function POST(request: Request) {
       applies_to: body.applies_to ?? "both",
       scope,
       description: body.description?.trim() || null,
+      valid_for_months: body.valid_for_months ?? null,
       is_active: true,
       sort_order: sortOrder,
     })

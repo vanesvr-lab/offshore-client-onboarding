@@ -24,9 +24,11 @@ export type ClientServiceDoc = {
   /** B-033 — set when the AI prefill banner has been applied or skipped for this upload. */
   prefill_dismissed_at: string | null;
   uploaded_at: string;
+  /** B-097 — manual override or OCR-extracted expiry. */
+  expiry_date: string | null;
   document_type_id: string | null;
   client_profile_id: string | null;
-  document_types: { name: string; category: string } | null;
+  document_types: { name: string; category: string; valid_for_months: number | null } | null;
 };
 
 export type ClientServiceRecord = {
@@ -199,12 +201,12 @@ export default async function ClientServiceDetailPage({
   const docsQuery = profileIds.length > 0
     ? supabase
         .from("documents")
-        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, prefill_dismissed_at, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
+        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, prefill_dismissed_at, uploaded_at, expiry_date, document_type_id, client_profile_id, document_types(name, category, valid_for_months)")
         .or(`service_id.eq.${id},client_profile_id.in.(${profileIds.join(",")})`)
         .eq("is_active", true)
     : supabase
         .from("documents")
-        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, prefill_dismissed_at, uploaded_at, document_type_id, client_profile_id, document_types(name, category)")
+        .select("id, file_name, mime_type, verification_status, verification_result, admin_status, prefill_dismissed_at, uploaded_at, expiry_date, document_type_id, client_profile_id, document_types(name, category, valid_for_months)")
         .eq("service_id", id)
         .eq("is_active", true);
 

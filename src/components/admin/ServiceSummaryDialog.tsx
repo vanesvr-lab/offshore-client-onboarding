@@ -409,10 +409,15 @@ export function ServiceSummaryDialog({
     admin_status: d.admin_status,
     prefill_dismissed_at: null,
     uploaded_at: d.uploaded_at,
+    expiry_date: d.expiry_date,
     document_type_id: d.document_type_id,
     client_profile_id: d.client_profile_id,
     document_types: d.document_types
-      ? { name: d.document_types.name, category: d.document_types.category }
+      ? {
+          name: d.document_types.name,
+          category: d.document_types.category,
+          valid_for_months: d.document_types.valid_for_months ?? null,
+        }
       : null,
   }));
 

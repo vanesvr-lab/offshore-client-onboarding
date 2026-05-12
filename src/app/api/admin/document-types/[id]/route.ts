@@ -16,13 +16,22 @@ export async function PATCH(
   const { id } = await params;
   const body = (await request.json()) as Record<string, unknown>;
 
-  const ALLOWED = ["name", "category", "applies_to", "scope", "description", "is_active", "sort_order"];
+  const ALLOWED = ["name", "category", "applies_to", "scope", "description", "is_active", "sort_order", "valid_for_months"];
   const patch: Record<string, unknown> = {};
   for (const key of ALLOWED) {
     if (key in body) patch[key] = body[key];
   }
   if ("scope" in patch && patch.scope !== "person" && patch.scope !== "application") {
     return NextResponse.json({ error: "scope must be 'person' or 'application'" }, { status: 400 });
+  }
+  if ("valid_for_months" in patch) {
+    const v = patch.valid_for_months;
+    if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 1 || v > 120)) {
+      return NextResponse.json(
+        { error: "valid_for_months must be an integer 1-120 or null" },
+        { status: 400 },
+      );
+    }
   }
 
   if (Object.keys(patch).length === 0) {
