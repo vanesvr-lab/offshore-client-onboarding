@@ -7,18 +7,22 @@ import { FloatingAssistantWidget } from "./FloatingAssistantWidget";
 
 interface ClientShellProps {
   userName: string | null | undefined;
+  /** B-103 — forwarded to the top Header so the avatar slot uses the
+   *  uploaded image when available. */
+  avatarUrl?: string | null;
   hasApplications: boolean;
   isPrimary: boolean;
   children: React.ReactNode;
 }
 
-export function ClientShell({ userName, hasApplications, isPrimary, children }: ClientShellProps) {
+export function ClientShell({ userName, avatarUrl, hasApplications, isPrimary, children }: ClientShellProps) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className="flex flex-col min-h-screen bg-sky-50/30">
       <Header
         userName={userName}
+        avatarUrl={avatarUrl}
         variant="client"
         onOpenMobileNav={() => setMobileNavOpen(true)}
       />

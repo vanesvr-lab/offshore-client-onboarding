@@ -25,6 +25,17 @@ export default async function ClientLayout({ children }: { children: React.React
     if (profile?.full_name) displayName = profile.full_name;
   }
 
+  // B-103 — read avatar_url for the top Header's unified avatar slot.
+  // Clients can't upload one yet (B-101 deferred the /account mirror),
+  // so this is null for everyone today but the hookup is forward-
+  // compatible for when client-side upload ships.
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("avatar_url")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  const avatarUrl = userRow?.avatar_url ?? null;
+
   // Fallback: try old client_users → clients path for backward compat
   let companyName = displayName;
   if (isPrimary) {
@@ -51,6 +62,7 @@ export default async function ClientLayout({ children }: { children: React.React
   return (
     <ClientShell
       userName={companyName}
+      avatarUrl={avatarUrl}
       hasApplications={(appCount ?? 0) > 0}
       isPrimary={isPrimary}
     >

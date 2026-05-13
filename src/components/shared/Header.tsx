@@ -2,11 +2,16 @@
 
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Menu } from "lucide-react";
 import { portalName } from "@/lib/portal-name";
 
 interface HeaderProps {
   userName?: string | null;
+  /** B-103 — admin/client avatar shown next to the name in the top bar.
+   *  Falls back to an initials circle when null. Wired in by both
+   *  `(admin)/layout.tsx` and `(client)/layout.tsx`. */
+  avatarUrl?: string | null;
   variant?: "admin" | "client";
   onOpenMobileNav?: () => void;
 }
@@ -20,7 +25,7 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export function Header({ userName, variant = "admin", onOpenMobileNav }: HeaderProps) {
+export function Header({ userName, avatarUrl, variant = "admin", onOpenMobileNav }: HeaderProps) {
   const router = useRouter();
 
   async function handleSignOut() {
@@ -52,15 +57,26 @@ export function Header({ userName, variant = "admin", onOpenMobileNav }: HeaderP
         </p>
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
-        {variant === "client" && userName ? (
+        {/* B-103 — unified avatar treatment for admin + client variants:
+            avatar image when `avatarUrl` is set, initials fallback when not. */}
+        {userName && (
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center shrink-0">
-              <span className="text-white text-xs font-semibold">{getInitials(userName)}</span>
+            <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-blue-500 flex items-center justify-center">
+              {avatarUrl ? (
+                <Image
+                  src={avatarUrl}
+                  alt={userName}
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 object-cover"
+                  unoptimized
+                />
+              ) : (
+                <span className="text-white text-xs font-semibold">{getInitials(userName)}</span>
+              )}
             </div>
             <span className="text-white text-sm hidden sm:inline">{userName}</span>
           </div>
-        ) : (
-          userName && <span className="hidden sm:inline text-white text-sm">{userName}</span>
         )}
         <button
           onClick={handleSignOut}

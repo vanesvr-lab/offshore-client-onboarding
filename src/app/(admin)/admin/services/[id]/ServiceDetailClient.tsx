@@ -3252,6 +3252,31 @@ export function ServiceDetailClient({
   const [service, setService] = useState(initialService);
   const [documents, setDocuments] = useState(initialDocuments);
   const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
+
+  // B-103 — cap the right rail's max-height to the left column's
+  // rendered height so the page never leaves a large empty area below
+  // a short left column. `window.innerHeight - 320` (the original
+  // sticky-rail ceiling) stays as the upper bound so a very tall left
+  // column never makes the rail overflow viewport.
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const [railMaxHeight, setRailMaxHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const el = leftColumnRef.current;
+    if (!el) return;
+    const ceiling = () => window.innerHeight - 320;
+    const recompute = () => {
+      const h = el.getBoundingClientRect().height;
+      setRailMaxHeight(Math.min(h, ceiling()));
+    };
+    const observer = new ResizeObserver(() => recompute());
+    observer.observe(el);
+    const onResize = () => recompute();
+    window.addEventListener("resize", onResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
   // B-084 Batch 1 — lift roles to state so per-profile saves can splice
   // updated kyc/profile fields directly into the parent without waiting
   // for the RSC roundtrip from `router.refresh()`. Sync from prop on
@@ -3933,7 +3958,7 @@ export function ServiceDetailClient({
 
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
       {/* Each section is its own boxed Card; outer container provides spacing only */}
-      <div className={reviewMode ? "space-y-4" : "lg:col-span-2 space-y-4"}>
+      <div ref={leftColumnRef} className={reviewMode ? "space-y-4" : "lg:col-span-2 space-y-4"}>
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
         {(!reviewMode || reviewStep === 0) && (
@@ -4332,7 +4357,10 @@ export function ServiceDetailClient({
           Vanessa can tune visually if needed. On <lg the rail stacks below
           the main column with normal scrolling. */}
       {!reviewMode && (
-      <div className="lg:sticky lg:top-[300px] lg:self-start lg:max-h-[calc(100vh-320px)] lg:overflow-y-auto space-y-3">
+      <div
+        className="lg:sticky lg:top-[300px] lg:self-start lg:overflow-y-auto space-y-3"
+        style={railMaxHeight ? { maxHeight: railMaxHeight } : undefined}
+      >
 
         {/* B-091 — service-level View Summary entry point. Lives at the
               very top of the right rail so it's the first action visible

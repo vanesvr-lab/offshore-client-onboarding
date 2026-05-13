@@ -13,6 +13,34 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-103 — Header avatar + right-rail height cap
+
+### 2026-05-13 — B-103 — Avatar in top header + right-rail balanced height (Claude Code)
+
+Two small UX gaps from B-101 closed:
+
+**1. Avatar in the top Header (unified treatment for admin + client).**
+`Header.tsx` picks up a new `avatarUrl` prop and renders one avatar block for both variants — `<Image>` when the URL is set, initials circle (existing behaviour) when null. Removed the variant-specific branch that left admin users without an avatar slot. The fallback bubble stays `bg-blue-500` so initials still look the same on both surfaces.
+
+Threaded through:
+- `src/app/(admin)/layout.tsx` — already fetches `users.avatar_url` for the Sidebar (B-101 batch 4); now also forwards it to `<Header>`.
+- `src/app/(client)/layout.tsx` — new fetch of `users.avatar_url` by `session.user.id`. Clients can't upload an avatar yet (tech-debt #B-101 deferred `/account` mirror), so the column is null for everyone today and the initials fallback renders. Hookup is forward-compatible.
+- `src/components/shared/ClientShell.tsx` — passes `avatarUrl` through from the layout to `<Header>`.
+
+**2. Right-rail height capped to left column (option b from the brief).**
+On `/admin/services/[id]` the right rail was `lg:max-h-[calc(100vh-320px)]`, leaving a large white area below the left column whenever the left was shorter than viewport (the screenshot scenario — most sections collapsed, only Internal Notes + Risk Assessment visible).
+
+`ServiceDetailClient.tsx` now:
+- Adds `leftColumnRef` on the left column wrapper.
+- A `ResizeObserver` measures the left column's rendered height on mount and on every change (section expand/collapse, profile add/remove, KYC card open/close).
+- The rail wrapper drops the Tailwind `lg:max-h-…` class and uses an inline `style={{ maxHeight: railMaxHeight }}` instead so the dynamic value wins.
+- `window.innerHeight - 320` stays as a ceiling — if the left ever overflows viewport, the rail still doesn't push past the visible area.
+
+Files: `src/components/shared/Header.tsx`, `src/components/shared/ClientShell.tsx`, `src/app/(admin)/layout.tsx`, `src/app/(client)/layout.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`.
+Build: clean.
+
+---
+
 ## B-102 — Admin Review Wizard
 
 ### 2026-05-13 — B-102 — Admin Review Wizard at `/admin/services/[id]/review` (Claude Code)
