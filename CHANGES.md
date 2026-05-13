@@ -15,6 +15,39 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-111 — At-a-glance pending view (color-coded step pills + Pending card)
 
+### 2026-05-13 — B-111 batch 2 — Right-rail Pending card with one-click drill-down (Claude Code)
+
+New `ServicePendingCard` mounted at the top of the right rail on `/admin/services/[id]` (above Status / Communications / Milestones). One row per actionable item across the whole service, sorted critical → warning → info. Each row is a button — click navigates to the relevant section / profile / document / alert without a refresh.
+
+Sources rolled into one list:
+- **Section verdicts** — rejected (critical) and flagged (warning) section reviews carry their notes as the row detail.
+- **Force-reviewed sections still below 100%** — surfaced as warning ("reviewed with override (40%)") so admin sees the deferred follow-up after a B-110 override.
+- **Incomplete sections** — `<step> — N% complete` (warning) for any step with no review and pct < 100.
+- **Ready-for-review** — `<step> — ready for review` (info) for steps at 100% with no review row.
+- **Missing required docs** — single rolled-up row (warning, waiver-aware via `missingDocCount` from Batch 1).
+- **Per-profile KYC gaps** — `<name> — KYC N% complete` (info) for each non-representative profile below 100%.
+- **B-108 auto-alerts** — critical + warning tiers (doc expiry < 30 days, expired, KYC age > 18 mo). Info-tier alerts stay in the dedicated Alerts dialog.
+- **B-108 open manual alerts** — admin-authored alerts at their declared severity.
+
+Pure derivation lives in `src/lib/services/computePendingItems.ts` — `computePendingItems(input)` returns `PendingItem[]` sorted by severity. Side-effect-free, trivially unit-testable later.
+
+`PendingCardWithState` wrapper inside `ServiceDetailClient.tsx` consumes the live `AdminApplicationSectionsProvider` context via `useSectionReviews`, so the list re-derives immediately after a save / waive / mark-reviewed without waiting for a router refresh. Memoizes over `pcts + profiles + missingDocCount + autoAlerts + manualAlerts`.
+
+Click routing (`handlePendingAction`):
+- `scroll_to_section` → `scrollIntoView` on the step's DOM anchor (`step-company-setup`, `step-financial`, …).
+- `scroll_to_profile` → scrolls to `#person-card-<profileId>` and clicks the card header to expand if currently collapsed (no state lift needed; mirrors how admin would click).
+- `open_document` → looks up the doc; if profile-scoped, routes to that PersonCard; else routes to the Documents section. Admin then clicks View on the doc row to open the full `DocumentDetailDialog`. Lifting the dialog state to ServiceDetailClient would propagate through every save/refresh handler — logged as tech debt.
+- `open_alert` → opens the existing B-108 `ServiceAlertsDialog`.
+
+Empty state: when nothing is pending, the card renders "All clear — nothing pending." with a green `0` counter pill. Otherwise the counter pill takes its color from the top item's severity (red / amber / blue).
+
+Tech debt logged: (a) `computePendingItems` memo invalidates on every parent render — fine today, revisit at scale; (b) intentional overlap with the Alerts feed; (c) `open_document` falls back to scroll instead of opening the dialog directly.
+
+Files: `src/lib/services/computePendingItems.ts` (new), `src/components/admin/ServicePendingCard.tsx` (new), `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (added `profilesForPending` + `handlePendingAction` + `PendingCardWithState` inner component + mount in right rail), `docs/tech-debt.md`.
+Build: clean.
+
+B-111 done — step pills color-coded + Pending card in right rail.
+
 ### 2026-05-13 — B-111 batch 1 — Step pills color-coded by readiness state (Claude Code)
 
 The 5 step pills in the sticky header on `/admin/services/[id]` no longer render uniform brand-navy. Each pill now reflects a readiness state derived from the live section review + the existing completion %:

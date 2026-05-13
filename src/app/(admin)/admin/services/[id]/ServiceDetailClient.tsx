@@ -70,10 +70,18 @@ import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycDocumentsTable } from "@/components/admin/KycDocumentsTable";
 import { ServiceCommunicationsCard } from "@/components/admin/ServiceCommunicationsCard";
+import { ServicePendingCard } from "@/components/admin/ServicePendingCard";
+import {
+  computePendingItems,
+  type PendingItem,
+  type PendingStepConfig,
+  type PendingProfileInput,
+} from "@/lib/services/computePendingItems";
 import { ServiceAlertsDialog } from "@/components/admin/ServiceAlertsDialog";
 import {
   computeAutoAlerts,
   severityRank,
+  type AutoAlert,
   type AutoAlertSeverity,
 } from "@/lib/alerts/computeAutoAlerts";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
@@ -3397,6 +3405,66 @@ const ADMIN_STEPS_SERVICES: AdminStep[] = [
   { id: "step-documents",     label: "Documents",     sectionKeys: ["documents"] },
 ];
 
+// B-111 Batch 2 — Pending card wrapper. Consumes the live section-reviews
+// context so the list re-derives immediately after a save without
+// waiting for a router refresh. All other inputs (step pcts, profile
+// list, missing-doc count, alerts) flow through props.
+function PendingCardWithState({
+  pcts,
+  profiles,
+  missingDocCount,
+  autoAlerts,
+  manualAlerts,
+  onAction,
+}: {
+  pcts: number[];
+  profiles: PendingProfileInput[];
+  missingDocCount: number;
+  autoAlerts: AutoAlert[];
+  manualAlerts: ManualServiceAlert[];
+  onAction: (item: PendingItem) => void;
+}) {
+  const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
+  const { rows } = useSectionReviews(sectionKeys);
+  const sectionReviewsLive = useMemo(
+    () => rows.flatMap((r) => r.history),
+    [rows],
+  );
+
+  const steps: PendingStepConfig[] = useMemo(
+    () =>
+      ADMIN_STEPS_SERVICES.map((step, i) => ({
+        stepId: step.id,
+        sectionKey: step.sectionKeys[0],
+        label: step.label,
+        pct: pcts[i] ?? 0,
+      })),
+    [pcts],
+  );
+
+  const items = useMemo(
+    () =>
+      computePendingItems({
+        steps,
+        sectionReviews: sectionReviewsLive,
+        profiles,
+        missingDocCount,
+        autoAlerts,
+        manualAlerts,
+      }),
+    [
+      steps,
+      sectionReviewsLive,
+      profiles,
+      missingDocCount,
+      autoAlerts,
+      manualAlerts,
+    ],
+  );
+
+  return <ServicePendingCard items={items} onAction={onAction} />;
+}
+
 // B-111 — step pill row that consumes the live section-reviews context so
 // the pill colors update immediately after a save without waiting for a
 // router refresh. Reads aggregate review status via `useSectionReviews`
@@ -4168,6 +4236,94 @@ export function ServiceDetailClient({
     }
     return n;
   }, [uniqueRoles]);
+
+  // B-111 Batch 2 — click handler for Pending card rows. Routes to the
+  // matching surface: section anchor scroll, profile card anchor scroll,
+  // service-level Alerts dialog open. `open_document` falls back to the
+  // section the doc sits in — full DocumentDetailDialog open from here
+  // would require lifting two PersonCard/AdminDocumentsSection local
+  // dialog states; admin clicks View on the doc row to drill further.
+  const handlePendingAction = useCallback(
+    (item: PendingItem) => {
+      switch (item.actionType) {
+        case "scroll_to_section": {
+          const el = document.getElementById(item.actionPayload);
+          el?.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+        case "scroll_to_profile": {
+          const el = document.getElementById(
+            `person-card-${item.actionPayload}`,
+          );
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+            // PersonCard's header is the cursor-pointer div with the
+            // role pill — click it to expand if currently collapsed.
+            // No state lift needed; mirrors how admin would click it.
+            const header = el.querySelector<HTMLDivElement>(".cursor-pointer");
+            const isExpanded = el.querySelector("[data-profile-id]") !== null;
+            if (header && !isExpanded) header.click();
+          }
+          return;
+        }
+        case "open_document": {
+          // Find the doc → if profile-scoped, route to that PersonCard;
+          // else route to the Documents section. Admin clicks View on the
+          // doc row to open the full DocumentDetailDialog.
+          const doc = documents.find((d) => d.id === item.actionPayload);
+          if (doc?.client_profile_id) {
+            const el = document.getElementById(
+              `person-card-${doc.client_profile_id}`,
+            );
+            el?.scrollIntoView({ behavior: "smooth", block: "start" });
+            const header = el?.querySelector<HTMLDivElement>(".cursor-pointer");
+            const isExpanded =
+              el?.querySelector("[data-profile-id]") !== null;
+            if (header && !isExpanded) header.click();
+          } else {
+            document
+              .getElementById("step-documents")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+          return;
+        }
+        case "open_alert": {
+          setAlertsDialogOpen(true);
+          return;
+        }
+      }
+    },
+    [documents],
+  );
+
+  // B-111 Batch 2 — per-profile snapshot for the Pending card. Same
+  // `computeKycPctForProfile` helper that drives the step pill count
+  // badge; one row per unique profile with their current KYC pct.
+  const profilesForPending = useMemo<PendingProfileInput[]>(
+    () =>
+      uniqueRoles
+        .map(({ person }) => person.client_profiles)
+        .filter(
+          (
+            p,
+          ): p is NonNullable<RoleWithProfile["client_profiles"]> => !!p,
+        )
+        .map((p) => {
+          // Reuse computeKycPctForProfile by reconstructing a minimal
+          // RoleWithProfile-shaped object — only `client_profiles.client_profile_kyc`
+          // is read.
+          const pseudo: RoleWithProfile = {
+            client_profiles: p,
+          } as RoleWithProfile;
+          return {
+            id: p.id,
+            full_name: p.full_name ?? null,
+            kycPct: computeKycPctForProfile(pseudo),
+            isRepresentative: !!p.is_representative,
+          };
+        }),
+    [uniqueRoles],
+  );
   const documentsRag: RagStatus =
     documentsPct >= 100 ? "green" : documentsPct > 0 ? "amber" : "red";
   const documentsStatusLabel =
@@ -5062,6 +5218,24 @@ export function ServiceDetailClient({
             ? `View Summary for ${service.service_number}`
             : "View Service Summary"}
         </Button>
+
+        {/* B-111 Batch 2 — Pending card sits at the top of the right
+              rail (above Status / Communications / Milestones). One row
+              per actionable item; click drills to the right place. */}
+        <PendingCardWithState
+          pcts={[
+            companySetupPct,
+            financialPct,
+            bankingPct,
+            peopleKycPct,
+            documentsPct,
+          ]}
+          profiles={profilesForPending}
+          missingDocCount={missingDocCount}
+          autoAlerts={visibleAutoAlerts}
+          manualAlerts={openManualAlerts}
+          onAction={handlePendingAction}
+        />
 
         {/* ── Status Change (B-093) ───────────────────────────────────────
               Four-row layout: label → current status badge → "updated on

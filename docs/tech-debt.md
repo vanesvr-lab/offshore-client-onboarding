@@ -11,6 +11,21 @@ remove after 30 days.
 
 ## 2026-05-13
 
+- **`computePendingItems` recomputes on every render.**
+  *Spawned by:* [B-111](cli-brief-pending-glance-b111.md).
+  *What:* `PendingCardWithState` derives the Pending list via `useMemo` over `sectionReviews + steps + profiles + missingDocCount + alerts`. Memoization keeps it cheap today (≤30 items for a busy service), but the inputs are array references that change on every parent re-render. If services start carrying hundreds of profiles or alerts, the memo deps will invalidate frequently and the cost climbs.
+  *Why deferred:* No measurable cost today. When it bites, lift stable refs (e.g. memoize `profilesForPending` upstream) or move the aggregate to a server-side derivation in `loadServiceDetail`.
+
+- **Pending card and Alerts feed overlap.**
+  *Spawned by:* [B-111](cli-brief-pending-glance-b111.md).
+  *What:* B-108's `ServiceAlertsDialog` and B-111's Pending card both surface critical / warning auto-alerts (doc expiry, KYC age). Info-tier auto-alerts (long-tail KYC age) stay in the Alerts dialog only. Manual alerts and per-section verdicts appear in both.
+  *Why deferred:* Intentional — Pending is the onboarding checklist + monitoring blockers; Alerts is the monitoring history with dismiss/resolve actions. Different read patterns. Revisit if Vanessa reports the duplication is confusing.
+
+- **`open_document` from Pending card scrolls instead of opening the dialog.**
+  *Spawned by:* [B-111](cli-brief-pending-glance-b111.md).
+  *What:* The brief specifies "open the existing `DocumentDetailDialog` for that document" on `open_document` click. Today the handler scrolls to the doc's section (PersonCard for profile-scoped docs, Documents section for service-scoped) and admin clicks View on the row to open the dialog. Lifting the dialog state to `ServiceDetailClient` would let us open it directly.
+  *Why deferred:* `DocumentDetailDialog` mount state is local to two places (`PersonCard` and `AdminDocumentsSection`), each owning their own `detailDoc` useState + Approve/Reject/Replace flows. Lifting would propagate state changes through every save/refresh handler. Scroll-then-click is a reasonable interim; revisit if Vanessa pushes back on the extra click.
+
 - **Review Wizard `Mark as Reviewed` writes a step-level review, not a per-profile review.**
   *Spawned by:* [B-109](cli-brief-review-wizard-polish-b109.md).
   *What:* Both the wizard-level `Mark as Reviewed` (Batch 1) and the per-profile sub-wizard's `Mark Profile Reviewed` (Batch 3) write to `application_section_reviews` with `section_key='people'` (the same step-level key) when reviewing inside step 3. They do not write a profile-scoped subject id. B-074 already supports per-profile subsection reviews via the inline KYC affordances inside `KycLongForm` (using `kyc:<profileId>:<categoryKey>` keys), so the per-profile review trail is captured there — just not from the sub-wizard's `Mark Profile Reviewed` button.
