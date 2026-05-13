@@ -162,10 +162,10 @@ Today:
 </div>
 ```
 
-The `justify-between` pushes the button to the far right of the card. Replace with `gap`-based layout so the button sits next to the last pill:
+The `justify-between` pushes the button to the far right of the card. Replace with `gap`-based layout, and use a generous gap so the button reads as visually separate from the pill cluster (Vanessa's exact words: "so it looks separate"):
 
 ```tsx
-<div className="rounded-lg border bg-white px-4 py-3 flex items-center flex-wrap gap-3">
+<div className="rounded-lg border bg-white px-4 py-3 flex items-center flex-wrap gap-x-8 gap-y-3">
   <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} onStepClick={handleStepClick} />
   <Link
     href={`/admin/services/${service.id}/review?step=0`}
@@ -178,9 +178,12 @@ The `justify-between` pushes the button to the far right of the card. Replace wi
 </div>
 ```
 
-Two changes: drop `justify-between`, add `flex-wrap` so it falls to a new row on narrow viewports instead of overflowing. The `gap-3` (already present) provides the small breathing space between the last pill and the button.
+Three changes:
+1. Drop `justify-between` — button no longer hugs the card's right edge.
+2. `gap-x-8` (32px horizontal) between the pills row and the button — clearly readable as a separate element rather than another step. If 32px reads cramped at the chosen font, bump to `gap-x-10`; if it reads too far, drop to `gap-x-6`. Pick the smallest value that visually decouples the two clusters.
+3. `gap-y-3` + `flex-wrap` so on narrow viewports the button falls to a new row instead of overflowing.
 
-If the pills cluster takes the full row width on common screens, the button naturally wraps below it — acceptable. Alternative: nest the pills in a child `flex-1` div so the button always sits at the row's end with a `gap` to the pills. Pick whichever lays out cleaner — match prevailing pattern.
+If the pills row ends up wider than the card's content width on common screens, the button naturally wraps below it — acceptable. Alternative if Vanessa wants the button always on the same row at desktop widths: nest the pills in a child `flex-1` wrapper so they take available space and the button always sits at the row's end with the `gap-x-8` gap. Pick whichever reads cleaner at her usual viewport (1440px-ish).
 
 ---
 
