@@ -44,6 +44,7 @@ import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, Doc
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
+import { SectionReviewPanel } from "@/components/admin/SectionReviewPanel";
 import { PerProfileReviewSummaryPanel, type PerProfileSubsection } from "@/components/admin/PerProfileReviewSummaryPanel";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
@@ -3279,6 +3280,17 @@ const REVIEW_STEP_SECTION_KEYS = [
   "documents",
 ] as const;
 
+// B-109 Batch 1 — display labels for the SectionReviewPanel dialog header.
+// Mirrors ADMIN_STEPS_SERVICES labels; kept separate so the panel header
+// reads consistently if the step strip ever diverges visually.
+const REVIEW_STEP_LABELS = [
+  "Company Setup",
+  "Financial",
+  "Banking",
+  "People & KYC",
+  "Documents",
+] as const;
+
 const BRAND_REVIEW_BLUE = "#24a0ed";
 
 // ─── Review Wizard chrome ─────────────────────────────────────────────────────
@@ -3349,9 +3361,11 @@ function ReviewWizardBottomNav({
 }) {
   const router = useRouter();
   const sectionKey = REVIEW_STEP_SECTION_KEYS[step];
-  const { onReviewSaved } = useSectionReview(sectionKey);
-  const [marking, setMarking] = useState(false);
+  const { currentStatus, onReviewSaved } = useSectionReview(sectionKey);
   const [advancing, setAdvancing] = useState(false);
+  // B-109 Batch 1 — Mark-as-Reviewed now opens the same SectionReviewPanel
+  // dialog the inline `Review` button uses (status picker + notes).
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
 
   const isFirstStep = step === 0;
   const isLastStep = step === ADMIN_STEPS_SERVICES.length - 1;
@@ -3397,42 +3411,26 @@ function ReviewWizardBottomNav({
     await goTo(step - 1);
   }
 
-  async function handleMarkReviewed() {
-    setMarking(true);
-    try {
-      const saved = await flushIfDirty();
-      if (!saved) {
-        toast.error("Couldn't save changes — fix the errors and try again.");
-        return;
-      }
-      // Section-review POST (re-uses the existing endpoint from B-068).
-      // Per tech-debt #26 `application_id` actually stores the service id
-      // on the modern path.
-      const res = await fetch(
-        `/api/admin/applications/${serviceId}/section-reviews`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ section_key: sectionKey, status: "reviewed" }),
-        },
-      );
-      const payload = (await res.json().catch(() => ({}))) as {
-        data?: ApplicationSectionReview;
-        error?: string;
-      };
-      if (!res.ok || !payload.data) {
-        toast.error(payload.error ?? "Couldn't mark as reviewed");
-        return;
-      }
-      onReviewSaved(payload.data);
-      toast.success("Marked as reviewed");
-      if (profileSubstep) {
-        profileSubstep.onNextProfile();
-      } else {
-        await goTo(step + 1);
-      }
-    } finally {
-      setMarking(false);
+  // B-109 Batch 1 — flush dirty edits before opening the review dialog so
+  // the dialog only deals with the review action itself. If save fails,
+  // don't open (matches the Next button's UX).
+  async function openReviewDialog() {
+    const saved = await flushIfDirty();
+    if (!saved) {
+      toast.error("Couldn't save changes — fix the errors and try again.");
+      return;
+    }
+    setReviewDialogOpen(true);
+  }
+
+  async function handleReviewSaved(review: ApplicationSectionReview) {
+    onReviewSaved(review);
+    setReviewDialogOpen(false);
+    toast.success(`Marked as ${review.status}.`);
+    if (profileSubstep) {
+      profileSubstep.onNextProfile();
+    } else {
+      await goTo(step + 1);
     }
   }
 
@@ -3443,43 +3441,54 @@ function ReviewWizardBottomNav({
       : "Next";
   const prevLabel = profileSubstep ? "Back to list" : "Previous";
   const markLabel = profileSubstep ? "Mark Profile Reviewed" : "Mark as Reviewed";
-  const nextDisabled = advancing || marking
+  const nextDisabled = advancing
     || (profileSubstep ? profileSubstep.profileIndex >= totalProfilesInStep - 1 : false);
 
   return (
-    <div className="sticky bottom-0 z-30 bg-white border-t -mx-8 px-8 py-3 flex items-center justify-between gap-3 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
-      <button
-        type="button"
-        onClick={() => void handlePrevious()}
-        disabled={advancing || marking || (!profileSubstep && isFirstStep)}
-        className="inline-flex items-center gap-1.5 rounded-full border border-brand-navy bg-white px-4 py-1.5 text-sm font-medium text-brand-navy hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        {prevLabel}
-      </button>
-      <div className="flex items-center gap-2">
+    <>
+      <div className="sticky bottom-0 z-30 bg-white border-t -mx-8 px-8 py-3 flex items-center justify-between gap-3 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
         <button
           type="button"
-          onClick={() => void handleMarkReviewed()}
-          disabled={marking || advancing}
-          style={{ backgroundColor: BRAND_REVIEW_BLUE }}
-          className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-60"
+          onClick={() => void handlePrevious()}
+          disabled={advancing || (!profileSubstep && isFirstStep)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-brand-navy bg-white px-4 py-1.5 text-sm font-medium text-brand-navy hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {marking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-          {markLabel}
+          <ChevronLeft className="h-4 w-4" />
+          {prevLabel}
         </button>
-        <button
-          type="button"
-          onClick={() => void handleNext()}
-          disabled={nextDisabled}
-          className="inline-flex items-center gap-1.5 rounded-full bg-brand-navy px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-brand-blue disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {nextLabel}
-          <ChevronRight className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void openReviewDialog()}
+            disabled={advancing}
+            style={{ backgroundColor: BRAND_REVIEW_BLUE }}
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-60"
+          >
+            <CheckCircle className="h-4 w-4" />
+            {markLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleNext()}
+            disabled={nextDisabled}
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-navy px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-brand-blue disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {nextLabel}
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
-    </div>
+      <SectionReviewPanel
+        applicationId={serviceId}
+        sectionKey={sectionKey}
+        sectionLabel={REVIEW_STEP_LABELS[step] ?? "Review"}
+        currentStatus={currentStatus}
+        open={reviewDialogOpen}
+        onOpenChange={setReviewDialogOpen}
+        onSaved={(r) => void handleReviewSaved(r)}
+      />
+    </>
   );
 }
 

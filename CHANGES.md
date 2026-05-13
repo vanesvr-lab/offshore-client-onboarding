@@ -13,6 +13,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-109 — Review Wizard polish (Mark dialog + step indicator + per-profile sub-wizard)
+
+### 2026-05-13 — B-109 batch 1 — Mark-as-Reviewed opens SectionReviewPanel (Claude Code)
+
+The Review Wizard's `Mark as Reviewed` button no longer silently POSTs `status='reviewed'`. It now opens the same `SectionReviewPanel` dialog the inline `Review` button uses everywhere else on `/admin/services/[id]` — full status picker (`reviewed | flagged | rejected`) + notes textarea, notes required on flagged/rejected.
+
+Flow: button click → `flushIfDirty()` saves any pending edits → if save fails, show error toast and don't open; if save succeeds, open the sheet. On the sheet's `onSaved`, push the new review into the section-reviews context, close the sheet, toast `Marked as <status>`, then auto-advance — `profileSubstep.onNextProfile()` when sub-stepping a profile, otherwise `goTo(step + 1)`. Last step advances out of the wizard back to `/admin/services/<id>` (handled inside `goTo`).
+
+Removed the old direct-POST `handleMarkReviewed` + `marking` state — the dialog owns submit state. New `REVIEW_STEP_LABELS` const (`Company Setup`, `Financial`, `Banking`, `People & KYC`, `Documents`) feeds the dialog header so the sheet title matches the wizard step label.
+
+Sub-step caveat: when `profileSubstep` is set, the dialog still writes the step-level `sectionKey` (e.g. `people`), not a per-profile review. Per-profile review writing is already wired separately via the inline KYC affordances from B-074. Wiring profile-scoped subject ids into the wizard's Mark button is deferred — appended to `docs/tech-debt.md`.
+
+Files: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (added `SectionReviewPanel` import + `REVIEW_STEP_LABELS` const; refactored `ReviewWizardBottomNav` to open the dialog and auto-advance on save).
+Build: clean.
+
+---
+
 ## B-108 — Communications log + service alerts
 
 ### 2026-05-13 — B-108 batch 1 — Comms log backend (Claude Code)
