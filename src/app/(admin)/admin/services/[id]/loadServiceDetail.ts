@@ -27,6 +27,7 @@ import type {
   ServiceAuditEntry,
   DocumentUpdateRequest,
   WaivedDocumentRequirement,
+  ServiceCommunication,
 } from "./page";
 
 export interface ServiceDetailPayload {
@@ -47,6 +48,7 @@ export interface ServiceDetailPayload {
   fieldExtractions: FieldExtraction[];
   lastStatusChange: ServiceAuditEntry | null;
   waivers: WaivedDocumentRequirement[];
+  communications: ServiceCommunication[];
 }
 
 export async function loadServiceDetail(
@@ -69,6 +71,7 @@ export async function loadServiceDetail(
     sectionReviewsRes,
     waiversRes,
     removalsRes,
+    communicationsRes,
   ] = await Promise.all([
     supabase
       .from("services")
@@ -164,6 +167,19 @@ export async function loadServiceDetail(
       .select("client_profile_id")
       .eq("service_id", serviceId)
       .eq("tenant_id", tenantId),
+
+    // B-108 — outbound emails for this service. Capped at 200 (most-recent
+    // first); pagination can come later if a single service ever exceeds.
+    supabase
+      .from("service_communications")
+      .select(`
+        id, sent_at, sent_by, sent_by_name, sent_to_email, sent_to_profile_id,
+        email_type, subject, body_html, related_entity_type, related_entity_id, status
+      `)
+      .eq("service_id", serviceId)
+      .eq("tenant_id", tenantId)
+      .order("sent_at", { ascending: false })
+      .limit(200),
   ]);
 
   if (!serviceRes.data) notFound();
@@ -336,5 +352,7 @@ export async function loadServiceDetail(
       (fieldExtractionsRes.data ?? []) as unknown as FieldExtraction[],
     lastStatusChange,
     waivers: filteredWaivers as unknown as WaivedDocumentRequirement[],
+    communications:
+      (communicationsRes.data ?? []) as unknown as ServiceCommunication[],
   };
 }

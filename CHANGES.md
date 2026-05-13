@@ -32,7 +32,20 @@ Migration: `supabase/migrations/20260513183738_service_communications.sql` — c
 Files: `supabase/migrations/20260513183738_service_communications.sql` (new), `src/lib/email/logCommunication.ts` (new), `src/lib/email/findServices.ts` (new), `src/app/api/admin/clients/[id]/send-invite/route.ts`, `src/app/api/admin/profiles/[id]/send-invite/route.ts`, `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts`, `src/app/api/admin/documents/[id]/request-update/route.ts`, `src/app/api/admin/processes/[id]/request-documents/route.ts`.
 Build: clean.
 
-Next: Batch 2 — right-rail Communications card + modal with sandboxed-iframe body viewer.
+### 2026-05-13 — B-108 batch 2 — Comms card + modal viewer (Claude Code)
+
+New `ServiceCommunicationsCard` lives in the right rail of `/admin/services/[id]` (between Status and Milestones). Shows `<n> emails sent` plus a `View all` button — disabled with muted "No emails sent yet" when the service has no log rows yet (the track-from-now default for every service that existed before B-108).
+
+`ServiceCommunicationsDialog` opens a 5-column table (Date · To · Type · Subject (≤80 char ellipsis) · View). Type-pill filter row at the top toggles between All and each `email_type` present in the data; counts reflect the active filter. Default sort is most-recent-first (server-ordered).
+
+The `View` column's eye icon opens a **nested dialog** containing the full rendered HTML body inside `<iframe sandbox="" srcDoc={body_html}>`. Empty `sandbox=""` (no allow-flags) blocks scripts, forms, popups, and same-origin reads — defensive against any future inbound HTML ever being written into this table. Sub-dialog header repeats date + recipient + type for context.
+
+Wiring: `ServiceCommunication` type added to `page.tsx`, `loadServiceDetail.ts` now parallel-fetches `service_communications` (`limit 200, sent_at desc`) and threads it through `ServiceDetailPayload.communications`. `ServiceDetailClient` accepts the new prop and forwards it to the card; `ReviewWizardClient` already spreads the full payload so it inherits automatically (the rail is hidden in review mode, so the card never renders there).
+
+Files: `src/app/(admin)/admin/services/[id]/page.tsx`, `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`, `src/components/admin/ServiceCommunicationsCard.tsx` (new), `src/components/admin/ServiceCommunicationsDialog.tsx` (new).
+Build: clean.
+
+Next: Batch 3 — service alerts (auto-detected doc-expiry / KYC-age + manual entries) with dismiss/resolve flow.
 
 ---
 

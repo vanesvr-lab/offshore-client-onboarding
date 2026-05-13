@@ -72,6 +72,24 @@ export type WaivedDocumentRequirement = {
   scope: "person" | "application";
 };
 
+// B-108 — one row per outbound email, ordered most-recent-first. Body is
+// the rendered HTML stored verbatim at send time so the modal can replay
+// exactly what the recipient received.
+export type ServiceCommunication = {
+  id: string;
+  sent_at: string;
+  sent_by: string | null;
+  sent_by_name: string | null;
+  sent_to_email: string | null;
+  sent_to_profile_id: string | null;
+  email_type: string;
+  subject: string;
+  body_html: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  status: "sent" | "failed";
+};
+
 export type ServiceAuditEntry = {
   id: string;
   created_at: string;

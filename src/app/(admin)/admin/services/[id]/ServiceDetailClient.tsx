@@ -40,7 +40,7 @@ import {
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
-import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement } from "./page";
+import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement, ServiceCommunication } from "./page";
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
@@ -61,6 +61,7 @@ import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycDocumentsTable } from "@/components/admin/KycDocumentsTable";
+import { ServiceCommunicationsCard } from "@/components/admin/ServiceCommunicationsCard";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 import { formatDate } from "@/lib/utils/formatters";
@@ -3221,6 +3222,11 @@ interface Props {
   // of the upload action; the client portal upload list filters them
   // out so the client never sees the slot.
   waivers: WaivedDocumentRequirement[];
+  // B-108 — most-recent-first outbound email log for this service. Drives
+  // the right-rail Communications card + modal viewer. Empty array when
+  // none have been sent (or, currently, when the service had no
+  // pre-existing rows — track-from-now).
+  communications: ServiceCommunication[];
   // B-102 — Review Wizard chrome. When `reviewMode` is true the component
   // hides the stage strip + step indicator + right-rail + admin extras +
   // bottom save bar, and renders only the section card whose index matches
@@ -3486,6 +3492,7 @@ export function ServiceDetailClient({
   fieldExtractions,
   lastStatusChange,
   waivers: initialWaivers,
+  communications,
   reviewMode = false,
   reviewStep = 0,
 }: Props) {
@@ -4770,6 +4777,9 @@ export function ServiceDetailClient({
             <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
           </div>
         </div>
+
+        {/* ── Communications (B-108) ──────────────────────────────────────── */}
+        <ServiceCommunicationsCard communications={communications} />
 
         {/* ── Section 8: Milestones ────────────────────────────────────────── */}
         <ServiceCollapsibleSection
