@@ -45,6 +45,7 @@ import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionRevi
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { SectionReviewPanel } from "@/components/admin/SectionReviewPanel";
+import { AdminReviewWizardStepIndicator } from "@/components/admin/AdminReviewWizardStepIndicator";
 import { PerProfileReviewSummaryPanel, type PerProfileSubsection } from "@/components/admin/PerProfileReviewSummaryPanel";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
@@ -3310,29 +3311,54 @@ function ReviewWizardTopBar({
   profileLabel: string | null;
   service: ServiceWithTemplate;
 }) {
+  const router = useRouter();
   const stepLabel = ADMIN_STEPS_SERVICES[step]?.label ?? "Review";
+
+  // B-109 Batch 2 — step click navigates within the wizard. We don't
+  // flush dirty edits here because the indicator sits in the always-on
+  // sticky band; saves happen on Next / Mark as Reviewed where the
+  // intent is unambiguous. Replace (not push) so back-button behaviour
+  // stays intuitive within the wizard surface.
+  function handleStepClick(nextStep: number) {
+    if (nextStep === step) return;
+    router.replace(`/admin/services/${serviceId}/review?step=${nextStep}`);
+  }
+
   return (
-    <div className="sticky top-0 z-30 bg-white border-b -mx-8 px-8 py-3 flex items-center justify-between gap-3 shadow-sm">
-      <div className="min-w-0 flex items-center gap-3">
-        <Wand2 className="h-4 w-4 text-brand-navy shrink-0" />
-        <div className="min-w-0">
-          <p className="text-xs text-gray-500 leading-none">
-            {service.service_number ? `${service.service_number} — ` : ""}
-            {service.service_templates?.name ?? "Service"} · Review Wizard
-          </p>
-          <p className="text-sm font-semibold text-brand-navy truncate">
-            Step {step + 1} of {ADMIN_STEPS_SERVICES.length}: {stepLabel}
-            {profileLabel ? ` · ${profileLabel}` : ""}
-          </p>
+    <div className="sticky top-0 z-30 bg-white border-b -mx-8 px-8 py-3 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex items-center gap-3">
+          <Wand2 className="h-4 w-4 text-brand-navy shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500 leading-none">
+              {service.service_number ? `${service.service_number} — ` : ""}
+              {service.service_templates?.name ?? "Service"} · Review Wizard
+            </p>
+            <p className="text-sm font-semibold text-brand-navy truncate">
+              Step {step + 1} of {ADMIN_STEPS_SERVICES.length}: {stepLabel}
+              {profileLabel ? ` · ${profileLabel}` : ""}
+            </p>
+          </div>
         </div>
+        <Link
+          href={`/admin/services/${serviceId}`}
+          className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-brand-navy"
+        >
+          <X className="h-4 w-4" />
+          Exit Review
+        </Link>
       </div>
-      <Link
-        href={`/admin/services/${serviceId}`}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-brand-navy"
-      >
-        <X className="h-4 w-4" />
-        Exit Review
-      </Link>
+      {/* B-109 Batch 2 — step indicator row beneath the title. Reads
+          aggregate review status from `AdminApplicationSectionsProvider`
+          (which wraps this component upstream) to mark steps complete. */}
+      <div className="mt-2 pl-7">
+        <AdminReviewWizardStepIndicator
+          currentStep={step}
+          sectionKeys={REVIEW_STEP_SECTION_KEYS}
+          labels={REVIEW_STEP_LABELS}
+          onStepClick={handleStepClick}
+        />
+      </div>
     </div>
   );
 }

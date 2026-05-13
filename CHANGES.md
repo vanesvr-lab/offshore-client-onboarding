@@ -15,6 +15,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-109 — Review Wizard polish (Mark dialog + step indicator + per-profile sub-wizard)
 
+### 2026-05-13 — B-109 batch 2 — Top step indicator inside Review Wizard chrome (Claude Code)
+
+The Review Wizard's sticky top band now renders a numbered-breadcrumb step indicator (`Company Setup › Financial › Banking › People & KYC › Documents`) beneath the title row. Visual language matches the client's `ServiceWizardStepIndicator` (green check on complete, bolded brand-navy on active, muted gray on pending) so admins see the same wizard chrome shape as clients.
+
+Completion state is derived from `application_section_reviews` via the existing `useSectionReviews` context hook — a step shows the green check when its `section_key` has a latest review with `status='reviewed'`. The current step is read from URL state (`?step=N`), so refresh / back-button keep the highlight correct.
+
+All five steps are click-navigable for admin (every pill cursor-pointer, not gated by completion order like the client wizard) — admins can freely jump around the review surface. Clicks `router.replace` to `?step=N`; no auto-save on step click since the always-visible sticky band shouldn't silently flush mid-review (saves still happen on Next / Mark as Reviewed where intent is unambiguous).
+
+The scroll-page step-pill strip (`AdminApplicationStepIndicator` at line 4290) is already gated `{!reviewMode && ...}` from B-102, so no duplicate strip renders in wizard mode.
+
+Files: `src/components/admin/AdminReviewWizardStepIndicator.tsx` (new — admin-flavoured copy of the client breadcrumb), `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (mount the indicator inside `ReviewWizardTopBar` beneath the title row).
+Build: clean.
+
 ### 2026-05-13 — B-109 batch 1 — Mark-as-Reviewed opens SectionReviewPanel (Claude Code)
 
 The Review Wizard's `Mark as Reviewed` button no longer silently POSTs `status='reviewed'`. It now opens the same `SectionReviewPanel` dialog the inline `Review` button uses everywhere else on `/admin/services/[id]` — full status picker (`reviewed | flagged | rejected`) + notes textarea, notes required on flagged/rejected.
