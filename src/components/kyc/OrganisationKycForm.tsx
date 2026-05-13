@@ -5,16 +5,9 @@ import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, Save } from "luc
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
-import { COUNTRIES } from "@/components/shared/MultiSelectCountry";
+import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { cn } from "@/lib/utils";
@@ -224,19 +217,12 @@ export function OrganisationKycForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FieldRow prefilled={prefilled.has("jurisdiction_incorporated")}>
                 <Label className="text-xs">Jurisdiction of incorporation *</Label>
-                <Select
+                {/* B-100 — ISO3-keyed CountrySelect. */}
+                <CountrySelect
                   value={fields.jurisdiction_incorporated ?? ""}
-                  onValueChange={(v) => set("jurisdiction_incorporated", v ?? "")}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select jurisdiction…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((j) => (
-                      <SelectItem key={j} value={j}>{j}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => set("jurisdiction_incorporated", v)}
+                  placeholder="Select jurisdiction…"
+                />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("date_of_incorporation")}>
                 <Label className="text-xs">Date of incorporation *</Label>
@@ -248,9 +234,11 @@ export function OrganisationKycForm({
               </FieldRow>
               <FieldRow>
                 <Label className="text-xs">Tax residence jurisdiction</Label>
-                <Input
+                {/* B-100 — ISO3-keyed CountrySelect. */}
+                <CountrySelect
                   value={fields.jurisdiction_tax_residence ?? ""}
-                  onChange={(e) => set("jurisdiction_tax_residence", e.target.value)}
+                  onChange={(v) => set("jurisdiction_tax_residence", v)}
+                  placeholder="Select jurisdiction…"
                 />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("listed_or_unlisted")}>

@@ -7,15 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DocumentUploadWidget } from "@/components/shared/DocumentUploadWidget";
-import { COUNTRIES } from "@/components/shared/MultiSelectCountry";
+import { CountrySelect } from "@/components/shared/CountrySelect";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
@@ -385,19 +378,12 @@ export function IndividualKycForm({
                     />
                   )}
                 </Label>
-                <Select
+                {/* B-100 — ISO3-keyed CountrySelect. */}
+                <CountrySelect
                   value={fields.nationality ?? ""}
-                  onValueChange={(v) => set("nationality", v ?? "")}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select nationality…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((n) => (
-                      <SelectItem key={n} value={n}>{n}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => set("nationality", v)}
+                  placeholder="Select nationality…"
+                />
               </FieldRow>
               <FieldRow>
                 <Label className="text-xs">
@@ -410,19 +396,11 @@ export function IndividualKycForm({
                     />
                   )}
                 </Label>
-                <Select
+                <CountrySelect
                   value={fields.passport_country ?? ""}
-                  onValueChange={(v) => set("passport_country", v ?? "")}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select country…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(v) => set("passport_country", v)}
+                  placeholder="Select country…"
+                />
               </FieldRow>
               <FieldRow prefilled={prefilled.has("passport_number")} mandatory>
                 <Label className="text-xs">

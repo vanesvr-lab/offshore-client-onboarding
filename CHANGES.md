@@ -15,6 +15,51 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-100 — Review tooltip + address save fix + waive document + Local Director
 
+### 2026-05-13 — B-100 batch 4 — ISO3 country dropdown + Local Director badge (Claude Code)
+
+`/admin/services/[id]` profile headers now display a "Local Director" pill next to the KYC % when the profile is a director on the current service AND `passport_country = "MUS"`. To make that check deterministic, every country field across the app now stores ISO 3166-1 alpha-3 codes (e.g. `MUS`) while displaying the country name. The AI passport extractor returns ISO3 too.
+
+**Pre-migration data survey** (`SELECT DISTINCT … COUNT(*) FROM client_profile_kyc`):
+
+```
+passport_country (6 rows total)         nationality (6 rows total)
+   4   (empty)                              4   (empty)
+   2   MUS  ← already ISO3                  2   CITIZEN OF MAURITIUS
+```
+
+Only one row pattern actually needed migrating (`CITIZEN OF MAURITIUS` → `MUS`). The migration encodes that mapping plus a defensive set of common aliases (UK / US / Mauritian / Mauritius) so any row landing between snapshot and push still backfills cleanly.
+
+**Migration:** `supabase/migrations/20260513024450_backfill_passport_country_iso3.sql` — `UPDATE client_profile_kyc` mappings on both `passport_country` and `nationality`. Values that don't match are left as-is; `<CountrySelect>` flags them with an italic `(legacy)` tag until a user re-selects.
+
+`npm run db:push` ran clean; `npm run db:status` shows Local + Remote paired for `20260513024450`.
+
+**Canonical list** (`src/lib/constants/countries.ts`): 249-entry ISO 3166-1 alpha-3 list with `name` + `numeric`. Exports `COUNTRIES_ISO`, `ISO3_TO_NAME`, `NAME_TO_ISO3` (includes ~17 common aliases — `uk`, `usa`, `vatican city`, `citizen of mauritius`, etc.), plus helpers `isValidIso3`, `nameForIso3`, `toIso3`. The legacy `COUNTRIES` name-array in `MultiSelectCountry.tsx` is left intact for now (see tech-debt entry).
+
+**`CountrySelect` rewrite** (`src/components/shared/CountrySelect.tsx`):
+- `value` and `onChange` now speak ISO3.
+- Search filters by both name and ISO3 code; rows display the code (gray monospace prefix) next to the name.
+- Custom-entry mode accepts a 3-letter code (auto-uppercased, validated against `ISO3_TO_NAME`); errors are shown inline.
+- Free-form legacy values render with a small italic amber `(legacy)` tag until cleared by a real selection.
+- `MultiSelectCountry`'s old name-array import deleted from this file.
+
+**AI extractor** (`src/lib/ai/verifyDocument.ts`):
+- System prompt extended: country codes (nationality, passport_country, country_of_birth, country_of_residence, jurisdiction_incorporated, jurisdiction_tax_residence) MUST be ISO3 uppercase; return `null` rather than guessing.
+- Post-processor walks `extracted_fields`; for any key in `ISO3_FIELD_KEYS` it accepts an ISO3 hit straight through, otherwise runs the value through `toIso3()`. Unresolvable values are dropped and added to `flags` so admins see them on review.
+
+**Form wiring** — every passport/nationality/jurisdiction input swapped to `<CountrySelect>`:
+- `src/components/kyc/IndividualKycForm.tsx` — nationality + passport_country (was raw `<Select>` over `COUNTRIES`).
+- `src/components/kyc/OrganisationKycForm.tsx` — jurisdiction_incorporated + jurisdiction_tax_residence (the latter was a plain `<Input>`).
+- `src/components/kyc/steps/IdentityStep.tsx` already used `CountrySelect`; gets ISO3 storage for free now that the component changed semantics.
+- Unused `Select*` / `COUNTRIES` imports cleaned up in both forms.
+
+**Local Director badge** (`src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`): `isLocalDirector = !profile.is_representative && kyc?.passport_country === "MUS" && (combinedRoles ?? [roleRow.role]).includes("director")`. Rendered in two places to match the brief's "next to the KYC %" wording: the collapsed navy header pill (translucent white "Local Director" chip) and the sticky banner above the long-form (`bg-brand-navy/10` chip). No flag emoji (brand chrome doesn't use country flags elsewhere).
+
+**Tech-debt entries appended** to `docs/tech-debt.md` under `2026-05-13`: parallel country lists, missing DB CHECK constraints on country columns, client-side-only Local Director check.
+
+`npm run build` clean.
+
+---
+
 ### 2026-05-13 — B-100 batch 3 — Waive document (Claude Code)
 
 Admin can waive any KYC document requirement on `/admin/services/[id]` → KYC Documents tab. Waived rows show a muted "Waived" pill in place of the upload action; the client portal upload list filters them out entirely so the client never sees the slot. Reversible via one-click "Un-waive". Both actions audit-logged.

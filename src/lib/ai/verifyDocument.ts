@@ -6,6 +6,19 @@ import type {
   VerificationRules,
 } from "@/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isValidIso3, toIso3 } from "@/lib/constants/countries";
+
+// B-100 — extracted-field keys that must be ISO 3166-1 alpha-3 codes.
+// Post-processor coerces free-form country names into ISO3 if the model
+// slipped, and otherwise drops the value rather than persisting noise.
+const ISO3_FIELD_KEYS = new Set<string>([
+  "nationality",
+  "passport_country",
+  "country_of_birth",
+  "country_of_residence",
+  "jurisdiction_incorporated",
+  "jurisdiction_tax_residence",
+]);
 
 // Lazy-instantiate the Anthropic client to avoid module-load-time env issues
 let _anthropic: Anthropic | null = null;
@@ -177,6 +190,8 @@ overall_status is derived ONLY from rule_results:
 
 Extraction failures (missing, ambiguous, unparseable fields) MUST NOT change overall_status. If a field cannot be extracted, leave it out of extracted_fields and add a short note to "flags" instead.
 
+Country codes (nationality, passport_country, country_of_birth, country_of_residence, jurisdiction_incorporated, jurisdiction_tax_residence) MUST be returned as ISO 3166-1 alpha-3 three-letter uppercase codes (e.g. MUS, GBR, USA, IND). If you cannot determine the ISO3 code with high confidence, return null for that field rather than a guess or a free-form country name.
+
 Respond ONLY in valid JSON. No preamble. No markdown. Exact schema required.`;
 
   const rulesSection = plainTextRules
@@ -341,6 +356,17 @@ Notes:
         const iso = normalizeDate(String(v));
         if (iso) cleaned[k] = iso;
         else addFlags.push(`Could not parse date for "${k}" — original: "${v}"`);
+      } else if (ISO3_FIELD_KEYS.has(k)) {
+        // B-100 — coerce model-returned country names to ISO3. Drop +
+        // flag values we can't resolve so the field stays clean.
+        const raw = String(v);
+        if (isValidIso3(raw.toUpperCase())) {
+          cleaned[k] = raw.toUpperCase();
+        } else {
+          const iso3 = toIso3(raw);
+          if (iso3) cleaned[k] = iso3;
+          else addFlags.push(`Could not resolve "${k}" to ISO 3166-1 alpha-3 — original: "${raw}"`);
+        }
       } else {
         cleaned[k] = String(v);
       }

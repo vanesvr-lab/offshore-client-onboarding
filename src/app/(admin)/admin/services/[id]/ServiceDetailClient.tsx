@@ -1620,6 +1620,16 @@ function PersonCard({
   const kycPct = calcKycPct(kyc);
   const kycDone = kyc?.kyc_journey_completed === true;
 
+  // B-100 — Local Director: profile is a director on this service AND
+  // `passport_country` is Mauritius (ISO3 = MUS). The dirty-tracker
+  // already pulls passport_country into `savedFields`, so toggling
+  // either dimension flips the badge live. Profile-level (`isRep` is
+  // ineligible by definition — reps don't have KYC).
+  const isLocalDirector =
+    !profile.is_representative &&
+    (kyc?.passport_country === "MUS") &&
+    (combinedRoles ?? [roleRow.role]).includes("director");
+
   const sentDate = inviteSentAt
     ? new Date(inviteSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : null;
@@ -1967,6 +1977,13 @@ function PersonCard({
                         {kycDone ? "✓ KYC Complete" : `KYC: ${kycPct}%`}
                       </span>
                     )}
+                    {/* B-100 — Local Director badge. director on this
+                        service + passport_country = MUS. */}
+                    {isLocalDirector && (
+                      <span className="inline-flex items-center rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium text-brand-navy shrink-0">
+                        Local Director
+                      </span>
+                    )}
                   </>
                 )}
                 {expanded && (
@@ -2098,6 +2115,14 @@ function PersonCard({
                   >
                     {kycDone ? "✓ Complete" : `${kycPct}%`}
                   </span>
+                  {/* B-100 — Local Director badge mirrors the collapsed
+                      header so the indicator stays in view while admin
+                      is editing the long-form. */}
+                  {isLocalDirector && (
+                    <span className="inline-flex items-center rounded-full bg-brand-navy/10 px-2 py-0.5 text-[10px] font-medium text-brand-navy">
+                      Local Director
+                    </span>
+                  )}
                 </div>
                 {kyc && kycSubsections.length > 0 && (
                   <Button
