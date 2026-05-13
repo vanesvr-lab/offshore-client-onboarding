@@ -11,6 +11,26 @@ remove after 30 days.
 
 ## 2026-05-13
 
+- **No UI to restore removed profiles.**
+  *Spawned by:* [B-101](cli-brief-account-brand-and-chatbot-b101.md).
+  *What:* B-101 batch 3 ships soft-delete (`service_profile_removals`) with no admin-facing restore button. Removed profiles stay in the table so restoration is a single SQL DELETE on `(service_id, client_profile_id)` if needed. Add a "Removed people (N)" collapsible at the bottom of People & KYC with one-click restore once Vanessa needs it.
+  *Why deferred:* Re-adding the profile via the existing "Add profile" flow already restores them functionally (their `profile_service_roles` rows stay intact, so role assignments come back). Only blocker is the UX needs to know they were previously here — not load-bearing yet.
+
+- **Client account settings page (`/account`) is missing.**
+  *Spawned by:* [B-101](cli-brief-account-brand-and-chatbot-b101.md).
+  *What:* B-101 batch 4 ships admin-only at `/admin/account`. Mirror the same three-card UX at `/account` for client users when the demand surfaces. Underlying API endpoints (`/api/admin/account/*`) can be generalised to `/api/account/*` and gated by `session.user.role` at call time.
+  *Why deferred:* Admins were the immediate need (Vanessa wanted to set her own picture). Clients can rely on Auth.js's set-password reset flow for password changes today.
+
+- **Chatbot widget has no backend.**
+  *Spawned by:* [B-101](cli-brief-account-brand-and-chatbot-b101.md).
+  *What:* B-101 batch 6 ships UI-only. Future: wire to Anthropic Claude with form-context awareness (current page, current profile, KYC section being viewed) and a knowledge-base RAG over our existing `knowledge_base` content. Placeholder copy explicitly says "coming soon" so the disabled input is on-message.
+  *Why deferred:* Out of scope for this brief — the UI surface is the commitment-to-come.
+
+- **Brand logo file (`public/brand-logo.png`) hookup is hardcoded to PNG.**
+  *Spawned by:* [B-101](cli-brief-account-brand-and-chatbot-b101.md).
+  *What:* `BrandMark.tsx` reads `/brand-logo.png` only. If the brand asset ever moves to SVG, swap the extension in one place. The `onError` fallback to lucide `Landmark` keeps the layout intact if the file goes missing. Low-priority.
+  *Why deferred:* Current asset is a 1536×1024 PNG. SVG would also remove the next/image roundtrip and shrink first-paint payload. Bundle that into the next brand polish pass.
+
 - **Two parallel country lists in the codebase.**
   *Spawned by:* [B-100](cli-brief-waive-docs-and-local-director-b100.md).
   *What:* `src/components/shared/MultiSelectCountry.tsx` still exports a name-only `COUNTRIES` array, used wherever a free-text country tag list is acceptable (geographical area fields, etc.). The new ISO3 list at `src/lib/constants/countries.ts` powers `CountrySelect`. Unify when there's a real need to query "all profiles in Mauritius" across both fields.

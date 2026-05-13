@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Header } from "@/components/shared/Header";
+import { FloatingAssistantWidget } from "@/components/shared/FloatingAssistantWidget";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -30,6 +31,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </main>
       </div>
+      {/* B-101 Batch 6 — placeholder AI assistant widget. UI-only; no backend wiring yet. */}
+      <FloatingAssistantWidget />
     </div>
   );
 }

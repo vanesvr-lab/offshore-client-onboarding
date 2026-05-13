@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
 
+### 2026-05-13 — B-101 batch 6 — Floating AI Assistant placeholder widget (Claude Code)
+
+New `FloatingAssistantWidget` (`src/components/shared/FloatingAssistantWidget.tsx`) — fixed bottom-right round button (h-14 w-14, brand-navy, lucide `MessageCircle`, hover scale 1.05). Click → slide-in panel anchored to the same corner (w-80, h-28rem, rounded-2xl, shadow-2xl, brand-navy header). Body has a single bot bubble with the placeholder welcome copy + the support@elarix.io mailto. Input row is a disabled textarea ("AI assistance coming soon…") and a disabled Send button.
+
+UI-only — no backend wiring. Open/closed state in local React state; resets per page load.
+
+**Mount points:**
+- `src/components/shared/ClientShell.tsx` — covers every page under `(client)/`.
+- `src/app/(admin)/layout.tsx` — covers every page under `(admin)/`.
+
+Not mounted in `(auth)/` layouts (login / register / set-password) — those don't need it.
+
+**Tech-debt entry added** noting: no backend; client `/account` page deferred; restore-removed-profile UI deferred; brand-logo extension hardcoded.
+
+Files: `src/components/shared/FloatingAssistantWidget.tsx` (new), `src/components/shared/ClientShell.tsx`, `src/app/(admin)/layout.tsx`, `docs/tech-debt.md`.
+Build: clean.
+
 ### 2026-05-13 — B-101 batch 5 — Brand logo + role-based portal name (Claude Code)
 
 Sidebar header, top Header bar, and auth pages (login / register / set-password) now render a brand logo alongside the portal name. Portal name is role-based:

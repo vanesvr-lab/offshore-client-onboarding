@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
+import { FloatingAssistantWidget } from "./FloatingAssistantWidget";
 
 interface ClientShellProps {
   userName: string | null | undefined;
@@ -34,6 +35,8 @@ export function ClientShell({ userName, hasApplications, isPrimary, children }: 
           <div className="p-4 md:p-8">{children}</div>
         </main>
       </div>
+      {/* B-101 Batch 6 — placeholder AI assistant widget. UI-only; no backend wiring yet. */}
+      <FloatingAssistantWidget />
     </div>
   );
 }
