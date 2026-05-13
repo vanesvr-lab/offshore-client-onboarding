@@ -799,6 +799,9 @@ export interface ApplicationSectionReview {
   notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string;
+  /** B-110 — admin marked the section reviewed despite incomplete fields.
+   *  Implies notes are non-null (server validates). */
+  force_reviewed: boolean;
   // joined optionally via reviewed_by → profiles(full_name)
   profiles?: { full_name: string | null } | null;
 }

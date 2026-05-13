@@ -24,6 +24,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (review: ApplicationSectionReview) => void;
+  /**
+   * B-110 — when true, the parent considers this section incomplete
+   * (completion < 100%). Drives the Force review checkbox + required
+   * notes when admin chooses `reviewed`. Default `false` keeps the
+   * existing flow unchanged for callers that don't pass it.
+   */
+  sectionIncomplete?: boolean;
 }
 
 const OPTIONS: {
@@ -68,26 +75,46 @@ export function SectionReviewPanel({
   open,
   onOpenChange,
   onSaved,
+  sectionIncomplete = false,
 }: Props) {
   const [status, setStatus] = useState<SectionReviewStatus | null>(null);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  // B-110 — explicit acknowledgement when admin marks an incomplete section
+  // reviewed. Reset alongside status/notes whenever the sheet reopens.
+  const [forceReview, setForceReview] = useState(false);
 
   useEffect(() => {
     if (open) {
       setStatus(null);
       setNotes("");
+      setForceReview(false);
     }
   }, [open]);
 
-  const notesRequired = status === "flagged" || status === "rejected";
+  // B-110 — `reviewed` on an incomplete section is the only path that needs
+  // the Force-review override. Flagged/Rejected stay notes-required as before.
+  const isForceReviewPath = status === "reviewed" && sectionIncomplete;
+  const notesRequired =
+    status === "flagged" || status === "rejected" || isForceReviewPath;
   const canSave =
-    !!status && !saving && (!notesRequired || notes.trim().length > 0);
+    !!status &&
+    !saving &&
+    (!notesRequired || notes.trim().length > 0) &&
+    (!isForceReviewPath || forceReview);
 
   async function handleSave() {
     if (!status || saving) return;
     if (notesRequired && !notes.trim()) {
-      toast.error("Notes are required when flagging or rejecting");
+      toast.error(
+        isForceReviewPath
+          ? "Notes are required when force-reviewing an incomplete section."
+          : "Notes are required when flagging or rejecting",
+      );
+      return;
+    }
+    if (isForceReviewPath && !forceReview) {
+      toast.error("Confirm the override to mark an incomplete section reviewed.");
       return;
     }
     setSaving(true);
@@ -101,6 +128,7 @@ export function SectionReviewPanel({
             section_key: sectionKey,
             status,
             notes: notes.trim() || null,
+            force_reviewed: isForceReviewPath && forceReview ? true : false,
           }),
         },
       );
@@ -175,6 +203,32 @@ export function SectionReviewPanel({
             </div>
           </div>
 
+          {/* B-110 — Force-review override card. Only shows when admin
+              picks `reviewed` AND the parent passed `sectionIncomplete`.
+              Both the checkbox and a non-empty Notes value are required
+              to enable Save (gated in `canSave`). */}
+          {isForceReviewPath && (
+            <div className="mt-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
+              <p className="text-sm font-medium text-amber-900">
+                This section is incomplete
+              </p>
+              <p className="text-xs text-amber-700">
+                Some required fields are blank. To mark this section reviewed
+                anyway, confirm the override and explain why in the notes
+                below.
+              </p>
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-amber-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={forceReview}
+                  onChange={(e) => setForceReview(e.target.checked)}
+                  className="h-4 w-4 rounded border-amber-400 text-amber-700 focus:ring-amber-500"
+                />
+                Force review (section is incomplete)
+              </label>
+            </div>
+          )}
+
           <div className="mt-6 space-y-2">
             <label className="text-sm font-medium text-gray-700">
               Notes
@@ -190,7 +244,9 @@ export function SectionReviewPanel({
               onChange={(e) => setNotes(e.target.value)}
               placeholder={
                 notesRequired
-                  ? "Required: explain what needs to change…"
+                  ? isForceReviewPath
+                    ? "Required: why is it acceptable to mark this reviewed despite missing fields?"
+                    : "Required: explain what needs to change…"
                   : "Optional context for this approval…"
               }
               className="min-h-24"

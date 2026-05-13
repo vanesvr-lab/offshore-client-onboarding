@@ -195,7 +195,13 @@ export function ServiceCollapsibleSection({
         </button>
 
         {sectionKey && (
-          <SectionReviewControls sectionKey={sectionKey} title={title} />
+          <SectionReviewControls
+            sectionKey={sectionKey}
+            title={title}
+            sectionIncomplete={
+              percentage !== undefined ? percentage < 100 : false
+            }
+          />
         )}
       </div>
 
@@ -209,7 +215,15 @@ export function ServiceCollapsibleSection({
   );
 }
 
-function SectionReviewControls({ sectionKey, title }: { sectionKey: string; title: string }) {
+function SectionReviewControls({
+  sectionKey,
+  title,
+  sectionIncomplete,
+}: {
+  sectionKey: string;
+  title: string;
+  sectionIncomplete?: boolean;
+}) {
   const { applicationId, currentStatus, onReviewSaved, latest } = useSectionReview(sectionKey);
   return (
     <div className="flex items-center gap-2 shrink-0">
@@ -225,6 +239,7 @@ function SectionReviewControls({ sectionKey, title }: { sectionKey: string; titl
         sectionLabel={title}
         currentStatus={currentStatus}
         onReviewSaved={onReviewSaved}
+        sectionIncomplete={sectionIncomplete}
       />
     </div>
   );

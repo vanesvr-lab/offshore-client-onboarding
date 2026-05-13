@@ -863,7 +863,11 @@ function KycLongFormSection({
           </div>
           {reviewKey && (
             <span onClick={(e) => e.stopPropagation()}>
-              <InlineReviewButton sectionKey={reviewKey} sectionLabel={section.title} />
+              <InlineReviewButton
+                sectionKey={reviewKey}
+                sectionLabel={section.title}
+                sectionIncomplete={pct < 100}
+              />
             </span>
           )}
           <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -1225,9 +1229,13 @@ function InlineReviewBadge({ sectionKey }: { sectionKey: string }) {
 function InlineReviewButton({
   sectionKey,
   sectionLabel,
+  sectionIncomplete,
 }: {
   sectionKey: string;
   sectionLabel: string;
+  /** B-110 — forwarded so admin can't silently mark an incomplete KYC
+   *  subsection reviewed without acknowledging the override. */
+  sectionIncomplete?: boolean;
 }) {
   const { applicationId, currentStatus, onReviewSaved } = useSectionReview(sectionKey);
   return (
@@ -1237,6 +1245,7 @@ function InlineReviewButton({
       sectionLabel={sectionLabel}
       currentStatus={currentStatus}
       onReviewSaved={onReviewSaved}
+      sectionIncomplete={sectionIncomplete}
     />
   );
 }
@@ -2308,6 +2317,7 @@ function PersonCard({
               }}
               onViewDoc={handleAdminViewDoc}
               uploadingDocTypeId={uploadingDocTypeId}
+              profileKycPct={kycPct}
               subStepIndex={wizardSubStep.subStepIndex}
               onSubStepChange={wizardSubStep.onSubStepChange}
               onBackToList={wizardSubStep.onBackToList}
@@ -3488,6 +3498,7 @@ function ReviewWizardBottomNav({
   onSave,
   profileSubstep,
   totalProfilesInStep,
+  stepPct,
 }: {
   serviceId: string;
   step: number;
@@ -3502,6 +3513,9 @@ function ReviewWizardBottomNav({
     onNextProfile: () => void;
   } | null;
   totalProfilesInStep: number;
+  /** B-110 — completion % for the current step. Drives the
+   *  Force-review override flow in the SectionReviewPanel dialog. */
+  stepPct: number;
 }) {
   const router = useRouter();
   const sectionKey = REVIEW_STEP_SECTION_KEYS[step];
@@ -3631,6 +3645,7 @@ function ReviewWizardBottomNav({
         open={reviewDialogOpen}
         onOpenChange={setReviewDialogOpen}
         onSaved={(r) => void handleReviewSaved(r)}
+        sectionIncomplete={stepPct < 100}
       />
     </>
   );
@@ -5226,6 +5241,21 @@ export function ServiceDetailClient({
           onSave={handleSaveReturningOk}
           profileSubstep={reviewProfileSubstep}
           totalProfilesInStep={uniqueRoles.length}
+          stepPct={
+            // B-110 — per-step completion drives the Force-review override
+            // in `SectionReviewPanel`. Mirrors REVIEW_STEP_SECTION_KEYS
+            // ordering: Company Setup / Financial / Banking / People & KYC
+            // / Documents.
+            reviewStep === 0
+              ? companySetupPct
+              : reviewStep === 1
+                ? financialPct
+                : reviewStep === 2
+                  ? bankingPct
+                  : reviewStep === 3
+                    ? peopleKycPct
+                    : documentsPct
+          }
         />
       )}
 

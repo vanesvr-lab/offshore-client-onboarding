@@ -15,6 +15,9 @@ interface Props {
   // B-079 — switches the trigger button to a translucent-white outline so
   // it reads as a band-level affordance on the navy step header.
   tone?: "default" | "on-dark";
+  /** B-110 — forwarded to `SectionReviewPanel` to drive the Force-review
+   *  override flow when admin marks an incomplete section reviewed. */
+  sectionIncomplete?: boolean;
 }
 
 export function SectionReviewButton({
@@ -24,6 +27,7 @@ export function SectionReviewButton({
   currentStatus,
   onReviewSaved,
   tone = "default",
+  sectionIncomplete,
 }: Props) {
   const [open, setOpen] = useState(false);
   return (
@@ -56,6 +60,7 @@ export function SectionReviewButton({
           onReviewSaved(r);
           setOpen(false);
         }}
+        sectionIncomplete={sectionIncomplete}
       />
     </>
   );

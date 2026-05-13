@@ -40,7 +40,12 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: { section_key?: string; status?: SectionReviewStatus; notes?: string | null };
+  let body: {
+    section_key?: string;
+    status?: SectionReviewStatus;
+    notes?: string | null;
+    force_reviewed?: boolean;
+  };
   try {
     body = await request.json();
   } catch {
@@ -60,6 +65,24 @@ export async function POST(
     return NextResponse.json({ error: "Notes are required when flagging or rejecting" }, { status: 400 });
   }
 
+  // B-110 — `force_reviewed` is only meaningful on the `reviewed` path. Reject
+  // misuse from clients (avoids confusing audit rows like a rejected section
+  // also carrying a force-reviewed flag). When set on `reviewed`, notes are
+  // required so the audit trail captures the override reason.
+  const forceReviewed = body.force_reviewed === true;
+  if (forceReviewed && status !== "reviewed") {
+    return NextResponse.json(
+      { error: "force_reviewed only applies when status is reviewed" },
+      { status: 400 },
+    );
+  }
+  if (status === "reviewed" && forceReviewed && !notes) {
+    return NextResponse.json(
+      { error: "Notes are required when force-reviewing an incomplete section." },
+      { status: 400 },
+    );
+  }
+
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("application_section_reviews")
@@ -68,6 +91,7 @@ export async function POST(
       section_key: sectionKey,
       status,
       notes,
+      force_reviewed: forceReviewed,
       reviewed_by: session.user.id,
     })
     .select("*, profiles:reviewed_by(full_name)")
@@ -79,6 +103,8 @@ export async function POST(
   // service-detail audit panel surfaces it. `params.id` is the service id
   // (column name is misleading per tech-debt #26 — application_id stores
   // service ids on the modern path).
+  // B-110 — include `force_reviewed` in the audit value so the trail shows
+  // when admin overrode an incomplete section.
   await writeAuditLog(supabase, {
     actor_id: session.user.id,
     actor_role: "admin",
@@ -86,7 +112,7 @@ export async function POST(
     action: "section_review_saved",
     entity_type: "service",
     entity_id: params.id,
-    new_value: { section_key: sectionKey, status, notes },
+    new_value: { section_key: sectionKey, status, notes, force_reviewed: forceReviewed },
   });
 
   return NextResponse.json({ data: data as unknown as ApplicationSectionReview });

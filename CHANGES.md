@@ -13,6 +13,43 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-110 — Force review on incomplete section
+
+### 2026-05-13 — B-110 — Force-review checkbox + required notes when section is incomplete (Claude Code)
+
+Admin can no longer silently mark a section `reviewed` when its completion is below 100%. When `status === 'reviewed'` AND the parent passes `sectionIncomplete = true`, `SectionReviewPanel` now shows an amber override card with a `Force review (section is incomplete)` checkbox; both the checkbox and a non-empty Notes value are required before Save enables. The choice persists on `application_section_reviews.force_reviewed` so the audit trail captures the override and the reason. Existing flow unchanged when the section is complete (notes optional on `reviewed`, required only on `flagged` / `rejected`).
+
+Migration: `supabase/migrations/20260513191757_section_review_force_reviewed.sql` — `ALTER TABLE application_section_reviews ADD COLUMN force_reviewed boolean NOT NULL DEFAULT false`. Pushed; `npm run db:status` clean (Local + Remote paired at `20260513191757`).
+
+API (`POST /api/admin/applications/[id]/section-reviews`):
+- Body now accepts optional `force_reviewed?: boolean` (defaults to `false`).
+- Validation: rejects `force_reviewed=true` when status isn't `reviewed` (400). When `status='reviewed' && force_reviewed=true && !notes` → 400 with `Notes are required when force-reviewing an incomplete section.`
+- Inserts `force_reviewed` and surfaces it on the returned row.
+- Audit log `section_review_saved` `new_value` now includes `force_reviewed` so the trail shows the override.
+
+UI (`SectionReviewPanel`):
+- New optional `sectionIncomplete?: boolean` prop. Default `false` keeps the existing flow for any caller that doesn't pass it.
+- Local `forceReview` state reset alongside status/notes whenever the sheet reopens.
+- Amber override card renders only when `status === 'reviewed' && sectionIncomplete`.
+- `notesRequired` extended to include the force-review path; `canSave` gates on both the checkbox + non-empty notes.
+- POST body now carries `force_reviewed: isForceReviewPath && forceReview ? true : false`.
+- Toast messages on save attempt explain why save is blocked (notes required / confirm override).
+
+Call sites threaded (`grep` for `SectionReviewPanel|SectionReviewButton`):
+- `SectionReviewButton` — new optional `sectionIncomplete?: boolean` forwarded straight to the panel.
+- `ServiceCollapsibleSection` — derives `sectionIncomplete = percentage < 100` from its own `percentage` prop and forwards into the internal `SectionReviewControls` (the per-section header pill).
+- `ServiceDetailClient.InlineReviewButton` — accepts `sectionIncomplete`, forwards to `SectionReviewButton`; KycLongFormSection passes the section's own `pct < 100`.
+- `ServiceDetailClient.ReviewWizardBottomNav` — accepts `stepPct`, passes `sectionIncomplete={stepPct < 100}` into the dialog. Parent maps the active `reviewStep` to the matching pct (`companySetupPct`, `financialPct`, `bankingPct`, `peopleKycPct`, `documentsPct`).
+- `AdminPerProfileReviewWizard` — accepts `profileKycPct`, passes `sectionIncomplete={profileKycPct < 100}` into the `Mark Profile Reviewed` dialog. PersonCard forwards its in-scope `kycPct`.
+- Legacy `/admin/applications/[id]` `ConnectedSectionHeader` callers don't have per-section pct in scope; left as default `false` per the brief.
+
+Type: `ApplicationSectionReview.force_reviewed: boolean` added in `src/types/index.ts`.
+
+Files: `supabase/migrations/20260513191757_section_review_force_reviewed.sql` (new), `src/types/index.ts`, `src/app/api/admin/applications/[id]/section-reviews/route.ts`, `src/components/admin/SectionReviewPanel.tsx`, `src/components/admin/SectionReviewButton.tsx`, `src/components/admin/ServiceCollapsibleSection.tsx`, `src/components/admin/AdminPerProfileReviewWizard.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`.
+Build: clean.
+
+---
+
 ## B-109 — Review Wizard polish (Mark dialog + step indicator + per-profile sub-wizard)
 
 ### 2026-05-13 — B-109 batch 3 — Admin per-profile sub-wizard for step 3 (Claude Code)

@@ -88,6 +88,11 @@ export interface AdminPerProfileReviewWizardProps {
   onViewDoc: (docId: string) => void;
   uploadingDocTypeId: string | null;
 
+  /** B-110 — overall KYC completion % for this profile. Drives the
+   *  Force-review override in the `Mark Profile Reviewed` dialog when
+   *  admin tries to mark an incomplete profile reviewed. */
+  profileKycPct: number;
+
   // Sub-step nav (URL-synced upstream)
   subStepIndex: number;
   onSubStepChange: (next: number) => void;
@@ -181,6 +186,7 @@ export function AdminPerProfileReviewWizard(
     onBackToList,
     onProfileReviewed,
     renderFormSection,
+    profileKycPct,
   } = props;
 
   const hasPersonDocs = kycDocsByCategory.some((c) => c.docs.length > 0);
@@ -366,6 +372,7 @@ export function AdminPerProfileReviewWizard(
         open={reviewDialogOpen}
         onOpenChange={setReviewDialogOpen}
         onSaved={(r) => void handleReviewSaved(r)}
+        sectionIncomplete={profileKycPct < 100}
       />
     </div>
   );
