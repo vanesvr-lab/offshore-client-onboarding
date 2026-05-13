@@ -1400,6 +1400,7 @@ function PersonCard({
   defaultExpanded,
   fieldExtractions,
   waivers,
+  onWaiversChange,
   adminNamesByUserId,
   onRefresh,
   onProfileSaved,
@@ -1423,6 +1424,10 @@ function PersonCard({
    *  "Waived" badge + tooltip on each waived KYC doc row and adjusts the
    *  uploaded/total counts to exclude waived requirements. */
   waivers?: WaivedDocumentRequirement[];
+  /** B-107 — splice waivers up into ServiceDetailClient's state so the
+   *  per-profile Documents subsection can fire its own Waive / Un-waive
+   *  actions through `KycDocsByCategory`. */
+  onWaiversChange?: (next: WaivedDocumentRequirement[]) => void;
   /** B-106 — admin user_id → full_name map for the waiver tooltip's
    *  "by <name>" suffix. Cheap lookup; the page already loads admin users
    *  for other surfaces (loadServiceDetail). */
@@ -1894,6 +1899,16 @@ function PersonCard({
     (acc, c) => acc + c.docs.filter((d) => d.is_uploaded && !d.is_waived).length,
     0,
   );
+  // B-107 — waived docs count toward "done" for the section pct so a
+  // profile with everything either uploaded or waived shows 100% on the
+  // collapsed Documents header. The text breakdown still keeps the
+  // explicit "uploaded · waived" split for readability.
+  const totalKycDone = totalKycUploaded + totalKycWaived;
+  const kycDonePct =
+    totalKycDocs > 0
+      ? Math.round((totalKycDone / totalKycDocs) * 100)
+      : 0;
+  const kycAllDone = totalKycDocs > 0 && totalKycDone === totalKycDocs;
 
   async function handleAdminDocUpload(docTypeId: string, file: File) {
     setUploadingDocTypeId(docTypeId);
@@ -2317,12 +2332,10 @@ function PersonCard({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span
                     className={`h-2 w-2 rounded-full ${
-                      totalKycRequired > 0 && totalKycUploaded === totalKycRequired
+                      kycAllDone
                         ? "bg-green-500"
-                        : totalKycUploaded > 0
+                        : totalKycDone > 0
                         ? "bg-amber-400"
-                        : totalKycRequired === 0
-                        ? "bg-green-500"
                         : "bg-red-400"
                     }`}
                   />
@@ -2339,28 +2352,17 @@ function PersonCard({
                     <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
-                          totalKycRequired > 0 && totalKycUploaded === totalKycRequired
+                          kycAllDone
                             ? "bg-green-500"
-                            : totalKycUploaded > 0
+                            : totalKycDone > 0
                             ? "bg-amber-400"
-                            : totalKycRequired === 0
-                            ? "bg-green-500"
                             : "bg-red-400"
                         }`}
-                        style={{
-                          width: `${
-                            totalKycRequired > 0
-                              ? Math.round((totalKycUploaded / totalKycRequired) * 100)
-                              : 100
-                          }%`,
-                        }}
+                        style={{ width: `${kycDonePct}%` }}
                       />
                     </div>
                     <span className="text-[10px] text-gray-500 tabular-nums w-8">
-                      {totalKycDocs > 0
-                        ? Math.round((totalKycUploaded / totalKycDocs) * 100)
-                        : 0}
-                      %
+                      {kycDonePct}%
                     </span>
                   </div>
                   <ChevronDown
@@ -2382,6 +2384,10 @@ function PersonCard({
                       uploadInputRef.current?.click();
                     }}
                     onViewClick={handleAdminViewDoc}
+                    serviceId={serviceId}
+                    profileId={profile.id}
+                    waivers={waivers}
+                    onWaiversChange={onWaiversChange}
                   />
                   <input
                     ref={uploadInputRef}
@@ -3784,9 +3790,16 @@ export function ServiceDetailClient({
   }, [serviceLevelDocs]);
   const documentsUploadedCount = uploadedServiceTypeIds.size;
   const documentsExpectedCount = serviceDocTypes.length;
+  // B-107 — service-scope waivers count as "done" for the Documents
+  // section pct. Filter by `scope === "application"` so per-profile
+  // waivers (already counted into peopleKycPct) don't double-count here.
+  const documentsServiceWaivedCount = waivers.filter(
+    (w) => w.scope === "application",
+  ).length;
+  const documentsDoneCount = documentsUploadedCount + documentsServiceWaivedCount;
   const documentsPct =
     documentsExpectedCount > 0
-      ? Math.round((documentsUploadedCount / documentsExpectedCount) * 100)
+      ? Math.round((documentsDoneCount / documentsExpectedCount) * 100)
       : 0;
   const documentsRag: RagStatus =
     documentsPct >= 100 ? "green" : documentsPct > 0 ? "amber" : "red";
@@ -4179,10 +4192,13 @@ export function ServiceDetailClient({
       </div>
 
       {/* B-073 — wizard-shaped step indicator with smooth-scroll anchors.
-          B-102 — entry button to the Review Wizard surface sits to the
-          right of the last pill. Sky-blue (#24a0ed) so it stands apart
-          from the brand-navy pills. */}
-      <div className="rounded-lg border bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          B-102 — entry button to the Review Wizard surface (sky-blue
+          `#24a0ed`).
+          B-107 — drop `justify-between` so the button sits adjacent to
+          the last pill (`gap-3` provides the small breathing space).
+          `flex-wrap` lets the button wrap below the pills on narrow
+          viewports instead of overflowing horizontally. */}
+      <div className="rounded-lg border bg-white px-4 py-3 flex items-center flex-wrap gap-3">
         <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} onStepClick={handleStepClick} />
         <Link
           href={`/admin/services/${service.id}/review?step=0`}
@@ -4382,6 +4398,7 @@ export function ServiceDetailClient({
                       }
                       fieldExtractions={personFieldExtractions}
                       waivers={waivers}
+                      onWaiversChange={setWaivers}
                       adminNamesByUserId={adminNamesByUserId}
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}

@@ -13,6 +13,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-107 — Per-profile waive + waiver-aware % + Review Wizard button position
+
+### 2026-05-13 — B-107 — Waive in per-profile docs, % counts waivers, button repositioned (Claude Code)
+
+Three small follow-ups after B-106:
+
+**Waive action on per-profile Documents rows.** `KycDocsByCategory` picks up four optional props (`serviceId`, `profileId`, `waivers`, `onWaiversChange`). When all four are wired (admin per-profile mount on `/admin/services/[id]`), every row renders a `Waive` button — same affordance as `KycDocumentsTable` — with the same confirmation dialog wording. Waived rows keep their muted treatment from B-106 batch 3 and gain an `Un-waive` button next to the "Waived" pill. Client-wizard mounts (without those props) stay read-only.
+
+**Shared waive util.** Extracted the optimistic POST/DELETE flow from `KycDocumentsTable.tsx` into `src/lib/waivers/clientActions.ts` (`waiveDocument` / `unwaiveDocument`). Both the table and `KycDocsByCategory` call into the same helper — no copy-paste drift, audit semantics stay identical. Threaded `setWaivers` down from `ServiceDetailClient` → `PersonCard` (new `onWaiversChange` prop) → `KycDocsByCategory`.
+
+**Waiver-aware completion %.** Per-profile Documents subsection header now reads `(uploaded + waived) / total` so a profile with everything either uploaded or waived shows 100% on its collapsed Documents header. The text breakdown still keeps `<N> of <required> uploaded · <W> waived` for readability. Same fix to the service-level Documents section header (`/admin/services/[id]` step 5): `documentsDoneCount = documentsUploadedCount + serviceWaivedCount` drives `documentsPct`, so a service with all docs uploaded or waived shows 100% on its outer pill.
+
+**Review Wizard button.** Dropped `justify-between` from the step-pill row; `flex-wrap` + `gap-3` now place the button adjacent to the Documents pill with breathing space, and it wraps below the pills on narrow viewports instead of overflowing.
+
+Files: `src/lib/waivers/clientActions.ts` (new), `src/components/kyc/KycDocsByCategory.tsx`, `src/components/admin/KycDocumentsTable.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`.
+Build: clean.
+
+---
+
 ## B-106 — Waivers everywhere (service docs + per-profile display + scope column)
 
 ### 2026-05-13 — B-106 batch 3 — Per-profile expanded view reflects waivers (Claude Code)

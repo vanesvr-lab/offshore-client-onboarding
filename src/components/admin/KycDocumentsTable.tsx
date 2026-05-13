@@ -28,6 +28,7 @@ import { computeDocumentExpiry } from "@/lib/documents/computeExpiry";
 import { formatDate } from "@/lib/utils/formatters";
 import type { DocumentType, ProfileServiceRole } from "@/types";
 import type { ServiceDoc, WaivedDocumentRequirement } from "@/app/(admin)/admin/services/[id]/page";
+import { waiveDocument, unwaiveDocument } from "@/lib/waivers/clientActions";
 
 type RoleWithProfile = ProfileServiceRole & {
   client_profiles: {
@@ -255,55 +256,34 @@ export function KycDocumentsTable({
     }
   }
 
-  // B-100 — Waive a row. Optimistically inserts a waiver, POSTs to the
-  // server; on failure we revert and toast.
+  // B-107 — waive / un-waive logic moved to `src/lib/waivers/clientActions.ts`
+  // so `KycDocsByCategory`'s per-row button reuses the same optimistic +
+  // POST/DELETE flow without copy-paste drift.
   async function waiveRow(row: { rowKey: string; profileId: string; docTypeId: string }) {
     setWaivingKey(row.rowKey);
-    const optimistic: WaivedDocumentRequirement = {
-      id: `optimistic-${row.profileId}-${row.docTypeId}`,
-      client_profile_id: row.profileId,
-      document_type_id: row.docTypeId,
-      waived_at: new Date().toISOString(),
-      waived_by: "",
-      scope: "person",
-    };
-    const prev = waivers;
-    onWaiversChange([...prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)), optimistic]);
     try {
-      const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "person", client_profile_id: row.profileId, document_type_id: row.docTypeId }),
+      await waiveDocument({
+        serviceId,
+        profileId: row.profileId,
+        documentTypeId: row.docTypeId,
+        prev: waivers,
+        onChange: onWaiversChange,
       });
-      const data = (await res.json()) as { data?: WaivedDocumentRequirement; error?: string };
-      if (!res.ok || !data.data) throw new Error(data.error ?? "Waive failed");
-      onWaiversChange([...prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)), data.data]);
-      toast.success("Document waived", { position: "top-right" });
-    } catch (err: unknown) {
-      onWaiversChange(prev);
-      toast.error(err instanceof Error ? err.message : "Waive failed", { position: "top-right" });
     } finally {
       setWaivingKey(null);
     }
   }
 
-  // B-100 — Un-waive: single-click reversal, no confirm.
   async function unwaiveRow(row: { rowKey: string; profileId: string; docTypeId: string }) {
     setWaivingKey(row.rowKey);
-    const prev = waivers;
-    onWaiversChange(prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)));
     try {
-      const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scope: "person", client_profile_id: row.profileId, document_type_id: row.docTypeId }),
+      await unwaiveDocument({
+        serviceId,
+        profileId: row.profileId,
+        documentTypeId: row.docTypeId,
+        prev: waivers,
+        onChange: onWaiversChange,
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Un-waive failed");
-      toast.success("Document un-waived", { position: "top-right" });
-    } catch (err: unknown) {
-      onWaiversChange(prev);
-      toast.error(err instanceof Error ? err.message : "Un-waive failed", { position: "top-right" });
     } finally {
       setWaivingKey(null);
     }
