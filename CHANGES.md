@@ -15,6 +15,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
 
+### 2026-05-13 — B-101 batch 4 — Admin account settings page (Claude Code)
+
+New `/admin/account` page where the signed-in admin can upload a profile picture, edit their full name, and change their password (with current-password verification). Three stacked cards, max-width 2xl, plenty of whitespace.
+
+**Migration:** `supabase/migrations/20260513073834_user_avatar_and_bucket.sql` — adds `users.avatar_url` (nullable text) + public `avatars` storage bucket + three defensive RLS policies on `storage.objects` (read = public; insert/update = own user_id prefix via `auth.uid()`). App-layer writes go through the service-role admin client, so the policies are defensive guard rails for any future direct-from-browser write. `npm run db:push` applied, `npm run db:status` clean.
+
+**API:**
+- `GET /api/admin/account` — returns `{ id, full_name, email, avatar_url }`.
+- `PATCH /api/admin/account` — updates `users.full_name`, audit-logged `account_profile_updated`.
+- `POST /api/admin/account/avatar` — multipart upload (PNG/JPEG/WebP, max 2 MB), removes any previous avatar from storage to keep the bucket clean, updates `users.avatar_url` to the public URL, audit-logged `account_avatar_updated`.
+- `DELETE /api/admin/account/avatar` — clears `users.avatar_url`, best-effort removes the storage object, audit-logged `account_avatar_removed`.
+- `POST /api/admin/account/password` — verifies current password via `bcrypt.compare`, hashes new password (12 rounds, matches set-password/register), updates both `users` and `profiles` for backward compat, audit-logged `account_password_changed`. Min 8 chars on the new password.
+
+**UI:** `AccountSettingsClient.tsx` owns the three forms. Save buttons are disabled until the relevant field is dirty / all password fields are filled and matching. Inline error for "Current password is incorrect" and "Passwords don't match". Toast for upload/save success + error.
+
+**Sidebar:** new `Account` nav item appears under a separate "Account" section header at the bottom of the admin nav (above the user-info footer). The footer slot itself now renders the admin's avatar (32px circle) next to the name, falling back to initials when no avatar is set. `Sidebar` accepts a new `avatarUrl` prop; the admin layout fetches `avatar_url` from `users` and forwards it.
+
+**Note:** client-side equivalent at `/account` is intentionally out of scope for this batch — tech-debt entry added.
+
+Files: `src/app/(admin)/admin/account/page.tsx` (new), `src/app/(admin)/admin/account/AccountSettingsClient.tsx` (new), `src/app/api/admin/account/route.ts` (new), `src/app/api/admin/account/avatar/route.ts` (new), `src/app/api/admin/account/password/route.ts` (new), `src/app/(admin)/layout.tsx`, `src/components/shared/Sidebar.tsx`, `supabase/migrations/20260513073834_user_avatar_and_bucket.sql` (new).
+Build: clean.
+
 ### 2026-05-13 — B-101 batch 3 — Soft-delete profile from service (Claude Code)
 
 Admin can now remove a profile from a service. The profile vanishes from the People & KYC accordion, the KYC Documents tab, and the per-profile review summary panel — but the underlying `profile_service_roles` rows stay intact so re-adding the profile to the service restores the role assignments cleanly. Audit-logged via `profile_removed_from_service`. No UI to restore — tech-debt entry recorded.

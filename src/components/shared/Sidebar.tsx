@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Users,
@@ -17,12 +18,16 @@ import {
   BookOpen,
   UserCheck,
   Shield,
+  UserCircle,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 interface SidebarProps {
   role: "admin" | "client";
   userName?: string | null;
+  /** B-101 Batch 4 — admin avatar URL for the footer slot. Falls back
+   *  to the lucide UserCircle when null. */
+  avatarUrl?: string | null;
   hasApplications?: boolean;
   isPrimary?: boolean;
   /** Mobile drawer open state (controlled by parent layout). */
@@ -92,6 +97,7 @@ function SectionHeader({ label }: { label: string }) {
 function SidebarContent({
   role,
   userName,
+  avatarUrl,
   hasApplications,
   isPrimary = true,
 }: Omit<SidebarProps, "mobileOpen" | "onMobileOpenChange">) {
@@ -179,6 +185,16 @@ function SidebarContent({
                 active={isActive(item.href, item.exact)}
               />
             ))}
+
+            {/* B-101 Batch 4 — admin account settings */}
+            <div className="border-t border-white/10 my-3" />
+            <SectionHeader label="Account" />
+            <NavItem
+              href="/admin/account"
+              label="Account"
+              icon={UserCircle}
+              active={isActive("/admin/account", false)}
+            />
 
             {/* Contextual: on a client page */}
             {contextClientId && (
@@ -318,13 +334,40 @@ function SidebarContent({
       </nav>
 
       {/* User info at bottom */}
-      <div className="border-t border-white/10 px-5 py-4">
-        {userName && (
-          <p className="text-white text-sm font-medium truncate">{userName}</p>
-        )}
-        <p className="text-brand-muted text-xs mt-0.5">
-          {role === "admin" ? "Administrator" : "Client"}
-        </p>
+      <div className="border-t border-white/10 px-5 py-4 flex items-center gap-3">
+        {/* B-101 Batch 4 — render avatar if available, else initials
+            fallback. Avatar URL is the public URL from the `avatars`
+            bucket and is unoptimized (Next/Image route would require a
+            remote config). */}
+        <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-white/10 flex items-center justify-center">
+          {avatarUrl ? (
+            <Image
+              src={avatarUrl}
+              alt={userName ?? "Account"}
+              width={32}
+              height={32}
+              className="h-8 w-8 object-cover"
+              unoptimized
+            />
+          ) : (
+            <span className="text-white text-xs font-semibold">
+              {(userName ?? "?")
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p) => p[0]?.toUpperCase() ?? "")
+                .join("")}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0">
+          {userName && (
+            <p className="text-white text-sm font-medium truncate">{userName}</p>
+          )}
+          <p className="text-brand-muted text-xs mt-0.5">
+            {role === "admin" ? "Administrator" : "Client"}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -333,6 +376,7 @@ function SidebarContent({
 export function Sidebar({
   role,
   userName,
+  avatarUrl,
   hasApplications,
   isPrimary = true,
   mobileOpen = false,
@@ -353,6 +397,7 @@ export function Sidebar({
         <SidebarContent
           role={role}
           userName={userName}
+          avatarUrl={avatarUrl}
           hasApplications={hasApplications}
           isPrimary={isPrimary}
         />
