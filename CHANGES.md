@@ -15,6 +15,36 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-100 — Review tooltip + address save fix + waive document + Local Director
 
+### 2026-05-13 — B-100 batch 3 — Waive document (Claude Code)
+
+Admin can waive any KYC document requirement on `/admin/services/[id]` → KYC Documents tab. Waived rows show a muted "Waived" pill in place of the upload action; the client portal upload list filters them out entirely so the client never sees the slot. Reversible via one-click "Un-waive". Both actions audit-logged.
+
+**Migration:** `supabase/migrations/20260513023627_waived_document_requirements.sql` creates `public.waived_document_requirements` with columns `(id, tenant_id, client_profile_id, service_id, document_type_id, waived_at, waived_by)` and a `UNIQUE (client_profile_id, service_id, document_type_id)` constraint. RLS enabled (no policies — service-role admin client only, mirroring `application_section_reviews`). Final `NOTIFY pgrst, 'reload schema'` so the API picks up the new table immediately.
+
+**Deviation from brief:** brief specified `client_profile_kyc_id + document_category text + subject_role_type text`. Used `client_profile_id + document_type_id` instead because the KycDocumentsTable rows are keyed on `(profile_id, doc_type_id)`. Category would have been lossy (one category → many doc types) and `subject_role_type` would have been NULL on every write today. Net: same granularity, cleaner FK chain, columns the API actually receives.
+
+`npm run db:push` ran clean; `npm run db:status` shows Local + Remote paired for `20260513023627`.
+
+**API:** new route `src/app/api/admin/services/[id]/waive-document/route.ts` — POST upserts (idempotent on the unique key) + writes `document_requirement_waived` audit row; DELETE removes the row + writes `document_requirement_unwaived`. Both write `service_id` + `document_type_id` into `audit_log.detail` so the entry is searchable.
+
+**Admin UI** (`src/components/admin/KycDocumentsTable.tsx`):
+- New props `waivers` + `onWaiversChange`.
+- `KycRow` carries an optional `waiver` row. When set, the status badge renders as a muted italic "Waived" pill with a hover tooltip `"Waived on <long date>"` (Tooltip pattern from B-100 batch 1).
+- Actions column: every row gets a Waive / Un-waive ghost button alongside View / Upload. Waive fires a confirmation Dialog (no reason field — Vanessa explicitly said "just a modal"); Un-waive is single-click. Both paths are optimistic with a server reconcile + toast.
+- Status filter gains a "Waived" option so admin can find waived rows.
+
+**Data plumbing** (`src/app/(admin)/admin/services/[id]/page.tsx`, `ServiceDetailClient.tsx`):
+- New `WaivedDocumentRequirement` type exported from `page.tsx`. Server fetches `waived_document_requirements` filtered to this service in the existing `Promise.all`.
+- `ServiceDetailClient` lifts `waivers` to state with the standard prop-sync `useEffect`. `AdminDocumentsSection` accepts `waivers` + `onWaiversChange` and threads them into `KycDocumentsTable`.
+
+**Client portal** (`src/app/(client)/services/[id]/page.tsx`, `ClientServiceDetailClient.tsx`, `ServiceWizard.tsx`, `ServiceWizardPeopleStep.tsx`, `PerPersonReviewWizard.tsx`):
+- Server fetches `waived_document_requirements` for this service and threads `(client_profile_id, document_type_id)` pairs through the prop chain.
+- In `PerPersonReviewWizard.docTypesByCategory`, a `waivedTypeIds` set is built from `waivers.filter(w => w.client_profile_id === profileId)` and filters out matching doc types from the visible list. Adds `waivers` + `profileId` to the memo deps.
+
+`npm run build` clean.
+
+---
+
 ### 2026-05-13 — B-100 batch 2 — Admin KYC address save fix (Claude Code)
 
 Bug: admin edits the free-form `address` field on a profile → Save → field reverts. Root cause: `address` lives on `client_profiles` (not `client_profile_kyc`), but the unified save endpoint at `/api/admin/profiles/[id]/kyc-fields/route.ts` only had a 3-key `PROFILE_FIELD_ALLOWED` list (`full_name`, `email`, `phone`). The form packed `address` into `kyc_fields` alongside `address_line_*`; `KYC_FIELD_ALLOWED` didn't include `address` either, so it was silently dropped. The response echoed the unchanged value back and the form re-synced to stale.

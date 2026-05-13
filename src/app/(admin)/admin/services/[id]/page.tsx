@@ -56,6 +56,17 @@ export type AdminUser = {
   email: string | null;
 };
 
+// B-100 — waiver row passed through to the KycDocumentsTable for the
+// "Waived" pill + Un-waive action. Matches the columns selected by
+// the parallel waivers query in this file.
+export type WaivedDocumentRequirement = {
+  id: string;
+  client_profile_id: string;
+  document_type_id: string;
+  waived_at: string;
+  waived_by: string;
+};
+
 export type ServiceAuditEntry = {
   id: string;
   created_at: string;
@@ -94,6 +105,7 @@ export default async function ServiceDetailPage({
     requirementsRes,
     documentTypesRes,
     sectionReviewsRes,
+    waiversRes,
   ] = await Promise.all([
     supabase
       .from("services")
@@ -189,6 +201,16 @@ export default async function ServiceDetailPage({
       .select("*, profiles:reviewed_by(full_name)")
       .eq("application_id", id)
       .order("reviewed_at", { ascending: false }),
+
+    // B-100 — waived KYC document requirements for this service. The
+    // admin KYC Documents tab uses these to render a "Waived" pill (and
+    // hide the Upload button); the client portal upload list filters
+    // them out so the client never sees the slot.
+    supabase
+      .from("waived_document_requirements")
+      .select("id, client_profile_id, document_type_id, waived_at, waived_by")
+      .eq("service_id", id)
+      .eq("tenant_id", tenantId),
   ]);
 
   if (!serviceRes.data) notFound();
@@ -358,6 +380,7 @@ export default async function ServiceDetailPage({
         substance={substance}
         fieldExtractions={(fieldExtractionsRes.data ?? []) as unknown as FieldExtraction[]}
         lastStatusChange={lastStatusChange}
+        waivers={(waiversRes.data ?? []) as unknown as WaivedDocumentRequirement[]}
       />
     </div>
   );

@@ -8,13 +8,26 @@
 
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, ArrowUpDown, Eye, Loader2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Ban, Eye, Loader2, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { computeDocumentExpiry } from "@/lib/documents/computeExpiry";
 import { formatDate } from "@/lib/utils/formatters";
 import type { DocumentType, ProfileServiceRole } from "@/types";
-import type { ServiceDoc } from "@/app/(admin)/admin/services/[id]/page";
+import type { ServiceDoc, WaivedDocumentRequirement } from "@/app/(admin)/admin/services/[id]/page";
 
 type RoleWithProfile = ProfileServiceRole & {
   client_profiles: {
@@ -29,7 +42,7 @@ type RoleWithProfile = ProfileServiceRole & {
   } | null;
 };
 
-type StatusFilter = "all" | "valid" | "expired" | "never_expires" | "missing";
+type StatusFilter = "all" | "valid" | "expired" | "never_expires" | "missing" | "waived";
 type SortKey = "profile" | "doc_type" | "uploaded" | "good_until" | "status";
 type SortDir = "asc" | "desc";
 
@@ -43,6 +56,10 @@ interface KycRow {
   upload: ServiceDoc | null;
   expiryStatus: "valid" | "expired" | "never_expires" | "missing";
   expiresAt: Date | null;
+  // B-100 — waiver row when this requirement has been waived. Renders
+  // a muted "Waived" pill in place of the Upload action; the row's
+  // Actions cell exposes "Un-waive".
+  waiver: WaivedDocumentRequirement | null;
 }
 
 function roleLabel(role: string): string {
@@ -57,6 +74,8 @@ export function KycDocumentsTable({
   docs,
   docTypes,
   roles,
+  waivers,
+  onWaiversChange,
   onViewClick,
   onUploaded,
 }: {
@@ -64,6 +83,10 @@ export function KycDocumentsTable({
   docs: ServiceDoc[];
   docTypes: DocumentType[];
   roles: RoleWithProfile[];
+  /** B-100 — waiver rows for this service. */
+  waivers: WaivedDocumentRequirement[];
+  /** B-100 — optimistic update callback for Waive / Un-waive. */
+  onWaiversChange: (next: WaivedDocumentRequirement[]) => void;
   onViewClick: (docId: string) => void;
   /** Fires after a successful Upload action so the parent can refresh. */
   onUploaded?: () => void;
@@ -76,6 +99,19 @@ export function KycDocumentsTable({
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadRef = useRef<{ profileId: string; docTypeId: string; rowKey: string } | null>(null);
+  // B-100 — Waive / Un-waive state.
+  const [waivingKey, setWaivingKey] = useState<string | null>(null);
+  const [waiveConfirm, setWaiveConfirm] =
+    useState<{ rowKey: string; profileId: string; docTypeId: string; profileName: string; docTypeName: string } | null>(null);
+
+  // Index waivers by row key for O(1) lookup.
+  const waiverByKey = useMemo(() => {
+    const m = new Map<string, WaivedDocumentRequirement>();
+    for (const w of waivers) {
+      m.set(`${w.client_profile_id}-${w.document_type_id}`, w);
+    }
+    return m;
+  }, [waivers]);
 
   // Unique profiles in this service (deduped by profile id; first match keeps roles).
   const profiles = useMemo(() => {
@@ -114,8 +150,9 @@ export function KycDocumentsTable({
         const expiryStatus: KycRow["expiryStatus"] = upload
           ? expiry!.status
           : "missing";
+        const key = `${profile.id}-${dt.id}`;
         result.push({
-          key: `${profile.id}-${dt.id}`,
+          key,
           profileId: profile.id,
           profileName: profile.name,
           profileRoles: profile.roles,
@@ -124,16 +161,18 @@ export function KycDocumentsTable({
           upload: upload ?? null,
           expiryStatus,
           expiresAt: expiry?.expiresAt ?? null,
+          waiver: waiverByKey.get(key) ?? null,
         });
       }
     }
     return result;
-  }, [docs, docTypes, profiles]);
+  }, [docs, docTypes, profiles, waiverByKey]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (profileFilter !== "all" && r.profileId !== profileFilter) return false;
       if (docTypeFilter !== "all" && r.docTypeId !== docTypeFilter) return false;
+      if (statusFilter === "waived") return r.waiver !== null;
       if (statusFilter !== "all" && r.expiryStatus !== statusFilter) return false;
       return true;
     });
@@ -210,7 +249,85 @@ export function KycDocumentsTable({
     }
   }
 
+  // B-100 — Waive a row. Optimistically inserts a waiver, POSTs to the
+  // server; on failure we revert and toast.
+  async function waiveRow(row: { rowKey: string; profileId: string; docTypeId: string }) {
+    setWaivingKey(row.rowKey);
+    const optimistic: WaivedDocumentRequirement = {
+      id: `optimistic-${row.profileId}-${row.docTypeId}`,
+      client_profile_id: row.profileId,
+      document_type_id: row.docTypeId,
+      waived_at: new Date().toISOString(),
+      waived_by: "",
+    };
+    const prev = waivers;
+    onWaiversChange([...prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)), optimistic]);
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_profile_id: row.profileId, document_type_id: row.docTypeId }),
+      });
+      const data = (await res.json()) as { data?: WaivedDocumentRequirement; error?: string };
+      if (!res.ok || !data.data) throw new Error(data.error ?? "Waive failed");
+      onWaiversChange([...prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)), data.data]);
+      toast.success("Document waived", { position: "top-right" });
+    } catch (err: unknown) {
+      onWaiversChange(prev);
+      toast.error(err instanceof Error ? err.message : "Waive failed", { position: "top-right" });
+    } finally {
+      setWaivingKey(null);
+    }
+  }
+
+  // B-100 — Un-waive: single-click reversal, no confirm.
+  async function unwaiveRow(row: { rowKey: string; profileId: string; docTypeId: string }) {
+    setWaivingKey(row.rowKey);
+    const prev = waivers;
+    onWaiversChange(prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)));
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_profile_id: row.profileId, document_type_id: row.docTypeId }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Un-waive failed");
+      toast.success("Document un-waived", { position: "top-right" });
+    } catch (err: unknown) {
+      onWaiversChange(prev);
+      toast.error(err instanceof Error ? err.message : "Un-waive failed", { position: "top-right" });
+    } finally {
+      setWaivingKey(null);
+    }
+  }
+
+  function waivedPill(row: KycRow) {
+    if (!row.waiver) return null;
+    const date = new Date(row.waiver.waived_at).toLocaleDateString("en-GB", {
+      day: "numeric", month: "long", year: "numeric",
+    });
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <span
+                className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 italic cursor-help"
+                aria-label={`Waived on ${date}`}
+              >
+                Waived
+              </span>
+            }
+          />
+          <TooltipContent>{`Waived on ${date}`}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
   function statusBadge(row: KycRow) {
+    if (row.waiver) return waivedPill(row);
     if (row.expiryStatus === "missing") {
       return (
         <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
@@ -285,6 +402,7 @@ export function KycDocumentsTable({
             <option value="expired">Expired</option>
             <option value="never_expires">Never expires</option>
             <option value="missing">Missing</option>
+            <option value="waived">Waived</option>
           </select>
         </div>
         <span className="text-xs text-gray-400 ml-auto">
@@ -387,39 +505,85 @@ export function KycDocumentsTable({
                     </div>
                   </td>
                   <td className="px-3 py-2 align-top text-right">
-                    {row.upload ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs gap-1"
-                        onClick={() => row.upload && onViewClick(row.upload.id)}
-                      >
-                        <Eye className="h-3 w-3" />
-                        View
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-xs gap-1"
-                        disabled={uploadingKey === row.key}
-                        onClick={() => {
-                          pendingUploadRef.current = {
-                            profileId: row.profileId,
-                            docTypeId: row.docTypeId,
-                            rowKey: row.key,
-                          };
-                          uploadInputRef.current?.click();
-                        }}
-                      >
-                        {uploadingKey === row.key ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Upload className="h-3 w-3" />
-                        )}
-                        Upload
-                      </Button>
-                    )}
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      {row.upload ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs gap-1"
+                          onClick={() => row.upload && onViewClick(row.upload.id)}
+                        >
+                          <Eye className="h-3 w-3" />
+                          View
+                        </Button>
+                      ) : row.waiver ? null : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs gap-1"
+                          disabled={uploadingKey === row.key}
+                          onClick={() => {
+                            pendingUploadRef.current = {
+                              profileId: row.profileId,
+                              docTypeId: row.docTypeId,
+                              rowKey: row.key,
+                            };
+                            uploadInputRef.current?.click();
+                          }}
+                        >
+                          {uploadingKey === row.key ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Upload className="h-3 w-3" />
+                          )}
+                          Upload
+                        </Button>
+                      )}
+                      {/* B-100 — Waive / Un-waive. Available on every row;
+                          the muted "Waived" pill in the Status column
+                          carries the visible state. */}
+                      {row.waiver ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs gap-1 text-gray-500 hover:text-brand-navy"
+                          disabled={waivingKey === row.key}
+                          onClick={() =>
+                            void unwaiveRow({ rowKey: row.key, profileId: row.profileId, docTypeId: row.docTypeId })
+                          }
+                        >
+                          {waivingKey === row.key ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3 w-3" />
+                          )}
+                          Un-waive
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs gap-1 text-gray-500 hover:text-brand-navy"
+                          disabled={waivingKey === row.key}
+                          onClick={() =>
+                            setWaiveConfirm({
+                              rowKey: row.key,
+                              profileId: row.profileId,
+                              docTypeId: row.docTypeId,
+                              profileName: row.profileName,
+                              docTypeName: row.docTypeName,
+                            })
+                          }
+                        >
+                          {waivingKey === row.key ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Ban className="h-3 w-3" />
+                          )}
+                          Waive
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -439,6 +603,51 @@ export function KycDocumentsTable({
           e.target.value = "";
         }}
       />
+
+      {/* B-100 — Waive confirmation dialog. No reason field (Vanessa
+          explicitly said "just a modal"). Single-click Un-waive is the
+          reversal path so no confirm there. */}
+      <Dialog
+        open={waiveConfirm !== null}
+        onOpenChange={(o) => {
+          if (!o) setWaiveConfirm(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Waive this document?</DialogTitle>
+          </DialogHeader>
+          {waiveConfirm && (
+            <p className="text-sm text-gray-600">
+              The client will no longer be asked to upload{" "}
+              <span className="font-semibold">{waiveConfirm.docTypeName}</span>{" "}
+              for{" "}
+              <span className="font-semibold">{waiveConfirm.profileName}</span>.
+              You can un-waive it at any time.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWaiveConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-navy hover:bg-brand-navy/90 text-white"
+              onClick={() => {
+                if (!waiveConfirm) return;
+                const target = waiveConfirm;
+                setWaiveConfirm(null);
+                void waiveRow({
+                  rowKey: target.rowKey,
+                  profileId: target.profileId,
+                  docTypeId: target.docTypeId,
+                });
+              }}
+            >
+              Waive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

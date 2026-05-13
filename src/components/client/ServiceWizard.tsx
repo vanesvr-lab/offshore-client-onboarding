@@ -31,6 +31,8 @@ interface Props {
   templateDocs: ServiceTemplateDocument[];
   /** B-071 — global role-based doc requirements. Used in fallback path. */
   roleRequirements: RoleDocumentRequirement[];
+  /** B-100 — waived (profile, doc_type) pairs hidden from the wizard. */
+  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
   startStep?: number;
   onClose: (updatedDetails?: Record<string, unknown>, updatedPersons?: ServicePerson[], updatedDocs?: ClientServiceDoc[]) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -80,6 +82,7 @@ export function ServiceWizard({
   documentTypes,
   templateDocs,
   roleRequirements,
+  waivers,
   startStep = 0,
   onClose,
   onDirtyChange,
@@ -386,6 +389,7 @@ export function ServiceWizard({
             documentTypes={documentTypes}
             templateDocs={templateDocs}
             roleRequirements={roleRequirements}
+            waivers={waivers ?? []}
             onNavVisibilityChange={setHideWizardNav}
           />
         )}

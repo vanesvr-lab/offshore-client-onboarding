@@ -212,6 +212,16 @@ export default async function ClientServiceDetailPage({
 
   const { data: docsData } = await docsQuery;
 
+  // B-100 — waived requirements for this service. The client portal
+  // wizard upload list filters out any `(client_profile_id,
+  // document_type_id)` pair present here so the slot disappears
+  // entirely.
+  const { data: waiversData } = await supabase
+    .from("waived_document_requirements")
+    .select("client_profile_id, document_type_id")
+    .eq("service_id", id)
+    .eq("tenant_id", tenantId);
+
   return (
     <ClientServiceDetailClient
       service={serviceRes.data as unknown as ClientServiceRecord}
@@ -224,6 +234,7 @@ export default async function ClientServiceDetailPage({
       roleRequirements={(roleRequirementsRes.data ?? []) as unknown as RoleDocumentRequirement[]}
       myRole={roleCheck.role}
       autoWizardStep={autoWizardStep}
+      waivers={(waiversData ?? []) as unknown as Array<{ client_profile_id: string; document_type_id: string }>}
     />
   );
 }

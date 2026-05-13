@@ -504,6 +504,9 @@ interface Props {
   templateDocs?: ServiceTemplateDocument[];
   /** B-071 — global role-based doc requirements (used when templateDocs is empty). */
   roleRequirements?: RoleDocumentRequirement[];
+  /** B-100 — waived (profile, doc_type) pairs. The doc-type list is
+   *  filtered down so waived slots disappear from the wizard entirely. */
+  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
   dueDiligenceLevel: DueDiligenceLevel;
   /** Called when the user finishes the wizard (last sub-step "Save & Close" / "Save & Finish"). */
   onComplete: () => void;
@@ -544,6 +547,7 @@ export function PerPersonReviewWizard({
   requirements,
   templateDocs = [],
   roleRequirements = [],
+  waivers = [],
   dueDiligenceLevel,
   onComplete,
   onExit,
@@ -693,14 +697,21 @@ export function PerPersonReviewWizard({
       if (appliesTo === "both") return true;
       return appliesTo === profileType;
     });
+    // B-100 — drop any doc type that's been waived for this profile.
+    const waivedTypeIds = new Set(
+      waivers
+        .filter((w) => w.client_profile_id === profileId)
+        .map((w) => w.document_type_id),
+    );
+    const visible = personOnly.filter((dt) => !waivedTypeIds.has(dt.id));
     const out: Record<string, DocumentType[]> = {};
-    for (const dt of personOnly) {
+    for (const dt of visible) {
       const cat = (dt.category || "additional") as string;
       if (!out[cat]) out[cat] = [];
       out[cat].push(dt);
     }
     return out;
-  }, [documentTypes, ddReqDocTypeIds, templateDocs, roleRequirements, personRole, isIndividual]);
+  }, [documentTypes, ddReqDocTypeIds, templateDocs, roleRequirements, personRole, isIndividual, waivers, profileId]);
 
   const personCategories = useMemo<string[]>(() => {
     const present = Object.keys(docTypesByCategory).filter((c) => docTypesByCategory[c].length > 0);

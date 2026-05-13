@@ -38,7 +38,7 @@ import {
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
-import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest } from "./page";
+import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement } from "./page";
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
@@ -2531,6 +2531,8 @@ function AdminDocumentsSection({
   kycDocTypes,
   updateRequests,
   roles,
+  waivers,
+  onWaiversChange,
   onDocumentAdded,
   onUpdateRequestAdded,
   onRefresh,
@@ -2548,6 +2550,12 @@ function AdminDocumentsSection({
   kycDocTypes: DocumentType[];
   updateRequests: DocumentUpdateRequest[];
   roles: RoleWithProfile[];
+  /** B-100 — waiver rows for this service. KycDocumentsTable reads them
+   *  to render the muted "Waived" pill + the Un-waive action. */
+  waivers: WaivedDocumentRequirement[];
+  /** B-100 — callback so Waive / Un-waive can optimistically update the
+   *  parent's waiver array without a full server refetch. */
+  onWaiversChange: (next: WaivedDocumentRequirement[]) => void;
   onDocumentAdded: (doc: ServiceDoc) => void;
   onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
   onRefresh: () => void;
@@ -2709,6 +2717,8 @@ function AdminDocumentsSection({
           docs={kycDocs}
           docTypes={kycDocTypes}
           roles={roles}
+          waivers={waivers}
+          onWaiversChange={onWaiversChange}
           onViewClick={openDetail}
           onUploaded={onRefresh}
         />
@@ -2866,6 +2876,11 @@ interface Props {
   // the right-rail Status card to render "Status updated on <date> by
   // <name>". Null when status has never been changed since service creation.
   lastStatusChange: ServiceAuditEntry | null;
+  // B-100 — waiver rows for this service (filtered server-side). The
+  // KycDocumentsTab uses them to render a muted "Waived" pill in place
+  // of the upload action; the client portal upload list filters them
+  // out so the client never sees the slot.
+  waivers: WaivedDocumentRequirement[];
 }
 
 // B-098 — forward chain + override list now come from the single source
@@ -2908,6 +2923,7 @@ export function ServiceDetailClient({
   substance,
   fieldExtractions,
   lastStatusChange,
+  waivers: initialWaivers,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -2936,6 +2952,14 @@ export function ServiceDetailClient({
   useEffect(() => {
     setService(initialService);
   }, [initialService]);
+
+  // B-100 — lift waivers so the KYC Documents tab can optimistically
+  // flip a row to "Waived" (or back) without a server round-trip. Sync
+  // from prop on every server re-fetch so external mutations propagate.
+  const [waivers, setWaivers] = useState<WaivedDocumentRequirement[]>(initialWaivers);
+  useEffect(() => {
+    setWaivers(initialWaivers);
+  }, [initialWaivers]);
 
   // B-085 — KYC/profile docs go inside person cards; service-level docs
   // (scope='application') flow into the Documents section via `serviceLevelDocs`
@@ -3661,6 +3685,8 @@ export function ServiceDetailClient({
             kycDocTypes={kycDocTypes}
             updateRequests={updateRequests}
             roles={typedRoles}
+            waivers={waivers}
+            onWaiversChange={setWaivers}
             onDocumentAdded={(doc) => setDocuments((prev) => [...prev, doc])}
             onUpdateRequestAdded={(req) => setUpdateRequests((prev) => [req, ...prev])}
             onRefresh={handleRolesRefresh}

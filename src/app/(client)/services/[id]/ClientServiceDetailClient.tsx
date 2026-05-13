@@ -33,6 +33,9 @@ interface Props {
   roleRequirements: RoleDocumentRequirement[];
   myRole: string;
   autoWizardStep?: number;
+  // B-100 — waived (profile, doc_type) pairs for this service. Used to
+  // hide upload slots from the wizard so the client never sees them.
+  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
 }
 
 // ─── Section completion helpers ──────────────────────────────────────────────
@@ -131,6 +134,7 @@ export function ClientServiceDetailClient({
   roleRequirements,
   myRole,
   autoWizardStep,
+  waivers,
 }: Props) {
   const [wizardMode, setWizardMode] = useState(autoWizardStep != null);
   const [wizardStartStep, setWizardStartStep] = useState(autoWizardStep ?? 0);
@@ -264,6 +268,7 @@ export function ClientServiceDetailClient({
           documentTypes={documentTypes}
           templateDocs={templateDocs}
           roleRequirements={roleRequirements}
+          waivers={waivers ?? []}
           startStep={wizardStartStep}
           onDirtyChange={setWizardIsDirty}
           onSaveFailedChange={setWizardSaveFailed}

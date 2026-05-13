@@ -994,6 +994,8 @@ interface Props {
   templateDocs: ServiceTemplateDocument[];
   /** B-071 — global role-based doc requirements (used when templateDocs is empty). */
   roleRequirements: RoleDocumentRequirement[];
+  /** B-100 — waived (profile, doc_type) pairs hidden from each profile. */
+  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
   onNavVisibilityChange: (hide: boolean) => void;
 }
 
@@ -1006,6 +1008,7 @@ export function ServiceWizardPeopleStep({
   documentTypes,
   templateDocs,
   roleRequirements,
+  waivers,
   onNavVisibilityChange,
 }: Props) {
   const router = useRouter();
@@ -1183,6 +1186,7 @@ export function ServiceWizardPeopleStep({
         requirements={requirements}
         templateDocs={templateDocs}
         roleRequirements={roleRequirements}
+        waivers={waivers ?? []}
         dueDiligenceLevel={ddLevel}
         onComplete={handleKycComplete}
         onExit={handleExitKycReview}
