@@ -11,6 +11,21 @@ remove after 30 days.
 
 ## 2026-05-13
 
+- **Auto-alert dismissals never expire.**
+  *Spawned by:* [B-108](cli-brief-comms-and-alerts-b108.md).
+  *What:* A `dismissed_auto_alerts` row keyed on `(service_id, auto_alert_key)` permanently suppresses that exact alert. Most auto-alert keys are entity-id-scoped (`doc_expiry_<docId>`, `kyc_age_<profileId>`) so a future doc / profile triggers a different key and re-shows, but if the same key recurs (e.g. the same doc is replaced in-place keeping its id, and a new expiry crosses the 60-day threshold), the dismissal still applies and the alert never reappears.
+  *Why deferred:* Acceptable for v1 — the entity-id-keyed pattern makes this rare in practice. Revisit if Vanessa reports an alert that "won't come back" after the underlying state genuinely re-triggers. Mitigation when needed: add `dismissed_at + expires_at` (e.g. 90 days) and filter dismissals server-side by expiry.
+
+- **Communications log doesn't track delivery status.**
+  *Spawned by:* [B-108](cli-brief-comms-and-alerts-b108.md).
+  *What:* `service_communications.status` is set to `sent` (or `failed`) based on Resend's synchronous response only. Bounces, spam complaints, and unsubscribes fired later via webhook are not captured — the modal will always show the email as `sent` even if it bounced.
+  *Why deferred:* Resend webhook plumbing is its own brief (auth header verification + event routing + idempotency keys + status transitions). The synchronous status is good enough until delivery monitoring becomes a real ask.
+
+- **Email body stored verbatim — no template versioning.**
+  *Spawned by:* [B-108](cli-brief-comms-and-alerts-b108.md).
+  *What:* `service_communications.body_html` is the rendered HTML at send time. If the invite or update template changes (logo swap, copy revision, footer update), historical rows still show the old body. The iframe viewer always shows what the recipient actually saw — but if we ever want to *replay* an email through the *current* template, the data isn't there.
+  *Why deferred:* Won't fix — this is the correct behavior for an audit log. Document the intent so a future re-render feature doesn't quietly conflate "what was sent" with "what the current template would have sent".
+
 - **Waiver `waived_by_name` is resolved client-side via a `users` map.**
   *Spawned by:* [B-106](cli-brief-waiver-everywhere-b106.md).
   *What:* `PersonCard` builds a `Record<user_id, full_name>` from the existing `adminUsers` page-load and resolves the waiver-tooltip "by <name>" via that map. Works because the lookup data is already on the page, but if `loadServiceDetail` ever drops the admin-users fetch, the tooltip silently shows just the date. Long-term, surface `waived_by_name` directly on the waiver row by extending the `loadServiceDetail` select to join `users(full_name)` and project as a column-level alias on `waived_document_requirements`.

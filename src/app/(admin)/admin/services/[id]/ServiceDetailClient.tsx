@@ -8,7 +8,7 @@ import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle,
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
-  AlertTriangle, Eye,
+  AlertTriangle, Bell, Eye,
   Sparkles, Trash2,
   Wand2, ChevronLeft, ChevronRight, X,
   Ban, RotateCcw,
@@ -40,7 +40,7 @@ import {
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
-import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement, ServiceCommunication } from "./page";
+import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement, ServiceCommunication, ManualServiceAlert, DismissedAutoAlert } from "./page";
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
@@ -62,6 +62,12 @@ import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycDocumentsTable } from "@/components/admin/KycDocumentsTable";
 import { ServiceCommunicationsCard } from "@/components/admin/ServiceCommunicationsCard";
+import { ServiceAlertsDialog } from "@/components/admin/ServiceAlertsDialog";
+import {
+  computeAutoAlerts,
+  severityRank,
+  type AutoAlertSeverity,
+} from "@/lib/alerts/computeAutoAlerts";
 import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 import { formatDate } from "@/lib/utils/formatters";
@@ -3227,6 +3233,11 @@ interface Props {
   // none have been sent (or, currently, when the service had no
   // pre-existing rows — track-from-now).
   communications: ServiceCommunication[];
+  // B-108 Batch 3 — admin-authored alerts (open + resolved). Auto alerts
+  // are computed at render from `documents` + profiles' kyc updated_at;
+  // dismissals match keys against this list.
+  manualAlerts: ManualServiceAlert[];
+  dismissedAutoAlerts: DismissedAutoAlert[];
   // B-102 — Review Wizard chrome. When `reviewMode` is true the component
   // hides the stage strip + step indicator + right-rail + admin extras +
   // bottom save bar, and renders only the section card whose index matches
@@ -3493,6 +3504,8 @@ export function ServiceDetailClient({
   lastStatusChange,
   waivers: initialWaivers,
   communications,
+  manualAlerts,
+  dismissedAutoAlerts,
   reviewMode = false,
   reviewStep = 0,
 }: Props) {
@@ -3500,6 +3513,11 @@ export function ServiceDetailClient({
   const [service, setService] = useState(initialService);
   const [documents, setDocuments] = useState(initialDocuments);
   const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
+
+  // B-108 Batch 3 — dialog open state lives high so the button trigger
+  // below can flip it. Alert derivation lives after `roles` state is
+  // declared further down.
+  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
 
   // B-103 — cap the right rail's max-height to the left column's
   // rendered height so the page never leaves a large empty area below
@@ -3547,6 +3565,60 @@ export function ServiceDetailClient({
   useEffect(() => {
     setRoles(initialRoles as unknown as RoleWithProfile[]);
   }, [initialRoles]);
+
+  // B-108 Batch 3 — derived alert state. `kyc_updated_at` comes from the
+  // joined `client_profile_kyc.updated_at` already present on `roles`,
+  // so no extra fetch is needed.
+  const profilesForAlerts = useMemo(() => {
+    return (roles as unknown as Array<{
+      client_profiles: {
+        id: string;
+        full_name: string | null;
+        client_profile_kyc?: { updated_at: string | null } | null;
+      } | null;
+    }>)
+      .map((r) => r.client_profiles)
+      .filter(
+        (p): p is { id: string; full_name: string | null; client_profile_kyc?: { updated_at: string | null } | null } =>
+          !!p,
+      )
+      .map((p) => ({
+        id: p.id,
+        full_name: p.full_name,
+        kyc_updated_at: p.client_profile_kyc?.updated_at ?? null,
+      }));
+  }, [roles]);
+  const autoAlerts = useMemo(
+    () => computeAutoAlerts({ documents, profiles: profilesForAlerts }),
+    [documents, profilesForAlerts],
+  );
+  const dismissedAutoKeys = useMemo(
+    () => new Set(dismissedAutoAlerts.map((d) => d.auto_alert_key)),
+    [dismissedAutoAlerts],
+  );
+  const visibleAutoAlerts = useMemo(
+    () => autoAlerts.filter((a) => !dismissedAutoKeys.has(a.key)),
+    [autoAlerts, dismissedAutoKeys],
+  );
+  const openManualAlerts = useMemo(
+    () => manualAlerts.filter((m) => m.status === "open"),
+    [manualAlerts],
+  );
+  const totalAlertCount = visibleAutoAlerts.length + openManualAlerts.length;
+  const topSeverity: AutoAlertSeverity | null = useMemo(() => {
+    let best: AutoAlertSeverity | null = null;
+    let bestRank = 0;
+    const consider = (sev: AutoAlertSeverity) => {
+      const r = severityRank(sev);
+      if (r > bestRank) {
+        best = sev;
+        bestRank = r;
+      }
+    };
+    visibleAutoAlerts.forEach((a) => consider(a.severity));
+    openManualAlerts.forEach((m) => consider(m.severity));
+    return best;
+  }, [visibleAutoAlerts, openManualAlerts]);
   // B-084 Batch 1 — sync documents/updateRequests/service from props on
   // server re-fetch. Mirrors the B-075 pattern already used for
   // PersonCard's `localDocs` (line 492).
@@ -4207,15 +4279,54 @@ export function ServiceDetailClient({
           viewports instead of overflowing horizontally. */}
       <div className="rounded-lg border bg-white px-4 py-3 flex items-center flex-wrap gap-3">
         <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} onStepClick={handleStepClick} />
-        <Link
-          href={`/admin/services/${service.id}/review?step=0`}
-          className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-white whitespace-nowrap shadow-sm hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
-          style={{ backgroundColor: "#24a0ed" }}
-        >
-          <Wand2 className="size-4" />
-          Review Wizard
-        </Link>
+        {/* B-108 Batch 3 — Alerts + Review Wizard sit at the right edge,
+            grouped with `gap-x-8` so they are visually separated from
+            the step pills and from each other. Alerts color tracks the
+            highest-severity open alert; muted gray when zero. */}
+        <div className="flex items-center gap-x-8 ml-auto">
+          <button
+            type="button"
+            onClick={() => setAlertsDialogOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-white whitespace-nowrap shadow-sm hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+            style={{
+              backgroundColor:
+                totalAlertCount === 0
+                  ? "#94a3b8"
+                  : topSeverity === "critical"
+                    ? "#dc2626"
+                    : topSeverity === "warning"
+                      ? "#f59e0b"
+                      : "#94a3b8",
+            }}
+          >
+            {topSeverity === "critical" ? (
+              <AlertTriangle className="size-4" />
+            ) : (
+              <Bell className="size-4" />
+            )}
+            Alerts ({totalAlertCount})
+          </button>
+          <Link
+            href={`/admin/services/${service.id}/review?step=0`}
+            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-white whitespace-nowrap shadow-sm hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+            style={{ backgroundColor: "#24a0ed" }}
+          >
+            <Wand2 className="size-4" />
+            Review Wizard
+          </Link>
+        </div>
       </div>
+
+      {/* B-108 Batch 3 — alerts dialog mount. Open state lives at the
+          top of this component; dismissals/resolves call router.refresh()
+          so this list always reflects current DB + computed state. */}
+      <ServiceAlertsDialog
+        open={alertsDialogOpen}
+        onClose={() => setAlertsDialogOpen(false)}
+        serviceId={service.id}
+        autoAlerts={visibleAutoAlerts}
+        manualAlerts={manualAlerts}
+      />
       </div>
       )}
       {/* ── End sticky shell ────────────────────────────────────────────── */}

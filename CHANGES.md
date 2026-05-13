@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-108 — Communications log + service alerts (in progress)
+## B-108 — Communications log + service alerts
 
 ### 2026-05-13 — B-108 batch 1 — Comms log backend (Claude Code)
 
@@ -45,7 +45,33 @@ Wiring: `ServiceCommunication` type added to `page.tsx`, `loadServiceDetail.ts` 
 Files: `src/app/(admin)/admin/services/[id]/page.tsx`, `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`, `src/components/admin/ServiceCommunicationsCard.tsx` (new), `src/components/admin/ServiceCommunicationsDialog.tsx` (new).
 Build: clean.
 
-Next: Batch 3 — service alerts (auto-detected doc-expiry / KYC-age + manual entries) with dismiss/resolve flow.
+### 2026-05-13 — B-108 batch 3 — Service alerts (auto + manual) (Claude Code)
+
+New Alerts button in the sticky step-pill row, positioned LEFT of Review Wizard with `gap-x-8` so both action buttons sit at the right edge separated from the step pills and from each other. Button background tracks the highest-severity open alert: `#dc2626` red for critical (with `AlertTriangle` icon), `#f59e0b` amber for warning (Bell), muted `#94a3b8` gray when zero or info-only (Bell). Label is always `Alerts (<count>)`.
+
+Modal `ServiceAlertsDialog` merges two sources into a single open list, sorted by severity (critical > warning > info) then created/detected date:
+
+1. **Auto alerts** computed at render time from `documents` (`expiry_date` < 0 days → critical "expired N days ago"; ≤30 days → warning; 31–60 days → info) and per-profile KYC age (`client_profile_kyc.updated_at` > 12 months → info; > 18 months → warning). Pure function in `src/lib/alerts/computeAutoAlerts.ts` so it's side-effect-free and trivially unit-testable later. Keys are entity-id-scoped (`doc_expiry_<id>`, `kyc_age_<id>`) so dismissals don't accidentally swallow a future genuinely-different alert.
+
+2. **Manual alerts** persisted in `service_alerts` (severity, title, optional note, open/resolved state). Inline + form on the dialog lets admin add one (title required, optional note, segmented severity pills). Open list shows each alert with an action button: `Dismiss` for auto (writes `dismissed_auto_alerts` row keyed on `(service_id, auto_alert_key)`); `Resolve` for manual (sets `status='resolved' + resolved_at/resolved_by`). Resolved manual alerts live in a collapsible "Resolved (N)" section at the bottom of the modal for audit trail.
+
+All three mutations refresh via `router.refresh()` so the dialog inherits the recomputed auto-alert list + updated manual + dismissal rows on the next render.
+
+Migration: `supabase/migrations/20260513185115_service_alerts.sql` — two tables + indexes. `service_alerts` (`open|resolved`, `info|warning|critical` checks) for manual entries; `dismissed_auto_alerts` (`UNIQUE (service_id, auto_alert_key)`) for the dismissal layer. Pushed; `npm run db:status` clean (Local + Remote paired at `20260513185115`).
+
+API routes (admin-only via `session.user.role === "admin"`):
+- `POST /api/admin/services/[id]/alerts` — create manual alert. Audit `service_alert_created`.
+- `PATCH /api/admin/services/[id]/alerts/[alertId]` — body `{ status: 'resolved' }`. Audit `service_alert_resolved`.
+- `POST /api/admin/services/[id]/alerts/dismiss-auto` — body `{ auto_alert_key }`. Idempotent (lookup-then-insert). Audit `auto_alert_dismissed`.
+
+`ManualServiceAlert` + `DismissedAutoAlert` types added to `page.tsx`. `loadServiceDetail.ts` parallel-fetches both tables; ServiceDetailClient consumes them and derives `visibleAutoAlerts`, `openManualAlerts`, `totalAlertCount`, and `topSeverity` via memoized derivations from the lifted `roles` state (so the per-profile `client_profile_kyc.updated_at` feeds the KYC-age rule without an extra fetch).
+
+Tech debt logged in `docs/tech-debt.md` under 2026-05-13: (a) auto-alert dismissals never expire, (b) comms log doesn't track delivery status from Resend webhooks, (c) email body stored verbatim — no template versioning.
+
+Files: `supabase/migrations/20260513185115_service_alerts.sql` (new), `src/lib/alerts/computeAutoAlerts.ts` (new), `src/components/admin/ServiceAlertsDialog.tsx` (new), `src/app/api/admin/services/[id]/alerts/route.ts` (new), `src/app/api/admin/services/[id]/alerts/[alertId]/route.ts` (new), `src/app/api/admin/services/[id]/alerts/dismiss-auto/route.ts` (new), `src/app/(admin)/admin/services/[id]/page.tsx`, `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`, `docs/tech-debt.md`.
+Build: clean.
+
+B-108 done — communications log + service alerts live.
 
 ---
 

@@ -90,6 +90,27 @@ export type ServiceCommunication = {
   status: "sent" | "failed";
 };
 
+// B-108 — admin-authored alerts. Auto alerts are computed at render
+// time from current data (no persisted row).
+export type ManualServiceAlert = {
+  id: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  note: string | null;
+  status: "open" | "resolved";
+  created_at: string;
+  created_by: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+};
+
+// B-108 — dismissals of *auto* alerts. Key matches `AutoAlert.key`.
+export type DismissedAutoAlert = {
+  auto_alert_key: string;
+  dismissed_at: string;
+  dismissed_by: string | null;
+};
+
 export type ServiceAuditEntry = {
   id: string;
   created_at: string;

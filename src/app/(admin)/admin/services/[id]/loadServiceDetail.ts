@@ -28,6 +28,8 @@ import type {
   DocumentUpdateRequest,
   WaivedDocumentRequirement,
   ServiceCommunication,
+  ManualServiceAlert,
+  DismissedAutoAlert,
 } from "./page";
 
 export interface ServiceDetailPayload {
@@ -49,6 +51,8 @@ export interface ServiceDetailPayload {
   lastStatusChange: ServiceAuditEntry | null;
   waivers: WaivedDocumentRequirement[];
   communications: ServiceCommunication[];
+  manualAlerts: ManualServiceAlert[];
+  dismissedAutoAlerts: DismissedAutoAlert[];
 }
 
 export async function loadServiceDetail(
@@ -72,6 +76,8 @@ export async function loadServiceDetail(
     waiversRes,
     removalsRes,
     communicationsRes,
+    manualAlertsRes,
+    dismissedAutoAlertsRes,
   ] = await Promise.all([
     supabase
       .from("services")
@@ -180,6 +186,23 @@ export async function loadServiceDetail(
       .eq("tenant_id", tenantId)
       .order("sent_at", { ascending: false })
       .limit(200),
+
+    // B-108 Batch 3 — manual alerts (persisted) for this service.
+    supabase
+      .from("service_alerts")
+      .select(
+        "id, severity, title, note, status, created_at, created_by, resolved_at, resolved_by",
+      )
+      .eq("service_id", serviceId)
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false }),
+
+    // B-108 Batch 3 — dismissals of computed auto alerts.
+    supabase
+      .from("dismissed_auto_alerts")
+      .select("auto_alert_key, dismissed_at, dismissed_by")
+      .eq("service_id", serviceId)
+      .eq("tenant_id", tenantId),
   ]);
 
   if (!serviceRes.data) notFound();
@@ -354,5 +377,9 @@ export async function loadServiceDetail(
     waivers: filteredWaivers as unknown as WaivedDocumentRequirement[],
     communications:
       (communicationsRes.data ?? []) as unknown as ServiceCommunication[],
+    manualAlerts:
+      (manualAlertsRes.data ?? []) as unknown as ManualServiceAlert[],
+    dismissedAutoAlerts:
+      (dismissedAutoAlertsRes.data ?? []) as unknown as DismissedAutoAlert[],
   };
 }
