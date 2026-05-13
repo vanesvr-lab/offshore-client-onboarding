@@ -106,6 +106,7 @@ export default async function ServiceDetailPage({
     documentTypesRes,
     sectionReviewsRes,
     waiversRes,
+    removalsRes,
   ] = await Promise.all([
     supabase
       .from("services")
@@ -211,9 +212,38 @@ export default async function ServiceDetailPage({
       .select("id, client_profile_id, document_type_id, waived_at, waived_by")
       .eq("service_id", id)
       .eq("tenant_id", tenantId),
+
+    // B-101 Batch 3 — soft-deleted profiles for this service. Any
+    // profile id in this set is filtered out of `rolesRes`, `waiversRes`,
+    // and the per-profile field_extractions below before any data
+    // reaches ServiceDetailClient. The underlying `profile_service_roles`
+    // rows stay intact so a future re-add restores the assignments.
+    supabase
+      .from("service_profile_removals")
+      .select("client_profile_id")
+      .eq("service_id", id)
+      .eq("tenant_id", tenantId),
   ]);
 
   if (!serviceRes.data) notFound();
+
+  // B-101 Batch 3 — apply the soft-delete filter to every per-profile
+  // collection before passing them to the client component. Removed
+  // profiles disappear from the People & KYC accordion, KYC Documents
+  // tab, per-profile review summary, and waiver list in one go.
+  const removedProfileIds = new Set(
+    ((removalsRes.data ?? []) as Array<{ client_profile_id: string }>)
+      .map((r) => r.client_profile_id)
+      .filter((v): v is string => !!v),
+  );
+  const filteredRoles = removedProfileIds.size > 0
+    ? ((rolesRes.data ?? []) as Array<{ client_profile_id: string | null }>)
+        .filter((r) => !r.client_profile_id || !removedProfileIds.has(r.client_profile_id))
+    : (rolesRes.data ?? []);
+  const filteredWaivers = removedProfileIds.size > 0
+    ? ((waiversRes.data ?? []) as Array<{ client_profile_id: string }>)
+        .filter((w) => !removedProfileIds.has(w.client_profile_id))
+    : (waiversRes.data ?? []);
 
   // ── B-072 Batch 6 — admin actions + substance ────────────────────────────
   // Read template-bound actions, existing per-service instances, and the
@@ -248,7 +278,7 @@ export default async function ServiceDetailPage({
   // need the latest row; the "previous value" tooltip on admin_override
   // markers reads superseded rows too, so include them for the matched
   // profiles as well.
-  const profileIdsForFE = ((rolesRes.data ?? []) as unknown as ProfileServiceRole[])
+  const profileIdsForFE = (filteredRoles as unknown as ProfileServiceRole[])
     .map((r) => r.client_profile_id)
     .filter((pid): pid is string => !!pid);
 
@@ -283,7 +313,7 @@ export default async function ServiceDetailPage({
   // B-078 Batch 6 — pull client_profile audit rows for every profile
   // assigned to this service so the panel surfaces `profile_kyc_updated`
   // events (admin Save bar writes one row per save event).
-  const profileIdsForAudit = ((rolesRes.data ?? []) as Array<{
+  const profileIdsForAudit = (filteredRoles as Array<{
     client_profile_id: string | null;
   }>)
     .map((r) => r.client_profile_id)
@@ -365,7 +395,7 @@ export default async function ServiceDetailPage({
     <div>
       <ServiceDetailClient
         service={serviceRes.data as unknown as ServiceWithTemplate}
-        roles={(rolesRes.data ?? []) as unknown as ProfileServiceRole[]}
+        roles={filteredRoles as unknown as ProfileServiceRole[]}
         overrides={(overridesRes.data ?? []) as unknown as ServiceSectionOverride[]}
         documents={(docsRes.data ?? []) as unknown as ServiceDoc[]}
         updateRequests={(updateRequestsRes.data ?? []) as unknown as DocumentUpdateRequest[]}
@@ -380,7 +410,7 @@ export default async function ServiceDetailPage({
         substance={substance}
         fieldExtractions={(fieldExtractionsRes.data ?? []) as unknown as FieldExtraction[]}
         lastStatusChange={lastStatusChange}
-        waivers={(waiversRes.data ?? []) as unknown as WaivedDocumentRequirement[]}
+        waivers={filteredWaivers as unknown as WaivedDocumentRequirement[]}
       />
     </div>
   );

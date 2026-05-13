@@ -15,6 +15,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
 
+### 2026-05-13 — B-101 batch 3 — Soft-delete profile from service (Claude Code)
+
+Admin can now remove a profile from a service. The profile vanishes from the People & KYC accordion, the KYC Documents tab, and the per-profile review summary panel — but the underlying `profile_service_roles` rows stay intact so re-adding the profile to the service restores the role assignments cleanly. Audit-logged via `profile_removed_from_service`. No UI to restore — tech-debt entry recorded.
+
+**Migration:** `supabase/migrations/20260513073305_service_profile_removals.sql` — new `service_profile_removals` table, tenant-scoped, RLS enabled (service-role-only access, mirroring `waived_document_requirements` from B-100). `npm run db:push` applied; `npm run db:status` shows Local + Remote matched at `20260513073305`.
+
+**Note:** the supabase CLI scaffolded the migration file as empty on first generation, so the registry recorded the timestamp with no SQL change. Reverted via `supabase migration repair --status reverted 20260513073305`, then re-pushed with the actual SQL.
+
+**API:** `POST /api/admin/services/[id]/profiles/[profileId]/remove` — upserts a `service_profile_removals` row (idempotent), writes audit_log. Admin-only.
+
+**Server-side filter:** `src/app/(admin)/admin/services/[id]/page.tsx` reads `service_profile_removals` for the service, builds a removed-id set, and filters `rolesRes.data` + `waiversRes.data` (and the downstream `profileIdsForFE` / `profileIdsForAudit` derivations) before they reach `ServiceDetailClient`. `KycDocumentsTable` derives profiles from roles, so per-profile docs for removed profiles disappear too.
+
+**UI:** new `Remove from service` destructive button in the expanded profile-card quick-actions row (collapsed strip stays clean). Click → confirm dialog → POST → `handleProfileRemoved` splices the role rows out locally + `onRefresh()` triggers a soft RSC re-fetch so audit/waiver state stays consistent.
+
+Files: `src/app/api/admin/services/[id]/profiles/[profileId]/remove/route.ts` (new), `src/app/(admin)/admin/services/[id]/page.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`, `supabase/migrations/20260513073305_service_profile_removals.sql` (new).
+Build: clean.
+
 ### 2026-05-13 — B-101 batch 2 — KYC Documents "Uploaded" filter option (Claude Code)
 
 `KycDocumentsTable` filter dropdown picks up an `Uploaded` option between `All` and `Valid`. Selecting it matches any row whose `expiryStatus` is one of `valid` / `expired` / `never_expires` — i.e. anything where an upload actually exists, regardless of expiry state. The waived branch and the other expiry-status branches keep their existing semantics.

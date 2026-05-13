@@ -9,7 +9,7 @@ import {
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
   AlertTriangle, Eye,
-  Sparkles,
+  Sparkles, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -1393,6 +1393,7 @@ function PersonCard({
   fieldExtractions,
   onRefresh,
   onProfileSaved,
+  onRemoved,
 }: {
   roleRow: RoleWithProfile;
   allRoleRows: RoleWithProfile[];
@@ -1420,6 +1421,10 @@ function PersonCard({
       phone: string | null;
     } | null,
   ) => void;
+  /** B-101 Batch 3 — admin soft-deletes this profile from the service.
+   *  Parent splices it out of the roles array immediately so the card
+   *  disappears without waiting for the RSC roundtrip. */
+  onRemoved?: (profileId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   // B-077 Batch 2 — grouped Documents collapsible at the end of the
@@ -1443,6 +1448,9 @@ function PersonCard({
   const [pendingUploadDocTypeId, setPendingUploadDocTypeId] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
+  // B-101 Batch 3 — soft-delete confirm + in-flight state.
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   // B-078 Batch 1 — per-profile dirty tracking. `savedFields` is the last-
   // known-from-DB snapshot; `draftFields` holds in-flight edits that flow
@@ -2043,6 +2051,20 @@ function PersonCard({
                 Sent {sentDate}
               </span>
             )}
+            {/* B-101 Batch 3 — soft-delete profile from this service.
+                Only rendered when the card is expanded so the action
+                requires a deliberate two-step (expand → remove). */}
+            {expanded && onRemoved && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setRemoveOpen(true)}
+                className={`h-6 text-xs gap-1 ml-auto ${BTN_DESTRUCTIVE_OUTLINE}`}
+              >
+                <Trash2 className="h-3 w-3" />
+                Remove from service
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -2414,6 +2436,57 @@ function PersonCard({
           onSent={(sentAt) => setInviteSentAt(sentAt)}
         />
       )}
+
+      {/* B-101 Batch 3 — Remove-from-service confirm dialog. */}
+      <Dialog open={removeOpen} onOpenChange={(open) => { if (!removing) setRemoveOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove this profile from the service?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            The profile will no longer appear under People &amp; KYC for this
+            service. Their role assignments stay saved and can be restored
+            by adding them back. This action is recorded in the audit log.
+          </p>
+          <DialogFooter className="gap-2">
+            <DialogClose className={`inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium ${BTN_OUTLINE}`} disabled={removing}>
+              Cancel
+            </DialogClose>
+            <Button
+              variant="outline"
+              className={BTN_DESTRUCTIVE_OUTLINE}
+              disabled={removing}
+              onClick={async () => {
+                if (!profile.id) return;
+                setRemoving(true);
+                try {
+                  const res = await fetch(
+                    `/api/admin/services/${serviceId}/profiles/${profile.id}/remove`,
+                    { method: "POST" },
+                  );
+                  if (!res.ok) {
+                    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+                    toast.error(payload.error ?? "Failed to remove profile");
+                    return;
+                  }
+                  toast.success(`Removed ${profile.full_name ?? "profile"} from this service`);
+                  setRemoveOpen(false);
+                  onRemoved?.(profile.id);
+                  // Soft re-fetch to keep audit panel + waivers consistent.
+                  onRefresh();
+                } catch {
+                  toast.error("Failed to remove profile");
+                } finally {
+                  setRemoving(false);
+                }
+              }}
+            >
+              {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* B-077 Batch 5 — per-profile aggregate Review summary panel */}
       {kyc && kycSubsections.length > 0 && (
@@ -3403,6 +3476,18 @@ export function ServiceDetailClient({
     router.refresh();
   }
 
+  // B-101 Batch 3 — splice removed profile out of `roles` so the card
+  // disappears immediately. KycDocumentsTable + PerProfileReviewSummaryPanel
+  // derive everything from `roles`, so the row count for the table and the
+  // people accordion both update without an RSC roundtrip. `onRefresh` is
+  // still called by the dialog so the audit-log panel + waiver list stay
+  // consistent on the next render.
+  const handleProfileRemoved = useCallback((profileId: string) => {
+    setRoles((prev) =>
+      prev.filter((r) => r.client_profiles?.id !== profileId),
+    );
+  }, []);
+
   // B-077 Batch 6c — when a new profile is added/linked, the card mounts
   // (or re-mounts) with `defaultExpanded`. Wait for the next render so
   // the new DOM node exists, then smooth-scroll it into view.
@@ -3664,6 +3749,7 @@ export function ServiceDetailClient({
                       fieldExtractions={personFieldExtractions}
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}
+                      onRemoved={handleProfileRemoved}
                     />
                   );
                 })}
