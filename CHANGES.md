@@ -15,6 +15,30 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
 
+### 2026-05-13 — B-101 batch 5 — Brand logo + role-based portal name (Claude Code)
+
+Sidebar header, top Header bar, and auth pages (login / register / set-password) now render a brand logo alongside the portal name. Portal name is role-based:
+- Admin viewers: **"Mauritius Offshore - Admin Portal"**
+- Non-admin viewers: **"Mauritius Offshore - Client Portal"**
+- Auth pages (role unknown pre-auth): **"Mauritius Offshore"** (brand-only)
+
+Emails kept the legacy "Mauritius Offshore Client Portal" wording on purpose (emails only go to clients).
+
+**New shared helpers:**
+- `src/lib/portal-name.ts` — `portalName(isAdmin)` + `BRAND_NAME` constant.
+- `src/components/shared/BrandMark.tsx` — renders `/brand-logo.png` via next/image; falls back to lucide `<Landmark>` if the image errors. Asset already in `public/brand-logo.png` (1536×1024 PNG).
+
+**Updated sites:**
+- `Sidebar.tsx` — 32px BrandMark next to the two-line portal name.
+- `Header.tsx` — picks `portalName(variant === "admin")` for the top bar.
+- `Navbar.tsx` — same swap (dead code per tech-debt #7 but updated for consistency).
+- `login/page.tsx`, `register/page.tsx`, `auth/set-password/page.tsx` — 48px BrandMark + brand-only name.
+- `set-password/page.tsx` toast — "welcome to Mauritius Offshore" (was "...Client Portal").
+- `src/app/layout.tsx` — `metadata.title` flattened to "Mauritius Offshore Portal" (Next.js metadata can't switch per request without server logic; role-aware names live in the UI layer).
+
+Files: `src/lib/portal-name.ts` (new), `src/components/shared/BrandMark.tsx` (new), `src/components/shared/Sidebar.tsx`, `src/components/shared/Header.tsx`, `src/components/shared/Navbar.tsx`, `src/app/(auth)/login/page.tsx`, `src/app/(auth)/register/page.tsx`, `src/app/auth/set-password/page.tsx`, `src/app/layout.tsx`.
+Build: clean.
+
 ### 2026-05-13 — B-101 batch 4 — Admin account settings page (Claude Code)
 
 New `/admin/account` page where the signed-in admin can upload a profile picture, edit their full name, and change their password (with current-password verification). Three stacked cards, max-width 2xl, plenty of whitespace.

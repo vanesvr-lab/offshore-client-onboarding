@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { portalName } from "@/lib/portal-name";
 
 interface NavbarProps {
   role: "client" | "admin";
@@ -24,7 +25,7 @@ export function Navbar({ role, userName }: NavbarProps) {
         <div className="flex items-center gap-8">
           <Link href={role === "admin" ? "/admin/dashboard" : "/dashboard"}>
             <div className="text-white">
-              <div className="text-lg font-semibold">Mauritius Offshore Client Portal</div>
+              <div className="text-lg font-semibold">{portalName(role === "admin")}</div>
               <div className="text-xs text-brand-light">The intelligent portal for client due diligence and compliance</div>
             </div>
           </Link>

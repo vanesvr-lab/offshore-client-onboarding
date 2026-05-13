@@ -3,6 +3,7 @@
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Menu } from "lucide-react";
+import { portalName } from "@/lib/portal-name";
 
 interface HeaderProps {
   userName?: string | null;
@@ -43,7 +44,8 @@ export function Header({ userName, variant = "admin", onOpenMobileNav }: HeaderP
 
       <div className="flex-1 min-w-0">
         <p className="text-white font-bold text-base sm:text-lg leading-none truncate">
-          Mauritius Offshore Client Portal
+          {/* B-101 Batch 5 — role-based portal name. */}
+          {portalName(variant === "admin")}
         </p>
         <p className="hidden sm:block text-brand-muted text-xs mt-0.5 truncate">
           The intelligent portal for client due diligence and compliance

@@ -3,9 +3,12 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "next-auth/react";
 
+// B-101 Batch 5 — metadata title is generic since Next.js metadata can't
+// switch per request without server logic. Role-aware portal names are
+// applied at the UI layer via `portalName(isAdmin)`.
 export const metadata: Metadata = {
-  title: "Mauritius Offshore Client Portal",
-  description: "Mauritius Offshore Client Portal — The intelligent portal for client due diligence and compliance",
+  title: "Mauritius Offshore Portal",
+  description: "Mauritius Offshore Portal — The intelligent portal for client due diligence and compliance",
 };
 
 export default function RootLayout({

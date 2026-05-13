@@ -21,6 +21,8 @@ import {
   UserCircle,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { BrandMark } from "@/components/shared/BrandMark";
+import { portalName } from "@/lib/portal-name";
 
 interface SidebarProps {
   role: "admin" | "client";
@@ -149,13 +151,22 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col bg-brand-dark">
-      {/* Brand */}
+      {/* Brand — B-101 Batch 5: logo + role-based portal name. */}
       <div className="px-5 py-5 border-b border-white/10">
-        <Link href={role === "admin" ? "/admin/dashboard" : "/dashboard"}>
+        <Link
+          href={role === "admin" ? "/admin/dashboard" : "/dashboard"}
+          className="flex items-center gap-2.5"
+        >
+          <BrandMark size={32} fallbackClassName="text-white" />
           <div className="text-white font-semibold text-[14px] leading-snug">
-            Mauritius Offshore
-            <br />
-            Client Portal
+            {portalName(role === "admin")
+              .split(" - ")
+              .map((part, idx, arr) => (
+                <span key={idx}>
+                  {part}
+                  {idx < arr.length - 1 && <br />}
+                </span>
+              ))}
           </div>
         </Link>
       </div>

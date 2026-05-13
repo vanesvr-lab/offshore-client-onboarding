@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/card";
 import { isEmail, isMinLength, isRequired } from "@/lib/validation";
 import { toast } from "sonner";
+import { BrandMark } from "@/components/shared/BrandMark";
+import { BRAND_NAME } from "@/lib/portal-name";
 
 interface FormState {
   fullName: string;
@@ -140,8 +142,10 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-10">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-brand-navy">Mauritius Offshore Client Portal</h1>
+      <div className="mb-8 flex flex-col items-center text-center">
+        {/* B-101 Batch 5 — brand logo + brand-only name (role unknown pre-auth). */}
+        <BrandMark size={48} className="mb-3" />
+        <h1 className="text-3xl font-bold text-brand-navy">{BRAND_NAME}</h1>
         <p className="text-sm text-gray-600 mt-1">The intelligent portal for client due diligence and compliance</p>
       </div>
       <Card className="w-full max-w-sm">
