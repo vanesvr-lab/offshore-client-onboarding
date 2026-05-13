@@ -23,6 +23,7 @@ interface KycFieldsBody {
     full_name?: string | null;
     email?: string | null;
     phone?: string | null;
+    address?: string | null;
   };
   roles?: {
     service_id: string;
@@ -103,6 +104,11 @@ const PROFILE_FIELD_ALLOWED = new Set<string>([
   "full_name",
   "email",
   "phone",
+  // B-100 — free-form address lives on `client_profiles.address`. Was
+  // silently dropped before because the form packs it into `kyc_fields`
+  // alongside the structured `address_line_*` columns; the server now
+  // splits it back out into the profile branch.
+  "address",
 ]);
 
 const DATE_FIELDS = new Set<string>([
@@ -144,11 +150,32 @@ export async function PATCH(
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
+  // B-100 — server-side splitter. The admin form bundles every dirty
+  // field into `kyc_fields`; here we lift the ones that actually live
+  // on `client_profiles` (`address` etc.) into `profile_fields` before
+  // either branch runs. Belt + braces for whichever caller forgets to
+  // route a field correctly client-side.
+  if (body.kyc_fields) {
+    const lifted: Record<string, unknown> = { ...(body.profile_fields ?? {}) };
+    const remainingKyc: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body.kyc_fields)) {
+      if (PROFILE_FIELD_ALLOWED.has(key)) {
+        lifted[key] = value;
+      } else {
+        remainingKyc[key] = value;
+      }
+    }
+    body.kyc_fields = remainingKyc;
+    if (Object.keys(lifted).length > 0) {
+      body.profile_fields = lifted as KycFieldsBody["profile_fields"];
+    }
+  }
+
   // Confirm profile is real and belongs to this tenant before touching
   // any of the three target tables.
   const { data: profile, error: lookupError } = await supabase
     .from("client_profiles")
-    .select("id, full_name, email, phone")
+    .select("id, full_name, email, phone, address")
     .eq("id", profileId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -280,7 +307,7 @@ export async function PATCH(
   // ── Return the new state so the client resets `savedFields` ─────────────
   const { data: updatedProfile } = await supabase
     .from("client_profiles")
-    .select("id, full_name, email, phone")
+    .select("id, full_name, email, phone, address")
     .eq("id", profileId)
     .eq("tenant_id", tenantId)
     .maybeSingle();

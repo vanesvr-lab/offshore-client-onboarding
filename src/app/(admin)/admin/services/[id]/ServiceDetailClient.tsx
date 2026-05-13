@@ -1657,7 +1657,11 @@ function PersonCard({
   // round-trip persists kyc_fields + profile_fields + role diff.
   // Cancel reverts every dirty field + draft roles back to the last-
   // known-from-DB snapshot.
-  const PROFILE_FIELD_KEYS = new Set(["full_name", "email", "phone"]);
+  // B-100 — `address` is a `client_profiles` column (free-form). Was
+  // being routed into `kyc_fields` and silently dropped server-side; now
+  // it splits cleanly into `profile_fields`. Server has a matching
+  // belt-and-braces splitter so legacy callers don't break.
+  const PROFILE_FIELD_KEYS = new Set(["full_name", "email", "phone", "address"]);
   async function handleKycBarSave() {
     if (!isDirty || savingKycBar) return;
     setSavingKycBar(true);
@@ -1711,7 +1715,13 @@ function PersonCard({
       );
       const data = (await res.json()) as {
         error?: string;
-        profile?: { id: string; full_name: string | null; email: string | null; phone: string | null } | null;
+        profile?: {
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          phone: string | null;
+          address: string | null;
+        } | null;
         kyc?: Record<string, unknown> | null;
         roles?: Array<{ id: string; role: string; service_id: string }>;
       };
@@ -1729,6 +1739,9 @@ function PersonCard({
         nextSaved.full_name = data.profile.full_name ?? "";
         nextSaved.email = data.profile.email ?? "";
         nextSaved.phone = data.profile.phone ?? "";
+        // B-100 — also sync `address` from the post-update profile row
+        // so the dirty tracker zeroes out on a successful save.
+        nextSaved.address = data.profile.address ?? "";
       }
       setSavedFields(nextSaved);
       setDraftFields(nextSaved);

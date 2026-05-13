@@ -15,6 +15,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-100 — Review tooltip + address save fix + waive document + Local Director
 
+### 2026-05-13 — B-100 batch 2 — Admin KYC address save fix (Claude Code)
+
+Bug: admin edits the free-form `address` field on a profile → Save → field reverts. Root cause: `address` lives on `client_profiles` (not `client_profile_kyc`), but the unified save endpoint at `/api/admin/profiles/[id]/kyc-fields/route.ts` only had a 3-key `PROFILE_FIELD_ALLOWED` list (`full_name`, `email`, `phone`). The form packed `address` into `kyc_fields` alongside `address_line_*`; `KYC_FIELD_ALLOWED` didn't include `address` either, so it was silently dropped. The response echoed the unchanged value back and the form re-synced to stale.
+
+- `src/app/api/admin/profiles/[id]/kyc-fields/route.ts` — added `"address"` to `PROFILE_FIELD_ALLOWED`. New server-side splitter at the top of the handler lifts any key found in `PROFILE_FIELD_ALLOWED` out of `kyc_fields` into `profile_fields` before either branch runs (Option A from the brief — belt + braces for any future field that lands in the wrong bucket). Profile lookup + post-update echo now select `id, full_name, email, phone, address`. Audit diff captures `address` automatically because it walks `Object.keys(body.profile_fields ?? {})` and the field is in `PROFILE_FIELD_ALLOWED`.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `PROFILE_FIELD_KEYS` set extended with `"address"` so the form-side splitter also routes it cleanly. Response type widened to include `profile.address`; `nextSaved.address` reset from the post-update echo so the dirty tracker zeroes out without a second fetch.
+
+`npm run build` clean.
+
+---
+
 ### 2026-05-13 — B-100 batch 1 — Review badge hover tooltip (Claude Code)
 
 `Reviewed` / `Flagged` / `Rejected` badges across `/admin/services/[id]` now expose the most-recent review on hover: `"<verb> on <long date> by <reviewer> — <first 80 chars of notes…>"`. "Not reviewed" pills stay plain (no tooltip when there's no review row).
