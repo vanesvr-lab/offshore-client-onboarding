@@ -43,7 +43,13 @@ const KYC_FIELD_ALLOWED = new Set<string>([
   "passport_country",
   "passport_number",
   "passport_expiry",
-  // Address (free-form lives on client_profiles.address; structured here)
+  // Address. B-104 — `address` lives on BOTH `client_profile_kyc` and
+  // `client_profiles`; the form reads from `client_profile_kyc(*)` so
+  // we MUST write to the kyc copy too. Kept in `PROFILE_FIELD_ALLOWED`
+  // as well — the splitter below now COPIES rather than MOVES so both
+  // tables stay in sync until the schema is consolidated (tech-debt).
+  "address",
+  // Structured address columns live on client_profile_kyc only.
   "address_line_1",
   "address_line_2",
   "address_city",
@@ -155,19 +161,36 @@ export async function PATCH(
   // on `client_profiles` (`address` etc.) into `profile_fields` before
   // either branch runs. Belt + braces for whichever caller forgets to
   // route a field correctly client-side.
+  //
+  // B-104 — fix the address save reset. `address` lives on BOTH tables
+  // (`client_profile_kyc.address` AND `client_profiles.address`). The
+  // page server-loads `client_profiles(... client_profile_kyc(*))`, so
+  // the form's `savedFields.address` comes from the kyc row. B-100's
+  // splitter MOVED address out of `kyc_fields`, leaving the kyc copy
+  // untouched — every save updated `client_profiles.address` correctly
+  // but the post-save response echoed the unchanged kyc row, which
+  // overwrote the form's address on splice-into-`savedFields`. Switch
+  // to COPY for dual-table keys so both columns stay in sync until the
+  // schema is consolidated.
+  const DUAL_TABLE_KEYS = new Set<string>(["address"]);
   if (body.kyc_fields) {
-    const lifted: Record<string, unknown> = { ...(body.profile_fields ?? {}) };
+    const liftedToProfile: Record<string, unknown> = { ...(body.profile_fields ?? {}) };
     const remainingKyc: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(body.kyc_fields)) {
-      if (PROFILE_FIELD_ALLOWED.has(key)) {
-        lifted[key] = value;
+      if (DUAL_TABLE_KEYS.has(key)) {
+        // Dual-table field — write to both branches.
+        liftedToProfile[key] = value;
+        remainingKyc[key] = value;
+      } else if (PROFILE_FIELD_ALLOWED.has(key)) {
+        // Profile-only field (full_name / email / phone) — move it out.
+        liftedToProfile[key] = value;
       } else {
         remainingKyc[key] = value;
       }
     }
     body.kyc_fields = remainingKyc;
-    if (Object.keys(lifted).length > 0) {
-      body.profile_fields = lifted as KycFieldsBody["profile_fields"];
+    if (Object.keys(liftedToProfile).length > 0) {
+      body.profile_fields = liftedToProfile as KycFieldsBody["profile_fields"];
     }
   }
 

@@ -13,6 +13,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-104 — Real fix for the admin address save reset
+
+### 2026-05-13 — B-104 — Address dual-write to keep kyc and profiles columns in sync (Claude Code)
+
+`/admin/services/[id]` admin KYC form's address field was still snapping back after save even with the B-100 batch 2 splitter in place. Root cause: `address` lives on **both** `client_profile_kyc` and `client_profiles`. The page server-loads `client_profiles(... client_profile_kyc(*))` so the form's `savedFields.address` reads from the kyc row. B-100's splitter **moved** address out of `kyc_fields` into `profile_fields` and updated `client_profiles.address` only — the kyc copy stayed at its old value, the post-save response echoed the stale kyc row, and the client spliced that back into `savedFields`, overwriting the just-typed address.
+
+**Fix:** `/api/admin/profiles/[id]/kyc-fields` now **copies** dual-table keys (today: just `address`) into both `kyc_fields` and `profile_fields` instead of moving them. Both branches run their respective UPDATE so both columns reconcile per save. `address` was also added to `KYC_FIELD_ALLOWED` so the kyc branch actually persists the value (the whitelist would have silently dropped it otherwise). Other profile-only fields (`full_name`, `email`, `phone`) still get moved out — their dual-table semantics don't apply.
+
+No new migrations, no new endpoints, no client-side change. Audit log will now show the address diff under **both** `kyc_fields` and `profile_fields` — slightly noisy but accurate; the dual-write deserves to be visible in the trail.
+
+**Tech-debt entry added** noting both columns still exist and listing the other writers that need auditing before a schema consolidation can drop the duplicate.
+
+Files: `src/app/api/admin/profiles/[id]/kyc-fields/route.ts`, `docs/tech-debt.md`.
+Build: clean.
+
+---
+
 ## B-103 — Header avatar + right-rail height cap
 
 ### 2026-05-13 — B-103 — Avatar in top header + right-rail balanced height (Claude Code)
