@@ -23,7 +23,11 @@ export interface KycDocsSummaryCategory {
 
 export interface KycDocsSummaryProps {
   uploadCount: number;
+  /** Total required doc types AFTER excluding waived ones. */
   totalCount: number;
+  /** B-106 — optional waived-count suffix. Renders "· N waived" after
+   *  the uploaded count when > 0. */
+  waivedCount?: number;
   byCategory: KycDocsSummaryCategory[];
   /** Hide the legend strip when caller wants a compact summary. Default: true. */
   showLegend?: boolean;
@@ -41,11 +45,14 @@ function categoryIcon(uploaded: number, total: number) {
 export function KycDocsSummary({
   uploadCount,
   totalCount,
+  waivedCount = 0,
   byCategory,
   showLegend = true,
   onCategoryClick,
 }: KycDocsSummaryProps) {
-  if (totalCount === 0) return null;
+  // B-106 — render the summary even when totalCount is 0 if there are
+  // waivers to surface; otherwise keep the original empty-state hide.
+  if (totalCount === 0 && waivedCount === 0) return null;
   return (
     <div className="rounded-lg border bg-white px-4 py-2.5 flex items-center justify-between gap-4 flex-wrap">
       <p className="text-[11px] text-gray-600 font-semibold uppercase tracking-wide flex items-center gap-1.5">
@@ -53,10 +60,13 @@ export function KycDocsSummary({
         KYC Documents
         <span
           className={`ml-1 text-[11px] font-medium normal-case tracking-normal ${
-            uploadCount === totalCount ? "text-green-600" : "text-amber-600"
+            totalCount > 0 && uploadCount === totalCount ? "text-green-600" : "text-amber-600"
           }`}
         >
           · {uploadCount} of {totalCount} uploaded
+          {waivedCount > 0 && (
+            <span className="text-gray-500"> · {waivedCount} waived</span>
+          )}
         </span>
       </p>
       <div className="flex items-center gap-x-4 gap-y-2 text-xs text-gray-600 flex-wrap">

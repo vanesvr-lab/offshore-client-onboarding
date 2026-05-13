@@ -1399,6 +1399,8 @@ function PersonCard({
   updateRequests,
   defaultExpanded,
   fieldExtractions,
+  waivers,
+  adminNamesByUserId,
   onRefresh,
   onProfileSaved,
   onRemoved,
@@ -1416,6 +1418,15 @@ function PersonCard({
   defaultExpanded?: boolean;
   /** B-070 — provenance rows already filtered to this profile. */
   fieldExtractions?: FieldExtraction[];
+  /** B-106 — waivers for this service. PersonCard filters internally to
+   *  person-scope rows belonging to this profile, then surfaces a
+   *  "Waived" badge + tooltip on each waived KYC doc row and adjusts the
+   *  uploaded/total counts to exclude waived requirements. */
+  waivers?: WaivedDocumentRequirement[];
+  /** B-106 — admin user_id → full_name map for the waiver tooltip's
+   *  "by <name>" suffix. Cheap lookup; the page already loads admin users
+   *  for other surfaces (loadServiceDetail). */
+  adminNamesByUserId?: Record<string, string | null>;
   onRefresh: () => void;
   /** B-084 Batch 1 — splice updated kyc/profile back into the parent's
    *  roles state so the per-profile and aggregate completion % flip
@@ -1626,6 +1637,20 @@ function PersonCard({
     return () => document.removeEventListener("click", onCardClick, true);
   }, [isDirty, roleRow.client_profiles?.id]);
 
+  // B-106 — must compute before the early return below to keep hook
+  // order stable. Uses the optional id so it stays empty for null
+  // profiles (which short-circuit on the next line anyway).
+  const profileIdForWaivers = roleRow.client_profiles?.id ?? null;
+  const waiverByDocTypeForProfile = useMemo(() => {
+    const m = new Map<string, WaivedDocumentRequirement>();
+    if (!profileIdForWaivers) return m;
+    for (const w of waivers ?? []) {
+      if (w.scope !== "person" || w.client_profile_id !== profileIdForWaivers) continue;
+      m.set(w.document_type_id, w);
+    }
+    return m;
+  }, [waivers, profileIdForWaivers]);
+
   if (!roleRow.client_profiles) return null;
   const profile = roleRow.client_profiles;
   // B-084 Batch 1 — derive `kyc` from `savedFields` (post-save splice)
@@ -1810,6 +1835,9 @@ function PersonCard({
   // B-076 — per-profile KYC doc data builders. Lifted from the deleted
   // `AdminKycDocListPanel`; consumed by `KycDocsSummary` (status box)
   // + `KycDocsByCategory` (grouped per-category list).
+  // B-106 — waivers carrying `scope === "person"` for this profile
+  // become `is_waived` rows in the list and drop out of the
+  // uploaded/total summary counts.
   const profileDocs = (profileDocuments ?? []).filter(
     (d) => d.client_profile_id === profile.id,
   );
@@ -1827,6 +1855,10 @@ function PersonCard({
       label: kycCategoryLabel(cat),
       docs: groups[cat].map<KycDocRowData>((dt) => {
         const uploaded = profileDocs.find((d) => d.document_type_id === dt.id);
+        const waiver = waiverByDocTypeForProfile.get(dt.id) ?? null;
+        const waivedByName = waiver
+          ? adminNamesByUserId?.[waiver.waived_by] ?? null
+          : null;
         return {
           id: uploaded?.id ?? null,
           document_type_id: dt.id,
@@ -1842,14 +1874,24 @@ function PersonCard({
           admin_status_at: uploaded?.admin_status_at ?? null,
           expiry_date: uploaded?.expiry_date ?? null,
           valid_for_months: dt.valid_for_months ?? null,
+          is_waived: waiver !== null,
+          waived_at: waiver?.waived_at ?? null,
+          waived_by_name: waivedByName,
         };
       }),
     }));
   })();
 
   const totalKycDocs = kycDocsByCategory.reduce((acc, c) => acc + c.docs.length, 0);
+  const totalKycWaived = kycDocsByCategory.reduce(
+    (acc, c) => acc + c.docs.filter((d) => d.is_waived).length,
+    0,
+  );
+  // B-106 — denominator excludes waived doc types; numerator already
+  // counts uploads (waived rows aren't uploaded).
+  const totalKycRequired = totalKycDocs - totalKycWaived;
   const totalKycUploaded = kycDocsByCategory.reduce(
-    (acc, c) => acc + c.docs.filter((d) => d.is_uploaded).length,
+    (acc, c) => acc + c.docs.filter((d) => d.is_uploaded && !d.is_waived).length,
     0,
   );
 
@@ -2208,12 +2250,13 @@ function PersonCard({
                 bottom (auto-expanding it via setDocsExpanded). */}
             <KycDocsSummary
               uploadCount={totalKycUploaded}
-              totalCount={totalKycDocs}
+              totalCount={totalKycRequired}
+              waivedCount={totalKycWaived}
               byCategory={kycDocsByCategory.map((c) => ({
                 key: c.key,
                 label: c.label,
-                uploaded: c.docs.filter((d) => d.is_uploaded).length,
-                total: c.docs.length,
+                uploaded: c.docs.filter((d) => d.is_uploaded && !d.is_waived).length,
+                total: c.docs.filter((d) => !d.is_waived).length,
               }))}
               onCategoryClick={(cat) => {
                 setDocsExpanded(true);
@@ -2274,10 +2317,12 @@ function PersonCard({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span
                     className={`h-2 w-2 rounded-full ${
-                      totalKycUploaded === totalKycDocs
+                      totalKycRequired > 0 && totalKycUploaded === totalKycRequired
                         ? "bg-green-500"
                         : totalKycUploaded > 0
                         ? "bg-amber-400"
+                        : totalKycRequired === 0
+                        ? "bg-green-500"
                         : "bg-red-400"
                     }`}
                   />
@@ -2285,7 +2330,8 @@ function PersonCard({
                     Documents
                   </span>
                   <span className="text-[11px] text-gray-500">
-                    ({totalKycUploaded} of {totalKycDocs} uploaded)
+                    ({totalKycUploaded} of {totalKycRequired} uploaded
+                    {totalKycWaived > 0 ? ` · ${totalKycWaived} waived` : ""})
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -2293,17 +2339,19 @@ function PersonCard({
                     <div className="w-16 h-1.5 rounded-full bg-gray-200 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
-                          totalKycUploaded === totalKycDocs
+                          totalKycRequired > 0 && totalKycUploaded === totalKycRequired
                             ? "bg-green-500"
                             : totalKycUploaded > 0
                             ? "bg-amber-400"
+                            : totalKycRequired === 0
+                            ? "bg-green-500"
                             : "bg-red-400"
                         }`}
                         style={{
                           width: `${
-                            totalKycDocs > 0
-                              ? Math.round((totalKycUploaded / totalKycDocs) * 100)
-                              : 0
+                            totalKycRequired > 0
+                              ? Math.round((totalKycUploaded / totalKycRequired) * 100)
+                              : 100
                           }%`,
                         }}
                       />
@@ -3464,6 +3512,17 @@ export function ServiceDetailClient({
       window.removeEventListener("resize", onResize);
     };
   }, []);
+  // B-106 — admin user_id → display name map for the waiver tooltip's
+  // "by <name>" suffix on per-profile docs. The page already loads
+  // `adminUsers` for the manager-assignment dropdown.
+  const adminNamesByUserId = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const u of adminUsers) {
+      m[u.user_id] = u.full_name ?? u.email ?? null;
+    }
+    return m;
+  }, [adminUsers]);
+
   // B-084 Batch 1 — lift roles to state so per-profile saves can splice
   // updated kyc/profile fields directly into the parent without waiting
   // for the RSC roundtrip from `router.refresh()`. Sync from prop on
@@ -4322,6 +4381,8 @@ export function ServiceDetailClient({
                         (reviewMode && reviewProfileId === pid)
                       }
                       fieldExtractions={personFieldExtractions}
+                      waivers={waivers}
+                      adminNamesByUserId={adminNamesByUserId}
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}
                       onRemoved={handleProfileRemoved}

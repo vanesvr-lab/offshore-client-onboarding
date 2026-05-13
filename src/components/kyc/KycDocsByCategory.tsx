@@ -9,6 +9,12 @@
 // and a divided list of `KycDocRow`s.
 
 import { KycDocRow, type KycDocRowData } from "./KycDocRow";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface KycDocsCategory {
   /** Stable category key (matches `document_types.category`). */
@@ -30,6 +36,16 @@ export interface KycDocsByCategoryProps {
   anchorPrefix?: string;
 }
 
+function waivedTooltipText(waivedAt: string | null | undefined, waivedByName?: string | null) {
+  if (!waivedAt) return "Waived";
+  const date = new Date(waivedAt).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return waivedByName ? `Waived on ${date} by ${waivedByName}` : `Waived on ${date}`;
+}
+
 export function KycDocsByCategory({
   categories,
   showAdminControls = false,
@@ -42,9 +58,13 @@ export function KycDocsByCategory({
   return (
     <div className="space-y-4">
       {categories.map((cat) => {
-        const total = cat.docs.length;
-        const uploaded = cat.docs.filter((d) => d.is_uploaded).length;
+        // B-106 — exclude waived rows from both numerator and denominator
+        // so the header reads "N of M uploaded" against required-only docs.
+        const requiredDocs = cat.docs.filter((d) => !d.is_waived);
+        const total = requiredDocs.length;
+        const uploaded = requiredDocs.filter((d) => d.is_uploaded).length;
         const complete = total > 0 && uploaded === total;
+        const waivedInCat = cat.docs.filter((d) => d.is_waived).length;
         return (
           <div
             key={cat.key}
@@ -58,23 +78,57 @@ export function KycDocsByCategory({
                 </p>
                 <span
                   className={`text-xs font-medium ${
-                    complete ? "text-green-600" : "text-amber-600"
+                    total === 0 ? "text-gray-500" : complete ? "text-green-600" : "text-amber-600"
                   }`}
                 >
                   {uploaded} of {total} uploaded
+                  {waivedInCat > 0 && (
+                    <span className="text-gray-500"> · {waivedInCat} waived</span>
+                  )}
                 </span>
               </div>
               <div className="divide-y">
-                {cat.docs.map((d) => (
-                  <KycDocRow
-                    key={d.document_type_id}
-                    doc={d}
-                    showAdminControls={showAdminControls}
-                    onViewClick={onViewClick}
-                    onUploadClick={onUploadClick}
-                    isUploading={uploadingDocTypeId === d.document_type_id}
-                  />
-                ))}
+                {cat.docs.map((d) => {
+                  if (d.is_waived) {
+                    return (
+                      <div
+                        key={d.document_type_id}
+                        className="flex items-center justify-between px-5 py-3 bg-gray-50/70"
+                      >
+                        <span className="text-sm text-gray-500 italic truncate">
+                          {d.document_name}
+                        </span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <span
+                                  className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 italic cursor-help"
+                                  aria-label={waivedTooltipText(d.waived_at, d.waived_by_name)}
+                                >
+                                  Waived
+                                </span>
+                              }
+                            />
+                            <TooltipContent>
+                              {waivedTooltipText(d.waived_at, d.waived_by_name)}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    );
+                  }
+                  return (
+                    <KycDocRow
+                      key={d.document_type_id}
+                      doc={d}
+                      showAdminControls={showAdminControls}
+                      onViewClick={onViewClick}
+                      onUploadClick={onUploadClick}
+                      isUploading={uploadingDocTypeId === d.document_type_id}
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>

@@ -32,6 +32,12 @@ export interface KycDocRowData {
   /** B-097 — expiry resolution inputs. */
   expiry_date?: string | null;
   valid_for_months?: number | null;
+  /** B-106 — waived KYC doc requirement. When true, row renders muted
+   *  with a "Waived on <date> by <name>" hover tooltip and the
+   *  Upload/View actions hide. */
+  is_waived?: boolean;
+  waived_at?: string | null;
+  waived_by_name?: string | null;
 }
 
 export interface KycDocRowProps {

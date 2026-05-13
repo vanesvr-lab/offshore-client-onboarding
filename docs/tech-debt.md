@@ -11,6 +11,11 @@ remove after 30 days.
 
 ## 2026-05-13
 
+- **Waiver `waived_by_name` is resolved client-side via a `users` map.**
+  *Spawned by:* [B-106](cli-brief-waiver-everywhere-b106.md).
+  *What:* `PersonCard` builds a `Record<user_id, full_name>` from the existing `adminUsers` page-load and resolves the waiver-tooltip "by <name>" via that map. Works because the lookup data is already on the page, but if `loadServiceDetail` ever drops the admin-users fetch, the tooltip silently shows just the date. Long-term, surface `waived_by_name` directly on the waiver row by extending the `loadServiceDetail` select to join `users(full_name)` and project as a column-level alias on `waived_document_requirements`.
+  *Why deferred:* Coupling the waiver row to a join changes the type shape across the chain — not worth it until either the admin-users fetch is removed or we add a non-admin actor (`waived_by` could in principle be any user_id, but today it's always an admin).
+
 - **`address` is duplicated between `client_profiles` and `client_profile_kyc`.**
   *Spawned by:* [B-104](cli-brief-address-save-true-fix-b104.md).
   *What:* Both tables carry an `address` column. B-104 makes `/api/admin/profiles/[id]/kyc-fields` dual-write to keep them in sync from the admin save endpoint. Other writers (the legacy `verify-code` magic-link flow at `src/app/api/kyc/verify-code/route.ts`, the client wizard auto-save at `/api/services/[id]/persons/[personId]/route.ts`, and any direct DB updates) may still only touch one column — verify and plug any remaining single-side writers before consolidating. **Plan to consolidate:** pick one column as canonical (likely `client_profiles.address` since it's already the contact-info layer), backfill from the other, drop the duplicate, remove the dual-write logic in the kyc-fields route. ~2-hour follow-up brief once we confirm no other writers are silently relying on the now-dropped column.

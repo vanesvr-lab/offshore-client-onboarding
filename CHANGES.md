@@ -15,6 +15,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-106 — Waivers everywhere (service docs + per-profile display + scope column)
 
+### 2026-05-13 — B-106 batch 3 — Per-profile expanded view reflects waivers (Claude Code)
+
+Admin's per-profile expanded view on `/admin/services/[id]` (and the Review Wizard at `/admin/services/[id]/review` step 3) now surfaces person-scope waivers throughout:
+
+- `PersonCard` accepts `waivers` + `adminNamesByUserId` props. Internally derives `waiverByDocTypeForProfile` (filtered to `scope === "person"` + this profile's id) and stamps every `KycDocRowData` with `is_waived`, `waived_at`, `waived_by_name`.
+- `totalKycRequired` (denominator) = `totalKycDocs - totalKycWaived`. `totalKycUploaded` excludes waived rows from the numerator too (waivers aren't uploads). The Documents collapsible header reads `<N> of <required> uploaded · <waived> waived` (suffix hidden when nothing's waived).
+- `KycDocsSummary` picks up an optional `waivedCount` prop and renders the `· N waived` suffix beside the upload count when set.
+- `KycDocsByCategory` now exempts waived docs from each category's `N of M` total. Waived rows render as a muted strip (gray background, italic doc name) with a "Waived" pill — hover tooltip shows `Waived on <long date> by <reviewer name>` when the reviewer is in `adminNamesByUserId`, else `Waived on <date>` only. `KycDocRow` gets new optional `is_waived` / `waived_at` / `waived_by_name` fields on its row-data type but render is unchanged for non-waived rows.
+- The waiver tooltip's reviewer name uses an admin-users lookup built once in `ServiceDetailClient` via `useMemo` (no extra fetch — `loadServiceDetail` already loads admin users for the manager-assignment dropdown). Tech-debt entry logged.
+
+The Review Wizard inherits this automatically — it mounts the same `ServiceDetailClient` with `reviewMode` so step 3 sees the same per-profile waivers.
+
+Files: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`, `src/components/kyc/KycDocRow.tsx`, `src/components/kyc/KycDocsSummary.tsx`, `src/components/kyc/KycDocsByCategory.tsx`, `docs/tech-debt.md`.
+Build: clean.
+
 ### 2026-05-13 — B-106 batch 2 — Service Docs waive UI + client wizard filters (Claude Code)
 
 Admin's Service Docs tab on `/admin/services/[id]` now exposes the same waive / un-waive UX as the KYC Documents tab. Waive button sits to the right of each row; click → confirm dialog (`The client will no longer be asked to upload <name>. You can un-waive it at any time.`) → POST with `scope: "application"`. Waived rows render with a muted background, a "Waived" pill (hover tooltip shows the waiver date), and an Un-waive button that single-clicks reverses the state. Optimistic update via `onWaiversChange` so the row flips instantly without waiting for the server roundtrip.
