@@ -46,6 +46,7 @@ import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { SectionReviewPanel } from "@/components/admin/SectionReviewPanel";
 import { AdminReviewWizardStepIndicator } from "@/components/admin/AdminReviewWizardStepIndicator";
+import { AdminPerProfileReviewWizard } from "@/components/admin/AdminPerProfileReviewWizard";
 import { PerProfileReviewSummaryPanel, type PerProfileSubsection } from "@/components/admin/PerProfileReviewSummaryPanel";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
@@ -446,6 +447,8 @@ function KycLongForm({
   fields,
   setFields,
   onAfterReapply,
+  restrictToSectionTitles,
+  forceOpenAll = false,
 }: {
   kyc: KycFull;
   profileId?: string;
@@ -474,6 +477,15 @@ function KycLongForm({
   /** B-078 Batch 1 — after a server-side re-apply, PersonCard syncs
    *  savedFields so dirty tracking resets. */
   onAfterReapply?: (patched: Record<string, unknown>) => void;
+  /** B-109 Batch 3 — sub-wizard filter: when set, only sections whose
+   *  `title` is in the list render. Lets `AdminPerProfileReviewWizard`
+   *  reuse this component to show one section per sub-step without
+   *  forking the long-form rendering pipeline. */
+  restrictToSectionTitles?: string[];
+  /** B-109 Batch 3 — sub-wizard mode wants the active section expanded
+   *  automatically (no admin click to open). Default false preserves
+   *  the existing "open with everything collapsed" behaviour. */
+  forceOpenAll?: boolean;
 }) {
   const isOrg = recordType === "organisation";
   const ddLevel: KycDueDiligenceLevel =
@@ -482,8 +494,13 @@ function KycLongForm({
   const sections = useMemo(
     () => baseSections
       .map((s) => gateSectionForLevel(s, ddLevel))
-      .filter((s): s is KycSection => s !== null),
-    [baseSections, ddLevel],
+      .filter((s): s is KycSection => s !== null)
+      .filter((s) =>
+        restrictToSectionTitles
+          ? restrictToSectionTitles.includes(s.title)
+          : true,
+      ),
+    [baseSections, ddLevel, restrictToSectionTitles],
   );
 
   // B-070 — group provenance rows by field_key for O(1) marker lookup.
@@ -512,7 +529,16 @@ function KycLongForm({
   // so dirty tracking can be lifted to the per-profile container.
   // B-075 — admin opens with everything collapsed. Vanessa, 2026-05-07:
   // "by default the page is loaded with all the sections collapsed."
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
+  // B-109 Batch 3 — `forceOpenAll` (sub-wizard mode) opens every gated
+  // section by default so the admin sees fields without an extra click.
+  const [openSections, setOpenSections] = useState<Set<string>>(() =>
+    forceOpenAll ? new Set(sections.map((s) => s.title)) : new Set(),
+  );
+  useEffect(() => {
+    if (forceOpenAll) {
+      setOpenSections(new Set(sections.map((s) => s.title)));
+    }
+  }, [forceOpenAll, sections]);
   const [localDocs, setLocalDocs] = useState<ServiceDoc[]>(profileDocuments ?? []);
   const [reapplyingSection, setReapplyingSection] = useState<string | null>(null);
 
@@ -1414,6 +1440,7 @@ function PersonCard({
   onRefresh,
   onProfileSaved,
   onRemoved,
+  wizardSubStep,
 }: {
   roleRow: RoleWithProfile;
   allRoleRows: RoleWithProfile[];
@@ -1458,6 +1485,16 @@ function PersonCard({
    *  Parent splices it out of the roles array immediately so the card
    *  disappears without waiting for the RSC roundtrip. */
   onRemoved?: (profileId: string) => void;
+  /** B-109 Batch 3 — when set, renders the per-profile sub-wizard in
+   *  place of the standard expanded body. State (fields, save, doc
+   *  upload, waivers) still lives in PersonCard; the sub-wizard is a
+   *  presenter that calls back here. */
+  wizardSubStep?: {
+    subStepIndex: number;
+    onSubStepChange: (next: number) => void;
+    onBackToList: () => void;
+    onProfileReviewed: () => void;
+  } | null;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   // B-077 Batch 2 — grouped Documents collapsible at the end of the
@@ -1733,8 +1770,10 @@ function PersonCard({
   // and B-104's server splitter were both correct but the splitter was
   // unreachable from this caller until address moved out of this set.)
   const PROFILE_FIELD_KEYS = new Set(["full_name", "email", "phone"]);
-  async function handleKycBarSave() {
-    if (!isDirty || savingKycBar) return;
+  // B-109 Batch 3 — returns true on success / no-op so callers (the
+  // per-profile sub-wizard) can gate auto-advance on save success.
+  async function handleKycBarSave(): Promise<boolean> {
+    if (!isDirty || savingKycBar) return true;
     setSavingKycBar(true);
     try {
       const kycPatch: Record<string, unknown> = {};
@@ -1826,11 +1865,13 @@ function PersonCard({
       );
       toast.success("Changes saved.", { position: "top-right" });
       onRefresh();
+      return true;
     } catch (err: unknown) {
       toast.error(
         err instanceof Error ? `Failed to save: ${err.message}` : "Failed to save",
         { position: "top-right" },
       );
+      return false;
     } finally {
       setSavingKycBar(false);
     }
@@ -2240,10 +2281,85 @@ function PersonCard({
             )}
           </div>
 
-          {/* Vertical containment wrapper — gray rule down the left edge
+          {/* B-109 Batch 3 — sub-wizard mode replaces the entire vertical
+              containment block. The sticky banner above stays so admin sees
+              who they're reviewing; the sub-wizard owns the rest (sub-step
+              indicator + active section + bottom nav). */}
+          {wizardSubStep ? (
+          <div className="m-4" data-profile-id={profile.id}>
+            <AdminPerProfileReviewWizard
+              serviceId={serviceId}
+              profileId={profile.id}
+              profileName={profile.full_name ?? "Profile"}
+              recordType={profile.record_type ?? null}
+              dueDiligenceLevel={profile.due_diligence_level ?? null}
+              onSave={handleKycBarSave}
+              isDirty={isDirty}
+              saving={savingKycBar}
+              kycDocsByCategory={kycDocsByCategory}
+              totalKycUploaded={totalKycUploaded}
+              totalKycRequired={totalKycRequired}
+              totalKycWaived={totalKycWaived}
+              waivers={waivers ?? []}
+              onWaiversChange={onWaiversChange ?? (() => {})}
+              onUploadClickFromDocs={(docTypeId) => {
+                setPendingUploadDocTypeId(docTypeId);
+                uploadInputRef.current?.click();
+              }}
+              onViewDoc={handleAdminViewDoc}
+              uploadingDocTypeId={uploadingDocTypeId}
+              subStepIndex={wizardSubStep.subStepIndex}
+              onSubStepChange={wizardSubStep.onSubStepChange}
+              onBackToList={wizardSubStep.onBackToList}
+              onProfileReviewed={wizardSubStep.onProfileReviewed}
+              renderFormSection={(sectionTitle) => (
+                <KycLongForm
+                  kyc={kyc}
+                  profileId={profile.id}
+                  profileDocuments={profileDocs}
+                  documentTypes={documentTypes}
+                  recordType={profile.record_type}
+                  dueDiligenceLevel={profile.due_diligence_level}
+                  fieldExtractions={fieldExtractions ?? []}
+                  onOpenDocumentDetail={handleAdminViewDoc}
+                  onSectionDocUpload={(docTypeId) => {
+                    setPendingUploadDocTypeId(docTypeId);
+                    uploadInputRef.current?.click();
+                  }}
+                  uploadingDocTypeId={uploadingDocTypeId}
+                  fields={draftFields}
+                  setFields={setDraftFields}
+                  onAfterReapply={(patched) =>
+                    setSavedFields((prev) => ({ ...prev, ...patched }))
+                  }
+                  restrictToSectionTitles={[sectionTitle]}
+                  forceOpenAll
+                />
+              )}
+            />
+            {/* B-109 Batch 3 — sub-wizard mode keeps the upload input
+                mounted so KYC docs can still be uploaded from the
+                Documents sub-step. */}
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.tiff"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && pendingUploadDocTypeId) {
+                  void handleAdminDocUpload(pendingUploadDocTypeId, file);
+                }
+                e.target.value = "";
+                setPendingUploadDocTypeId(null);
+              }}
+            />
+          </div>
+          ) : (
+          /* Vertical containment wrapper — gray rule down the left edge
               of the entire profile content (B-077 QA #2). The wrapper
               starts inside the card with margins so the rule reads as a
-              clear indent rather than blending with the card border. */}
+              clear indent rather than blending with the card border. */
           <div
             className="border-l-4 border-[#7dbbe3] ml-4 mr-4 my-4 pl-4"
             data-profile-id={profile.id}
@@ -2460,7 +2576,9 @@ function PersonCard({
             </div>
           </div>
 
-          </div>{/* /vertical containment wrapper (B-077 Batch 1) */}
+          </div>
+          )}{/* /vertical containment wrapper (B-077 Batch 1) — closes the
+                 sub-wizard ternary added in B-109 Batch 3. */}
 
           {/* B-076 — admin doc detail dialog (Approve / Reject / Re-run AI
               / Send Update Request). Same component the deleted
@@ -3829,6 +3947,44 @@ export function ServiceDetailClient({
       }
     : null;
 
+  // B-109 Batch 3 — per-profile sub-step. `?substep=<n>` is parsed when
+  // step 3 + a profile is selected; defaults to 0. Clamped to >= 0; the
+  // sub-wizard itself clamps the upper bound against its computed list.
+  const rawSubStep = reviewProfileId ? searchParams.get("substep") : null;
+  const reviewSubStepIndex = (() => {
+    if (!reviewProfileId) return 0;
+    const parsed = rawSubStep ? parseInt(rawSubStep, 10) : 0;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  })();
+  // Wire the per-profile sub-wizard nav. Built only when a profile is
+  // selected; otherwise PersonCard receives `null` and renders normally.
+  const reviewProfileWizardSubStep = reviewProfileId
+    ? {
+        subStepIndex: reviewSubStepIndex,
+        onSubStepChange: (next: number) => {
+          router.replace(
+            `/admin/services/${service.id}/review?step=3&profile=${reviewProfileId}&substep=${next}`,
+          );
+        },
+        onBackToList: () => {
+          router.replace(`/admin/services/${service.id}/review?step=3`);
+        },
+        onProfileReviewed: () => {
+          const nextIdx = reviewProfileIndex + 1;
+          if (nextIdx >= uniqueRoles.length) {
+            router.replace(`/admin/services/${service.id}/review?step=3`);
+            return;
+          }
+          const nextPid = uniqueRoles[nextIdx]?.person.client_profiles?.id;
+          if (!nextPid) return;
+          // New profile starts at sub-step 0.
+          router.replace(
+            `/admin/services/${service.id}/review?step=3&profile=${nextPid}`,
+          );
+        },
+      }
+    : null;
+
   // ── Section completion ────────────────────────────────────────────────────
 
   const companyFields = getFieldsForSection("company_setup", serviceFields);
@@ -4556,6 +4712,11 @@ export function ServiceDetailClient({
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}
                       onRemoved={handleProfileRemoved}
+                      wizardSubStep={
+                        reviewMode && reviewProfileId === pid
+                          ? reviewProfileWizardSubStep
+                          : null
+                      }
                     />
                   );
                 })}
@@ -5052,8 +5213,12 @@ export function ServiceDetailClient({
       </div>{/* End grid */}
 
       {/* B-102 — Review Wizard sticky bottom nav. Replaces the scroll
-          page's save bar; auto-saves dirty changes before advancing. */}
-      {reviewMode && (
+          page's save bar; auto-saves dirty changes before advancing.
+          B-109 Batch 3 — suppressed when the per-profile sub-wizard is
+          active (`?profile=<id>` on step 3). The sub-wizard owns its own
+          bottom nav (Back to list / Previous / Next / Mark Profile
+          Reviewed); the parent nav would duplicate those affordances. */}
+      {reviewMode && !reviewProfileId && (
         <ReviewWizardBottomNav
           serviceId={service.id}
           step={reviewStep}

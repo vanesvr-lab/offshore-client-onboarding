@@ -15,6 +15,45 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-109 — Review Wizard polish (Mark dialog + step indicator + per-profile sub-wizard)
 
+### 2026-05-13 — B-109 batch 3 — Admin per-profile sub-wizard for step 3 (Claude Code)
+
+New component `AdminPerProfileReviewWizard` at `src/components/admin/AdminPerProfileReviewWizard.tsx`. Mirrors the client `PerPersonReviewWizard` structurally: in the Review Wizard at step 3 (People & KYC), clicking a profile from the list opens a sub-wizard that walks the admin through that profile's KYC sections one at a time with a `Next` button between each.
+
+Sub-step ordering follows `KYC_SECTIONS_INDIVIDUAL` / `KYC_SECTIONS_ORGANISATION` from `src/lib/kyc/sections.ts`, gated by `due_diligence_level`:
+- Individual / CDD or EDD: Identity → Financial → Compliance → Documents
+- Individual / SDD: Identity → Financial → Documents (Declarations is `cddOrAbove`)
+- Organisation: Identity → Tax & Financial → Documents
+
+Per the brief, `Address` is not split into its own sub-step on the admin side — the admin KYC schema keeps Address inside `Your Identity` (with its dedicated Address subdivider and source-doc rows from B-084). Tech-debt entry in `docs/tech-debt.md` tracks unifying the sub-step ordering with the client wizard's structure.
+
+URL sync: extended the existing `?step=3&profile=<id>` parsing to `?step=3&profile=<id>&substep=<n>` so refresh / back-button preserve the active sub-step. `?substep` defaults to 0; the sub-wizard clamps the upper bound against its computed list.
+
+For each form sub-step, the sub-wizard reuses the existing `KycLongForm` via a new `restrictToSectionTitles?: string[]` prop — only the section matching the active sub-step renders, with all the existing review badge / inline review button / AI prefill banner / source-doc rows / Re-apply / View affordances intact. A `forceOpenAll` prop opens the gated section by default so the admin sees fields without an extra click.
+
+The Documents sub-step renders the same `KycDocsSummary` + `KycDocsByCategory` blocks PersonCard already uses, with per-profile waive/un-waive (B-107) and admin upload + view affordances. The upload `<input type="file">` is mounted inside the sub-wizard branch so uploads work without falling back to the standard PersonCard body.
+
+Bottom nav (sub-wizard-owned): `Back to list` (left) / `Previous` (when sub-step > 0) / `Mark Profile Reviewed` (always) / `Next` (when not last sub-step). `Next` auto-saves via `PersonCard.handleKycBarSave` (modified to return `Promise<boolean>` so the sub-wizard can gate auto-advance on save success). Save failures show the existing error toast and don't advance.
+
+`Mark Profile Reviewed` opens the same `SectionReviewPanel` dialog from Batch 1 (status picker + notes). Section key is the step-level `people` per Batch 1 §1.2 — profile-scoped subject id wiring is logged as tech debt for a follow-up brief. On save, the auto-advance jumps to the next profile (resetting to sub-step 0) or returns to the profile list if this was the last.
+
+Parent wizard nav (`ReviewWizardBottomNav`) is suppressed when the sub-wizard is active — the wizard chrome's Exit Review stays in the top bar; everything else is owned by the sub-wizard. Without this gate, the parent's Back to list / Mark Profile Reviewed / Next Profile would duplicate the sub-wizard's affordances.
+
+Wiring into PersonCard: a new `wizardSubStep` prop replaces the entire vertical containment block (Roles picker + KycDocsSummary + KycLongForm + Documents collapsible + Save bar) with the sub-wizard when set. The sticky banner (profile name + email + KYC %) stays so admin sees who they're reviewing. Save state, dirty tracking, doc upload handlers, and waivers all stay in PersonCard; the sub-wizard is a presenter that calls back.
+
+Files:
+- `src/components/admin/AdminPerProfileReviewWizard.tsx` (new — ~440 lines)
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`
+  - Added `restrictToSectionTitles` + `forceOpenAll` props to `KycLongForm`
+  - `PersonCard.handleKycBarSave` now returns `Promise<boolean>`
+  - New `wizardSubStep` prop on `PersonCard`; wraps the vertical containment block in a sub-wizard / normal-body ternary
+  - URL parsing: `?substep=<n>` derived alongside `?profile=<id>` at the wizard root
+  - Parent `ReviewWizardBottomNav` mount now gated on `!reviewProfileId`
+- `docs/tech-debt.md` — appended two entries (profile-scoped Mark Reviewed; sub-step ordering source-of-truth).
+
+Build: clean.
+
+B-109 done — Review Wizard now has Mark dialog + top step indicator + per-profile sub-wizard.
+
 ### 2026-05-13 — B-109 batch 2 — Top step indicator inside Review Wizard chrome (Claude Code)
 
 The Review Wizard's sticky top band now renders a numbered-breadcrumb step indicator (`Company Setup › Financial › Banking › People & KYC › Documents`) beneath the title row. Visual language matches the client's `ServiceWizardStepIndicator` (green check on complete, bolded brand-navy on active, muted gray on pending) so admins see the same wizard chrome shape as clients.

@@ -11,6 +11,16 @@ remove after 30 days.
 
 ## 2026-05-13
 
+- **Review Wizard `Mark as Reviewed` writes a step-level review, not a per-profile review.**
+  *Spawned by:* [B-109](cli-brief-review-wizard-polish-b109.md).
+  *What:* Both the wizard-level `Mark as Reviewed` (Batch 1) and the per-profile sub-wizard's `Mark Profile Reviewed` (Batch 3) write to `application_section_reviews` with `section_key='people'` (the same step-level key) when reviewing inside step 3. They do not write a profile-scoped subject id. B-074 already supports per-profile subsection reviews via the inline KYC affordances inside `KycLongForm` (using `kyc:<profileId>:<categoryKey>` keys), so the per-profile review trail is captured there — just not from the sub-wizard's `Mark Profile Reviewed` button.
+  *Why deferred:* The `application_section_reviews` schema already supports profile-scoped subject ids (B-074 uses them), so this is purely wiring: thread `profileId` into the dialog's POST and use `kyc:<profileId>:overall` (or similar) as the key. ~half-day follow-up.
+
+- **Sub-wizard section ordering depends on `KYC_SECTIONS_*` arrays, not the client wizard.**
+  *Spawned by:* [B-109](cli-brief-review-wizard-polish-b109.md).
+  *What:* The admin per-profile sub-wizard's sub-steps are derived from `KYC_SECTIONS_INDIVIDUAL` / `KYC_SECTIONS_ORGANISATION` in `src/lib/kyc/sections.ts`. The client's `PerPersonReviewWizard` has its own sub-step config (e.g. it splits `Address` into its own sub-step between Identity and Financial; admin keeps Address inside the Identity section). If either side changes ordering, the two wizards drift.
+  *Why deferred:* The client wizard has historical step naming + hidden-address-fields logic that doesn't 1:1 map to `KYC_SECTIONS_*`. Long-term: lift the sub-step ordering into a shared structure in `src/lib/kyc/sections.ts` that both the client `PerPersonReviewWizard` and admin `AdminPerProfileReviewWizard` consume.
+
 - **Auto-alert dismissals never expire.**
   *Spawned by:* [B-108](cli-brief-comms-and-alerts-b108.md).
   *What:* A `dismissed_auto_alerts` row keyed on `(service_id, auto_alert_key)` permanently suppresses that exact alert. Most auto-alert keys are entity-id-scoped (`doc_expiry_<docId>`, `kyc_age_<profileId>`) so a future doc / profile triggers a different key and re-shows, but if the same key recurs (e.g. the same doc is replaced in-place keeping its id, and a new expiry crosses the 60-day threshold), the dismissal still applies and the alert never reappears.
