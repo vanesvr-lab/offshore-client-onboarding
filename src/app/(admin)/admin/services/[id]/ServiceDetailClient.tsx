@@ -3495,7 +3495,7 @@ export function ServiceDetailClient({
             return (
               <div
                 key={step}
-                className={`relative ${step === "start" ? "flex-[0.55]" : "flex-1"}`}
+                className="relative flex-1"
                 style={{ marginRight: idx < arr.length - 1 ? "2px" : 0 }}
               >
                 <svg viewBox="0 0 200 36" className="w-full h-9" preserveAspectRatio="none">
@@ -3508,13 +3508,9 @@ export function ServiceDetailClient({
                       : "M0,0 L180,0 L200,18 L180,36 L0,36 L20,18 Z"}
                     fill={bgColor}
                   />
-                  {/* Text. B-099 — fontSize bumped 10 → 14 to match the
-                      step-pill label size below; longer labels
-                      (Verification & Screening, Risk Assessment, …)
-                      get more horizontal room because the Start
-                      chevron's flex was halved on the wrapper above. */}
+                  {/* B-101 — fontSize 14 → 12 so all 8 chevrons fit at equal width; Start matches the rest. */}
                   <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
-                    fill={textColor} fontSize="14" fontWeight="600" fontFamily="system-ui, sans-serif"
+                    fill={textColor} fontSize="12" fontWeight="600" fontFamily="system-ui, sans-serif"
                   >
                     {isComplete ? "✓ " : ""}{overrideLabel ?? SERVICE_STATUS_LABELS[step]}
                   </text>

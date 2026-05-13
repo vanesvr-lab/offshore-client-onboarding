@@ -13,6 +13,17 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
+
+### 2026-05-13 — B-101 batch 1 — Stage strip uniform width + font 12 (Claude Code)
+
+`ServiceDetailClient.tsx` stage strip: dropped the `flex-[0.55]` conditional on the `start` chevron so every step now uses `flex-1` and renders at equal width. Trade-off accepted in the brief: `fontSize` 14 → 12 so the longer labels (`Document Collection`, `Verification & Screening`, `Risk Assessment`) keep fitting inside their now-narrower chevrons. Inline comment updated to reflect B-101 history.
+
+Files: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`.
+Build: clean.
+
+---
+
 ## B-100 — Review tooltip + address save fix + waive document + Local Director
 
 ### 2026-05-13 — B-100 batch 4 — ISO3 country dropdown + Local Director badge (Claude Code)
