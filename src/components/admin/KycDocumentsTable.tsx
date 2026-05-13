@@ -42,7 +42,7 @@ type RoleWithProfile = ProfileServiceRole & {
   } | null;
 };
 
-type StatusFilter = "all" | "valid" | "expired" | "never_expires" | "missing" | "waived";
+type StatusFilter = "all" | "uploaded" | "valid" | "expired" | "never_expires" | "missing" | "waived";
 type SortKey = "profile" | "doc_type" | "uploaded" | "good_until" | "status";
 type SortDir = "asc" | "desc";
 
@@ -172,6 +172,9 @@ export function KycDocumentsTable({
     return rows.filter((r) => {
       if (profileFilter !== "all" && r.profileId !== profileFilter) return false;
       if (docTypeFilter !== "all" && r.docTypeId !== docTypeFilter) return false;
+      if (statusFilter === "uploaded") {
+        return r.expiryStatus === "valid" || r.expiryStatus === "expired" || r.expiryStatus === "never_expires";
+      }
       if (statusFilter === "waived") return r.waiver !== null;
       if (statusFilter !== "all" && r.expiryStatus !== statusFilter) return false;
       return true;
@@ -398,6 +401,7 @@ export function KycDocumentsTable({
             className="text-xs border rounded-lg px-2 py-1 bg-white"
           >
             <option value="all">All</option>
+            <option value="uploaded">Uploaded</option>
             <option value="valid">Valid</option>
             <option value="expired">Expired</option>
             <option value="never_expires">Never expires</option>

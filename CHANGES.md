@@ -15,6 +15,13 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
 
+### 2026-05-13 — B-101 batch 2 — KYC Documents "Uploaded" filter option (Claude Code)
+
+`KycDocumentsTable` filter dropdown picks up an `Uploaded` option between `All` and `Valid`. Selecting it matches any row whose `expiryStatus` is one of `valid` / `expired` / `never_expires` — i.e. anything where an upload actually exists, regardless of expiry state. The waived branch and the other expiry-status branches keep their existing semantics.
+
+Files: `src/components/admin/KycDocumentsTable.tsx` (StatusFilter type, filter memo, dropdown options).
+Build: clean.
+
 ### 2026-05-13 — B-101 batch 1 — Stage strip uniform width + font 12 (Claude Code)
 
 `ServiceDetailClient.tsx` stage strip: dropped the `flex-[0.55]` conditional on the `start` chevron so every step now uses `flex-1` and renders at equal width. Trade-off accepted in the brief: `fontSize` 14 → 12 so the longer labels (`Document Collection`, `Verification & Screening`, `Risk Assessment`) keep fitting inside their now-narrower chevrons. Inline comment updated to reflect B-101 history.
