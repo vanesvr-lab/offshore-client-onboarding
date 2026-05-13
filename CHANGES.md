@@ -13,6 +13,37 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-111 — At-a-glance pending view (color-coded step pills + Pending card)
+
+### 2026-05-13 — B-111 batch 1 — Step pills color-coded by readiness state (Claude Code)
+
+The 5 step pills in the sticky header on `/admin/services/[id]` no longer render uniform brand-navy. Each pill now reflects a readiness state derived from the live section review + the existing completion %:
+
+| State | Color | Trigger |
+|---|---|---|
+| `rejected` | red-600 | section_review.status === 'rejected' |
+| `flagged` | amber-600 | section_review.status === 'flagged' |
+| `complete` | green-600 | status='reviewed' AND !force_reviewed AND pct=100 |
+| `in_review` | blue-600 | pct=100 AND no review row yet |
+| `in_progress` | amber-500 | pct >0 and <100, OR force-reviewed at any pct |
+| `not_started` | gray-400 | pct=0 AND no review |
+
+Force-reviewed sections (B-110) render amber (not green) so the override stays visible at a glance; the pill's hover tooltip surfaces "Force-reviewed on <date> by <reviewer> — <notes>" so admin sees why.
+
+Inline count badge after the label (white-on-state pill) shows the actionable signal:
+- Company Setup / Financial / Banking: `<pct>%` while incomplete; `ready` at 100% pre-review
+- People & KYC: `<n> incomplete` when any profile's KYC < 100%; `ready` at 100% pre-review
+- Documents: `<n> missing` when any required doc type has no upload and no application-scope waiver; `ready` at 100% pre-review
+
+State is computed inside a new `StepPillsWithState` wrapper that consumes the existing `AdminApplicationSectionsProvider` context via `useSectionReviews`, so the pills update immediately after a save without waiting for a router refresh. Helper functions live in `src/lib/services/stepState.ts` (`resolvePillState`, `resolveCountBadge`, `pillStateTooltip`) — pure functions, no React, trivially unit-testable later.
+
+`AdminApplicationStepIndicator` gained optional `state` / `countBadge` / `tooltip` fields on each `AdminStep`. Missing state falls back to the B-099 brand-navy default so any caller that hasn't migrated keeps working unchanged (the Review Wizard's `AdminReviewWizardStepIndicator` from B-109 uses a different visual treatment and is unaffected).
+
+Files: `src/lib/services/stepState.ts` (new), `src/components/admin/AdminApplicationStepIndicator.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (added `incompleteProfileCount` + `missingDocCount` memos + new `StepPillsWithState` inner component).
+Build: clean.
+
+---
+
 ## B-110 — Force review on incomplete section
 
 ### 2026-05-13 — B-110 — Force-review checkbox + required notes when section is incomplete (Claude Code)

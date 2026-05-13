@@ -41,7 +41,7 @@ import {
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement, ServiceCommunication, ManualServiceAlert, DismissedAutoAlert } from "./page";
-import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
+import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useSectionReviews, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
 import { SectionReviewPanel } from "@/components/admin/SectionReviewPanel";
@@ -49,6 +49,11 @@ import { AdminReviewWizardStepIndicator } from "@/components/admin/AdminReviewWi
 import { AdminPerProfileReviewWizard } from "@/components/admin/AdminPerProfileReviewWizard";
 import { PerProfileReviewSummaryPanel, type PerProfileSubsection } from "@/components/admin/PerProfileReviewSummaryPanel";
 import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
+import {
+  resolvePillState,
+  resolveCountBadge,
+  pillStateTooltip,
+} from "@/lib/services/stepState";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
 import { CountrySelect } from "@/components/shared/CountrySelect";
 import { Input } from "@/components/ui/input";
@@ -3392,6 +3397,51 @@ const ADMIN_STEPS_SERVICES: AdminStep[] = [
   { id: "step-documents",     label: "Documents",     sectionKeys: ["documents"] },
 ];
 
+// B-111 — step pill row that consumes the live section-reviews context so
+// the pill colors update immediately after a save without waiting for a
+// router refresh. Reads aggregate review status via `useSectionReviews`
+// (each step has exactly one section key, so the row is just `latest`).
+function StepPillsWithState({
+  pcts,
+  incompleteProfileCount,
+  missingDocCount,
+  onStepClick,
+}: {
+  pcts: number[];
+  incompleteProfileCount: number;
+  missingDocCount: number;
+  onStepClick: (stepId: string) => void;
+}) {
+  const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
+  const { rows } = useSectionReviews(sectionKeys);
+  const stepsWithState: AdminStep[] = useMemo(
+    () =>
+      ADMIN_STEPS_SERVICES.map((step, i) => {
+        const review = rows[i]?.latest ?? null;
+        const pct = pcts[i] ?? 0;
+        const state = resolvePillState({ review, pct });
+        const countBadge = resolveCountBadge({
+          stepId: step.id,
+          state,
+          pct,
+          incompleteProfileCount:
+            step.id === "step-people-kyc" ? incompleteProfileCount : undefined,
+          missingDocCount:
+            step.id === "step-documents" ? missingDocCount : undefined,
+        });
+        const tooltip = pillStateTooltip({ state, pct, review });
+        return { ...step, state, countBadge, tooltip };
+      }),
+    [rows, pcts, incompleteProfileCount, missingDocCount],
+  );
+  return (
+    <AdminApplicationStepIndicator
+      steps={stepsWithState}
+      onStepClick={onStepClick}
+    />
+  );
+}
+
 const DD_LEVELS = [
   { value: "sdd", label: "SDD — Simplified" },
   { value: "cdd", label: "CDD — Standard" },
@@ -4086,6 +4136,38 @@ export function ServiceDetailClient({
     documentsExpectedCount > 0
       ? Math.round((documentsDoneCount / documentsExpectedCount) * 100)
       : 0;
+
+  // B-111 — count of required service-level doc types with no upload AND
+  // no application-scope waiver. Drives the Documents pill's "N missing"
+  // count badge + the right-rail Pending card (Batch 2).
+  const waivedAppDocTypeIds = useMemo(() => {
+    const out = new Set<string>();
+    for (const w of waivers) {
+      if (w.scope === "application") out.add(w.document_type_id);
+    }
+    return out;
+  }, [waivers]);
+  const missingDocCount = useMemo(() => {
+    let n = 0;
+    for (const dt of serviceDocTypes) {
+      if (uploadedServiceTypeIds.has(dt.id)) continue;
+      if (waivedAppDocTypeIds.has(dt.id)) continue;
+      n++;
+    }
+    return n;
+  }, [serviceDocTypes, uploadedServiceTypeIds, waivedAppDocTypeIds]);
+
+  // B-111 — count of profiles whose KYC is < 100%. Drives the People &
+  // KYC pill's "N incomplete" count badge.
+  const incompleteProfileCount = useMemo(() => {
+    let n = 0;
+    for (const { person } of uniqueRoles) {
+      if (person.client_profiles?.is_representative) continue;
+      const pct = computeKycPctForProfile(person);
+      if (pct < 100) n++;
+    }
+    return n;
+  }, [uniqueRoles]);
   const documentsRag: RagStatus =
     documentsPct >= 100 ? "green" : documentsPct > 0 ? "amber" : "red";
   const documentsStatusLabel =
@@ -4484,7 +4566,18 @@ export function ServiceDetailClient({
           `flex-wrap` lets the button wrap below the pills on narrow
           viewports instead of overflowing horizontally. */}
       <div className="rounded-lg border bg-white px-4 py-3 flex items-center flex-wrap gap-3">
-        <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} onStepClick={handleStepClick} />
+        <StepPillsWithState
+          pcts={[
+            companySetupPct,
+            financialPct,
+            bankingPct,
+            peopleKycPct,
+            documentsPct,
+          ]}
+          incompleteProfileCount={incompleteProfileCount}
+          missingDocCount={missingDocCount}
+          onStepClick={handleStepClick}
+        />
         {/* B-108 Batch 3 — Alerts + Review Wizard sit at the right edge,
             grouped with `gap-x-8` so they are visually separated from
             the step pills and from each other. Alerts color tracks the
