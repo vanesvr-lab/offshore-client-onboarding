@@ -13,6 +13,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-13 — B-099 — Step-pill accordion + uniform pill styling + stage strip font (Claude Code)
+
+`/admin/services/[id]` three UX polishes.
+
+- **Step pills now drive an accordion** over the 3 form section cards (Company Setup, Financial, Banking). Clicking a pill expands its section and collapses the other two; clicking the same pill again collapses it (none open). People & KYC + Documents pills still smooth-scroll only — their internal expansion mechanics (per-profile cards, Service vs KYC tabs) stay independent. `ServiceCollapsibleSection` gained optional `open` + `onToggle` props for a hybrid controlled/uncontrolled mode; default callers (Internal Notes / Risk Assessment / Milestones / Audit Trail) keep their internal state. Page root holds `openStepSection: "company_setup" | "financial" | "banking" | null`; `handleStepClick(stepId)` maps the step id back to a form-step key, calls `setOpenStepSection(...)` for the 3 form steps, and `requestAnimationFrame`-defers the smooth-scroll so the freshly-expanded section lands at the right offset.
+- **Step pills look uniform.** Removed B-098's `isActive` scroll-tracker + the `{reviewedCount}/{totalCount}` text after each label. Every pill is brand-navy/white with the numbered badge. Dropped the `useAggregateStatus` hook call and `useActiveStepId` listener inside `AdminApplicationStepIndicator` since they only powered the now-removed visuals. Click is delegated upward via a new `onStepClick(stepId)` prop; when the parent doesn't pass one the pill falls back to a local scroll-only handler so the component still works in isolation.
+- **Stage strip font bumped → 14** (was `fontSize="10"` after a B-098 micro-tweak) to match the step-pill label size below. **Start chevron narrowed** to `flex-[0.55]` (others stay `flex-1`) so the longer downstream labels (Document Collection, Verification & Screening, Risk Assessment, Final Review, Registration) read at the larger font without truncation.
+
+Touched files:
+- `src/components/admin/ServiceCollapsibleSection.tsx` — hybrid controlled/uncontrolled state (`internalOpen` + new `open` / `onToggle` props).
+- `src/components/admin/AdminApplicationStepIndicator.tsx` — rewritten: drops `useAggregateStatus` + `useActiveStepId`, accepts `onStepClick`, uniform pill styling.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `openStepSection` state + `toggleStepSection` + `handleStepClick`; threaded `open` / `onToggle` into the 3 form `ServiceCollapsibleSection` call sites (People & KYC + Documents intentionally left self-managed); `onStepClick` wired into `AdminApplicationStepIndicator`; stage strip SVG `fontSize` 10 → 14, wrapper className conditional `flex-[0.55]` for `step === "start"`.
+
+`npm run build` clean (lint + TS strict + production build). Smoke test deferred to Vanessa post dev-server restart cycle.
+
+---
+
 ### 2026-05-13 — B-098 — Service status overhaul + section review rename + officer FK + step pills (Claude Code)
 
 Four concerns bundled (shared migration tooling).

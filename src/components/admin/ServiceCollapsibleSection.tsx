@@ -35,6 +35,14 @@ interface Props {
    *  service-level Documents pill show "Not started" / "Partial" /
    *  "Complete" without affecting other sections' "Incomplete" wording. */
   statusLabelOverride?: string;
+  /** B-099 — when both `open` and `onToggle` are provided, the parent
+   *  controls the expanded state (used to drive the step-pill accordion
+   *  over Company Setup / Financial / Banking). When either is
+   *  undefined the component falls back to internal state, preserving
+   *  behaviour for Internal Notes / Risk Assessment / Milestones /
+   *  Audit Trail. */
+  open?: boolean;
+  onToggle?: () => void;
   children: React.ReactNode;
 }
 
@@ -61,11 +69,25 @@ export function ServiceCollapsibleSection({
   anchorId,
   variant = "default",
   statusLabelOverride,
+  open: controlledOpen,
+  onToggle,
   children,
 }: Props) {
   // Default open if not complete
   const autoOpen = defaultOpen ?? (ragStatus !== "green");
-  const [open, setOpen] = useState(autoOpen);
+  const [internalOpen, setInternalOpen] = useState(autoOpen);
+  // B-099 — hybrid controlled/uncontrolled. Step-pill accordion at the
+  // page root passes both `open` + `onToggle`; everyone else (Internal
+  // Notes, Risk Assessment, Milestones, Audit Trail) gets self-managed.
+  const isControlled = controlledOpen !== undefined && onToggle !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const handleToggle = () => {
+    if (isControlled) {
+      onToggle();
+    } else {
+      setInternalOpen((v) => !v);
+    }
+  };
 
   const fillColor =
     ragStatus === "green" ? "bg-green-500" :
@@ -86,7 +108,7 @@ export function ServiceCollapsibleSection({
       <div className={`flex items-center gap-2 ${isStep ? "px-2 py-2" : "px-5 py-4"}`}>
         <button
           type="button"
-          onClick={() => setOpen(!open)}
+          onClick={handleToggle}
           className="flex-1 min-w-0 flex items-center justify-between text-left hover:bg-gray-50/50 transition-colors -mx-2 px-2 py-1 rounded gap-3"
         >
           {isStep ? (

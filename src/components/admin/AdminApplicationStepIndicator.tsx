@@ -1,9 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useAggregateStatus } from "./AdminApplicationSections";
 
 export interface AdminStep {
   id: string;          // anchor id, e.g. "step-company-setup"
@@ -13,23 +11,31 @@ export interface AdminStep {
 
 interface Props {
   steps: AdminStep[];
+  /** B-099 — parent-provided click handler. Called with the step's id
+   *  (`step-company-setup`, `step-financial`, …). The parent decides
+   *  whether to toggle a section (form-step keys) and is responsible
+   *  for the smooth-scroll. If omitted, the pill falls back to a
+   *  local scroll-only handler. */
+  onStepClick?: (stepId: string) => void;
 }
 
 /**
  * B-069 Batch 1 — admin-side step indicator (numbered breadcrumb).
- * B-098 — restyled to pill button language (matches the rest of the
- * page after B-096 turned every `<Button>` into a pill): each step
- * renders as a rounded-full pill, brand-navy fill for the active step,
- * light-gray fill for inactive. Chevron separators preserved. Anchor
- * smooth-scroll behaviour unchanged.
- *
- * "Active" = whichever step's anchor is currently nearest the top of
- * the viewport, derived from a scroll listener. When nothing is in
- * range (e.g. user is above the first section) the first step is
- * treated as active so a pill always reads as the current focus.
+ * B-098 — restyled to pill button language.
+ * B-099 — every pill renders uniformly brand-navy/white; no per-pill
+ * `isActive` detection and no `n/m` review counts. Click is delegated
+ * to the parent via `onStepClick` so the page root can drive an
+ * accordion over the 3 form section cards (Company Setup / Financial
+ * / Banking) and skip the toggle for People & KYC / Documents.
  */
-export function AdminApplicationStepIndicator({ steps }: Props) {
-  const activeId = useActiveStepId(steps);
+export function AdminApplicationStepIndicator({ steps, onStepClick }: Props) {
+  function handleClick(stepId: string) {
+    if (onStepClick) {
+      onStepClick(stepId);
+      return;
+    }
+    document.getElementById(stepId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   return (
     <nav
       aria-label="Application sections"
@@ -43,7 +49,7 @@ export function AdminApplicationStepIndicator({ steps }: Props) {
               aria-hidden="true"
             />
           ) : null}
-          <StepPill step={step} index={i} isActive={step.id === activeId} />
+          <StepPill step={step} index={i} onClick={() => handleClick(step.id)} />
         </Fragment>
       ))}
     </nav>
@@ -53,93 +59,22 @@ export function AdminApplicationStepIndicator({ steps }: Props) {
 function StepPill({
   step,
   index,
-  isActive,
+  onClick,
 }: {
   step: AdminStep;
   index: number;
-  isActive: boolean;
+  onClick: () => void;
 }) {
-  const { reviewedCount, totalCount } = useAggregateStatus(step.sectionKeys);
-
-  function handleClick() {
-    const el = document.getElementById(step.id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-
   return (
     <button
       type="button"
-      onClick={handleClick}
-      aria-current={isActive ? "step" : undefined}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-        isActive
-          ? "bg-brand-navy text-white hover:bg-brand-navy/90"
-          : "bg-gray-100 text-gray-700 hover:bg-gray-200",
-      )}
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-3 py-1.5 text-sm text-white transition-colors hover:bg-brand-navy/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
     >
-      <span
-        className={cn(
-          "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold",
-          isActive ? "bg-white text-brand-navy" : "bg-white text-gray-500",
-        )}
-      >
+      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-brand-navy">
         {index + 1}
       </span>
       <span className="font-medium">{step.label}</span>
-      {totalCount > 0 ? (
-        <span
-          className={cn(
-            "text-xs tabular-nums",
-            isActive ? "text-white/80" : "text-gray-500",
-          )}
-        >
-          {reviewedCount}/{totalCount}
-        </span>
-      ) : null}
     </button>
   );
-}
-
-// Find the step anchor closest to the top of the viewport. Re-evaluates
-// on scroll + resize. Returns `null` until first measurement (which
-// then falls back to the first step in the render path).
-function useActiveStepId(steps: AdminStep[]): string | null {
-  const [activeId, setActiveId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (steps.length === 0) return;
-
-    function measure() {
-      const OFFSET = 200; // approx height of sticky shell above content
-      let best: { id: string; distance: number } | null = null;
-      for (const step of steps) {
-        const el = document.getElementById(step.id);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        // Distance from anchor top to the visual "current line" (just
-        // below the sticky header). Negative = anchor already passed.
-        const distance = rect.top - OFFSET;
-        if (distance <= 0) {
-          if (best === null || distance > best.distance) {
-            best = { id: step.id, distance };
-          }
-        }
-      }
-      setActiveId(best?.id ?? steps[0].id);
-    }
-
-    measure();
-    window.addEventListener("scroll", measure, { passive: true });
-    window.addEventListener("resize", measure);
-    return () => {
-      window.removeEventListener("scroll", measure);
-      window.removeEventListener("resize", measure);
-    };
-  }, [steps]);
-
-  return activeId;
 }

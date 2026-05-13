@@ -2923,6 +2923,31 @@ export function ServiceDetailClient({
   const [saving, setSaving] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  // B-099 — step-pill accordion state for the 3 form section cards.
+  // People & KYC + Documents pills are scroll-only (their internal
+  // expansion mechanics — per-profile cards / Service vs KYC tabs —
+  // stay independent). Clicking a form-step pill opens that section
+  // and collapses the other two; clicking the same pill again
+  // collapses everything.
+  type FormStepKey = "company_setup" | "financial" | "banking";
+  const [openStepSection, setOpenStepSection] = useState<FormStepKey | null>(null);
+  const toggleStepSection = (key: FormStepKey) =>
+    setOpenStepSection((current) => (current === key ? null : key));
+  function handleStepClick(stepId: string) {
+    const FORM_STEP_KEY_BY_ID: Record<string, FormStepKey> = {
+      "step-company-setup": "company_setup",
+      "step-financial": "financial",
+      "step-banking": "banking",
+    };
+    const key = FORM_STEP_KEY_BY_ID[stepId];
+    if (key) setOpenStepSection(key);
+    // Defer the scroll a frame so the expansion DOM lands first and the
+    // browser scrolls to the correct final offset.
+    requestAnimationFrame(() => {
+      document.getElementById(stepId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   // Milestones with date editing
   const [milestones, setMilestones] = useState({
     loe_received: service.loe_received ?? false,
@@ -3392,7 +3417,11 @@ export function ServiceDetailClient({
               ? SERVICE_STATUS_LABELS[isRejected ? "rejected" : "closed"]
               : null;
             return (
-              <div key={step} className="relative flex-1" style={{ marginRight: idx < arr.length - 1 ? "2px" : 0 }}>
+              <div
+                key={step}
+                className={`relative ${step === "start" ? "flex-[0.55]" : "flex-1"}`}
+                style={{ marginRight: idx < arr.length - 1 ? "2px" : 0 }}
+              >
                 <svg viewBox="0 0 200 36" className="w-full h-9" preserveAspectRatio="none">
                   {/* Main body */}
                   <path
@@ -3403,9 +3432,13 @@ export function ServiceDetailClient({
                       : "M0,0 L180,0 L200,18 L180,36 L0,36 L20,18 Z"}
                     fill={bgColor}
                   />
-                  {/* Text */}
+                  {/* Text. B-099 — fontSize bumped 10 → 14 to match the
+                      step-pill label size below; longer labels
+                      (Verification & Screening, Risk Assessment, …)
+                      get more horizontal room because the Start
+                      chevron's flex was halved on the wrapper above. */}
                   <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
-                    fill={textColor} fontSize="10" fontWeight="600" fontFamily="system-ui, sans-serif"
+                    fill={textColor} fontSize="14" fontWeight="600" fontFamily="system-ui, sans-serif"
                   >
                     {isComplete ? "✓ " : ""}{overrideLabel ?? SERVICE_STATUS_LABELS[step]}
                   </text>
@@ -3418,7 +3451,7 @@ export function ServiceDetailClient({
 
       {/* B-073 — wizard-shaped step indicator with smooth-scroll anchors */}
       <div className="rounded-lg border bg-white px-4 py-3">
-        <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} />
+        <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} onStepClick={handleStepClick} />
       </div>
       </div>
       {/* ── End sticky shell ────────────────────────────────────────────── */}
@@ -3438,6 +3471,8 @@ export function ServiceDetailClient({
           sectionKey="company_setup"
           anchorId="step-company-setup"
           variant="step"
+          open={openStepSection === "company_setup"}
+          onToggle={() => toggleStepSection("company_setup")}
         >
           {companyFields.length === 0 ? (
             <p className="text-sm text-gray-400">No company setup fields for this template.</p>
@@ -3459,6 +3494,8 @@ export function ServiceDetailClient({
           sectionKey="financial"
           anchorId="step-financial"
           variant="step"
+          open={openStepSection === "financial"}
+          onToggle={() => toggleStepSection("financial")}
         >
           {financialFields.length === 0 ? (
             <p className="text-sm text-gray-400">No financial fields for this template.</p>
@@ -3480,6 +3517,8 @@ export function ServiceDetailClient({
           sectionKey="banking"
           anchorId="step-banking"
           variant="step"
+          open={openStepSection === "banking"}
+          onToggle={() => toggleStepSection("banking")}
         >
           {bankingFields.length === 0 ? (
             <p className="text-sm text-gray-400">No banking fields for this template.</p>
