@@ -33,9 +33,11 @@ interface Props {
   roleRequirements: RoleDocumentRequirement[];
   myRole: string;
   autoWizardStep?: number;
-  // B-100 — waived (profile, doc_type) pairs for this service. Used to
-  // hide upload slots from the wizard so the client never sees them.
-  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
+  // B-100 / B-106 — waived requirements for this service. `scope`
+  // distinguishes person-scope (profile-specific) vs application-scope
+  // (service-level). Both are filtered out of the wizard so the client
+  // never sees the upload slot.
+  waivers?: Array<{ client_profile_id: string | null; document_type_id: string; scope: "person" | "application" }>;
 }
 
 // ─── Section completion helpers ──────────────────────────────────────────────

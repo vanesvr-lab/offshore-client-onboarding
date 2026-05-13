@@ -15,6 +15,15 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-106 — Waivers everywhere (service docs + per-profile display + scope column)
 
+### 2026-05-13 — B-106 batch 2 — Service Docs waive UI + client wizard filters (Claude Code)
+
+Admin's Service Docs tab on `/admin/services/[id]` now exposes the same waive / un-waive UX as the KYC Documents tab. Waive button sits to the right of each row; click → confirm dialog (`The client will no longer be asked to upload <name>. You can un-waive it at any time.`) → POST with `scope: "application"`. Waived rows render with a muted background, a "Waived" pill (hover tooltip shows the waiver date), and an Un-waive button that single-clicks reverses the state. Optimistic update via `onWaiversChange` so the row flips instantly without waiting for the server roundtrip.
+
+**Client portal:** `ServiceWizardDocumentsStep` (wizard step 4) now accepts a `waivers` prop and filters out any required doc type whose id matches a service-scope waiver. `PerPersonReviewWizard` was already filtering person-scope waivers but only by `client_profile_id`; the filter now requires `scope === "person"` so service-scope rows never bleed into per-person doc lists. Waivers type on the `(client)/services/[id]/page.tsx` loader widened to include `scope` + nullable `client_profile_id`; threaded through `ClientServiceDetailClient` → `ServiceWizard` → `ServiceWizardPeopleStep` → `ServiceWizardDocumentsStep` / `PerPersonReviewWizard`.
+
+Files: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (Service Docs tab + waive dialog + Tooltip import), `src/components/client/ServiceWizard.tsx`, `src/components/client/ServiceWizardDocumentsStep.tsx`, `src/components/client/ServiceWizardPeopleStep.tsx`, `src/components/client/PerPersonReviewWizard.tsx`, `src/app/(client)/services/[id]/page.tsx`, `src/app/(client)/services/[id]/ClientServiceDetailClient.tsx`.
+Build: clean.
+
 ### 2026-05-13 — B-106 batch 1 — Schema scope + service waivers allowed (Claude Code)
 
 `waived_document_requirements` now carries an explicit `scope` column (`'person' | 'application'`) plus a row-level CHECK constraint that ties `scope` to `client_profile_id` nullness: person waivers must have a profile_id, service waivers must not. `client_profile_id` was made nullable. The old composite UNIQUE was replaced with two partial unique indexes — one per scope — because Postgres treats NULLs as distinct in UNIQUE, so without partial indexes a service waiver (NULL profile) could be inserted twice.

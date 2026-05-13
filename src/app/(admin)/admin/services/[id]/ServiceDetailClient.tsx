@@ -11,6 +11,7 @@ import {
   AlertTriangle, Eye,
   Sparkles, Trash2,
   Wand2, ChevronLeft, ChevronRight, X,
+  Ban, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +51,12 @@ import { CountrySelect } from "@/components/shared/CountrySelect";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AiPrefillBanner, type AiPrefillBannerStatus } from "@/components/kyc/AiPrefillBanner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
 import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
@@ -2675,6 +2682,82 @@ function AdminDocumentsSection({
   // can open it (mirrors PersonCard's pattern for per-profile docs).
   const [detailDoc, setDetailDoc] = useState<DocumentDetailDoc | null>(null);
 
+  // B-106 — Waive / un-waive state for the Service Docs tab. Mirrors the
+  // KycDocumentsTable pattern: confirm-then-waive, single-click un-waive.
+  // Service waivers carry `scope: "application"` and a NULL profile id.
+  const [waivingTypeId, setWaivingTypeId] = useState<string | null>(null);
+  const [serviceWaiveConfirm, setServiceWaiveConfirm] = useState<{
+    docTypeId: string;
+    docTypeName: string;
+  } | null>(null);
+
+  // B-106 — index service-scope waivers by doc_type_id for O(1) lookup.
+  const serviceWaiverByTypeId = useMemo(() => {
+    const m = new Map<string, WaivedDocumentRequirement>();
+    for (const w of waivers) {
+      if (w.scope !== "application") continue;
+      m.set(w.document_type_id, w);
+    }
+    return m;
+  }, [waivers]);
+
+  async function waiveServiceDoc(docTypeId: string) {
+    setWaivingTypeId(docTypeId);
+    const optimistic: WaivedDocumentRequirement = {
+      id: `optimistic-svc-${docTypeId}`,
+      client_profile_id: null,
+      document_type_id: docTypeId,
+      waived_at: new Date().toISOString(),
+      waived_by: "",
+      scope: "application",
+    };
+    const prev = waivers;
+    onWaiversChange([
+      ...prev.filter((w) => !(w.scope === "application" && w.document_type_id === docTypeId)),
+      optimistic,
+    ]);
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "application", document_type_id: docTypeId }),
+      });
+      const data = (await res.json()) as { data?: WaivedDocumentRequirement; error?: string };
+      if (!res.ok || !data.data) throw new Error(data.error ?? "Waive failed");
+      onWaiversChange([
+        ...prev.filter((w) => !(w.scope === "application" && w.document_type_id === docTypeId)),
+        data.data,
+      ]);
+      toast.success("Document waived", { position: "top-right" });
+    } catch (err: unknown) {
+      onWaiversChange(prev);
+      toast.error(err instanceof Error ? err.message : "Waive failed", { position: "top-right" });
+    } finally {
+      setWaivingTypeId(null);
+    }
+  }
+
+  async function unwaiveServiceDoc(docTypeId: string) {
+    setWaivingTypeId(docTypeId);
+    const prev = waivers;
+    onWaiversChange(prev.filter((w) => !(w.scope === "application" && w.document_type_id === docTypeId)));
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "application", document_type_id: docTypeId }),
+      });
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Un-waive failed");
+      toast.success("Document un-waived", { position: "top-right" });
+    } catch (err: unknown) {
+      onWaiversChange(prev);
+      toast.error(err instanceof Error ? err.message : "Un-waive failed", { position: "top-right" });
+    } finally {
+      setWaivingTypeId(null);
+    }
+  }
+
   // Build requests map: document_id → sorted requests
   const requestsByDoc = new Map<string, DocumentUpdateRequest[]>();
   for (const req of updateRequests) {
@@ -2835,6 +2918,7 @@ function AdminDocumentsSection({
         <div className="rounded-lg border bg-white divide-y">
           {documentTypes.map((dt) => {
             const upload = uploadByTypeId.get(dt.id);
+            const waiver = serviceWaiverByTypeId.get(dt.id) ?? null;
             const rowData: KycDocRowData = upload
               ? {
                   id: upload.id,
@@ -2859,17 +2943,77 @@ function AdminDocumentsSection({
                   is_uploaded: false,
                 };
             return (
-              <KycDocRow
+              <div
                 key={dt.id}
-                doc={rowData}
-                showAdminControls
-                isUploading={uploadingTypeId === dt.id}
-                onViewClick={openDetail}
-                onUploadClick={(docTypeId) => {
-                  setPendingUploadDocTypeId(docTypeId);
-                  uploadInputRef.current?.click();
-                }}
-              />
+                className={`flex items-center justify-between gap-2 ${
+                  waiver ? "bg-gray-50/70" : ""
+                }`}
+              >
+                <div className={`flex-1 min-w-0 ${waiver ? "opacity-60" : ""}`}>
+                  <KycDocRow
+                    doc={rowData}
+                    showAdminControls
+                    isUploading={uploadingTypeId === dt.id}
+                    onViewClick={openDetail}
+                    onUploadClick={(docTypeId) => {
+                      setPendingUploadDocTypeId(docTypeId);
+                      uploadInputRef.current?.click();
+                    }}
+                  />
+                </div>
+                <div className="pr-3 shrink-0 flex items-center gap-2">
+                  {waiver && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <span
+                              className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 italic cursor-help"
+                              aria-label={`Waived on ${new Date(waiver.waived_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`}
+                            >
+                              Waived
+                            </span>
+                          }
+                        />
+                        <TooltipContent>{`Waived on ${new Date(waiver.waived_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {waiver ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs gap-1 text-gray-500 hover:text-brand-navy"
+                      disabled={waivingTypeId === dt.id}
+                      onClick={() => void unwaiveServiceDoc(dt.id)}
+                    >
+                      {waivingTypeId === dt.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3 w-3" />
+                      )}
+                      Un-waive
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs gap-1 text-gray-500 hover:text-brand-navy"
+                      disabled={waivingTypeId === dt.id}
+                      onClick={() =>
+                        setServiceWaiveConfirm({ docTypeId: dt.id, docTypeName: dt.name })
+                      }
+                    >
+                      {waivingTypeId === dt.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Ban className="h-3 w-3" />
+                      )}
+                      Waive
+                    </Button>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -2920,6 +3064,43 @@ function AdminDocumentsSection({
           Note: {documents.length - dedupedTypeCount} duplicate upload(s) collapsed in this list. Source data may need cleanup.
         </p>
       )}
+
+      {/* B-106 — Service Docs waive confirmation dialog. Mirrors the
+          KycDocumentsTable confirm — no reason field, single-click
+          un-waive is the reversal path. */}
+      <Dialog
+        open={serviceWaiveConfirm !== null}
+        onOpenChange={(o) => { if (!o) setServiceWaiveConfirm(null); }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Waive this document?</DialogTitle>
+          </DialogHeader>
+          {serviceWaiveConfirm && (
+            <p className="text-sm text-gray-600">
+              The client will no longer be asked to upload{" "}
+              <span className="font-semibold">{serviceWaiveConfirm.docTypeName}</span>.
+              You can un-waive it at any time.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setServiceWaiveConfirm(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-brand-navy hover:bg-brand-navy/90 text-white"
+              onClick={() => {
+                if (!serviceWaiveConfirm) return;
+                const target = serviceWaiveConfirm;
+                setServiceWaiveConfirm(null);
+                void waiveServiceDoc(target.docTypeId);
+              }}
+            >
+              Waive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* B-085 — admin doc detail dialog (Approve / Reject / Replace / Send
           Update Request / Re-run AI). Shared with per-profile docs. */}

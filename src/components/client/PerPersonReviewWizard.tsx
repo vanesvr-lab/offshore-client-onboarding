@@ -504,9 +504,11 @@ interface Props {
   templateDocs?: ServiceTemplateDocument[];
   /** B-071 — global role-based doc requirements (used when templateDocs is empty). */
   roleRequirements?: RoleDocumentRequirement[];
-  /** B-100 — waived (profile, doc_type) pairs. The doc-type list is
-   *  filtered down so waived slots disappear from the wizard entirely. */
-  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
+  /** B-100 / B-106 — waived (profile, doc_type) pairs + service-scope
+   *  waivers. Only person-scope rows apply to this component; the
+   *  consumer filters internally. The doc-type list is filtered down so
+   *  waived slots disappear from the wizard entirely. */
+  waivers?: Array<{ client_profile_id: string | null; document_type_id: string; scope: "person" | "application" }>;
   dueDiligenceLevel: DueDiligenceLevel;
   /** Called when the user finishes the wizard (last sub-step "Save & Close" / "Save & Finish"). */
   onComplete: () => void;
@@ -697,10 +699,12 @@ export function PerPersonReviewWizard({
       if (appliesTo === "both") return true;
       return appliesTo === profileType;
     });
-    // B-100 — drop any doc type that's been waived for this profile.
+    // B-100 / B-106 — drop any doc type that's been waived for this
+    // profile. Only person-scope rows apply here; service-scope waivers
+    // are filtered by `ServiceWizardDocumentsStep`.
     const waivedTypeIds = new Set(
       waivers
-        .filter((w) => w.client_profile_id === profileId)
+        .filter((w) => w.scope === "person" && w.client_profile_id === profileId)
         .map((w) => w.document_type_id),
     );
     const visible = personOnly.filter((dt) => !waivedTypeIds.has(dt.id));

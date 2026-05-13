@@ -24,6 +24,10 @@ interface Props {
   requiredDocTypes?: RequiredDocType[];
   /** B-043 — reasons why Submit is still disabled; surfaced as an amber card at the top of this step. */
   submitBlockers?: string[];
+  /** B-106 — service-scope waivers for this service. A waiver with
+   *  `scope === "application"` and a matching `document_type_id` removes
+   *  the upload slot from this step entirely. */
+  waivers?: Array<{ client_profile_id: string | null; document_type_id: string; scope: "person" | "application" }>;
 }
 
 function DocRow({
@@ -156,10 +160,21 @@ export function ServiceWizardDocumentsStep({
   onDocumentsChange,
   requiredDocTypes: allRequiredDocTypes = [],
   submitBlockers = [],
+  waivers = [],
 }: Props) {
   // B-049 §1.2 — caller already pre-filtered to application-scope requirements;
   // accept whatever doc types are passed in.
-  const requiredDocTypes = allRequiredDocTypes;
+  // B-106 — drop any service-scope-waived doc type so the client never sees
+  // its upload slot. Person-scope waivers are filtered upstream by
+  // PerPersonReviewWizard.
+  const waivedServiceTypeIds = new Set(
+    waivers
+      .filter((w) => w.scope === "application")
+      .map((w) => w.document_type_id),
+  );
+  const requiredDocTypes = allRequiredDocTypes.filter(
+    (dt) => !waivedServiceTypeIds.has(dt.id),
+  );
   const requiredNames = new Set(requiredDocTypes.map((dt) => dt.name));
 
   // Display only docs that match a required application-scope doc type.

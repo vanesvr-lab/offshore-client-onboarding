@@ -994,8 +994,11 @@ interface Props {
   templateDocs: ServiceTemplateDocument[];
   /** B-071 — global role-based doc requirements (used when templateDocs is empty). */
   roleRequirements: RoleDocumentRequirement[];
-  /** B-100 — waived (profile, doc_type) pairs hidden from each profile. */
-  waivers?: Array<{ client_profile_id: string; document_type_id: string }>;
+  /** B-100 / B-106 — waived requirements for this service. Both
+   *  person-scope (profile-specific) and application-scope (service-level)
+   *  rows arrive here; the People step forwards them to PerPersonReviewWizard
+   *  which filters to person-scope internally. */
+  waivers?: Array<{ client_profile_id: string | null; document_type_id: string; scope: "person" | "application" }>;
   onNavVisibilityChange: (hide: boolean) => void;
 }
 
