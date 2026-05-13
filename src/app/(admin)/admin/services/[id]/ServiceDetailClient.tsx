@@ -1676,11 +1676,17 @@ function PersonCard({
   // round-trip persists kyc_fields + profile_fields + role diff.
   // Cancel reverts every dirty field + draft roles back to the last-
   // known-from-DB snapshot.
-  // B-100 — `address` is a `client_profiles` column (free-form). Was
-  // being routed into `kyc_fields` and silently dropped server-side; now
-  // it splits cleanly into `profile_fields`. Server has a matching
-  // belt-and-braces splitter so legacy callers don't break.
-  const PROFILE_FIELD_KEYS = new Set(["full_name", "email", "phone", "address"]);
+  // B-105 — `address` is dual-table (lives on BOTH `client_profiles.address`
+  // AND `client_profile_kyc.address`). The admin page reads address from the
+  // kyc spread, so the kyc copy MUST be the one we write to. Routing address
+  // through `kyc_fields` lets the server's DUAL_TABLE_KEYS splitter (B-104)
+  // write to both tables. If we put it in `profile_fields` here, the server
+  // splitter never runs for address and only `client_profiles` updates —
+  // leaving `client_profile_kyc.address` stale, which then overwrites the
+  // form's value on the post-save refresh. (B-100's profile-only routing
+  // and B-104's server splitter were both correct but the splitter was
+  // unreachable from this caller until address moved out of this set.)
+  const PROFILE_FIELD_KEYS = new Set(["full_name", "email", "phone"]);
   async function handleKycBarSave() {
     if (!isDirty || savingKycBar) return;
     setSavingKycBar(true);
@@ -1758,9 +1764,9 @@ function PersonCard({
         nextSaved.full_name = data.profile.full_name ?? "";
         nextSaved.email = data.profile.email ?? "";
         nextSaved.phone = data.profile.phone ?? "";
-        // B-100 — also sync `address` from the post-update profile row
-        // so the dirty tracker zeroes out on a successful save.
-        nextSaved.address = data.profile.address ?? "";
+        // B-105 — `address` flows back through `data.kyc.address` like
+        // every other kyc field, picked up by the loop above. No
+        // separate override needed.
       }
       setSavedFields(nextSaved);
       setDraftFields(nextSaved);

@@ -13,6 +13,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-105 — Address save reset, real fix #2 (client splitter)
+
+### 2026-05-13 — B-105 — Route address through kyc_fields so the server splitter actually runs (Claude Code)
+
+B-104 added a dual-table splitter on the server (`DUAL_TABLE_KEYS = ["address"]`) that writes both `client_profile_kyc.address` and `client_profiles.address` whenever address arrives in `body.kyc_fields`. Correct fix — but unreachable from the admin save bar.
+
+`handleKycBarSave` in `ServiceDetailClient.tsx` had `address` in `PROFILE_FIELD_KEYS`, which forced it into `body.profile_fields` and **never** `body.kyc_fields`. Server splitter only runs when `body.kyc_fields` is truthy → it short-circuited for address. Only `client_profiles.address` was updated; the kyc copy stayed stale. The form reads from `client_profile_kyc(*)`, so on `onRefresh` the rebuilt `initialFields` snapped back to the stale kyc value and the dirty tracker reset.
+
+**Fix (one-line shape):** drop `"address"` from `PROFILE_FIELD_KEYS`. The save bar now packs address into `kyc_fields`, the server splitter copies it into `profile_fields` too, and both tables get the UPDATE. The post-save response echoes the fresh kyc row, the splice-back into `savedFields` carries the new value, and the form sticks.
+
+Also removed the now-redundant `nextSaved.address = data.profile.address ?? ""` override — address flows back through the kyc spread (`for (const [k, v] of Object.entries(data.kyc ?? {}))`) like every other kyc field.
+
+Files: `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`.
+Build: clean.
+
+---
+
 ## B-104 — Real fix for the admin address save reset
 
 ### 2026-05-13 — B-104 — Address dual-write to keep kyc and profiles columns in sync (Claude Code)
