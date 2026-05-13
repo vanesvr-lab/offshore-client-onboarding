@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       tenant_id: tenantId,
       service_template_id: body.service_template_id,
       service_details: body.service_details ?? {},
-      status: "draft",
+      status: "start",
       ...(serviceNumber ? { service_number: serviceNumber } : {}),
     })
     .select("id")
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
         new_value: {
           service_number: serviceNumber,
           service_template_id: body.service_template_id,
-          status: "draft",
+          status: "start",
         },
       });
       return NextResponse.json({ id: service.id, warning: `Service created but roles failed: ${rolesErr.message}` });
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
     new_value: {
       service_number: serviceNumber,
       service_template_id: body.service_template_id,
-      status: "draft",
+      status: "start",
     },
   });
 

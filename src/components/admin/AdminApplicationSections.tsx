@@ -158,20 +158,20 @@ export function useAggregateStatus(sectionKeys: string[]): {
   let reviewedCount = 0;
   let hasRejected = false;
   let hasFlagged = false;
-  let allApproved = true;
+  let allReviewed = true;
   for (const key of sectionKeys) {
     const latest = ctx.reviewsBySection[key]?.[0];
     if (!latest) {
-      allApproved = false;
+      allReviewed = false;
       continue;
     }
     reviewedCount++;
     if (latest.status === "rejected") hasRejected = true;
     else if (latest.status === "flagged") hasFlagged = true;
-    if (latest.status !== "approved") allApproved = false;
+    if (latest.status !== "reviewed") allReviewed = false;
   }
   if (hasRejected) return { status: "rejected", reviewedCount, totalCount };
   if (hasFlagged) return { status: "flagged", reviewedCount, totalCount };
-  if (allApproved) return { status: "approved", reviewedCount, totalCount };
+  if (allReviewed) return { status: "reviewed", reviewedCount, totalCount };
   return { status: null, reviewedCount, totalCount };
 }

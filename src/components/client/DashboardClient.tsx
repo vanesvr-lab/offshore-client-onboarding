@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getClientStatusLabel } from "@/lib/utils/clientLabels";
+import { getStatusBadgeClass } from "@/lib/services/statusChain";
 
 type ServiceSection = {
   label: string;
@@ -27,20 +28,13 @@ interface Props {
   allComplete: boolean;
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  in_progress: "bg-blue-50 text-blue-700",
-  submitted: "bg-indigo-50 text-indigo-700",
-  in_review: "bg-amber-50 text-amber-700",
-  pending_action: "bg-orange-50 text-orange-700",
-  approved: "bg-green-50 text-green-700",
-  rejected: "bg-red-50 text-red-700",
-};
-
 function ServiceCard({ svc }: { svc: ServiceCardRow }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
-  const badgeClass = STATUS_BADGE[svc.status] ?? "bg-gray-100 text-gray-600";
+  // B-098 — status badge palette is the canonical map at
+  // `getStatusBadgeClass`; the previous inline table referenced the
+  // pre-overhaul enum values.
+  const badgeClass = getStatusBadgeClass(svc.status);
 
   const progressBarColor =
     svc.overallPct === 100

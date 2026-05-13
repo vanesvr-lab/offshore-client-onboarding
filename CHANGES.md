@@ -13,6 +13,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+### 2026-05-13 — B-098 — Service status overhaul + section review rename + officer FK + step pills (Claude Code)
+
+Four concerns bundled (shared migration tooling).
+
+- **Assigned Officer dropdown fix:** added FK `admin_users_user_id_fkey` referencing `public.users(id)` ON DELETE CASCADE — without this, the Supabase JS join `users(full_name, email)` failed with PGRST200 ("no relationship found in schema cache") and the dropdown rendered empty after B-096 removed the broken `tenant_id` filter. Migration `supabase/migrations/20260513012213_admin_users_user_id_fkey.sql` is idempotent (guarded by `pg_constraint` lookup). No code change beyond the migration — `page.tsx:155-157` (`from("admin_users").select("user_id, users(full_name, email)")`) now resolves.
+- **Section review enum rename — `approved` → `reviewed`:** `application_section_reviews.status` value renamed via `supabase/migrations/20260513012214_section_review_approved_to_reviewed.sql` (auto-discovers the CHECK constraint name, drops it, migrates rows, re-adds with `('reviewed', 'flagged', 'rejected')`). Vanessa's term: clicking the Review button on a section card means the section has been *reviewed*, not that anyone *approved* it (which conflates with the service-level `approved` status). Touched:
+  - New `src/lib/admin/sectionReviewStatus.ts` — `SECTION_REVIEW_STATUS` const + `SectionReviewStatus` type. Single source of truth.
+  - `src/types/index.ts:787` — `SectionReviewStatus` alias updated to `"reviewed" | "flagged" | "rejected"`.
+  - `src/components/admin/SectionReviewBadge.tsx` — badge variant key `approved` → `reviewed`, label "Reviewed".
+  - `src/components/admin/SectionReviewPanel.tsx` — picker option renamed; label "Reviewed".
+  - `src/components/admin/AdminApplicationSections.tsx` — `useAggregateStatus` returns `reviewed` instead of `approved` when every subsection is reviewed.
+  - `src/components/admin/PerProfileReviewSummaryPanel.tsx` — bulk "Approve all" CTA renamed "Mark all reviewed"; bulkAction state `"approve"` → `"review"`; toasts updated.
+  - `src/app/api/admin/applications/[id]/section-reviews/route.ts` — POST validation accepts `reviewed | flagged | rejected`.
+  - Button label `Review` (verb on `SectionReviewButton`) deliberately unchanged.
+- **Service status overhaul:** 8 old values (`draft, in_progress, submitted, in_review, pending_action, verification, approved, rejected`) replaced by **10 new**: 8 forward chain (`start → document_collection → verification_and_screening → risk_assessment → final_review → approved → registration → active`) + 2 override-only terminals (`rejected`, `closed`). Migration `supabase/migrations/20260513012215_services_status_new_chain.sql` drops the CHECK, resets every existing row to `start` (per Vanessa — single test service she'll move manually), sets `DEFAULT 'start'`, re-adds CHECK with the new 10-value list. Historical `audit_log` rows referencing the old values left as-is. Single source of truth at **`src/lib/services/statusChain.ts`** — exports `SERVICE_STATUS_FORWARD_CHAIN`, `SERVICE_STATUS_TERMINAL_OVERRIDES`, `SERVICE_STATUS_ALL`, `SERVICE_STATUS_LABELS`, `getNextStatus`, `isTerminalStatus`, `isValidServiceStatus`, `getStatusLabel`, `getStatusBadgeClass`. Imported by:
+  - `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — inline `FORWARD_CHAIN` + `STATUS_OPTIONS` arrays deleted; right-rail Status card pulls `getNextStatus` + `SERVICE_STATUS_LABELS`; override dropdown lists `SERVICE_STATUS_ALL`; top-of-page Salesforce-style stage strip iterates `SERVICE_STATUS_FORWARD_CHAIN`; terminal overrides (`rejected`/`closed`) paint the last chevron red/grey when active; `statusBadgeClass` aliased to `getStatusBadgeClass`. Local `getNextStage` is a thin alias to `getNextStatus`.
+  - `src/app/(admin)/admin/services/ServicesPageClient.tsx` — filter list derived from `SERVICE_STATUS_ALL` + `SERVICE_STATUS_LABELS`; inline badge palette removed.
+  - `src/app/(admin)/admin/profiles/[id]/ProfileDetailClient.tsx` — service badge uses `getStatusBadgeClass` + `getStatusLabel`.
+  - `src/components/client/DashboardClient.tsx` — `STATUS_BADGE` table deleted; uses `getStatusBadgeClass(svc.status)`.
+  - `src/lib/utils/clientLabels.ts` — `CLIENT_STATUS_LABELS` rewritten for the new chain (client-portal-friendly copy).
+  - `src/app/api/admin/services/[id]/route.ts` — PATCH now rejects status values outside `SERVICE_STATUS_ALL` with a 400 (was silently letting the DB CHECK throw a 500).
+  - `src/app/api/admin/services/route.ts` — new services default to `status: "start"` (was `"draft"`).
+  - `src/app/api/services/[id]/route.ts` — removed the legacy client-driven `draft → submitted` PATCH path; clients can update `service_details` only, the admin advances the chain.
+  - `src/components/client/ServiceWizard.tsx` — `handleConfirmSubmit` no longer PATCHes status; just toasts + closes (saving was already done earlier).
+  - `src/types/index.ts:735` — `ServiceRecord.status` re-typed to `ServiceStatus` from the new module.
+- **Step indicator pill styling (`src/components/admin/AdminApplicationStepIndicator.tsx`):** each numbered step (`1. Company Setup ▸ 2. Financial ▸ …`) is now a rounded-full pill — `bg-brand-navy text-white` for the active step, `bg-gray-100 text-gray-700` for inactive. Chevron separators preserved. Numbered badge inside the pill switched to a white circle for both states (brand-navy number when active, gray when inactive). Active step is derived from the nearest in-viewport section anchor via a new `useActiveStepId` scroll-tracker — falls back to the first step when nothing is in range. Anchor smooth-scroll behaviour unchanged. The old per-step status icon (CheckCircle / Flag / XCircle / Circle) was retired — the count badge `n/m` carries the same information without doubling up visual signals.
+
+Migration push: ran `npm run db:push` — all three migrations applied; `npm run db:status` shows Local + Remote paired for `20260513012213`, `20260513012214`, `20260513012215` with no drift.
+
+`npm run build` clean (lint + TS strict + Next 14 production build).
+
+Smoke test deferred to Vanessa once the dev server restart cycle (`pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`) is run — see `docs/cli-brief-status-overhaul-and-officer-fk-b098.md` Step 8 for the full 9-point checklist.
+
+---
+
 ### 2026-05-12 — B-097 — Document validity tracking + KYC Documents tab (Claude Code)
 
 Four additions on `/admin/services/[id]`:

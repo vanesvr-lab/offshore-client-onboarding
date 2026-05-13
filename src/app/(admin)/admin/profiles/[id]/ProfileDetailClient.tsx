@@ -22,6 +22,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { ClientProfile, ClientProfileKyc, ProfileServiceRole, DocumentRecord, DueDiligenceRequirement, RoleDocumentRequirement, ProfileRequirementOverride } from "@/types";
+import { getStatusBadgeClass, getStatusLabel } from "@/lib/services/statusChain";
 
 interface Props {
   profile: ClientProfile;
@@ -579,13 +580,8 @@ export function ProfileDetailClient({ profile, kyc, roles, documents, ddRequirem
                   <div key={svc.id} className="border rounded-lg px-3 py-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-brand-navy">{svc.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
-                        svc.status === "approved" ? "bg-green-100 text-green-700" :
-                        svc.status === "rejected" ? "bg-red-100 text-red-700" :
-                        svc.status === "draft" ? "bg-gray-100 text-gray-600" :
-                        "bg-blue-100 text-blue-700"
-                      }`}>
-                        {svc.status.replace("_", " ")}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getStatusBadgeClass(svc.status)}`}>
+                        {getStatusLabel(svc.status)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">

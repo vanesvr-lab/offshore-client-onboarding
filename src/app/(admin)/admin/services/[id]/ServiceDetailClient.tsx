@@ -57,6 +57,14 @@ import { KycRolesPicker } from "@/components/kyc/KycRolesPicker";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 import { formatDate } from "@/lib/utils/formatters";
 import {
+  SERVICE_STATUS_FORWARD_CHAIN,
+  SERVICE_STATUS_ALL,
+  SERVICE_STATUS_LABELS,
+  getNextStatus,
+  getStatusBadgeClass,
+  getStatusLabel,
+} from "@/lib/services/statusChain";
+import {
   KYC_SECTIONS_INDIVIDUAL,
   KYC_SECTIONS_ORGANISATION,
   gateSectionForLevel,
@@ -146,19 +154,9 @@ function ragFromPct(pct: number): RagStatus {
   return "red";
 }
 
-function statusBadgeClass(status: string): string {
-  const map: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-600",
-    in_progress: "bg-blue-50 text-blue-700",
-    submitted: "bg-indigo-50 text-indigo-700",
-    in_review: "bg-amber-50 text-amber-700",
-    pending_action: "bg-orange-50 text-orange-700",
-    verification: "bg-purple-50 text-purple-700",
-    approved: "bg-green-50 text-green-700",
-    rejected: "bg-red-50 text-red-700",
-  };
-  return map[status] ?? "bg-gray-100 text-gray-600";
-}
+// B-098 — status badge colours now live in src/lib/services/statusChain.
+// Local alias kept for the existing call sites in this file.
+const statusBadgeClass = getStatusBadgeClass;
 
 function calcKycPct(kyc: KycFull | null): number {
   if (!kyc) return 0;
@@ -2843,29 +2841,10 @@ interface Props {
   lastStatusChange: ServiceAuditEntry | null;
 }
 
-// B-093 — canonical forward chain for the Status card's "Move to <next>"
-// button. Mirrors the existing stage strip at the top of the page.
-// pending_action and rejected are off-path side states — they have no
-// "next" in the forward chain and render the button disabled.
-const FORWARD_CHAIN = [
-  "draft",
-  "in_progress",
-  "submitted",
-  "in_review",
-  "verification",
-  "approved",
-] as const;
-type ForwardStage = (typeof FORWARD_CHAIN)[number];
-
-function getNextStage(current: string): ForwardStage | null {
-  const idx = (FORWARD_CHAIN as readonly string[]).indexOf(current);
-  if (idx === -1 || idx === FORWARD_CHAIN.length - 1) return null;
-  return FORWARD_CHAIN[idx + 1];
-}
-
-const STATUS_OPTIONS = [
-  "draft", "in_progress", "submitted", "in_review", "pending_action", "verification", "approved", "rejected",
-] as const;
+// B-098 — forward chain + override list now come from the single source
+// of truth at src/lib/services/statusChain. `getNextStage` is a thin
+// alias so the rest of this file keeps reading naturally.
+const getNextStage = getNextStatus;
 
 // B-073 — five wizard steps for the modern services detail page. Section keys
 // match what's wired into ServiceCollapsibleSection in this file.
@@ -3382,31 +3361,36 @@ export function ServiceDetailClient({
 
         </div>
 
-        {/* Salesforce-style path chevron */}
+        {/* Salesforce-style path chevron. B-098 — renders the 8 forward
+            statuses imported from SERVICE_STATUS_FORWARD_CHAIN. Override
+            terminals (`rejected`, `closed`) aren't in the strip; when
+            the service sits at one of them the strip shows the chain
+            unhighlighted and the right-rail Status card carries the
+            terminal indication via its badge. */}
         <div className="flex items-center mt-3">
-          {(["draft", "in_progress", "submitted", "in_review", "verification", "approved"] as const).map((step, idx, arr) => {
-            const stepLabels: Record<string, string> = {
-              draft: "Draft",
-              in_progress: "In Progress",
-              submitted: "Submitted",
-              in_review: "In Review",
-              verification: "Verification",
-              approved: "Approved",
-            };
-            const stepIdx = arr.indexOf(service.status as typeof arr[number]);
+          {SERVICE_STATUS_FORWARD_CHAIN.map((step, idx, arr) => {
+            const stepIdx = (arr as readonly string[]).indexOf(service.status);
             const isActive = idx === stepIdx;
-            const isComplete = idx < stepIdx;
+            const isComplete = stepIdx >= 0 && idx < stepIdx;
             const isRejected = service.status === "rejected";
+            const isClosed = service.status === "closed";
+            const isTerminalOverride = isRejected || isClosed;
 
-            // Salesforce-style colors
-            const bgColor = isRejected && isActive
-              ? "#ef4444"
+            // Salesforce-style colours
+            const bgColor = isTerminalOverride && idx === arr.length - 1
+              ? (isRejected ? "#ef4444" : "#6b7280")
               : isComplete
               ? "#16a34a"
               : isActive
               ? "#2563eb"
               : "#e5e7eb";
-            const textColor = (isComplete || isActive || (isRejected && isActive)) ? "#fff" : "#9ca3af";
+            const textColor =
+              isComplete || isActive || (isTerminalOverride && idx === arr.length - 1)
+                ? "#fff"
+                : "#9ca3af";
+            const overrideLabel = isTerminalOverride && idx === arr.length - 1
+              ? SERVICE_STATUS_LABELS[isRejected ? "rejected" : "closed"]
+              : null;
             return (
               <div key={step} className="relative flex-1" style={{ marginRight: idx < arr.length - 1 ? "2px" : 0 }}>
                 <svg viewBox="0 0 200 36" className="w-full h-9" preserveAspectRatio="none">
@@ -3421,9 +3405,9 @@ export function ServiceDetailClient({
                   />
                   {/* Text */}
                   <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central"
-                    fill={textColor} fontSize="11" fontWeight="600" fontFamily="system-ui, sans-serif"
+                    fill={textColor} fontSize="10" fontWeight="600" fontFamily="system-ui, sans-serif"
                   >
-                    {isComplete ? "✓ " : ""}{isRejected && isActive ? "Rejected" : stepLabels[step]}
+                    {isComplete ? "✓ " : ""}{overrideLabel ?? SERVICE_STATUS_LABELS[step]}
                   </text>
                 </svg>
               </div>
@@ -3791,8 +3775,8 @@ export function ServiceDetailClient({
           {/* Row 2 — current status */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-gray-700">Current status:</span>
-            <span className={`text-sm px-2 py-0.5 rounded-full font-medium capitalize ${statusBadgeClass(service.status)}`}>
-              {service.status.replace(/_/g, " ")}
+            <span className={`text-sm px-2 py-0.5 rounded-full font-medium ${statusBadgeClass(service.status)}`}>
+              {getStatusLabel(service.status)}
             </span>
           </div>
 
@@ -3818,17 +3802,21 @@ export function ServiceDetailClient({
             )}
           </p>
 
-          {/* Row 4 — actions */}
+          {/* Row 4 — actions. B-098: nextStage falls back to the last
+              forward step so the button label doesn't collapse at
+              terminals (active / rejected / closed); button stays
+              greyed in that case. */}
           {(() => {
             const nextStage = getNextStage(service.status);
             const isTerminal = nextStage === null;
-            const nextLabel = (nextStage ?? "approved").replace(/_/g, " ");
+            const fallback = SERVICE_STATUS_FORWARD_CHAIN[SERVICE_STATUS_FORWARD_CHAIN.length - 1];
+            const nextLabel = SERVICE_STATUS_LABELS[nextStage ?? fallback];
             return (
               <div className="flex items-center gap-2 pt-1">
                 <Button
                   onClick={() => nextStage && void updateStatus(nextStage)}
                   disabled={isTerminal || updatingStatus}
-                  className={`flex-1 h-9 text-xs capitalize ${BTN_PRIMARY} ${isTerminal ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`flex-1 h-9 text-xs ${BTN_PRIMARY} ${isTerminal ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   Move to {nextLabel}
                 </Button>
@@ -3844,9 +3832,9 @@ export function ServiceDetailClient({
                     className="h-9 rounded-md border border-gray-300 bg-white pl-2.5 pr-6 text-xs cursor-pointer appearance-none hover:bg-gray-50"
                   >
                     <option value="">Stage Override</option>
-                    {STATUS_OPTIONS.map((s) => (
+                    {SERVICE_STATUS_ALL.map((s) => (
                       <option key={s} value={s} disabled={s === service.status}>
-                        {s.replace(/_/g, " ")}
+                        {SERVICE_STATUS_LABELS[s]}
                       </option>
                     ))}
                   </select>
@@ -3868,9 +3856,9 @@ export function ServiceDetailClient({
             </DialogHeader>
             <p className="text-sm text-gray-600">
               This will change status from{" "}
-              <span className="font-semibold capitalize">{service.status.replace(/_/g, " ")}</span>{" "}
+              <span className="font-semibold">{getStatusLabel(service.status)}</span>{" "}
               to{" "}
-              <span className="font-semibold capitalize">{(pendingOverride ?? "").replace(/_/g, " ")}</span>.{" "}
+              <span className="font-semibold">{pendingOverride ? getStatusLabel(pendingOverride) : ""}</span>.{" "}
               Use this for corrections only — normal flow advances via the &quot;Move to&quot; button.
             </p>
             <DialogFooter>

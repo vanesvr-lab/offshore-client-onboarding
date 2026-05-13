@@ -52,8 +52,8 @@ export async function POST(
   if (!sectionKey) {
     return NextResponse.json({ error: "section_key is required" }, { status: 400 });
   }
-  if (status !== "approved" && status !== "flagged" && status !== "rejected") {
-    return NextResponse.json({ error: "status must be approved | flagged | rejected" }, { status: 400 });
+  if (status !== "reviewed" && status !== "flagged" && status !== "rejected") {
+    return NextResponse.json({ error: "status must be reviewed | flagged | rejected" }, { status: 400 });
   }
   const notes = body.notes?.trim() || null;
   if ((status === "rejected" || status === "flagged") && !notes) {

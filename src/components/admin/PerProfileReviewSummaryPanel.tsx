@@ -6,8 +6,8 @@
 // (Identity / Financial / Declarations for individuals, Identity / Tax
 // for organisations) with the latest review status + last note. Admin
 // can click any row to scroll to that subsection in the long form, or
-// use the bottom Approve all / Flag profile bulk actions to write the
-// same status to every subsection in one go (sequential POSTs to the
+// use the bottom Mark all reviewed / Flag profile bulk actions to write
+// the same status to every subsection in one go (sequential POSTs to the
 // existing `/api/admin/applications/[id]/section-reviews` endpoint —
 // no bulk endpoint added; see B-077 brief "out of scope").
 
@@ -68,7 +68,7 @@ export function PerProfileReviewSummaryPanel({
   subsections,
 }: Props) {
   const [batchNote, setBatchNote] = useState("");
-  const [bulkAction, setBulkAction] = useState<"approve" | "flag" | null>(null);
+  const [bulkAction, setBulkAction] = useState<"review" | "flag" | null>(null);
 
   const sectionKeys = subsections.map((s) => s.key);
   const { applicationId, rows, addReview } = useSectionReviews(sectionKeys);
@@ -103,29 +103,31 @@ export function PerProfileReviewSummaryPanel({
     return json.data as ApplicationSectionReview;
   }
 
-  async function handleApproveAll() {
-    // Approve every subsection that's currently null or flagged.
+  async function handleReviewAll() {
+    // B-098 — mark every subsection that's currently null or flagged
+    // as `reviewed`. (Renamed from "approve all" — the underlying
+    // section-review status was renamed from `approved` to `reviewed`.)
     const targets = rows.filter(
       (r) => r.latest === null || r.latest.status === "flagged",
     );
     if (targets.length === 0) {
-      toast.info("Nothing to approve — all subsections already approved/rejected.");
+      toast.info("Nothing to mark — all subsections already reviewed or rejected.");
       return;
     }
-    setBulkAction("approve");
+    setBulkAction("review");
     let successCount = 0;
     try {
       for (const t of targets) {
         const review = await postReview(
           t.sectionKey,
-          "approved",
+          "reviewed",
           batchNote.trim() || null,
         );
         addReview(review);
         successCount++;
       }
       toast.success(
-        `Approved ${successCount} subsection${successCount === 1 ? "" : "s"} for ${profileName}`,
+        `Reviewed ${successCount} subsection${successCount === 1 ? "" : "s"} for ${profileName}`,
       );
       setBatchNote("");
       onOpenChange(false);
@@ -133,7 +135,7 @@ export function PerProfileReviewSummaryPanel({
       toast.error(
         err instanceof Error
           ? `${err.message} (saved ${successCount}/${targets.length})`
-          : "Bulk approve failed",
+          : "Bulk review failed",
       );
     } finally {
       setBulkAction(null);
@@ -251,7 +253,7 @@ export function PerProfileReviewSummaryPanel({
           {/* Batch note */}
           <div className="space-y-2">
             <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-              Batch note (optional for approve, required for flag)
+              Batch note (optional for review, required for flag)
             </label>
             <Textarea
               rows={3}
@@ -291,16 +293,16 @@ export function PerProfileReviewSummaryPanel({
           <Button
             type="button"
             size="sm"
-            onClick={() => void handleApproveAll()}
+            onClick={() => void handleReviewAll()}
             disabled={bulkAction !== null}
             className="bg-brand-navy hover:bg-brand-blue gap-1.5"
           >
-            {bulkAction === "approve" ? (
+            {bulkAction === "review" ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <CheckCircle2 className="size-3.5" />
             )}
-            Approve all
+            Mark all reviewed
           </Button>
         </SheetFooter>
       </SheetContent>

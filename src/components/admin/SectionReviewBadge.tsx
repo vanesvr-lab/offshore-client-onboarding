@@ -17,8 +17,8 @@ const VARIANTS: Record<
   SectionReviewStatus | "none",
   { label: string; classes: string; Icon: typeof CheckCircle2 }
 > = {
-  approved: {
-    label: "Approved",
+  reviewed: {
+    label: "Reviewed",
     classes: "bg-green-100 text-green-700",
     Icon: CheckCircle2,
   },

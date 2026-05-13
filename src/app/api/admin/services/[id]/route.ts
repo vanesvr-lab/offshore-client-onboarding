@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { isValidServiceStatus, SERVICE_STATUS_ALL } from "@/lib/services/statusChain";
 
 /** PATCH /api/admin/services/[id] — Update service fields */
 export async function PATCH(
@@ -29,6 +30,18 @@ export async function PATCH(
 
   if (Object.keys(patch).length === 1) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+  }
+
+  // B-098 — guard against status values outside the canonical chain so a
+  // malformed client never reaches the DB CHECK constraint with a 500.
+  if ("status" in patch) {
+    const candidate = patch.status;
+    if (typeof candidate !== "string" || !isValidServiceStatus(candidate)) {
+      return NextResponse.json(
+        { error: `status must be one of: ${SERVICE_STATUS_ALL.join(", ")}` },
+        { status: 400 },
+      );
+    }
   }
 
   const supabase = createAdminClient();

@@ -7,48 +7,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MiniProgressBar } from "@/components/shared/MiniProgressBar";
 import type { AdminServiceRow } from "./page";
+import {
+  SERVICE_STATUS_ALL,
+  SERVICE_STATUS_LABELS,
+  getStatusBadgeClass,
+  getStatusLabel,
+  type ServiceStatus,
+} from "@/lib/services/statusChain";
 
 interface Props {
   rows: AdminServiceRow[];
   templateOptions: { id: string; name: string }[];
 }
 
-type StatusFilter =
-  | "all"
-  | "draft"
-  | "in_progress"
-  | "submitted"
-  | "in_review"
-  | "approved"
-  | "rejected";
+type StatusFilter = "all" | ServiceStatus;
 
+// B-098 — filter list mirrors the new service status chain. Forward
+// stages first, then override-only terminals.
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "draft", label: "Draft" },
-  { value: "submitted", label: "Submitted" },
-  { value: "in_review", label: "In Review" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
+  ...SERVICE_STATUS_ALL.map((s) => ({ value: s, label: SERVICE_STATUS_LABELS[s] })),
 ];
 
 function statusBadge(status: string) {
-  const styles: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-600",
-    in_progress: "bg-blue-50 text-blue-700",
-    submitted: "bg-indigo-50 text-indigo-700",
-    in_review: "bg-amber-50 text-amber-700",
-    pending_action: "bg-orange-50 text-orange-700",
-    verification: "bg-purple-50 text-purple-700",
-    approved: "bg-green-50 text-green-700",
-    rejected: "bg-red-50 text-red-700",
-  };
   return (
     <span
-      className={`text-[10px] px-2 py-0.5 rounded-full capitalize ${
-        styles[status] ?? "bg-gray-100 text-gray-600"
-      }`}
+      className={`text-[10px] px-2 py-0.5 rounded-full ${getStatusBadgeClass(status)}`}
     >
-      {status.replace(/_/g, " ")}
+      {getStatusLabel(status)}
     </span>
   );
 }

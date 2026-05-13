@@ -33,10 +33,13 @@ export async function PATCH(
 
   const body = (await request.json()) as Record<string, unknown>;
 
-  // Clients can only update service_details and status (draft → submitted)
+  // B-098 — Clients can only update service_details. The old
+  // draft → submitted status path is gone: services.status is now an
+  // admin-driven chain (start → document_collection → …). The client
+  // wizard's "Submit" CTA just saves details and closes; advancing the
+  // chain is the admin's call via the right-rail Status card.
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ("service_details" in body) patch.service_details = body.service_details;
-  if ("status" in body && body.status === "submitted") patch.status = "submitted";
 
   if (Object.keys(patch).length === 1) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

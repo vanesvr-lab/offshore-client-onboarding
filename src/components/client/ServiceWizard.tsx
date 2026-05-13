@@ -298,20 +298,12 @@ export function ServiceWizard({
 
   async function handleConfirmSubmit() {
     setValidationPhase(null);
-    // PATCH status to submitted
-    try {
-      const res = await fetch(`/api/services/${serviceId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "submitted" }),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to submit");
-      toast.success("Application submitted for review!", { position: "top-right" });
-      onClose(serviceDetails, persons, documents);
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to submit", { position: "top-right" });
-    }
+    // B-098 — service.status is admin-driven now (no client → submitted
+    // transition). Saving the wizard just closes; the admin advances
+    // the chain from /admin/services/[id]. Service details were already
+    // persisted by `saveServiceDetails` earlier in the flow.
+    toast.success("Application submitted for review!", { position: "top-right" });
+    onClose(serviceDetails, persons, documents);
   }
 
   const handleFieldChange = useCallback((key: string, value: unknown) => {

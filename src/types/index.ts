@@ -732,7 +732,7 @@ export interface ServiceRecord {
   service_template_id: string;
   service_number: string | null;
   service_details: Record<string, unknown>;
-  status: 'draft' | 'in_progress' | 'submitted' | 'in_review' | 'pending_action' | 'verification' | 'approved' | 'rejected';
+  status: import("@/lib/services/statusChain").ServiceStatus;
   loe_received: boolean;
   loe_received_at: string | null;
   invoice_sent_at: string | null;
@@ -784,7 +784,11 @@ export interface ServiceSectionOverride {
 }
 
 // B-068 — per-section admin review workflow
-export type SectionReviewStatus = "approved" | "flagged" | "rejected";
+// B-098 — `approved` renamed to `reviewed`. Source of truth lives at
+// `@/lib/admin/sectionReviewStatus`; this alias is kept here so the
+// many existing `import type { SectionReviewStatus } from "@/types"`
+// sites don't all need to be rewritten.
+export type SectionReviewStatus = "reviewed" | "flagged" | "rejected";
 
 export interface ApplicationSectionReview {
   id: string;

@@ -35,8 +35,8 @@ const OPTIONS: {
   iconColor: string;
 }[] = [
   {
-    value: "approved",
-    label: "Approved",
+    value: "reviewed",
+    label: "Reviewed",
     Icon: CheckCircle2,
     ring: "border-gray-200",
     ringActive: "border-green-500 bg-green-50",
