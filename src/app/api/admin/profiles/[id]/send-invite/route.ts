@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantId } from "@/lib/tenant";
 import { Resend } from "resend";
 import crypto from "crypto";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { logCommunication } from "@/lib/email/logCommunication";
+import { findServiceIdsForClient } from "@/lib/email/findServices";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -79,11 +82,8 @@ export async function POST(
   const accessUrl = `${baseUrl}/kyc/fill/${accessToken}`;
 
   // Send email with code + link
-  const { error: emailError } = await resend.emails.send({
-    from: `GWMS Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
-    to: record.email,
-    subject: `Complete your KYC profile — ${companyName}`,
-    html: `
+  const emailSubject = `Complete your KYC profile — ${companyName}`;
+  const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 22px;">GWMS Client Portal</h1>
@@ -115,7 +115,13 @@ export async function POST(
           GWMS Client Portal | Mauritius
         </div>
       </div>
-    `,
+    `;
+
+  const { data: resendData, error: emailError } = await resend.emails.send({
+    from: `GWMS Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    to: record.email,
+    subject: emailSubject,
+    html: emailHtml,
   });
 
   if (emailError) {
@@ -145,6 +151,34 @@ export async function POST(
     new_value: { sent_at: sentAt },
     detail: { email: record.email },
   });
+
+  // B-108 — fanout via client_id (kyc_records is legacy; the recipient
+  // belongs to a client, and that client's services are what we log to).
+  try {
+    const tenantId = getTenantId(session);
+    const serviceIds = record.client_id
+      ? await findServiceIdsForClient(supabase, record.client_id, tenantId)
+      : [];
+    for (const sid of serviceIds) {
+      await logCommunication({
+        serviceId: sid,
+        tenantId,
+        sentBy: session.user.id,
+        sentByName: session.user.name ?? session.user.email ?? null,
+        sentToEmail: record.email,
+        sentToProfileId: null,
+        emailType: "profile_kyc_invite",
+        subject: emailSubject,
+        bodyHtml: emailHtml,
+        relatedEntityType: "profile",
+        relatedEntityId: params.id,
+        resendMessageId: resendData?.id ?? null,
+        status: "sent",
+      });
+    }
+  } catch (err) {
+    console.error("[profiles/send-invite] comms log fanout failed:", err);
+  }
 
   return NextResponse.json({ success: true, sentAt });
 }

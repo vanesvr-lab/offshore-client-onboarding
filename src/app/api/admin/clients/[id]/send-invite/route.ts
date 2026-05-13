@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantId } from "@/lib/tenant";
 import { Resend } from "resend";
 import { SignJWT } from "jose";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { logCommunication } from "@/lib/email/logCommunication";
+import { findServiceIdsForClient } from "@/lib/email/findServices";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -49,11 +52,8 @@ export async function POST(
 
   const inviteUrl = `${appUrl}/auth/set-password?token=${encodeURIComponent(token)}`;
 
-  const { data: emailResult, error: emailError } = await resend.emails.send({
-    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
-    to: email!,
-    subject: "Welcome to Mauritius Offshore Client Portal — Set up your account",
-    html: `
+  const emailSubject = "Welcome to Mauritius Offshore Client Portal — Set up your account";
+  const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 22px;">Mauritius Offshore Client Portal</h1>
@@ -80,7 +80,13 @@ export async function POST(
           Mauritius Offshore Client Portal | 365 Royal Road, Rose Hill, Mauritius | +230 454 9670
         </div>
       </div>
-    `,
+    `;
+
+  const { data: emailResult, error: emailError } = await resend.emails.send({
+    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    to: email!,
+    subject: emailSubject,
+    html: emailHtml,
   });
 
   if (emailError) {
@@ -107,6 +113,34 @@ export async function POST(
     new_value: { sent_at: sentAt },
     detail: { email },
   });
+
+  // B-108 — fanout to every service tied to this client (one log row per).
+  // `service_communications.service_id` is NOT NULL — clients with no
+  // services yet (the common signup-invite case) silently produce zero
+  // rows. Comms log is best-effort, never blocks.
+  try {
+    const tenantId = getTenantId(session);
+    const serviceIds = await findServiceIdsForClient(supabase, params.id, tenantId);
+    for (const sid of serviceIds) {
+      await logCommunication({
+        serviceId: sid,
+        tenantId,
+        sentBy: session.user.id,
+        sentByName: session.user.name ?? session.user.email ?? null,
+        sentToEmail: email ?? null,
+        sentToProfileId: userId ?? null,
+        emailType: "client_signup_invite",
+        subject: emailSubject,
+        bodyHtml: emailHtml,
+        relatedEntityType: "profile",
+        relatedEntityId: userId ?? null,
+        resendMessageId: emailResult?.id ?? null,
+        status: "sent",
+      });
+    }
+  } catch (err) {
+    console.error("[clients/send-invite] comms log fanout failed:", err);
+  }
 
   revalidatePath(`/admin/clients/${params.id}`);
   return NextResponse.json({ success: true, emailId: emailResult?.id });

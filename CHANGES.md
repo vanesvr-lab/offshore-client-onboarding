@@ -13,6 +13,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-108 — Communications log + service alerts (in progress)
+
+### 2026-05-13 — B-108 batch 1 — Comms log backend (Claude Code)
+
+New `service_communications` table captures every outbound email's body + metadata. Best-effort write — never throws, never blocks the send. All five Resend send paths now log to it:
+
+- `/api/admin/clients/[id]/send-invite` → `client_signup_invite` (fanout via `findServiceIdsForClient` since signup invites pre-date service creation; emits zero rows on the common case where a client has no services yet)
+- `/api/admin/profiles/[id]/send-invite` → `profile_kyc_invite` (legacy `kyc_records` route; fanout via `findServiceIdsForClient(record.client_id)`)
+- `/api/services/[id]/persons/[roleId]/send-invite` → `service_kyc_invite` (direct `params.id`, no fanout)
+- `/api/admin/documents/[id]/request-update` → `document_update_request` (direct `body.service_id`)
+- `/api/admin/processes/[id]/request-documents` → `process_documents_request` (fanout via `findServiceIdsForClient(proc.client_id)`; each row's `related_entity_id` = its own service id)
+
+Schema bridge: `service_communications.service_id` is `NOT NULL`, but several routes operate on clients/profiles/processes and don't carry one directly. New helper `src/lib/email/findServices.ts` walks `client_users → client_profiles → profile_service_roles` to resolve service ids by client or profile. Best-effort fanout wrapped in try/catch, never blocks the response.
+
+Migration: `supabase/migrations/20260513183738_service_communications.sql` — created table + `(service_id)` and `(service_id, sent_at DESC)` indexes, RLS enabled (admin client bypasses), CHECK constraint on `status IN ('sent', 'failed')`. Pushed; `npm run db:status` clean (Local + Remote paired at `20260513183738`).
+
+Files: `supabase/migrations/20260513183738_service_communications.sql` (new), `src/lib/email/logCommunication.ts` (new), `src/lib/email/findServices.ts` (new), `src/app/api/admin/clients/[id]/send-invite/route.ts`, `src/app/api/admin/profiles/[id]/send-invite/route.ts`, `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts`, `src/app/api/admin/documents/[id]/request-update/route.ts`, `src/app/api/admin/processes/[id]/request-documents/route.ts`.
+Build: clean.
+
+Next: Batch 2 — right-rail Communications card + modal with sandboxed-iframe body viewer.
+
+---
+
 ## B-107 — Per-profile waive + waiver-aware % + Review Wizard button position
 
 ### 2026-05-13 — B-107 — Waive in per-profile docs, % counts waivers, button repositioned (Claude Code)

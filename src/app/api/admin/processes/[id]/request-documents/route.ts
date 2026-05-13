@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantId } from "@/lib/tenant";
 import { Resend } from "resend";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { logCommunication } from "@/lib/email/logCommunication";
+import { findServiceIdsForClient } from "@/lib/email/findServices";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -79,11 +82,8 @@ export async function POST(
   const docList = docNames.map((n) => `• ${n}`).join("\n");
   const customMsg = message ? `\n\n${message}` : "";
 
-  await resend.emails.send({
-    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
-    to: ownerEmail,
-    subject: `Documents required — ${templateName}`,
-    html: `
+  const emailSubject = `Documents required — ${templateName}`;
+  const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 20px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 20px;">Mauritius Offshore Client Portal</h1>
@@ -100,7 +100,13 @@ export async function POST(
           Mauritius Offshore Client Portal | 365 Royal Road, Rose Hill, Mauritius | +230 454 9670
         </div>
       </div>
-    `,
+    `;
+
+  const { data: resendData, error: emailError } = await resend.emails.send({
+    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    to: ownerEmail,
+    subject: emailSubject,
+    html: emailHtml,
   });
 
   await writeAuditLog(supabase, {
@@ -117,6 +123,35 @@ export async function POST(
     },
     detail: { document_names: docNames, email: ownerEmail },
   });
+
+  // B-108 — fanout via the process's client_id; log one row per service
+  // tied to that client. Each row's related_entity_id points at its own
+  // service so the comms list groups naturally per service.
+  try {
+    const tenantId = getTenantId(session);
+    const serviceIds = proc.client_id
+      ? await findServiceIdsForClient(supabase, proc.client_id, tenantId)
+      : [];
+    for (const sid of serviceIds) {
+      await logCommunication({
+        serviceId: sid,
+        tenantId,
+        sentBy: session.user.id,
+        sentByName: session.user.name ?? session.user.email ?? null,
+        sentToEmail: ownerEmail,
+        sentToProfileId: null,
+        emailType: "process_documents_request",
+        subject: emailSubject,
+        bodyHtml: emailHtml,
+        relatedEntityType: "service",
+        relatedEntityId: sid,
+        resendMessageId: resendData?.id ?? null,
+        status: emailError ? "failed" : "sent",
+      });
+    }
+  } catch (err) {
+    console.error("[processes/request-documents] comms log fanout failed:", err);
+  }
 
   return NextResponse.json({ success: true, emailSent: true });
 }

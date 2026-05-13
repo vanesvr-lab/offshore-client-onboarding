@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { Resend } from "resend";
 import crypto from "crypto";
+import { logCommunication } from "@/lib/email/logCommunication";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -179,11 +180,8 @@ export async function POST(
        </p>`
     : "";
 
-  const { error: emailError } = await resend.emails.send({
-    from: `GWMS Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
-    to: profile.email,
-    subject: `Complete your KYC — ${serviceName} at GWMS`,
-    html: `
+  const emailSubject = `Complete your KYC — ${serviceName} at GWMS`;
+  const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 22px;">GWMS Client Portal</h1>
@@ -220,7 +218,30 @@ export async function POST(
           GWMS Client Portal | Mauritius
         </div>
       </div>
-    `,
+    `;
+
+  const { data: resendData, error: emailError } = await resend.emails.send({
+    from: `GWMS Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    to: profile.email,
+    subject: emailSubject,
+    html: emailHtml,
+  });
+
+  // B-108 — best-effort comms log; direct service id, no fanout needed.
+  await logCommunication({
+    serviceId: params.id,
+    tenantId,
+    sentBy: session.user.id ?? null,
+    sentByName: session.user.name ?? session.user.email ?? null,
+    sentToEmail: profile.email,
+    sentToProfileId: profile.id,
+    emailType: "service_kyc_invite",
+    subject: emailSubject,
+    bodyHtml: emailHtml,
+    relatedEntityType: "profile",
+    relatedEntityId: profile.id,
+    resendMessageId: resendData?.id ?? null,
+    status: emailError ? "failed" : "sent",
   });
 
   if (emailError) {
