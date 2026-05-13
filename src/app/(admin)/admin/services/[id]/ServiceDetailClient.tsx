@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle,
@@ -10,6 +10,7 @@ import {
   StickyNote, ShieldCheck, Milestone, Clock,
   AlertTriangle, Eye,
   Sparkles, Trash2,
+  Wand2, ChevronLeft, ChevronRight, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -2979,6 +2980,13 @@ interface Props {
   // of the upload action; the client portal upload list filters them
   // out so the client never sees the slot.
   waivers: WaivedDocumentRequirement[];
+  // B-102 — Review Wizard chrome. When `reviewMode` is true the component
+  // hides the stage strip + step indicator + right-rail + admin extras +
+  // bottom save bar, and renders only the section card whose index matches
+  // `reviewStep`. The wizard nav (top + bottom) is mounted by the parent
+  // `ReviewWizardClient`, not here, so this stays a pure read-only flag.
+  reviewMode?: boolean;
+  reviewStep?: number;
 }
 
 // B-098 — forward chain + override list now come from the single source
@@ -3002,6 +3010,221 @@ const DD_LEVELS = [
   { value: "edd", label: "EDD — Enhanced" },
 ] as const;
 
+// B-102 — Review Wizard step → application_section_reviews.section_key
+// mapping. Lives next to ADMIN_STEPS_SERVICES so future step additions
+// stay obvious. `people` already exists for the People & KYC aggregate.
+const REVIEW_STEP_SECTION_KEYS = [
+  "company_setup",
+  "financial",
+  "banking",
+  "people",
+  "documents",
+] as const;
+
+const BRAND_REVIEW_BLUE = "#24a0ed";
+
+// ─── Review Wizard chrome ─────────────────────────────────────────────────────
+//
+// Sticky top bar (replaces the existing back-link + stage-strip + step-pill
+// shell) and sticky bottom nav (replaces the bottom save bar) used only when
+// ServiceDetailClient is mounted with `reviewMode`.
+
+function ReviewWizardTopBar({
+  serviceId,
+  step,
+  profileLabel,
+  service,
+}: {
+  serviceId: string;
+  step: number;
+  profileLabel: string | null;
+  service: ServiceWithTemplate;
+}) {
+  const stepLabel = ADMIN_STEPS_SERVICES[step]?.label ?? "Review";
+  return (
+    <div className="sticky top-0 z-30 bg-white border-b -mx-8 px-8 py-3 flex items-center justify-between gap-3 shadow-sm">
+      <div className="min-w-0 flex items-center gap-3">
+        <Wand2 className="h-4 w-4 text-brand-navy shrink-0" />
+        <div className="min-w-0">
+          <p className="text-xs text-gray-500 leading-none">
+            {service.service_number ? `${service.service_number} — ` : ""}
+            {service.service_templates?.name ?? "Service"} · Review Wizard
+          </p>
+          <p className="text-sm font-semibold text-brand-navy truncate">
+            Step {step + 1} of {ADMIN_STEPS_SERVICES.length}: {stepLabel}
+            {profileLabel ? ` · ${profileLabel}` : ""}
+          </p>
+        </div>
+      </div>
+      <Link
+        href={`/admin/services/${serviceId}`}
+        className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-brand-navy"
+      >
+        <X className="h-4 w-4" />
+        Exit Review
+      </Link>
+    </div>
+  );
+}
+
+function ReviewWizardBottomNav({
+  serviceId,
+  step,
+  pendingChanges,
+  onSave,
+  profileSubstep,
+  totalProfilesInStep,
+}: {
+  serviceId: string;
+  step: number;
+  pendingChanges: boolean;
+  onSave: () => Promise<boolean>;
+  /** B-102 — When step 3 (People & KYC) has `?profile=<id>`, sub-step nav
+   *  swaps in: Previous → Back to list, Next → Next Profile, Mark as
+   *  Reviewed → Mark Profile Reviewed. `null` for the list view. */
+  profileSubstep: {
+    profileIndex: number;
+    onBackToList: () => void;
+    onNextProfile: () => void;
+  } | null;
+  totalProfilesInStep: number;
+}) {
+  const router = useRouter();
+  const sectionKey = REVIEW_STEP_SECTION_KEYS[step];
+  const { onReviewSaved } = useSectionReview(sectionKey);
+  const [marking, setMarking] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
+
+  const isFirstStep = step === 0;
+  const isLastStep = step === ADMIN_STEPS_SERVICES.length - 1;
+
+  async function flushIfDirty(): Promise<boolean> {
+    if (!pendingChanges) return true;
+    return onSave();
+  }
+
+  async function goTo(nextStep: number) {
+    setAdvancing(true);
+    try {
+      const ok = await flushIfDirty();
+      if (!ok) {
+        toast.error("Couldn't save changes — fix the errors and try again.");
+        return;
+      }
+      if (nextStep < 0) return;
+      if (nextStep >= ADMIN_STEPS_SERVICES.length) {
+        router.replace(`/admin/services/${serviceId}`);
+        return;
+      }
+      router.replace(`/admin/services/${serviceId}/review?step=${nextStep}`);
+    } finally {
+      setAdvancing(false);
+    }
+  }
+
+  async function handleNext() {
+    if (profileSubstep) {
+      profileSubstep.onNextProfile();
+      return;
+    }
+    await goTo(step + 1);
+  }
+
+  async function handlePrevious() {
+    if (profileSubstep) {
+      profileSubstep.onBackToList();
+      return;
+    }
+    if (isFirstStep) return;
+    await goTo(step - 1);
+  }
+
+  async function handleMarkReviewed() {
+    setMarking(true);
+    try {
+      const saved = await flushIfDirty();
+      if (!saved) {
+        toast.error("Couldn't save changes — fix the errors and try again.");
+        return;
+      }
+      // Section-review POST (re-uses the existing endpoint from B-068).
+      // Per tech-debt #26 `application_id` actually stores the service id
+      // on the modern path.
+      const res = await fetch(
+        `/api/admin/applications/${serviceId}/section-reviews`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ section_key: sectionKey, status: "reviewed" }),
+        },
+      );
+      const payload = (await res.json().catch(() => ({}))) as {
+        data?: ApplicationSectionReview;
+        error?: string;
+      };
+      if (!res.ok || !payload.data) {
+        toast.error(payload.error ?? "Couldn't mark as reviewed");
+        return;
+      }
+      onReviewSaved(payload.data);
+      toast.success("Marked as reviewed");
+      if (profileSubstep) {
+        profileSubstep.onNextProfile();
+      } else {
+        await goTo(step + 1);
+      }
+    } finally {
+      setMarking(false);
+    }
+  }
+
+  const nextLabel = profileSubstep
+    ? "Next Profile"
+    : isLastStep
+      ? "Finish"
+      : "Next";
+  const prevLabel = profileSubstep ? "Back to list" : "Previous";
+  const markLabel = profileSubstep ? "Mark Profile Reviewed" : "Mark as Reviewed";
+  const nextDisabled = advancing || marking
+    || (profileSubstep ? profileSubstep.profileIndex >= totalProfilesInStep - 1 : false);
+
+  return (
+    <div className="sticky bottom-0 z-30 bg-white border-t -mx-8 px-8 py-3 flex items-center justify-between gap-3 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
+      <button
+        type="button"
+        onClick={() => void handlePrevious()}
+        disabled={advancing || marking || (!profileSubstep && isFirstStep)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-brand-navy bg-white px-4 py-1.5 text-sm font-medium text-brand-navy hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        {prevLabel}
+      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handleMarkReviewed()}
+          disabled={marking || advancing}
+          style={{ backgroundColor: BRAND_REVIEW_BLUE }}
+          className="inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-60"
+        >
+          {marking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+          {markLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleNext()}
+          disabled={nextDisabled}
+          className="inline-flex items-center gap-1.5 rounded-full bg-brand-navy px-4 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-brand-blue disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {advancing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {nextLabel}
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function ServiceDetailClient({
@@ -3022,6 +3245,8 @@ export function ServiceDetailClient({
   fieldExtractions,
   lastStatusChange,
   waivers: initialWaivers,
+  reviewMode = false,
+  reviewStep = 0,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -3173,6 +3398,46 @@ export function ServiceDetailClient({
     return aName.localeCompare(bName);
   });
 
+  // ── B-102 Review Wizard derived state ─────────────────────────────────────
+  // When in reviewMode + step 3 + `?profile=<id>` is set, narrow the People
+  // & KYC section to a single expanded profile and adapt the bottom nav.
+  const searchParams = useSearchParams();
+  const rawReviewProfile = reviewMode && reviewStep === 3
+    ? searchParams.get("profile")
+    : null;
+  const reviewProfileId = rawReviewProfile && uniqueRoles.some(
+    ({ person }) => person.client_profiles?.id === rawReviewProfile,
+  )
+    ? rawReviewProfile
+    : null;
+  const reviewProfileIndex = reviewProfileId
+    ? uniqueRoles.findIndex(({ person }) => person.client_profiles?.id === reviewProfileId)
+    : -1;
+  const reviewProfileLabel = reviewProfileId
+    ? uniqueRoles[reviewProfileIndex]?.person.client_profiles?.full_name ?? null
+    : null;
+  const reviewProfileSubstep = reviewProfileId
+    ? {
+        profileIndex: reviewProfileIndex,
+        onBackToList: () => {
+          router.replace(`/admin/services/${service.id}/review?step=3`);
+        },
+        onNextProfile: () => {
+          const nextIdx = reviewProfileIndex + 1;
+          if (nextIdx >= uniqueRoles.length) {
+            // No more profiles — return to list, let admin advance with Next.
+            router.replace(`/admin/services/${service.id}/review?step=3`);
+            return;
+          }
+          const nextPid = uniqueRoles[nextIdx]?.person.client_profiles?.id;
+          if (!nextPid) return;
+          router.replace(
+            `/admin/services/${service.id}/review?step=3&profile=${nextPid}`,
+          );
+        },
+      }
+    : null;
+
   // ── Section completion ────────────────────────────────────────────────────
 
   const companyFields = getFieldsForSection("company_setup", serviceFields);
@@ -3290,6 +3555,31 @@ export function ServiceDetailClient({
       toast.error(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // B-102 — boolean-returning wrapper for the Review Wizard's save-on-advance.
+  // The legacy `handleSave` toasts and swallows the result; this variant
+  // surfaces a clean ok/not-ok so the wizard can refuse to advance on failure.
+  async function handleSaveReturningOk(): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/admin/services/${service.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service_details: serviceDetails }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to save");
+        return false;
+      }
+      setService((prev) => ({ ...prev, service_details: serviceDetails }));
+      setPendingChanges(false);
+      router.refresh();
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save");
+      return false;
     }
   }
 
@@ -3514,12 +3804,23 @@ export function ServiceDetailClient({
       initialReviews={sectionReviews}
     >
     <div>
+      {/* B-102 — Review Wizard top bar replaces the existing sticky shell
+          while `reviewMode` is true. */}
+      {reviewMode && (
+        <ReviewWizardTopBar
+          serviceId={service.id}
+          step={reviewStep}
+          profileLabel={reviewProfileLabel}
+          service={service}
+        />
+      )}
       {/* ── B-090 Sticky shell: back link + title row + stage strip + step
             indicator all pin together at top-0 of <main>. Background
             matches the page (bg-gray-50) so scrolling content underneath
             doesn't bleed through; -mx-8 px-8 extends the bg to the
             edges of <main> beyond the page's p-8 padding so the shadow
             spans the full content width. ──────────────────────────── */}
+      {!reviewMode && (
       <div className="sticky top-0 z-30 bg-gray-50 -mx-8 px-8 pt-3 pb-3 shadow-sm">
       <Link
         href="/admin/services"
@@ -3606,21 +3907,36 @@ export function ServiceDetailClient({
         </div>
       </div>
 
-      {/* B-073 — wizard-shaped step indicator with smooth-scroll anchors */}
-      <div className="rounded-lg border bg-white px-4 py-3">
+      {/* B-073 — wizard-shaped step indicator with smooth-scroll anchors.
+          B-102 — entry button to the Review Wizard surface sits to the
+          right of the last pill. Sky-blue (#24a0ed) so it stands apart
+          from the brand-navy pills. */}
+      <div className="rounded-lg border bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <AdminApplicationStepIndicator steps={ADMIN_STEPS_SERVICES} onStepClick={handleStepClick} />
+        <Link
+          href={`/admin/services/${service.id}/review?step=0`}
+          className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-white whitespace-nowrap shadow-sm hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+          style={{ backgroundColor: "#24a0ed" }}
+        >
+          <Wand2 className="size-4" />
+          Review Wizard
+        </Link>
       </div>
       </div>
+      )}
       {/* ── End sticky shell ────────────────────────────────────────────── */}
 
       {/* ── Two-column layout ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+      <div className={reviewMode
+        ? "max-w-3xl mx-auto mt-4"
+        : "grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4"}>
 
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
       {/* Each section is its own boxed Card; outer container provides spacing only */}
-      <div className="lg:col-span-2 space-y-4">
+      <div className={reviewMode ? "space-y-4" : "lg:col-span-2 space-y-4"}>
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
+        {(!reviewMode || reviewStep === 0) && (
         <ServiceCollapsibleSection
           title="Company Setup"
           percentage={companySetupPct}
@@ -3628,7 +3944,7 @@ export function ServiceDetailClient({
           sectionKey="company_setup"
           anchorId="step-company-setup"
           variant="step"
-          open={openStepSection === "company_setup"}
+          open={reviewMode ? true : openStepSection === "company_setup"}
           onToggle={() => toggleStepSection("company_setup")}
         >
           {companyFields.length === 0 ? (
@@ -3642,8 +3958,10 @@ export function ServiceDetailClient({
             />
           )}
         </ServiceCollapsibleSection>
+        )}
 
         {/* ── Section 2: Financial ─────────────────────────────────────────── */}
+        {(!reviewMode || reviewStep === 1) && (
         <ServiceCollapsibleSection
           title="Financial"
           percentage={financialPct}
@@ -3651,7 +3969,7 @@ export function ServiceDetailClient({
           sectionKey="financial"
           anchorId="step-financial"
           variant="step"
-          open={openStepSection === "financial"}
+          open={reviewMode ? true : openStepSection === "financial"}
           onToggle={() => toggleStepSection("financial")}
         >
           {financialFields.length === 0 ? (
@@ -3665,8 +3983,10 @@ export function ServiceDetailClient({
             />
           )}
         </ServiceCollapsibleSection>
+        )}
 
         {/* ── Section 3: Banking ───────────────────────────────────────────── */}
+        {(!reviewMode || reviewStep === 2) && (
         <ServiceCollapsibleSection
           title="Banking"
           percentage={bankingPct}
@@ -3674,7 +3994,7 @@ export function ServiceDetailClient({
           sectionKey="banking"
           anchorId="step-banking"
           variant="step"
-          open={openStepSection === "banking"}
+          open={reviewMode ? true : openStepSection === "banking"}
           onToggle={() => toggleStepSection("banking")}
         >
           {bankingFields.length === 0 ? (
@@ -3688,8 +4008,10 @@ export function ServiceDetailClient({
             />
           )}
         </ServiceCollapsibleSection>
+        )}
 
         {/* ── Section 4: People & KYC ──────────────────────────────────────── */}
+        {(!reviewMode || reviewStep === 3) && (
         <ServiceCollapsibleSection
           title={`People & KYC (${uniqueRoles.length} ${uniqueRoles.length === 1 ? "person" : "people"})`}
           percentage={peopleKycPct}
@@ -3697,6 +4019,7 @@ export function ServiceDetailClient({
           sectionKey="people"
           anchorId="step-people-kyc"
           variant="step"
+          defaultOpen={reviewMode ? true : undefined}
         >
           <div className="pt-4">
             {/* B-077 Batch 6a — Add Director / Shareholder / UBO buttons
@@ -3721,11 +4044,48 @@ export function ServiceDetailClient({
               ))}
             </div>
 
+            {/* B-102 — Review Wizard sub-step LIST view: in review mode +
+                step 3 + no `?profile=<id>`, render a clickable list that
+                navigates to the per-profile sub-step instead of the
+                expandable PersonCards. Keeps the URL the source of truth
+                for which profile is currently being reviewed. */}
+            {reviewMode && reviewStep === 3 && !reviewProfileId && uniqueRoles.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {uniqueRoles.map(({ person, roles: personRoles }) => {
+                  const pid = person.client_profiles?.id;
+                  const name = person.client_profiles?.full_name ?? "Unnamed profile";
+                  if (!pid) return null;
+                  return (
+                    <Link
+                      key={pid}
+                      href={`/admin/services/${service.id}/review?step=3&profile=${pid}`}
+                      className="flex items-center justify-between gap-3 rounded-lg border bg-white px-4 py-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-brand-navy truncate">{name}</p>
+                        <p className="text-xs text-gray-500 capitalize truncate">
+                          {personRoles.join(", ")}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+
             {uniqueRoles.length === 0 ? (
               <p className="text-sm text-gray-400 mb-4">No profiles linked yet.</p>
-            ) : (
+            ) : (reviewMode && reviewStep === 3 && !reviewProfileId) ? null : (
               <div className="space-y-3 mb-4">
-                {uniqueRoles.map(({ person, roles: personRoles, allRoleRows }) => {
+                {/* B-102 — Review Wizard sub-step DETAIL view: when
+                    `?profile=<id>` is set on step 3, render only that
+                    profile (expanded). Outside review mode, render the
+                    full per-profile card list. */}
+                {(reviewMode && reviewProfileId
+                  ? uniqueRoles.filter(({ person }) => person.client_profiles?.id === reviewProfileId)
+                  : uniqueRoles
+                ).map(({ person, roles: personRoles, allRoleRows }) => {
                   const pid = person.client_profiles?.id;
                   const personProfileDocs = pid
                     ? profileDocs.filter((d) => d.client_profile_id === pid)
@@ -3745,7 +4105,10 @@ export function ServiceDetailClient({
                       documentTypes={documentTypes}
                       requirements={requirements}
                       updateRequests={updateRequests}
-                      defaultExpanded={!!pid && pid === newlyAddedProfileId}
+                      defaultExpanded={
+                        (!!pid && pid === newlyAddedProfileId) ||
+                        (reviewMode && reviewProfileId === pid)
+                      }
                       fieldExtractions={personFieldExtractions}
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}
@@ -3753,15 +4116,28 @@ export function ServiceDetailClient({
                     />
                   );
                 })}
+                {reviewMode && reviewProfileId && (
+                  <Link
+                    href={`/admin/services/${service.id}/review?step=3`}
+                    className="inline-flex items-center gap-1.5 text-xs text-brand-navy hover:underline"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                    Back to profile list
+                  </Link>
+                )}
               </div>
             )}
 
-            {/* Ownership Structure — editable, collapsible */}
-            <OwnershipStructure
-              shareholders={typedRoles.filter((r: RoleWithProfile) => r.role === "shareholder")}
-              serviceId={service.id}
-              onSaved={handleRolesRefresh}
-            />
+            {/* Ownership Structure — editable, collapsible. B-102 — hide
+                in the Review Wizard list view (step 3 with no profile)
+                so the list mirrors the simplified ServiceWizardPeopleStep. */}
+            {!(reviewMode && reviewStep === 3 && !reviewProfileId) && (
+              <OwnershipStructure
+                shareholders={typedRoles.filter((r: RoleWithProfile) => r.role === "shareholder")}
+                serviceId={service.id}
+                onSaved={handleRolesRefresh}
+              />
+            )}
 
             {/* B-074 — per-profile KYC subsection reviews are now inline in
                 KycLongForm (each section row carries its own review badge +
@@ -3770,11 +4146,13 @@ export function ServiceDetailClient({
                 keys, no data migration. */}
           </div>
         </ServiceCollapsibleSection>
+        )}
 
         {/* ── Section 5: Documents ─────────────────────────────────────────── */}
         {/* B-085 — title carries upload-based count (X of Y uploaded).
             Pct + RAG dot are upload-based too. KYC-per-person docs are
             filtered out — they live in the per-profile Documents block. */}
+        {(!reviewMode || reviewStep === 4) && (
         <ServiceCollapsibleSection
           title={`Documents (${documentsUploadedCount} of ${documentsExpectedCount} uploaded)`}
           percentage={documentsPct}
@@ -3783,6 +4161,7 @@ export function ServiceDetailClient({
           sectionKey="documents"
           anchorId="step-documents"
           variant="step"
+          defaultOpen={reviewMode ? true : undefined}
         >
           <AdminDocumentsSection
             serviceId={service.id}
@@ -3799,7 +4178,12 @@ export function ServiceDetailClient({
             onRefresh={handleRolesRefresh}
           />
         </ServiceCollapsibleSection>
+        )}
 
+        {/* B-102 — admin-only sections (Admin Actions / Internal Notes /
+            Risk Assessment) are hidden inside the Review Wizard — they
+            don't belong in a focused review flow. */}
+        {!reviewMode && (<>
         {/* ── B-072 — Admin Actions (Substance / Bank / FSC) ─────────────── */}
         {templateActions.length > 0 && (
           <AdminServiceActionsSection
@@ -3936,15 +4320,18 @@ export function ServiceDetailClient({
           </div>
         </ServiceCollapsibleSection>
 
+        </>)}
       </div>{/* End left column */}
 
-      {/* ── RIGHT: Sidebar (col-span-1) ─────────────────────────────────── */}
-      {/* B-090 — at lg+ the whole rail pins as one block; if content is
-            taller than the viewport, an internal scrollbar appears inside
-            the rail. top-[200px] is the approximate height of the sticky
-            shell above (back link + title card + stage strip + step
-            indicator); Vanessa can tune visually if needed. On <lg the
-            rail stacks below the main column with normal scrolling. */}
+      {/* B-102 — right rail (Status / Internal Notes summary / Audit Trail)
+          is hidden inside the Review Wizard. ── RIGHT: Sidebar (col-span-1).
+          B-090 — at lg+ the whole rail pins as one block; if content is
+          taller than the viewport, an internal scrollbar appears inside the
+          rail. top-[200px] is the approximate height of the sticky shell
+          above (back link + title card + stage strip + step indicator);
+          Vanessa can tune visually if needed. On <lg the rail stacks below
+          the main column with normal scrolling. */}
+      {!reviewMode && (
       <div className="lg:sticky lg:top-[300px] lg:self-start lg:max-h-[calc(100vh-320px)] lg:overflow-y-auto space-y-3">
 
         {/* B-091 — service-level View Summary entry point. Lives at the
@@ -4211,11 +4598,25 @@ export function ServiceDetailClient({
           </div>
         </ServiceCollapsibleSection>
 
-      </div>{/* End right column */}
+      </div>
+      )}{/* End right column / !reviewMode */}
       </div>{/* End grid */}
 
+      {/* B-102 — Review Wizard sticky bottom nav. Replaces the scroll
+          page's save bar; auto-saves dirty changes before advancing. */}
+      {reviewMode && (
+        <ReviewWizardBottomNav
+          serviceId={service.id}
+          step={reviewStep}
+          pendingChanges={pendingChanges}
+          onSave={handleSaveReturningOk}
+          profileSubstep={reviewProfileSubstep}
+          totalProfilesInStep={uniqueRoles.length}
+        />
+      )}
+
       {/* Fixed bottom save bar — only shows when changes are pending */}
-      {pendingChanges && (
+      {!reviewMode && pendingChanges && (
         <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
           <p className="text-sm text-amber-600 font-medium">You have unsaved changes</p>
           <div className="flex items-center gap-2">
@@ -4241,7 +4642,7 @@ export function ServiceDetailClient({
       )}
 
       {/* Bottom padding for fixed bar */}
-      {pendingChanges && <div className="h-16" />}
+      {!reviewMode && pendingChanges && <div className="h-16" />}
 
       {/* B-091 — service-level summary modal */}
       {serviceSummaryOpen && (

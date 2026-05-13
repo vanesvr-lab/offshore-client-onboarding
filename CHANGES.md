@@ -13,6 +13,37 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-102 — Admin Review Wizard
+
+### 2026-05-13 — B-102 — Admin Review Wizard at `/admin/services/[id]/review` (Claude Code)
+
+New wizard-style review surface for service reviews. Admin clicks the new `Review Wizard` button (sky-blue `#24a0ed`, sits to the right of the last step pill on the scroll page) and lands on `/admin/services/[id]/review?step=0`. The wizard renders one step at a time with a sticky top bar (back-link replaced by `Exit Review`, step indicator inline) and a sticky bottom nav (`Previous` / `Mark as Reviewed` / `Next`, last step's Next reads `Finish` and exits the wizard).
+
+**Implementation (Path A from the brief):** `ServiceDetailClient` picks up two new optional props (`reviewMode`, `reviewStep`). When `reviewMode` is true, the component hides the stage strip, the right rail (Status / Internal Notes / Audit Trail), the admin-only sections (Admin Actions / Internal Notes / Risk Assessment), and the bottom save bar — and renders the wizard top + bottom nav in their place. Per-step section cards stay exactly as they appear on the scroll page (every existing edit field, save mechanism, and dirty tracker carries over for free). Existing `/admin/services/[id]` page is functionally unchanged except for the new entry button.
+
+**Save-on-advance:** `Next` and `Mark as Reviewed` call a new `handleSaveReturningOk` wrapper around the existing service-details PATCH and bail out early on failure. Per-profile dirty trackers (B-078's per-card Save bar) remain in place — they save independently on their own click.
+
+**Mark as Reviewed:** reuses the existing `POST /api/admin/applications/[id]/section-reviews` endpoint from B-068 with `{ section_key: STEP_SECTION_KEYS[step], status: "reviewed" }`. Optimistically updates the section status via the `useSectionReview` context's `onReviewSaved` so the per-section badge flips immediately, then advances. Per tech-debt #26 the column name `application_id` actually stores service ids.
+
+**People & KYC sub-stepping (step 3):**
+- List view (`?step=3`) — clickable profile rows that navigate to `?step=3&profile=<id>`. Mirrors the simplified `ServiceWizardPeopleStep` (no Ownership Structure / per-card affordances).
+- Detail view (`?step=3&profile=<id>`) — renders only that profile's `PersonCard` expanded (with all the existing edit affordances). Bottom nav swaps: `Previous` → `Back to list`, `Next` → `Next Profile`, `Mark as Reviewed` → `Mark Profile Reviewed`. `Next Profile` cycles through `uniqueRoles` in order; once past the last profile, advances to step 4. No per-profile section_key exists yet — see tech-debt entry.
+
+**Documents step:** renders the existing `KycDocumentsTable` exactly as it appears on the scroll page (Service Docs / KYC Documents tab pair, Uploaded filter from B-101 batch 2, waive controls).
+
+**Exit Review:** top-right link navigates to `/admin/services/[id]`. The existing unsaved-changes dialog wired into per-profile cards handles its own warning on dirty exits.
+
+**URL is source of truth:** deep-linking `?step=N` or `?step=3&profile=X` works on first load; refresh preserves position. Step nav uses `router.replace` so the wizard doesn't pile up history entries.
+
+**Refactor:** extracted the scroll page's data-loading into a shared `loadServiceDetail(serviceId, tenantId)` helper at `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts`. Both `page.tsx` (scroll) and `review/page.tsx` (wizard) call it — no query duplication.
+
+**Tech-debt entries added:** `ServiceDetailClient.tsx` is now dual-purpose (~4700 lines); "Mark Profile Reviewed" reuses `section_key=people` since no per-profile pattern exists yet.
+
+Files: `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts` (new), `src/app/(admin)/admin/services/[id]/review/page.tsx` (new), `src/app/(admin)/admin/services/[id]/review/ReviewWizardClient.tsx` (new), `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (props + wizard chrome + section visibility), `src/app/(admin)/admin/services/[id]/page.tsx` (uses the shared loader), `docs/tech-debt.md`.
+Build: clean.
+
+---
+
 ## B-101 — Stage strip width + Uploaded filter + soft-delete profile + admin account + brand + chatbot
 
 ### 2026-05-13 — B-101 batch 6 — Floating AI Assistant placeholder widget (Claude Code)
