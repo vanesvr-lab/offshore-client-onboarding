@@ -70,11 +70,16 @@ export function useSectionReview(sectionKey: string) {
     );
   }
   const history = ctx.reviewsBySection[sectionKey] ?? [];
-  const currentStatus = history[0]?.status ?? null;
+  const latest = history[0] ?? null;
+  const currentStatus = latest?.status ?? null;
   return {
     applicationId: ctx.applicationId,
     sectionKey,
     currentStatus,
+    // B-100 — latest row exposed so callers can hand `reviewed_at`,
+    // `profiles.full_name`, and `notes` to `SectionReviewBadge`'s
+    // hover tooltip. Null when no review has been recorded yet.
+    latest,
     history,
     onReviewSaved: ctx.addReview,
   };
@@ -91,7 +96,7 @@ export function ConnectedSectionHeader({
   sectionKey,
   rightSlot,
 }: ConnectedSectionHeaderProps) {
-  const { applicationId, currentStatus, onReviewSaved } =
+  const { applicationId, currentStatus, onReviewSaved, latest } =
     useSectionReview(sectionKey);
   return (
     <SectionHeader
@@ -101,6 +106,7 @@ export function ConnectedSectionHeader({
       currentStatus={currentStatus}
       onReviewSaved={onReviewSaved}
       rightSlot={rightSlot}
+      latestReview={latest}
     />
   );
 }
@@ -141,10 +147,16 @@ export function useSectionReviews(sectionKeys: string[]): {
 
 // B-069 — aggregate of multiple sections (e.g. one wizard step covers
 // several section_keys). Used by the admin step indicator.
+//
+// B-100 — returns `latest` too: the most-recent review row whose status
+// matches the aggregate verdict. Lets callers render the
+// `SectionReviewBadge` tooltip with reviewer + date + notes for the
+// review that drove the aggregate.
 export function useAggregateStatus(sectionKeys: string[]): {
   status: ApplicationSectionReview["status"] | null;
   reviewedCount: number;
   totalCount: number;
+  latest: ApplicationSectionReview | null;
 } {
   const ctx = useContext(SectionReviewsContext);
   if (!ctx) {
@@ -153,11 +165,13 @@ export function useAggregateStatus(sectionKeys: string[]): {
     );
   }
   const totalCount = sectionKeys.length;
-  if (totalCount === 0) return { status: null, reviewedCount: 0, totalCount: 0 };
+  if (totalCount === 0)
+    return { status: null, reviewedCount: 0, totalCount: 0, latest: null };
 
   let reviewedCount = 0;
-  let hasRejected = false;
-  let hasFlagged = false;
+  let mostRecentRejected: ApplicationSectionReview | null = null;
+  let mostRecentFlagged: ApplicationSectionReview | null = null;
+  let mostRecentReviewed: ApplicationSectionReview | null = null;
   let allReviewed = true;
   for (const key of sectionKeys) {
     const latest = ctx.reviewsBySection[key]?.[0];
@@ -166,12 +180,35 @@ export function useAggregateStatus(sectionKeys: string[]): {
       continue;
     }
     reviewedCount++;
-    if (latest.status === "rejected") hasRejected = true;
-    else if (latest.status === "flagged") hasFlagged = true;
+    if (latest.status === "rejected") {
+      if (
+        !mostRecentRejected ||
+        new Date(latest.reviewed_at) > new Date(mostRecentRejected.reviewed_at)
+      ) {
+        mostRecentRejected = latest;
+      }
+    } else if (latest.status === "flagged") {
+      if (
+        !mostRecentFlagged ||
+        new Date(latest.reviewed_at) > new Date(mostRecentFlagged.reviewed_at)
+      ) {
+        mostRecentFlagged = latest;
+      }
+    } else if (latest.status === "reviewed") {
+      if (
+        !mostRecentReviewed ||
+        new Date(latest.reviewed_at) > new Date(mostRecentReviewed.reviewed_at)
+      ) {
+        mostRecentReviewed = latest;
+      }
+    }
     if (latest.status !== "reviewed") allReviewed = false;
   }
-  if (hasRejected) return { status: "rejected", reviewedCount, totalCount };
-  if (hasFlagged) return { status: "flagged", reviewedCount, totalCount };
-  if (allReviewed) return { status: "reviewed", reviewedCount, totalCount };
-  return { status: null, reviewedCount, totalCount };
+  if (mostRecentRejected)
+    return { status: "rejected", reviewedCount, totalCount, latest: mostRecentRejected };
+  if (mostRecentFlagged)
+    return { status: "flagged", reviewedCount, totalCount, latest: mostRecentFlagged };
+  if (allReviewed && mostRecentReviewed)
+    return { status: "reviewed", reviewedCount, totalCount, latest: mostRecentReviewed };
+  return { status: null, reviewedCount, totalCount, latest: null };
 }

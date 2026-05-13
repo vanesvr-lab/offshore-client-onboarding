@@ -13,6 +13,27 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-100 — Review tooltip + address save fix + waive document + Local Director
+
+### 2026-05-13 — B-100 batch 1 — Review badge hover tooltip (Claude Code)
+
+`Reviewed` / `Flagged` / `Rejected` badges across `/admin/services/[id]` now expose the most-recent review on hover: `"<verb> on <long date> by <reviewer> — <first 80 chars of notes…>"`. "Not reviewed" pills stay plain (no tooltip when there's no review row).
+
+- `src/components/admin/SectionReviewBadge.tsx` — three new optional props (`reviewedAt`, `reviewerName`, `notes`) and a `buildTooltip` helper. When `reviewedAt` is set the badge wraps in `Tooltip` / `TooltipTrigger` / `TooltipContent` (`@base-ui/react` via `src/components/ui/tooltip.tsx`, `render` prop pattern copied from `FieldProvenanceMarker.tsx`). Date format: `en-GB` long (`"7 May 2026"`). Notes truncated to 80 chars with an ellipsis if longer; em-dash + preview segment dropped entirely when notes are empty.
+- `src/components/admin/AdminApplicationSections.tsx` — `useSectionReview` now returns `latest` (the most-recent `application_section_reviews` row). `useAggregateStatus` returns the row that drove the aggregate verdict (most-recent rejected → flagged → reviewed by `reviewed_at`).
+- Callers updated to thread the new fields through:
+  - `ServiceDetailClient.tsx` — `InlineReviewBadge` + `PersonAggregateReviewBadge`
+  - `SectionHeader.tsx` — new `latestReview` prop, fed by `ConnectedSectionHeader` in `AdminApplicationSections.tsx`
+  - `ServiceCollapsibleSection.tsx` — `SectionReviewControls` pulls `latest` from the hook
+  - `SectionNotesHistory.tsx` — every row badge gets its own tooltip
+  - `PerProfileReviewSummaryPanel.tsx` — aggregate badge + per-subsection row badges
+
+Legacy `application_section_reviews`-page (admin/applications/[id]) intentionally untouched (tech-debt #26 — deprecation path).
+
+`npm run build` clean.
+
+---
+
 ### 2026-05-13 — B-099 — Step-pill accordion + uniform pill styling + stage strip font (Claude Code)
 
 `/admin/services/[id]` three UX polishes.

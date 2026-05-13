@@ -210,10 +210,15 @@ export function ServiceCollapsibleSection({
 }
 
 function SectionReviewControls({ sectionKey, title }: { sectionKey: string; title: string }) {
-  const { applicationId, currentStatus, onReviewSaved } = useSectionReview(sectionKey);
+  const { applicationId, currentStatus, onReviewSaved, latest } = useSectionReview(sectionKey);
   return (
     <div className="flex items-center gap-2 shrink-0">
-      <SectionReviewBadge status={currentStatus} />
+      <SectionReviewBadge
+        status={currentStatus}
+        reviewedAt={latest?.reviewed_at}
+        reviewerName={latest?.profiles?.full_name ?? null}
+        notes={latest?.notes ?? null}
+      />
       <SectionReviewButton
         applicationId={applicationId}
         sectionKey={sectionKey}

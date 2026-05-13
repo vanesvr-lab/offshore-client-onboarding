@@ -203,7 +203,12 @@ export function PerProfileReviewSummaryPanel({
                 reviewed
               </p>
             </div>
-            <SectionReviewBadge status={aggregate.status} />
+            <SectionReviewBadge
+              status={aggregate.status}
+              reviewedAt={aggregate.latest?.reviewed_at}
+              reviewerName={aggregate.latest?.profiles?.full_name ?? null}
+              notes={aggregate.latest?.notes ?? null}
+            />
           </div>
 
           {/* Per-subsection list */}
@@ -229,7 +234,12 @@ export function PerProfileReviewSummaryPanel({
                         <span className="text-sm font-medium text-gray-900">
                           {s.label}
                         </span>
-                        <SectionReviewBadge status={latest?.status ?? null} />
+                        <SectionReviewBadge
+                          status={latest?.status ?? null}
+                          reviewedAt={latest?.reviewed_at}
+                          reviewerName={reviewerName}
+                          notes={note}
+                        />
                       </div>
                       {latest && (
                         <p className="text-[11px] text-gray-500 mt-0.5">

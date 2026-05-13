@@ -12,6 +12,8 @@ interface Props {
   currentStatus: SectionReviewStatus | null;
   onReviewSaved: (review: ApplicationSectionReview) => void;
   rightSlot?: React.ReactNode;
+  // B-100 — tooltip data for the badge (most-recent review row).
+  latestReview?: ApplicationSectionReview | null;
 }
 
 export function SectionHeader({
@@ -21,12 +23,18 @@ export function SectionHeader({
   currentStatus,
   onReviewSaved,
   rightSlot,
+  latestReview,
 }: Props) {
   return (
     <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-2">
         <CardTitle className="text-base">{title}</CardTitle>
-        <SectionReviewBadge status={currentStatus} />
+        <SectionReviewBadge
+          status={currentStatus}
+          reviewedAt={latestReview?.reviewed_at}
+          reviewerName={latestReview?.profiles?.full_name ?? null}
+          notes={latestReview?.notes ?? null}
+        />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {rightSlot}

@@ -1168,8 +1168,15 @@ function KycLongFormField({
 // (which renders its own CardHeader and would conflict with the existing
 // collapsible header design).
 function InlineReviewBadge({ sectionKey }: { sectionKey: string }) {
-  const { currentStatus } = useSectionReview(sectionKey);
-  return <SectionReviewBadge status={currentStatus} />;
+  const { currentStatus, latest } = useSectionReview(sectionKey);
+  return (
+    <SectionReviewBadge
+      status={currentStatus}
+      reviewedAt={latest?.reviewed_at}
+      reviewerName={latest?.profiles?.full_name ?? null}
+      notes={latest?.notes ?? null}
+    />
+  );
 }
 
 function InlineReviewButton({
@@ -1210,9 +1217,16 @@ function PersonAggregateReviewBadge({
     ? ["identity", "tax"]
     : ["identity", "financial", "compliance"];
   const sectionKeys = cats.map((c) => `kyc:${profileId}:${c}`);
-  const { status, reviewedCount } = useAggregateStatus(sectionKeys);
+  const { status, reviewedCount, latest } = useAggregateStatus(sectionKeys);
   if (reviewedCount === 0) return null;
-  return <SectionReviewBadge status={status} />;
+  return (
+    <SectionReviewBadge
+      status={status}
+      reviewedAt={latest?.reviewed_at}
+      reviewerName={latest?.profiles?.full_name ?? null}
+      notes={latest?.notes ?? null}
+    />
+  );
 }
 
 // ─── Ownership Structure ──────────────────────────────────────────────────────

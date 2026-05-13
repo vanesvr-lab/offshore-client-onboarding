@@ -56,7 +56,12 @@ export function SectionNotesHistory({ reviews }: Props) {
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <SectionReviewBadge status={r.status} />
+                  <SectionReviewBadge
+                    status={r.status}
+                    reviewedAt={r.reviewed_at}
+                    reviewerName={r.profiles?.full_name ?? null}
+                    notes={r.notes}
+                  />
                   <span className="text-gray-500">
                     {reviewer}{" "}
                     <span
