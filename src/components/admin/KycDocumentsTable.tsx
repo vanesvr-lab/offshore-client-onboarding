@@ -104,10 +104,13 @@ export function KycDocumentsTable({
   const [waiveConfirm, setWaiveConfirm] =
     useState<{ rowKey: string; profileId: string; docTypeId: string; profileName: string; docTypeName: string } | null>(null);
 
-  // Index waivers by row key for O(1) lookup.
+  // Index waivers by row key for O(1) lookup. B-106 — only person-scope
+  // waivers belong in this map; service-scope waivers (with null profile)
+  // are handled by the Service Docs tab.
   const waiverByKey = useMemo(() => {
     const m = new Map<string, WaivedDocumentRequirement>();
     for (const w of waivers) {
+      if (w.scope !== "person" || !w.client_profile_id) continue;
       m.set(`${w.client_profile_id}-${w.document_type_id}`, w);
     }
     return m;
@@ -262,6 +265,7 @@ export function KycDocumentsTable({
       document_type_id: row.docTypeId,
       waived_at: new Date().toISOString(),
       waived_by: "",
+      scope: "person",
     };
     const prev = waivers;
     onWaiversChange([...prev.filter((w) => !(w.client_profile_id === row.profileId && w.document_type_id === row.docTypeId)), optimistic]);
@@ -269,7 +273,7 @@ export function KycDocumentsTable({
       const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_profile_id: row.profileId, document_type_id: row.docTypeId }),
+        body: JSON.stringify({ scope: "person", client_profile_id: row.profileId, document_type_id: row.docTypeId }),
       });
       const data = (await res.json()) as { data?: WaivedDocumentRequirement; error?: string };
       if (!res.ok || !data.data) throw new Error(data.error ?? "Waive failed");
@@ -292,7 +296,7 @@ export function KycDocumentsTable({
       const res = await fetch(`/api/admin/services/${serviceId}/waive-document`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_profile_id: row.profileId, document_type_id: row.docTypeId }),
+        body: JSON.stringify({ scope: "person", client_profile_id: row.profileId, document_type_id: row.docTypeId }),
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Un-waive failed");

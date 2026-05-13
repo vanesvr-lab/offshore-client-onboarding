@@ -56,15 +56,20 @@ export type AdminUser = {
   email: string | null;
 };
 
-// B-100 — waiver row passed through to the KycDocumentsTable for the
-// "Waived" pill + Un-waive action. Matches the columns selected by
-// the parallel waivers query in this file.
+// B-100 / B-106 — waiver row passed through to the KycDocumentsTable
+// (person-scope) + the Service Docs tab (application-scope). Matches the
+// columns selected by `loadServiceDetail`.
+//
+// B-106 — `scope` distinguishes:
+//   - "person"      → `client_profile_id` non-null, KYC waiver
+//   - "application" → `client_profile_id` null, service-level waiver
 export type WaivedDocumentRequirement = {
   id: string;
-  client_profile_id: string;
+  client_profile_id: string | null;
   document_type_id: string;
   waived_at: string;
   waived_by: string;
+  scope: "person" | "application";
 };
 
 export type ServiceAuditEntry = {

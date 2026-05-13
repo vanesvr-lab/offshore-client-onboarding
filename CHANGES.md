@@ -13,6 +13,25 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-106 — Waivers everywhere (service docs + per-profile display + scope column)
+
+### 2026-05-13 — B-106 batch 1 — Schema scope + service waivers allowed (Claude Code)
+
+`waived_document_requirements` now carries an explicit `scope` column (`'person' | 'application'`) plus a row-level CHECK constraint that ties `scope` to `client_profile_id` nullness: person waivers must have a profile_id, service waivers must not. `client_profile_id` was made nullable. The old composite UNIQUE was replaced with two partial unique indexes — one per scope — because Postgres treats NULLs as distinct in UNIQUE, so without partial indexes a service waiver (NULL profile) could be inserted twice.
+
+**Migration:** `supabase/migrations/20260513135824_waiver_scope_and_service_waivers.sql`. Backfill set every existing row to `scope = 'person'` (B-100 only ever created person-scope waivers — verified via REST query before push). `npm run db:push` + `npm run db:status` both clean.
+
+**API:** `POST/DELETE /api/admin/services/[id]/waive-document` now takes `{ scope: "person" | "application", document_type_id, client_profile_id? }`. Validation returns 400 if `scope: "person"` lacks `client_profile_id` or `scope: "application"` carries one. POST swaps the previous `.upsert(onConflict: composite)` for a lookup-then-insert pattern because Supabase JS doesn't expose partial-index targets for upserts. DELETE uses `.is("client_profile_id", null)` for the service-scope branch. Audit log includes `scope` in both `new_value` and `detail`; `entity_type` is `"client_profile"` for person waivers and `"service"` for application waivers.
+
+**Types:** `WaivedDocumentRequirement` exported from `page.tsx` picks up `scope` and a nullable `client_profile_id`. `loadServiceDetail`'s waivers select now includes `scope`. The B-101 soft-delete filter on `filteredWaivers` was loosened so service-scope rows (null profile) aren't filtered out.
+
+**KycDocumentsTable:** `waiverByKey` now only indexes person-scope rows. Optimistic insert sets `scope: "person"` explicitly. Waive/un-waive bodies forward the new shape.
+
+Files: `supabase/migrations/20260513135824_waiver_scope_and_service_waivers.sql` (new), `src/app/api/admin/services/[id]/waive-document/route.ts`, `src/app/(admin)/admin/services/[id]/page.tsx`, `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts`, `src/components/admin/KycDocumentsTable.tsx`.
+Build: clean.
+
+---
+
 ## B-105 — Address save reset, real fix #2 (client splitter)
 
 ### 2026-05-13 — B-105 — Route address through kyc_fields so the server splitter actually runs (Claude Code)

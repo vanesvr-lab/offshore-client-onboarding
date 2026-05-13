@@ -155,7 +155,7 @@ export async function loadServiceDetail(
 
     supabase
       .from("waived_document_requirements")
-      .select("id, client_profile_id, document_type_id, waived_at, waived_by")
+      .select("id, client_profile_id, document_type_id, waived_at, waived_by, scope")
       .eq("service_id", serviceId)
       .eq("tenant_id", tenantId),
 
@@ -178,9 +178,11 @@ export async function loadServiceDetail(
     ? ((rolesRes.data ?? []) as Array<{ client_profile_id: string | null }>)
         .filter((r) => !r.client_profile_id || !removedProfileIds.has(r.client_profile_id))
     : (rolesRes.data ?? []);
+  // B-106 — service-scope waivers have `client_profile_id === null`; only
+  // person-scope waivers are subject to the removed-profile filter.
   const filteredWaivers = removedProfileIds.size > 0
-    ? ((waiversRes.data ?? []) as Array<{ client_profile_id: string }>)
-        .filter((w) => !removedProfileIds.has(w.client_profile_id))
+    ? ((waiversRes.data ?? []) as Array<{ client_profile_id: string | null }>)
+        .filter((w) => !w.client_profile_id || !removedProfileIds.has(w.client_profile_id))
     : (waiversRes.data ?? []);
 
   // Template actions + substance ──────────────────────────────────────────
