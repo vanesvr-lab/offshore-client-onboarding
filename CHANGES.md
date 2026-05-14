@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-113 — Spacebar fix + KYC % + inline DD selector + per-profile Pending (in progress 2026-05-14)
 
+### 2026-05-14 — B-113 batch 2 — Inline DD-level selector on per-profile header (Claude Code)
+
+New `ProfileDdLevelSelector` (`src/components/admin/ProfileDdLevelSelector.tsx`) mounts in each per-profile card's Quick Actions row (between Portal access toggle and Request KYC). Three options — SDD / CDD / EDD. Hidden on representative cards (reps don't have KYC of their own, so DD level is meaningless).
+
+On change, it PATCHes `/api/admin/profiles/[id]` with `{ due_diligence_level: <next> }` — the same endpoint `AccountProfilesTable` already uses on `/admin/clients/[id]`. That endpoint already writes a `profile_dd_level_changed` audit row with `previous_value` / `new_value`, so no API work was needed.
+
+On success, the selector calls `onLevelChanged(next)` which the page handles via a new `handleProfileDdLevelChanged` callback that splices the new level into the parent `roles` state. The KycLongForm below the header receives the updated `dueDiligenceLevel`, `gateSectionForLevel` runs with the new level, and EDD-only fields (`source_of_wealth_description` et al.) appear/hide immediately. Because the Batch 1 fix made `calcKycPct` DD-aware, the right-rail Completed gauge + the per-profile KYC % also re-derive correctly the moment the level flips — no page reload required.
+
+`npm run build` clean.
+
 ### 2026-05-14 — B-113 batch 1 — Spacebar fix + DD-aware KYC % (Claude Code)
 
 Two bug fixes on `/admin/services/[id]`:

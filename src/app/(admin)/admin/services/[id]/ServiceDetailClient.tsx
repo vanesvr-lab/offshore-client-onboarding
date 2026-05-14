@@ -53,6 +53,7 @@ import {
   type ReviewState,
 } from "@/components/admin/AdminApplicationStepIndicator";
 import { ServiceProgressMeters } from "@/components/admin/ServiceProgressMeters";
+import { ProfileDdLevelSelector } from "@/components/admin/ProfileDdLevelSelector";
 import {
   resolvePillState,
   resolveCountBadge,
@@ -1487,6 +1488,7 @@ function PersonCard({
   onRefresh,
   onProfileSaved,
   onRemoved,
+  onDdLevelChanged,
   wizardSubStep,
 }: {
   roleRow: RoleWithProfile;
@@ -1532,6 +1534,10 @@ function PersonCard({
    *  Parent splices it out of the roles array immediately so the card
    *  disappears without waiting for the RSC roundtrip. */
   onRemoved?: (profileId: string) => void;
+  /** B-113 Batch 2 — inline DD-level change splice. Parent updates the
+   *  `roles` state so the KycLongForm below re-renders with the new
+   *  `dueDiligenceLevel` and EDD-only fields show/hide immediately. */
+  onDdLevelChanged?: (profileId: string, nextLevel: string) => void;
   /** B-109 Batch 3 — when set, renders the per-profile sub-wizard in
    *  place of the standard expanded body. State (fields, save, doc
    *  upload, waivers) still lives in PersonCard; the sub-wizard is a
@@ -2198,6 +2204,21 @@ function PersonCard({
               {roleRow.can_manage ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
               Portal access
             </button>
+            {/* B-113 Batch 2 — inline DD-level selector. Representatives
+                don't have KYC of their own, so we don't surface the
+                control on rep cards. Parent splices the new level into
+                `roles` so the KycLongForm below re-renders with
+                `gateSectionForLevel` and EDD-only fields appear/hide
+                without a page reload. */}
+            {!profile.is_representative && (
+              <ProfileDdLevelSelector
+                profileId={profile.id}
+                currentLevel={profile.due_diligence_level}
+                onLevelChanged={(next) =>
+                  onDdLevelChanged?.(profile.id, next)
+                }
+              />
+            )}
             {!profile.is_representative && (
               <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className={`h-6 text-xs gap-1 ${BTN_OUTLINE}`}>
                 <Mail className="h-3 w-3" />
@@ -4743,6 +4764,29 @@ export function ServiceDetailClient({
     );
   }, []);
 
+  // B-113 Batch 2 — DD-level inline change splice. `ProfileDdLevelSelector`
+  // calls this after a successful PATCH. Mirrors `handleProfileSaved`'s
+  // pattern: rewrite the matching profile in-place so KycLongForm
+  // re-renders with the new `dueDiligenceLevel` and `calcKycPct` recomputes
+  // (EDD-only fields toggle visibility, peopleKycPct shifts).
+  const handleProfileDdLevelChanged = useCallback(
+    (profileId: string, nextLevel: string) => {
+      setRoles((prev) =>
+        prev.map((r) => {
+          if (!r.client_profiles || r.client_profiles.id !== profileId) return r;
+          return {
+            ...r,
+            client_profiles: {
+              ...r.client_profiles,
+              due_diligence_level: nextLevel,
+            },
+          };
+        }),
+      );
+    },
+    [],
+  );
+
   // B-077 Batch 6c — when a new profile is added/linked, the card mounts
   // (or re-mounts) with `defaultExpanded`. Wait for the next render so
   // the new DOM node exists, then smooth-scroll it into view.
@@ -5134,6 +5178,7 @@ export function ServiceDetailClient({
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}
                       onRemoved={handleProfileRemoved}
+                      onDdLevelChanged={handleProfileDdLevelChanged}
                       wizardSubStep={
                         reviewMode && reviewProfileId === pid
                           ? reviewProfileWizardSubStep
