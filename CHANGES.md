@@ -13,7 +13,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-113 — Spacebar fix + KYC % + inline DD selector + per-profile Pending (in progress 2026-05-14)
+## B-113 — Spacebar fix + KYC % + inline DD selector + per-profile Pending (done 2026-05-14)
+
+### 2026-05-14 — B-113 batch 3 — Per-profile Pending button + popover (Claude Code)
+
+New `ProfilePendingButton` (`src/components/admin/ProfilePendingButton.tsx`) mounts on each non-rep profile's Quick Actions row, immediately after the DD-level selector. Renders an amber `Pending (N)` chip; clicking opens a 320px popover anchored under the trigger that lists items scoped to that profile only. Closes on outside click + Escape. Hidden entirely when the profile has zero pending items, so clean profiles keep the header tidy.
+
+New `computeProfilePendingItems` derivation in `src/lib/services/computePendingItems.ts`:
+- **Missing required KYC fields** — DD-level-gated, mirrors the Batch 1 `calcKycPct` field set (`date_of_birth`, `nationality`, `passport_number`, `passport_expiry`, `occupation`, `address`, plus `source_of_wealth_description` when `ddLevel === "edd"`). Each missing field is one row with a friendly label.
+- **Missing required KYC docs** — waiver-aware (per-profile `scope='person'` waivers drop the row).
+- **Profile-scoped auto-alerts** — `sourceEntityType === "profile"` matches the profile id; `sourceEntityType === "document"` matches when the document belongs to this profile. Info-tier alerts stay in the service-level Alerts dialog.
+
+Sorted critical → warning → info. Manual alerts aren't yet profile-linked (tech-debt entry from Batch 1 tracks adding `client_profile_id` to `service_alerts`).
+
+`PendingItem` gained an optional `profileId?: string`. The existing service-level `computePendingItems` now tags profile-scoped rows (`profile_kyc_<id>` + profile auto-alerts) with this field; document-scoped alerts get their attribution at the caller because the service-level compute doesn't receive the docs map.
+
+`ServiceDetailClient` derives a `perProfilePending: Map<string, PendingItem[]>` once per render and feeds the matching slice to each `PersonCard` via two new props (`pendingItems` + `onPendingAction`). The popover's click handler is the same `handlePendingAction` the right-rail `ServicePendingCard` already uses, so navigation behaviour is identical (scroll to profile / open doc / open alerts dialog).
+
+`npm run build` clean.
 
 ### 2026-05-14 — B-113 batch 2 — Inline DD-level selector on per-profile header (Claude Code)
 

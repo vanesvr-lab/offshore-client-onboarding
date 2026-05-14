@@ -35,6 +35,10 @@ export interface PendingItem {
   detail?: string;
   actionType: PendingActionType;
   actionPayload: string;
+  /** B-113 Batch 3 — when set, this row is scoped to a specific profile
+   *  and should also surface in that profile's per-profile Pending
+   *  popover. Step-level / service-level rows leave this `undefined`. */
+  profileId?: string;
 }
 
 // Caller maps each step's `section_key` and human label here once; the
@@ -207,6 +211,7 @@ export function computePendingItems(input: ComputePendingInput): PendingItem[] {
       label: `${p.full_name ?? "Unnamed profile"} — KYC ${p.kycPct}% complete`,
       actionType: "scroll_to_profile",
       actionPayload: p.id,
+      profileId: p.id,
     });
   }
 
@@ -223,6 +228,12 @@ export function computePendingItems(input: ComputePendingInput): PendingItem[] {
       actionType:
         a.sourceEntityType === "document" ? "open_document" : "scroll_to_profile",
       actionPayload: a.sourceEntityId,
+      // B-113 Batch 3 — profile-scope tag for the per-profile popover.
+      // Document-scoped alerts get their profile attribution at the
+      // caller (lookup against the docs list), so we only tag the
+      // direct profile case here.
+      profileId:
+        a.sourceEntityType === "profile" ? a.sourceEntityId : undefined,
     });
   }
 
@@ -246,3 +257,168 @@ export function computePendingItems(input: ComputePendingInput): PendingItem[] {
 }
 
 export { severityForSection };
+
+// B-113 Batch 3 — per-profile pending compute.
+//
+// Drives the popover on each profile's "Pending (N)" button. Surfaces
+// concerns scoped to a single profile that the service-level list
+// either rolls up to step-level or filters out entirely:
+//   1. Missing required KYC fields (DD-level-gated; mirrors the
+//      Batch 1 `calcKycPct` field set).
+//   2. Missing required KYC docs (waiver-aware).
+//   3. Profile-scoped auto-alerts at warning/critical severity — both
+//      `sourceEntityType === "profile"` and `sourceEntityType ===
+//      "document"` when the document belongs to this profile.
+//
+// Sorted critical → warning → info. Manual alerts aren't yet
+// profile-linked (`service_alerts` only knows about the service); a
+// tech-debt entry tracks adding `client_profile_id`.
+
+interface ProfilePendingDocInput {
+  id: string;
+  document_type_id: string | null;
+  client_profile_id: string | null;
+}
+
+interface ProfilePendingDocTypeInput {
+  id: string;
+  name: string;
+}
+
+interface ProfilePendingWaiverInput {
+  scope: string;
+  client_profile_id: string | null;
+  document_type_id: string;
+}
+
+export interface ProfilePendingInput {
+  profile: {
+    id: string;
+    full_name: string | null;
+    is_representative: boolean;
+  };
+  kyc: Record<string, unknown> | null;
+  ddLevel: string | null;
+  profileDocuments: ProfilePendingDocInput[];
+  documentTypes: ProfilePendingDocTypeInput[];
+  waivers: ProfilePendingWaiverInput[];
+  autoAlerts: AutoAlert[];
+}
+
+const PROFILE_REQUIRED_FIELDS_BASE = [
+  "date_of_birth",
+  "nationality",
+  "passport_number",
+  "passport_expiry",
+  "occupation",
+  "address",
+] as const;
+
+const FIELD_LABELS: Record<string, string> = {
+  date_of_birth: "Date of birth",
+  nationality: "Nationality",
+  passport_number: "Passport number",
+  passport_expiry: "Passport expiry",
+  occupation: "Occupation",
+  address: "Address",
+  source_of_wealth_description: "Source of wealth description",
+};
+
+function formatFieldLabel(field: string): string {
+  return (
+    FIELD_LABELS[field] ??
+    field
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+}
+
+export function computeProfilePendingItems(
+  input: ProfilePendingInput,
+): PendingItem[] {
+  const out: PendingItem[] = [];
+
+  // Representatives don't carry KYC of their own — empty list keeps the
+  // button hidden.
+  if (input.profile.is_representative) return out;
+
+  // 1. Missing required KYC fields (DD-aware, mirrors `calcKycPct`).
+  const requiredFields: string[] = [...PROFILE_REQUIRED_FIELDS_BASE];
+  if (input.ddLevel === "edd") {
+    requiredFields.push("source_of_wealth_description");
+  }
+  for (const f of requiredFields) {
+    const v = input.kyc?.[f];
+    if (typeof v === "boolean") continue;
+    if (v == null || v === "") {
+      out.push({
+        id: `field_${input.profile.id}_${f}`,
+        severity: "warning",
+        label: `${formatFieldLabel(f)} — missing`,
+        actionType: "scroll_to_profile",
+        actionPayload: input.profile.id,
+        profileId: input.profile.id,
+      });
+    }
+  }
+
+  // 2. Missing required KYC docs (waiver-aware). `documentTypes` is the
+  //    person-scope, active list already filtered by the caller.
+  for (const dt of input.documentTypes) {
+    const isUploaded = input.profileDocuments.some(
+      (d) =>
+        d.document_type_id === dt.id &&
+        d.client_profile_id === input.profile.id,
+    );
+    const isWaived = input.waivers.some(
+      (w) =>
+        w.scope === "person" &&
+        w.client_profile_id === input.profile.id &&
+        w.document_type_id === dt.id,
+    );
+    if (!isUploaded && !isWaived) {
+      out.push({
+        id: `doc_${input.profile.id}_${dt.id}`,
+        severity: "warning",
+        label: `${dt.name} — not uploaded`,
+        actionType: "scroll_to_profile",
+        actionPayload: input.profile.id,
+        profileId: input.profile.id,
+      });
+    }
+  }
+
+  // 3. Profile-scoped auto alerts. Document-scoped alerts are attributed
+  //    here via the profile's documents (the service-level
+  //    `computePendingItems` can't do this lookup because it doesn't
+  //    receive the docs map).
+  for (const a of input.autoAlerts) {
+    if (a.severity === "info") continue;
+    const isThisProfile =
+      (a.sourceEntityType === "profile" &&
+        a.sourceEntityId === input.profile.id) ||
+      (a.sourceEntityType === "document" &&
+        input.profileDocuments.some((d) => d.id === a.sourceEntityId));
+    if (!isThisProfile) continue;
+    out.push({
+      id: `alert_${input.profile.id}_${a.key}`,
+      severity: severityForAuto(a.severity),
+      label: a.title,
+      detail: a.note || undefined,
+      actionType:
+        a.sourceEntityType === "document"
+          ? "open_document"
+          : "scroll_to_profile",
+      actionPayload:
+        a.sourceEntityType === "document"
+          ? a.sourceEntityId
+          : input.profile.id,
+      profileId: input.profile.id,
+    });
+  }
+
+  return out.sort(
+    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
+  );
+}

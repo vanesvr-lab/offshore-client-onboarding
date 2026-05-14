@@ -54,6 +54,7 @@ import {
 } from "@/components/admin/AdminApplicationStepIndicator";
 import { ServiceProgressMeters } from "@/components/admin/ServiceProgressMeters";
 import { ProfileDdLevelSelector } from "@/components/admin/ProfileDdLevelSelector";
+import { ProfilePendingButton } from "@/components/admin/ProfilePendingButton";
 import {
   resolvePillState,
   resolveCountBadge,
@@ -77,6 +78,7 @@ import { ServiceCommunicationsCard } from "@/components/admin/ServiceCommunicati
 import { ServicePendingCard } from "@/components/admin/ServicePendingCard";
 import {
   computePendingItems,
+  computeProfilePendingItems,
   type PendingItem,
   type PendingStepConfig,
   type PendingProfileInput,
@@ -1489,6 +1491,8 @@ function PersonCard({
   onProfileSaved,
   onRemoved,
   onDdLevelChanged,
+  pendingItems,
+  onPendingAction,
   wizardSubStep,
 }: {
   roleRow: RoleWithProfile;
@@ -1538,6 +1542,14 @@ function PersonCard({
    *  `roles` state so the KycLongForm below re-renders with the new
    *  `dueDiligenceLevel` and EDD-only fields show/hide immediately. */
   onDdLevelChanged?: (profileId: string, nextLevel: string) => void;
+  /** B-113 Batch 3 — pre-computed per-profile pending items (parent
+   *  derives via `computeProfilePendingItems`). Drives the "Pending (N)"
+   *  popover on the Quick Actions row; empty array hides the button. */
+  pendingItems?: PendingItem[];
+  /** B-113 Batch 3 — popover row click handler. Parent passes the same
+   *  `handlePendingAction` the service-level Pending card uses so the
+   *  navigation behaviour stays consistent. */
+  onPendingAction?: (item: PendingItem) => void;
   /** B-109 Batch 3 — when set, renders the per-profile sub-wizard in
    *  place of the standard expanded body. State (fields, save, doc
    *  upload, waivers) still lives in PersonCard; the sub-wizard is a
@@ -2219,6 +2231,19 @@ function PersonCard({
                 }
               />
             )}
+            {/* B-113 Batch 3 — per-profile Pending popover. Hidden when
+                the profile has nothing pending so a clean profile keeps
+                the header strip uncluttered. Reuses the page-level
+                `handlePendingAction` so navigation is consistent with
+                the service-level Pending card. */}
+            {!profile.is_representative &&
+              pendingItems &&
+              onPendingAction && (
+                <ProfilePendingButton
+                  items={pendingItems}
+                  onAction={onPendingAction}
+                />
+              )}
             {!profile.is_representative && (
               <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)} className={`h-6 text-xs gap-1 ${BTN_OUTLINE}`}>
                 <Mail className="h-3 w-3" />
@@ -4503,6 +4528,53 @@ export function ServiceDetailClient({
         }),
     [uniqueRoles],
   );
+  // B-113 Batch 3 — per-profile pending map. Each profile gets a list
+  // of items scoped to that profile only (missing required KYC fields,
+  // missing required docs, profile- or doc-scoped auto alerts). The
+  // header-mounted `ProfilePendingButton` reads `items.length` to
+  // decide whether to render; clicks reuse `handlePendingAction` so the
+  // navigation behaviour matches the service-level Pending card.
+  const perProfilePending = useMemo<Map<string, PendingItem[]>>(() => {
+    const map = new Map<string, PendingItem[]>();
+    for (const role of typedRoles) {
+      const p = role.client_profiles;
+      if (!p) continue;
+      if (map.has(p.id)) continue; // skip dup roles for same profile
+      const rawKyc = p.client_profile_kyc;
+      const kyc = (Array.isArray(rawKyc) ? rawKyc[0] ?? null : rawKyc) as
+        | Record<string, unknown>
+        | null;
+      const items = computeProfilePendingItems({
+        profile: {
+          id: p.id,
+          full_name: p.full_name ?? null,
+          is_representative: !!p.is_representative,
+        },
+        kyc,
+        ddLevel: p.due_diligence_level ?? null,
+        profileDocuments: documents
+          .filter((d) => d.client_profile_id === p.id)
+          .map((d) => ({
+            id: d.id,
+            document_type_id: d.document_type_id,
+            client_profile_id: d.client_profile_id,
+          })),
+        documentTypes: kycDocTypes.map((dt) => ({
+          id: dt.id,
+          name: dt.name,
+        })),
+        waivers: (waivers ?? []).map((w) => ({
+          scope: w.scope,
+          client_profile_id: w.client_profile_id,
+          document_type_id: w.document_type_id,
+        })),
+        autoAlerts: visibleAutoAlerts,
+      });
+      map.set(p.id, items);
+    }
+    return map;
+  }, [typedRoles, documents, kycDocTypes, waivers, visibleAutoAlerts]);
+
   const documentsRag: RagStatus =
     documentsPct >= 100 ? "green" : documentsPct > 0 ? "amber" : "red";
   const documentsStatusLabel =
@@ -5179,6 +5251,10 @@ export function ServiceDetailClient({
                       onProfileSaved={handleProfileSaved}
                       onRemoved={handleProfileRemoved}
                       onDdLevelChanged={handleProfileDdLevelChanged}
+                      pendingItems={
+                        pid ? perProfilePending.get(pid) ?? [] : []
+                      }
+                      onPendingAction={handlePendingAction}
                       wizardSubStep={
                         reviewMode && reviewProfileId === pid
                           ? reviewProfileWizardSubStep
