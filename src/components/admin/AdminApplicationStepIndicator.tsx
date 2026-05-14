@@ -4,17 +4,20 @@ import { Fragment } from "react";
 import { ChevronRight } from "lucide-react";
 import type { PillState } from "@/lib/services/stepState";
 
+export type ReviewState = "reviewed" | "flagged" | "rejected" | "not_reviewed";
+
 export interface AdminStep {
   id: string;          // anchor id, e.g. "step-company-setup"
   label: string;       // "Company Setup"
   sectionKeys: string[]; // section_keys aggregated for the step's status pill
-  /** B-111 — readiness state. Drives pill color + tooltip. Undefined =
-   *  fall back to brand-navy (pre-B-111 visual), preserving any caller
-   *  that hasn't migrated. */
+  /** B-111 — readiness state. Retained for callers that still read it
+   *  (Pending card derivation, downstream analytics). B-112 no longer
+   *  uses it to color the pill body — the pill is always brand-navy. */
   state?: PillState;
-  /** B-111 — small inline badge after the label (e.g. "40%",
-   *  "2 missing", "ready"). Null/undefined hides it. */
-  countBadge?: string | null;
+  /** B-112 — 0–100. Drives the completion gauge (green at 100, amber otherwise). */
+  completionPct?: number;
+  /** B-112 — drives the review gauge: full-fill circle + ✓ / ⚑ / ✕ / ○ icon. */
+  reviewState?: ReviewState;
   /** B-111 — full hover-title text describing the state + reviewer info. */
   tooltip?: string;
 }
@@ -29,35 +32,45 @@ interface Props {
   onStepClick?: (stepId: string) => void;
 }
 
-// B-111 — per-state pill styling. Numbered badge is always white-on-state
-// so the contrast against the colored pill background reads cleanly.
-const STATE_STYLES: Record<
-  PillState,
-  { bg: string; badgeText: string }
-> = {
-  complete:    { bg: "bg-green-600  hover:bg-green-700",  badgeText: "text-green-700" },
-  in_review:   { bg: "bg-blue-600   hover:bg-blue-700",   badgeText: "text-blue-700" },
-  in_progress: { bg: "bg-amber-500  hover:bg-amber-600",  badgeText: "text-amber-700" },
-  flagged:     { bg: "bg-amber-600  hover:bg-amber-700",  badgeText: "text-amber-800" },
-  rejected:    { bg: "bg-red-600    hover:bg-red-700",    badgeText: "text-red-700" },
-  not_started: { bg: "bg-gray-400   hover:bg-gray-500",   badgeText: "text-gray-700" },
+const REVIEW_BG: Record<ReviewState, string> = {
+  reviewed: "#16a34a",
+  flagged: "#d97706",
+  rejected: "#dc2626",
+  not_reviewed: "#475569",
 };
 
-const DEFAULT_PILL_BG = "bg-brand-navy hover:bg-brand-navy/90";
-const DEFAULT_BADGE_TEXT = "text-brand-navy";
+const REVIEW_ICON: Record<ReviewState, string> = {
+  reviewed: "✓",
+  flagged: "⚑",
+  rejected: "✕",
+  not_reviewed: "○",
+};
+
+const REVIEW_LABEL: Record<ReviewState, string> = {
+  reviewed: "reviewed",
+  flagged: "flagged",
+  rejected: "rejected",
+  not_reviewed: "not reviewed",
+};
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
 
 /**
  * B-069 Batch 1 — admin-side step indicator (numbered breadcrumb).
  * B-098 — restyled to pill button language.
- * B-099 — every pill renders uniformly brand-navy/white; no per-pill
- * `isActive` detection and no `n/m` review counts. Click is delegated
- * to the parent via `onStepClick` so the page root can drive an
- * accordion over the 3 form section cards (Company Setup / Financial
- * / Banking) and skip the toggle for People & KYC / Documents.
- * B-111 — pills now reflect a `state` per step (rejected / flagged /
- * complete / in_review / in_progress / not_started) with an optional
- * inline `countBadge` after the label. Steps without a state fall back
- * to the B-099 brand-navy default.
+ * B-099 — every pill renders uniformly brand-navy/white; click is
+ * delegated to the parent via `onStepClick`.
+ * B-111 — pills reflected a per-step `state` (rejected / flagged /
+ * complete / in_review / in_progress / not_started) with an inline
+ * `countBadge`. That treatment painted the row in 5 colors and felt
+ * too loud.
+ * B-112 — G-2 redesign: pill body returns to uniform brand-navy. Step
+ * number moves into the label ("1: Company Setup"). Two SVG gauges sit
+ * on the right — completion % (green at 100, amber otherwise; pct in
+ * centre) and review state (full-fill circle in green/amber/red/gray
+ * with ✓ / ⚑ / ✕ / ○).
  */
 export function AdminApplicationStepIndicator({ steps, onStepClick }: Props) {
   function handleClick(stepId: string) {
@@ -96,27 +109,101 @@ function StepPill({
   index: number;
   onClick: () => void;
 }) {
-  const styles = step.state ? STATE_STYLES[step.state] : null;
-  const bg = styles?.bg ?? DEFAULT_PILL_BG;
-  const badgeText = styles?.badgeText ?? DEFAULT_BADGE_TEXT;
+  const pct = clamp(Math.round(step.completionPct ?? 0), 0, 100);
+  const completionStrokeColor = pct >= 100 ? "#4ade80" : "#fbbf24"; // green / amber
+  const reviewState: ReviewState = step.reviewState ?? "not_reviewed";
   return (
     <button
       type="button"
       onClick={onClick}
       title={step.tooltip ?? undefined}
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${bg}`}
+      className="inline-flex items-center gap-2 rounded-full bg-brand-navy py-1 pl-3 pr-1.5 text-sm text-white transition-colors hover:bg-brand-navy/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
     >
-      <span
-        className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-semibold ${badgeText}`}
-      >
-        {index + 1}
+      <span className="font-medium leading-none">
+        {index + 1}: {step.label}
       </span>
-      <span className="font-medium">{step.label}</span>
-      {step.countBadge ? (
-        <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium tabular-nums">
-          {step.countBadge}
-        </span>
-      ) : null}
+      <CompletionGauge pct={pct} strokeColor={completionStrokeColor} />
+      <ReviewGauge
+        bg={REVIEW_BG[reviewState]}
+        icon={REVIEW_ICON[reviewState]}
+        label={REVIEW_LABEL[reviewState]}
+      />
     </button>
+  );
+}
+
+function CompletionGauge({ pct, strokeColor }: { pct: number; strokeColor: string }) {
+  const dashTotal = 88; // ~2π × 14
+  const dash = (pct / 100) * dashTotal;
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 36 36"
+      role="img"
+      aria-label={`${pct}% complete`}
+    >
+      <circle
+        cx="18"
+        cy="18"
+        r="14"
+        fill="none"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth="4"
+      />
+      <circle
+        cx="18"
+        cy="18"
+        r="14"
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth="4"
+        strokeDasharray={`${dash} ${dashTotal}`}
+        strokeLinecap="round"
+        transform="rotate(-90 18 18)"
+      />
+      <text
+        x="18"
+        y="22"
+        textAnchor="middle"
+        fontSize="11"
+        fontWeight="700"
+        fill="#fff"
+      >
+        {pct}
+      </text>
+    </svg>
+  );
+}
+
+function ReviewGauge({
+  bg,
+  icon,
+  label,
+}: {
+  bg: string;
+  icon: string;
+  label: string;
+}) {
+  return (
+    <svg
+      width="26"
+      height="26"
+      viewBox="0 0 36 36"
+      role="img"
+      aria-label={`Review state: ${label}`}
+    >
+      <circle cx="18" cy="18" r="16" fill={bg} />
+      <text
+        x="18"
+        y="23"
+        textAnchor="middle"
+        fontSize="14"
+        fontWeight="700"
+        fill="#fff"
+      >
+        {icon}
+      </text>
+    </svg>
   );
 }

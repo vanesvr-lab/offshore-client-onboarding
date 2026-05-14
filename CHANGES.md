@@ -13,6 +13,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-112 — Pill gauges + rail progress meters + Pending resize (done 2026-05-14)
+
+### 2026-05-14 — Step-pill G-2 redesign + right-rail Completed/Reviewed meters + Pending card 4-row cap (Claude Code)
+
+Replaced B-111's full-pill color treatment on `/admin/services/[id]` with the G-2 gauge design and added a top-of-rail progress card.
+
+- **`AdminApplicationStepIndicator`**: pill body returns to uniform brand-navy. Step number moves into the label (`1: Company Setup`). The B-111 `state`-driven background colors and the inline `countBadge` are no longer rendered. Each pill now carries two SVG gauges on the right: completion % (green stroke at 100, amber otherwise; integer pct in centre) and review state (full-fill circle in green / amber / red / slate-gray with ✓ / ⚑ / ✕ / ○ icon). New `AdminStep` fields: `completionPct` and `reviewState`. `state` is kept on the interface for downstream consumers (Pending card derivation) but no longer drives the pill visuals.
+- **`StepPillsWithState` (`ServiceDetailClient`)**: now populates `completionPct` and `reviewState` directly from the live section reviews via `useSectionReviews`. Tooltip text rebuilt for the new shape — `Section Label\n<pct>% complete · Reviewed by <name> on <date>` (or Flagged / Rejected / Not reviewed variants). `pillStateTooltip` from `stepState.ts` is no longer imported (the helper itself stays — other call sites may still use it).
+- **`ServiceProgressMeters`**: new component at the top of the right rail. Two side-by-side 80px circular gauges — `Completed n/5` (brand-blue) and `Reviewed n/5` (green) — with a Tailwind `Progress` heading above. Counts re-derive immediately after a save thanks to the `ProgressMetersWithState` wrapper which consumes `useSectionReviews` (the same hook the pills + Pending card use).
+- **`ServicePendingCard`**: list now `max-h-60` (~240px, ~4 rows visible) with internal scroll. When `items.length > 4`, a faint white-to-transparent gradient overlays the bottom 24px of the scroll container as a "more below" UX hint. `pointer-events-none` keeps the gradient from blocking taps on the last visible row.
+- **Cleanup**: deleted `public/pill-mockups.html` (B-112 prototyping aid, no longer a runtime asset).
+
+No migrations, no new endpoints, no AI changes — pure UI derivation off existing props + the existing section-reviews context. `npm run build` clean.
+
+---
+
 ## B-111 — At-a-glance pending view (color-coded step pills + Pending card)
 
 ### 2026-05-13 — B-111 batch 2 — Right-rail Pending card with one-click drill-down (Claude Code)

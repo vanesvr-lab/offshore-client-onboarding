@@ -69,11 +69,25 @@ export function ServicePendingCard({
           All clear — nothing pending.
         </p>
       ) : (
-        <ul className="space-y-1.5 max-h-[60vh] overflow-y-auto -mr-1 pr-1">
-          {items.map((item) => (
-            <PendingRow key={item.id} item={item} onAction={onAction} />
-          ))}
-        </ul>
+        // B-112 — cap the visible list at ~4 rows (~240px). The 5th row
+        // peeks at the bottom edge as a UX hint that more exists; a
+        // faint white-to-transparent gradient sits over the bottom of
+        // the scroll container when items overflow so the cut-off line
+        // doesn't look like a hard truncation. `pointer-events-none`
+        // keeps the gradient from blocking taps on the last visible row.
+        <div className="relative">
+          <ul className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+            {items.map((item) => (
+              <PendingRow key={item.id} item={item} onAction={onAction} />
+            ))}
+          </ul>
+          {total > 4 ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-lg bg-gradient-to-t from-white to-transparent"
+            />
+          ) : null}
+        </div>
       )}
     </div>
   );

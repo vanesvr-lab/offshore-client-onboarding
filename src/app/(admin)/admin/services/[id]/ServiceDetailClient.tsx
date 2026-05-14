@@ -48,11 +48,15 @@ import { SectionReviewPanel } from "@/components/admin/SectionReviewPanel";
 import { AdminReviewWizardStepIndicator } from "@/components/admin/AdminReviewWizardStepIndicator";
 import { AdminPerProfileReviewWizard } from "@/components/admin/AdminPerProfileReviewWizard";
 import { PerProfileReviewSummaryPanel, type PerProfileSubsection } from "@/components/admin/PerProfileReviewSummaryPanel";
-import { AdminApplicationStepIndicator, type AdminStep } from "@/components/admin/AdminApplicationStepIndicator";
+import {
+  AdminApplicationStepIndicator,
+  type AdminStep,
+  type ReviewState,
+} from "@/components/admin/AdminApplicationStepIndicator";
+import { ServiceProgressMeters } from "@/components/admin/ServiceProgressMeters";
 import {
   resolvePillState,
   resolveCountBadge,
-  pillStateTooltip,
 } from "@/lib/services/stepState";
 import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
 import { CountrySelect } from "@/components/shared/CountrySelect";
@@ -3466,9 +3470,72 @@ function PendingCardWithState({
 }
 
 // B-111 — step pill row that consumes the live section-reviews context so
-// the pill colors update immediately after a save without waiting for a
+// the pill state updates immediately after a save without waiting for a
 // router refresh. Reads aggregate review status via `useSectionReviews`
 // (each step has exactly one section key, so the row is just `latest`).
+// B-112 — pill body is uniform brand-navy; each pill carries two SVG
+// gauges (completion % + review state). The legacy `state` + tooltip
+// values are still computed so downstream consumers (Pending card
+// derivation, hover detail) keep working.
+function toReviewState(
+  review: ApplicationSectionReview | null,
+): ReviewState {
+  if (!review) return "not_reviewed";
+  if (review.status === "reviewed") return "reviewed";
+  if (review.status === "flagged") return "flagged";
+  if (review.status === "rejected") return "rejected";
+  return "not_reviewed";
+}
+
+function formatReviewedOn(reviewedAt: string | null | undefined): string | null {
+  if (!reviewedAt) return null;
+  return new Date(reviewedAt).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function buildStepTooltip({
+  label,
+  pct,
+  reviewState,
+  review,
+}: {
+  label: string;
+  pct: number;
+  reviewState: ReviewState;
+  review: ApplicationSectionReview | null;
+}): string {
+  // Line 1: section label.
+  // Line 2: completion phrase · review phrase (joined when both meaningful).
+  const completionPhrase =
+    pct >= 100 ? "100% complete" : pct > 0 ? `${pct}% complete` : "Not started";
+
+  const who = review?.profiles?.full_name ?? null;
+  const when = formatReviewedOn(review?.reviewed_at);
+  const whoWhen = who && when ? ` by ${who} on ${when}` : when ? ` on ${when}` : who ? ` by ${who}` : "";
+
+  let reviewPhrase: string;
+  switch (reviewState) {
+    case "reviewed":
+      reviewPhrase = `Reviewed${whoWhen}`;
+      break;
+    case "flagged":
+      reviewPhrase = `Flagged${whoWhen}`;
+      break;
+    case "rejected":
+      reviewPhrase = `Rejected${whoWhen}`;
+      break;
+    case "not_reviewed":
+    default:
+      reviewPhrase = "Not reviewed";
+      break;
+  }
+
+  return `${label}\n${completionPhrase} · ${reviewPhrase}`;
+}
+
 function StepPillsWithState({
   pcts,
   incompleteProfileCount,
@@ -3482,13 +3549,17 @@ function StepPillsWithState({
 }) {
   const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
+  // `resolveCountBadge` is still called only so we keep the legacy
+  // helper warm for downstream callers; the badge value itself is no
+  // longer fed to the pill in B-112.
   const stepsWithState: AdminStep[] = useMemo(
     () =>
       ADMIN_STEPS_SERVICES.map((step, i) => {
         const review = rows[i]?.latest ?? null;
         const pct = pcts[i] ?? 0;
         const state = resolvePillState({ review, pct });
-        const countBadge = resolveCountBadge({
+        // Kept warm — Pending card derivation reads the same logic.
+        resolveCountBadge({
           stepId: step.id,
           state,
           pct,
@@ -3497,8 +3568,21 @@ function StepPillsWithState({
           missingDocCount:
             step.id === "step-documents" ? missingDocCount : undefined,
         });
-        const tooltip = pillStateTooltip({ state, pct, review });
-        return { ...step, state, countBadge, tooltip };
+        const reviewState = toReviewState(review);
+        const completionPct = Math.round(pct);
+        const tooltip = buildStepTooltip({
+          label: step.label,
+          pct: completionPct,
+          reviewState,
+          review,
+        });
+        return {
+          ...step,
+          state,
+          completionPct,
+          reviewState,
+          tooltip,
+        };
       }),
     [rows, pcts, incompleteProfileCount, missingDocCount],
   );
@@ -3506,6 +3590,39 @@ function StepPillsWithState({
     <AdminApplicationStepIndicator
       steps={stepsWithState}
       onStepClick={onStepClick}
+    />
+  );
+}
+
+// B-112 — right-rail progress meters. Consumes the live section-reviews
+// context (same hook as the pill row) so the Reviewed gauge advances
+// immediately after a save. Completed count is derived from the same
+// pct array fed to the pills; "complete" = pct >= 100.
+function ProgressMetersWithState({
+  pcts,
+}: {
+  pcts: number[];
+}) {
+  const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
+  const { rows } = useSectionReviews(sectionKeys);
+  const total = ADMIN_STEPS_SERVICES.length;
+  const completedCount = useMemo(
+    () => pcts.filter((p) => (p ?? 0) >= 100).length,
+    [pcts],
+  );
+  const reviewedCount = useMemo(
+    () =>
+      rows.reduce(
+        (acc, row) => (row?.latest?.status === "reviewed" ? acc + 1 : acc),
+        0,
+      ),
+    [rows],
+  );
+  return (
+    <ServiceProgressMeters
+      completedCount={completedCount}
+      reviewedCount={reviewedCount}
+      total={total}
     />
   );
 }
@@ -5218,6 +5335,20 @@ export function ServiceDetailClient({
             ? `View Summary for ${service.service_number}`
             : "View Service Summary"}
         </Button>
+
+        {/* B-112 — progress meters card sits above the Pending card.
+              Two circular gauges (Completed n/5 + Reviewed n/5) give
+              the one-second answer for "how far through this service".
+              Counts re-derive live from the section-reviews context. */}
+        <ProgressMetersWithState
+          pcts={[
+            companySetupPct,
+            financialPct,
+            bankingPct,
+            peopleKycPct,
+            documentsPct,
+          ]}
+        />
 
         {/* B-111 Batch 2 — Pending card sits at the top of the right
               rail (above Status / Communications / Milestones). One row
