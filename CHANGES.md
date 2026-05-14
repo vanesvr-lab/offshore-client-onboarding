@@ -13,6 +13,26 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-115 — Org-aware required docs + native DD selector (done 2026-05-14)
+
+### 2026-05-14 — Filter required docs by `applies_to` + native `<select>` for inline DD picker (Claude Code)
+
+Two follow-ups to B-114:
+
+- **New shared util `src/lib/kyc/applicableDocTypes.ts`** filters `document_types` by `applies_to` against a profile's `record_type` (`'individual'` / `'organisation'` / `'both'`). Legacy NULL/undefined rows are kept so uncategorised types don't silently disappear. Structural input — wraps both full `DocumentType` rows and the trimmed `{ id, name, applies_to }` shape the per-profile pending helper receives.
+
+- **`calcKycPct`** (ServiceDetailClient.tsx) now filters `kycDocTypes` through the helper before counting. Elarix LLC stops being penalised for individual-only doc types (Driving Licence, National ID Card, Proof of Occupation, etc.) — the denominator drops and the truthful pct rises.
+
+- **`computeProfilePendingItems`** (`src/lib/services/computePendingItems.ts`) applies the same filter to the doc-types loop. The org Pending popover no longer lists Driving Licence / National ID Card / etc. `ProfilePendingDocTypeInput` gains `applies_to?: string | null` and the call site in `ServiceDetailClient.tsx` passes it through.
+
+- **`ProfileDdLevelSelector` rewritten with a native `<select>`** instead of base-ui Select. The base-ui control was being eaten by the parent's `onClick={(e) => e.stopPropagation()}` collapse handler at `ServiceDetailClient.tsx:2315`, and `<SelectValue />` wasn't auto-mapping to the SelectItem label so the trigger showed lowercase `"sdd"`. Native sidesteps both — browser-managed click/keyboard/SR behaviour, no portal, `<option value="sdd">SDD</option>` renders as "SDD" automatically. Same PATCH logic, same `onLevelChanged` callback, same h-6 footprint.
+
+Two new tech-debt entries logged: (a) native `<select>` open-menu styling varies by OS, acceptable for a 3-option picker; (b) `document_types.applies_to` has no CHECK constraint, a typo'd value would silently behave like a legacy NULL.
+
+`npm run build` clean.
+
+---
+
 ## B-114 — Truthful profile KYC % + DD PATCH fix + badge color (done 2026-05-14)
 
 ### 2026-05-14 — Truthful profile KYC % + DD PATCH targets client_profiles + record-type-aware Pending + colored badge (Claude Code)

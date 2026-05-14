@@ -110,6 +110,7 @@ import {
   type KycField,
   type DueDiligenceLevel as KycDueDiligenceLevel,
 } from "@/lib/kyc/sections";
+import { filterDocTypesForRecordType } from "@/lib/kyc/applicableDocTypes";
 
 // ─── Document category helpers ────────────────────────────────────────────────
 
@@ -264,7 +265,13 @@ function calcKycPct(input: CalcKycPctInput): number {
     profile.record_type,
     profile.due_diligence_level,
   );
-  const requiredDocs = kycDocTypes;
+  // B-115 — drop doc types whose `applies_to` doesn't match the profile's
+  // record_type. Stops org profiles from being penalised for
+  // individual-only docs (Driving Licence etc.) and vice versa.
+  const requiredDocs = filterDocTypesForRecordType(
+    kycDocTypes,
+    profile.record_type,
+  );
   const totalRequired = requiredFields.length + requiredDocs.length;
   if (totalRequired === 0) return 100;
 
@@ -4705,6 +4712,7 @@ export function ServiceDetailClient({
         documentTypes: kycDocTypesForPct.map((dt) => ({
           id: dt.id,
           name: dt.name,
+          applies_to: dt.applies_to,
         })),
         waivers: (waivers ?? []).map((w) => ({
           scope: w.scope,

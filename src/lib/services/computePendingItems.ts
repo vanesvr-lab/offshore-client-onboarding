@@ -26,6 +26,7 @@ import {
   type DueDiligenceLevel,
   type KycSection,
 } from "@/lib/kyc/sections";
+import { filterDocTypesForRecordType } from "@/lib/kyc/applicableDocTypes";
 
 export type PendingSeverity = "critical" | "warning" | "info";
 
@@ -290,6 +291,10 @@ interface ProfilePendingDocInput {
 interface ProfilePendingDocTypeInput {
   id: string;
   name: string;
+  /** B-115 — used by `filterDocTypesForRecordType` to drop person-only
+   *  doc types from an organisation profile's pending list (and vice
+   *  versa). Null/undefined keeps the row (legacy uncategorised). */
+  applies_to?: string | null;
 }
 
 interface ProfilePendingWaiverInput {
@@ -381,8 +386,15 @@ export function computeProfilePendingItems(
   }
 
   // 2. Missing required KYC docs (waiver-aware). `documentTypes` is the
-  //    person-scope, active list already filtered by the caller.
-  for (const dt of input.documentTypes) {
+  //    person-scope, active list already filtered by the caller. B-115
+  //    drops anything whose `applies_to` doesn't match this profile's
+  //    record_type — org profiles stop listing Driving Licence /
+  //    National ID Card / etc.
+  const applicableDocTypes = filterDocTypesForRecordType(
+    input.documentTypes,
+    input.profile.record_type,
+  );
+  for (const dt of applicableDocTypes) {
     const isUploaded = input.profileDocuments.some(
       (d) =>
         d.document_type_id === dt.id &&

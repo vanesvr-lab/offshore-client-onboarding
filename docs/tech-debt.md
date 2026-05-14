@@ -11,6 +11,16 @@ remove after 30 days.
 
 ## 2026-05-14
 
+- **Native `<select>` rendering has visible OS variance.**
+  *Spawned by:* [B-115](cli-brief-org-applies-to-and-native-dd-select-b115.md).
+  *What:* `ProfileDdLevelSelector` was rewritten using a native `<select>` to dodge the parent's `stopPropagation` wrapper and base-ui's lowercase render quirk. The trigger is styled but the open menu draws with platform defaults (macOS / Windows / iOS Safari all differ). Acceptable for a 3-option DD picker; if visual parity becomes a need, build a small headless dropdown that doesn't fight the collapse handler at `ServiceDetailClient.tsx:2315`.
+  *Why deferred:* The variance is cosmetic only and admin browsers are mostly macOS Chrome.
+
+- **`document_types.applies_to` has no CHECK constraint.**
+  *Spawned by:* [B-115](cli-brief-org-applies-to-and-native-dd-select-b115.md).
+  *What:* `filterDocTypesForRecordType` treats `'individual' | 'organisation' | 'both'` as the canonical values; a typo (e.g. `'individuals'`) would silently behave like a legacy NULL and pass through for every profile. Today every value is set via the admin UI's dropdown so the risk is low. If we start importing/seeding doc types from other sources, add a CHECK constraint in a migration to prevent silent drift.
+  *Why deferred:* Schema change without an active failure mode — admin UI is the only writer.
+
 - **All person-scope KYC doc types are treated as required for every profile.**
   *Spawned by:* [B-114](cli-brief-kyc-pct-truthful-b114.md).
   *What:* `calcKycPct` (and the parallel logic inside `computeProfilePendingItems`) counts every active person-scope `document_types` row as required against every profile. In practice some doc types only apply to certain roles (e.g. UBO-only forms). When role-scoped doc requirements ship (probably via the `role_requirements` / `role_document_requirements` table already in the schema), filter `requiredDocs` to only those that apply to the profile's roles. The math stays correct by structure — just the field count gets more accurate per role.
