@@ -19,6 +19,13 @@ import type {
   AutoAlert,
   AutoAlertSeverity,
 } from "@/lib/alerts/computeAutoAlerts";
+import {
+  KYC_SECTIONS_INDIVIDUAL,
+  KYC_SECTIONS_ORGANISATION,
+  gateSectionForLevel,
+  type DueDiligenceLevel,
+  type KycSection,
+} from "@/lib/kyc/sections";
 
 export type PendingSeverity = "critical" | "warning" | "info";
 
@@ -295,7 +302,12 @@ export interface ProfilePendingInput {
   profile: {
     id: string;
     full_name: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
     is_representative: boolean;
+    /** B-114 — drives which KYC field schema feeds the popover. */
+    record_type?: string | null;
   };
   kyc: Record<string, unknown> | null;
   ddLevel: string | null;
@@ -305,34 +317,15 @@ export interface ProfilePendingInput {
   autoAlerts: AutoAlert[];
 }
 
-const PROFILE_REQUIRED_FIELDS_BASE = [
-  "date_of_birth",
-  "nationality",
-  "passport_number",
-  "passport_expiry",
-  "occupation",
+// B-114 — `full_name`, `email`, `phone`, `address` live on `client_profiles`
+// rather than `client_profile_kyc`. Mirrors the `PROFILE_LEVEL_KEYS` set
+// inside `ServiceDetailClient`'s `calcKycPct`.
+const PROFILE_LEVEL_KEYS = new Set([
+  "full_name",
+  "email",
+  "phone",
   "address",
-] as const;
-
-const FIELD_LABELS: Record<string, string> = {
-  date_of_birth: "Date of birth",
-  nationality: "Nationality",
-  passport_number: "Passport number",
-  passport_expiry: "Passport expiry",
-  occupation: "Occupation",
-  address: "Address",
-  source_of_wealth_description: "Source of wealth description",
-};
-
-function formatFieldLabel(field: string): string {
-  return (
-    FIELD_LABELS[field] ??
-    field
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ")
-  );
-}
+]);
 
 export function computeProfilePendingItems(
   input: ProfilePendingInput,
@@ -343,19 +336,43 @@ export function computeProfilePendingItems(
   // button hidden.
   if (input.profile.is_representative) return out;
 
-  // 1. Missing required KYC fields (DD-aware, mirrors `calcKycPct`).
-  const requiredFields: string[] = [...PROFILE_REQUIRED_FIELDS_BASE];
-  if (input.ddLevel === "edd") {
-    requiredFields.push("source_of_wealth_description");
-  }
+  // 1. Missing required KYC fields. B-114 — drive off the same schema
+  //    the form renders from (`KYC_SECTIONS_INDIVIDUAL` /
+  //    `KYC_SECTIONS_ORGANISATION`), gated by DD level. Previously this
+  //    used a hardcoded individual-shaped list, so an organisation
+  //    profile would surface "Date of birth — missing" etc. — nonsense.
+  const sections =
+    input.profile.record_type === "organisation"
+      ? KYC_SECTIONS_ORGANISATION
+      : KYC_SECTIONS_INDIVIDUAL;
+  const level = (input.ddLevel ?? "cdd") as DueDiligenceLevel;
+  const gated = sections
+    .map((s) => gateSectionForLevel(s, level))
+    .filter((s): s is KycSection => s !== null);
+  const requiredFields = gated.flatMap((s) =>
+    s.fields.filter((f) => f.required && !f.showWhen),
+  );
   for (const f of requiredFields) {
-    const v = input.kyc?.[f];
-    if (typeof v === "boolean") continue;
-    if (v == null || v === "") {
+    // B-114 — same profile/kyc fallback the page-level `calcKycPct`
+    // uses: try the profile-level columns first when the field is one
+    // of `full_name` / `email` / `phone` / `address`, otherwise read
+    // straight from the kyc record.
+    const profileVal = PROFILE_LEVEL_KEYS.has(f.key)
+      ? (input.profile as Record<string, unknown>)[f.key]
+      : undefined;
+    const v =
+      profileVal != null && profileVal !== ""
+        ? profileVal
+        : (input.kyc as Record<string, unknown> | null)?.[f.key];
+    const empty =
+      f.type === "boolean"
+        ? v === null || v === undefined
+        : v == null || v === "";
+    if (empty) {
       out.push({
-        id: `field_${input.profile.id}_${f}`,
+        id: `field_${input.profile.id}_${f.key}`,
         severity: "warning",
-        label: `${formatFieldLabel(f)} — missing`,
+        label: `${f.label} — missing`,
         actionType: "scroll_to_profile",
         actionPayload: input.profile.id,
         profileId: input.profile.id,

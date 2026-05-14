@@ -13,6 +13,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-114 — Truthful profile KYC % + DD PATCH fix + badge color (done 2026-05-14)
+
+### 2026-05-14 — Truthful profile KYC % + DD PATCH targets client_profiles + record-type-aware Pending + colored badge (Claude Code)
+
+Four corrections to the profile-level KYC metric on `/admin/services/[id]`:
+
+- **`/api/admin/profiles/[id]` PATCH rewritten.** Was writing to the legacy `kyc_records` table — a leftover from the pre-Phase-1 schema. The active service-detail surface reads `due_diligence_level` from `client_profiles`, so PATCHes were returning 200-OK but the value never moved for anyone who matters. Rewrote to target `client_profiles`, tenant-scoped on both the lookup and the update. Audit row `entity_type` bumped from `kyc_record` to `client_profile`. Dropped the `revalidatePath('/admin/clients/[clientId]')` call (the modern `client_profiles` row doesn't expose `client_id` directly; the page revalidates via `router.refresh()` on the client side anyway). This is why B-113's inline DD selector "worked" in the UI splice but didn't survive a hard refresh.
+
+- **`calcKycPct` rewritten.** Was hardcoding an individual-shaped field list which left organisation profiles (Elarix LLC etc.) permanently at 0% and counted only fields — never docs. New signature takes the full input (`kyc`, `profile`, `profileDocs`, `kycDocTypes`, `waivers`, `profileId`); drives off `KYC_SECTIONS_INDIVIDUAL` / `KYC_SECTIONS_ORGANISATION` (branched by `record_type`); gates fields via `gateSectionForLevel` so SDD isn't penalised for `cddOrAbove` sections and EDD-only fields only count for EDD; counts every active person-scope KYC doc type as required, with waiver-aware "done" checking. Result: Elarix LLC reports an honest org pct, Vanessa drops below 100% until her required docs are uploaded or waived. Three call sites updated — the per-profile badge, the sort comparator (`computeKycPctForProfile`), and the People & KYC aggregator (averages `calcKycPct` across profiles). `pctInputForProfile` + `computeKycPctForProfile` lifted to `useCallback` so the downstream `useMemo`s pass exhaustive-deps cleanly. Two new tech-debt entries added: (a) all KYC doc types are still treated as required for every profile (role-scoped requirements not yet wired), (b) conditional `showWhen` fields are excluded from the denominator.
+
+- **KYC % badge color-coded.** Both the collapsed pill badge and the sticky-banner progress bar now color-code by `kycPct` (green ≥100, amber >0, red 0) instead of by the legacy `kyc_journey_completed` flag. Labels normalized to `KYC: {pct}%` everywhere — `kyc_journey_completed` is no longer surfaced in the header because `pct ≥ 100` is now the structural source of truth. The unused `kycDone` local was removed.
+
+- **`computeProfilePendingItems` given the same record-type + section-driven refactor.** The Pending popover on an org profile would previously list "Date of birth — missing", "Passport number — missing" etc. — nonsense for organisations. Now drives off `KYC_SECTIONS_INDIVIDUAL` / `KYC_SECTIONS_ORGANISATION` with `gateSectionForLevel`, uses the field's own `label` instead of the local snake_case → Title formatter, and applies the same `PROFILE_LEVEL_KEYS` fallback (try `client_profiles` first, fall back to `client_profile_kyc`) so dual-table fields like `address` aren't double-flagged. The per-render `perProfilePending` map now passes `record_type` + `email` + `phone` into the input.
+
+`npm run build` clean.
+
+---
+
 ## B-113 — Spacebar fix + KYC % + inline DD selector + per-profile Pending (done 2026-05-14)
 
 ### 2026-05-14 — B-113 batch 3 — Per-profile Pending button + popover (Claude Code)

@@ -195,30 +195,108 @@ function ragFromPct(pct: number): RagStatus {
 // Local alias kept for the existing call sites in this file.
 const statusBadgeClass = getStatusBadgeClass;
 
-// B-113 — DD-aware required-fields counter for a single profile's KYC.
-// - `source_of_funds_description` is the optional "Additional context"
-//   textarea (no `required: true` in src/lib/kyc/sections.ts) and must
-//   not count toward required-fields-filled %.
-// - `source_of_wealth_description` is `eddOnly: true` — only rendered
-//   for EDD profiles. Counting it for CDD/SDD made every CDD profile
-//   permanently capped at 80% even when all visible required fields
-//   were filled.
-function calcKycPct(kyc: KycFull | null, ddLevel?: string | null): number {
-  if (!kyc) return 0;
-  const KYC_FIELDS: string[] = [
-    "date_of_birth", "nationality", "passport_number", "passport_expiry",
-    "occupation", "address",
-    "is_pep", "legal_issues_declared",
-  ];
-  if (ddLevel === "edd") {
-    KYC_FIELDS.push("source_of_wealth_description");
-  }
-  const filled = KYC_FIELDS.filter((f) => {
-    const v = kyc[f];
-    if (typeof v === "boolean") return true; // booleans count as filled once set
-    return v !== null && v !== undefined && v !== "";
+// B-114 — record_type + DD-aware required-completion counter that
+// ALSO includes required KYC docs (waiver-aware) in the denominator.
+// Replaces the B-113 field-only helper that hardcoded an individual
+// field list — Elarix LLC was permanently stuck at 0% because none of
+// the individual fields apply to an organisation profile, and Vanessa
+// reported 100% with only 3 of 19 KYC docs actually uploaded.
+//
+// Drives the per-profile badge on the service-detail page + the
+// People & KYC step aggregator (averaged across profiles).
+//
+// Fields: source of truth is `KYC_SECTIONS_INDIVIDUAL` /
+// `KYC_SECTIONS_ORGANISATION`. We apply `gateSectionForLevel` so SDD
+// profiles aren't penalised for `cddOrAbove` sections, and EDD-only
+// fields only count for EDD. Conditional fields (`showWhen`) are
+// excluded from the denominator — a tech-debt note tracks this
+// tradeoff (see docs/tech-debt.md).
+//
+// Docs: every active person-scope `document_types` row is counted as
+// required. A doc is "done" when uploaded for this profile OR waived
+// with a person-scope waiver pinned to this profile.
+//
+// A few field keys live on `client_profiles` (full_name, email,
+// phone, address) rather than `client_profile_kyc`; we read those off
+// `profile` instead.
+
+interface CalcKycPctInput {
+  kyc: KycFull | null;
+  profile: {
+    record_type?: string | null;
+    full_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    due_diligence_level?: string | null;
+  };
+  profileDocs: ServiceDoc[];
+  kycDocTypes: DocumentType[];
+  waivers: WaivedDocumentRequirement[];
+  profileId: string;
+}
+
+const PROFILE_LEVEL_KEYS = new Set([
+  "full_name",
+  "email",
+  "phone",
+  "address",
+]);
+
+function pickRequiredKycFields(
+  recordType: string | null | undefined,
+  ddLevel: string | null | undefined,
+): KycField[] {
+  const sections =
+    recordType === "organisation"
+      ? KYC_SECTIONS_ORGANISATION
+      : KYC_SECTIONS_INDIVIDUAL;
+  const level = (ddLevel ?? "cdd") as KycDueDiligenceLevel;
+  const gated = sections
+    .map((s) => gateSectionForLevel(s, level))
+    .filter((s): s is KycSection => s !== null);
+  return gated.flatMap((s) => s.fields.filter((f) => f.required && !f.showWhen));
+}
+
+function calcKycPct(input: CalcKycPctInput): number {
+  const { kyc, profile, profileDocs, kycDocTypes, waivers, profileId } = input;
+  const requiredFields = pickRequiredKycFields(
+    profile.record_type,
+    profile.due_diligence_level,
+  );
+  const requiredDocs = kycDocTypes;
+  const totalRequired = requiredFields.length + requiredDocs.length;
+  if (totalRequired === 0) return 100;
+
+  const filledFields = requiredFields.filter((f) => {
+    // B-114 — `full_name` / `email` / `phone` live on `client_profiles`;
+    // `address` is dual-table (B-105). Try profile first when the field
+    // is profile-level, fall through to kyc when empty so a profile
+    // whose copy is blank but kyc copy isn't still counts as filled.
+    const profileVal = PROFILE_LEVEL_KEYS.has(f.key)
+      ? (profile as Record<string, unknown>)[f.key]
+      : undefined;
+    const v =
+      profileVal != null && profileVal !== ""
+        ? profileVal
+        : (kyc as Record<string, unknown> | null)?.[f.key];
+    if (f.type === "boolean") return v !== null && v !== undefined;
+    if (v == null || v === "") return false;
+    return true;
   }).length;
-  return Math.round((filled / KYC_FIELDS.length) * 100);
+
+  const filledDocs = requiredDocs.filter((dt) => {
+    const uploaded = profileDocs.some((d) => d.document_type_id === dt.id);
+    if (uploaded) return true;
+    return waivers.some(
+      (w) =>
+        w.scope === "person" &&
+        w.client_profile_id === profileId &&
+        w.document_type_id === dt.id,
+    );
+  }).length;
+
+  return Math.round(((filledFields + filledDocs) / totalRequired) * 100);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -1774,10 +1852,11 @@ function PersonCard({
   // last-known DB state and gets updated immediately on Save, so the
   // per-profile pill flips without waiting for the parent re-fetch.
   const kyc = savedFields as KycFull;
-  // B-113 — pass DD level so EDD-only fields are only counted for EDD
-  // profiles; otherwise CDD/SDD permanently top out below 100%.
-  const kycPct = calcKycPct(kyc, profile.due_diligence_level);
-  const kycDone = kyc?.kyc_journey_completed === true;
+  // B-114 — `kycPct` is computed further down (after `profileDocs` and
+  // the scope-filtered `kycDocTypesForPct` are in scope), because the
+  // helper now includes required docs + waivers in its denominator.
+  // The legacy `kyc_journey_completed` flag is no longer surfaced in
+  // the badge — pct ≥ 100 is the structural source of truth.
 
   // B-100 — Local Director: profile is a director on this service AND
   // `passport_country` is Mauritius (ISO3 = MUS). The dirty-tracker
@@ -1964,6 +2043,24 @@ function PersonCard({
     (d) => d.client_profile_id === profile.id,
   );
   const kycDocTypes = (documentTypes ?? []).filter((dt) => isKycDoc(dt.category));
+  // B-114 — scope-filtered list (active person-scope doc types) for the
+  // calcKycPct denominator. Mirrors the parent-level memo used by the
+  // service-level aggregators. Kept separate from the category-grouped
+  // `kycDocTypes` above, which drives the section UI by display category.
+  const kycDocTypesForPct = (documentTypes ?? []).filter(
+    (dt) => (dt.scope ?? "person") === "person" && dt.is_active !== false,
+  );
+  // B-114 — profile-level KYC % now counts required fields + required
+  // KYC docs (waiver-aware), branched by `record_type` so organisation
+  // profiles report against the org schema and the badge tells the truth.
+  const kycPct = calcKycPct({
+    kyc,
+    profile,
+    profileDocs,
+    kycDocTypes: kycDocTypesForPct,
+    waivers: waivers ?? [],
+    profileId: profile.id,
+  });
   const kycDocsByCategory = (() => {
     const groups: Record<string, DocumentType[]> = {};
     for (const dt of kycDocTypes) {
@@ -2165,12 +2262,21 @@ function PersonCard({
                       </span>
                     ))}
                     {!profile.is_representative && (
+                      // B-114 — color-code by `kycPct` (green ≥100, amber
+                      // >0, red 0) so the badge reflects the actual
+                      // readiness of fields + docs. `kycDone` is the
+                      // user's "I'm done" affirmation; pct ≥100 is the
+                      // structural answer and is what admin acts on.
                       <span
                         className={`text-xs font-medium tabular-nums shrink-0 ${
-                          kycDone ? "text-green-700" : kycPct > 0 ? "text-amber-700" : "text-red-600"
+                          kycPct >= 100
+                            ? "text-green-700"
+                            : kycPct > 0
+                              ? "text-amber-700"
+                              : "text-red-600"
                         }`}
                       >
-                        {kycDone ? "✓ KYC Complete" : `KYC: ${kycPct}%`}
+                        KYC: {kycPct}%
                       </span>
                     )}
                     {/* B-100 — Local Director badge. director on this
@@ -2344,14 +2450,15 @@ function PersonCard({
                 <div className="flex items-center gap-2">
                   <div className="w-20 h-1.5 rounded-full bg-gray-200 overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${kycDone ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
+                      // B-114 — pct-based color matches the collapsed-pill badge.
+                      className={`h-full rounded-full ${kycPct >= 100 ? "bg-green-500" : kycPct > 0 ? "bg-amber-400" : "bg-red-400"}`}
                       style={{ width: `${kycPct}%` }}
                     />
                   </div>
                   <span
-                    className={`text-[11px] font-medium tabular-nums ${kycDone ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}
+                    className={`text-[11px] font-medium tabular-nums ${kycPct >= 100 ? "text-green-600" : kycPct > 0 ? "text-amber-600" : "text-red-500"}`}
                   >
-                    {kycDone ? "✓ Complete" : `${kycPct}%`}
+                    {kycPct}%
                   </span>
                   {/* B-100 — Local Director badge mirrors the collapsed
                       header so the indicator stays in view while admin
@@ -4207,17 +4314,52 @@ export function ServiceDetailClient({
       profileRolesMap.set(r.id, { person: r, roles: [r.role], allRoleRows: [r] });
     }
   }
+  // B-114 — scope-filtered list of person-scope KYC doc types feeds
+  // every `calcKycPct` call below (sort comparator + aggregator). Same
+  // filter the parent `kycDocTypes` memo uses further down; memoized so
+  // downstream `useMemo`s that depend on it have a stable reference.
+  const kycDocTypesForPct = useMemo(
+    () =>
+      (documentTypes ?? []).filter(
+        (dt) => (dt.scope ?? "person") === "person" && dt.is_active !== false,
+      ),
+    [documentTypes],
+  );
+
+  const pctInputForProfile = useCallback(
+    (
+      p: NonNullable<RoleWithProfile["client_profiles"]>,
+    ): CalcKycPctInput => {
+      const raw = p.client_profile_kyc;
+      const kyc = (Array.isArray(raw) ? raw[0] ?? null : raw) as
+        | KycFull
+        | null;
+      return {
+        kyc,
+        profile: p,
+        profileDocs: documents.filter((d) => d.client_profile_id === p.id),
+        kycDocTypes: kycDocTypesForPct,
+        waivers: waivers ?? [],
+        profileId: p.id,
+      };
+    },
+    [documents, kycDocTypesForPct, waivers],
+  );
+
   // B-091 — sort People & KYC list so most-action-needed profiles surface
   // first: portal-access cluster on top, then KYC % ascending (lower = more
   // work outstanding), then alphabetical name as the predictable tiebreaker.
   // Profiles with no KYC record sort as 0% so they float to the top of
   // their portal-access group.
-  function computeKycPctForProfile(person: RoleWithProfile): number {
-    const raw = person.client_profiles?.client_profile_kyc;
-    const kyc = (Array.isArray(raw) ? raw[0] ?? null : raw) as KycFull | null;
-    // B-113 — DD-aware so EDD-only fields don't penalise CDD/SDD profiles.
-    return calcKycPct(kyc, person.client_profiles?.due_diligence_level);
-  }
+  const computeKycPctForProfile = useCallback(
+    (person: RoleWithProfile): number => {
+      const p = person.client_profiles;
+      if (!p) return 0;
+      // B-114 — DD-aware + record_type-aware + waiver-aware via `calcKycPct`.
+      return calcKycPct(pctInputForProfile(p));
+    },
+    [pctInputForProfile],
+  );
   const uniqueRoles = Array.from(profileRolesMap.values()).sort((a, b) => {
     const aPortal = a.allRoleRows.some((r) => r.can_manage) ? 1 : 0;
     const bPortal = b.allRoleRows.some((r) => r.can_manage) ? 1 : 0;
@@ -4321,22 +4463,17 @@ export function ServiceDetailClient({
   const bankingPct = calcSectionCompletion(serviceFields, serviceDetails, "banking").percentage;
 
   const hasDirector = typedRoles.some((r) => r.role === "director");
-  // B-113 — aggregate People & KYC via per-profile DD-aware `calcKycPct`
-  // (instead of the shared `calcKycCompletion` util that's not yet
-  // DD-aware). EDD-only fields no longer drag CDD/SDD profiles down,
-  // which previously capped the step pct at 80% in every typical case.
+  // B-114 — aggregate People & KYC via the new docs-aware `calcKycPct`.
+  // Each profile contributes its full per-profile pct (record_type +
+  // DD-aware fields + required-doc count) and we average across all
+  // profiles with a `client_profiles` row.
   const kycProfileEntries = typedRoles
     .map((r) => r.client_profiles)
-    .filter((p): p is NonNullable<typeof p> => p !== null)
-    .map((p) => {
-      const raw = p.client_profile_kyc;
-      const kyc = (Array.isArray(raw) ? raw[0] ?? null : raw) as KycFull | null;
-      return { kyc, ddLevel: p.due_diligence_level };
-    });
+    .filter((p): p is NonNullable<typeof p> => p !== null);
   const kycPct = hasDirector && kycProfileEntries.length > 0
     ? Math.round(
         kycProfileEntries.reduce(
-          (sum, e) => sum + calcKycPct(e.kyc, e.ddLevel),
+          (sum, p) => sum + calcKycPct(pctInputForProfile(p)),
           0,
         ) / kycProfileEntries.length,
       )
@@ -4439,7 +4576,7 @@ export function ServiceDetailClient({
       if (pct < 100) n++;
     }
     return n;
-  }, [uniqueRoles]);
+  }, [uniqueRoles, computeKycPctForProfile]);
 
   // B-111 Batch 2 — click handler for Pending card rows. Routes to the
   // matching surface: section anchor scroll, profile card anchor scroll,
@@ -4526,7 +4663,7 @@ export function ServiceDetailClient({
             isRepresentative: !!p.is_representative,
           };
         }),
-    [uniqueRoles],
+    [uniqueRoles, computeKycPctForProfile],
   );
   // B-113 Batch 3 — per-profile pending map. Each profile gets a list
   // of items scoped to that profile only (missing required KYC fields,
@@ -4548,6 +4685,12 @@ export function ServiceDetailClient({
         profile: {
           id: p.id,
           full_name: p.full_name ?? null,
+          email: p.email ?? null,
+          phone: p.phone ?? null,
+          // B-114 — record_type drives which KYC field schema feeds
+          // the popover. Without it an org profile would surface
+          // "Date of birth — missing" etc., which is nonsense.
+          record_type: p.record_type ?? null,
           is_representative: !!p.is_representative,
         },
         kyc,
@@ -4559,7 +4702,7 @@ export function ServiceDetailClient({
             document_type_id: d.document_type_id,
             client_profile_id: d.client_profile_id,
           })),
-        documentTypes: kycDocTypes.map((dt) => ({
+        documentTypes: kycDocTypesForPct.map((dt) => ({
           id: dt.id,
           name: dt.name,
         })),
@@ -4573,7 +4716,7 @@ export function ServiceDetailClient({
       map.set(p.id, items);
     }
     return map;
-  }, [typedRoles, documents, kycDocTypes, waivers, visibleAutoAlerts]);
+  }, [typedRoles, documents, kycDocTypesForPct, waivers, visibleAutoAlerts]);
 
   const documentsRag: RagStatus =
     documentsPct >= 100 ? "green" : documentsPct > 0 ? "amber" : "red";

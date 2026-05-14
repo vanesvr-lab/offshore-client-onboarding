@@ -11,6 +11,16 @@ remove after 30 days.
 
 ## 2026-05-14
 
+- **All person-scope KYC doc types are treated as required for every profile.**
+  *Spawned by:* [B-114](cli-brief-kyc-pct-truthful-b114.md).
+  *What:* `calcKycPct` (and the parallel logic inside `computeProfilePendingItems`) counts every active person-scope `document_types` row as required against every profile. In practice some doc types only apply to certain roles (e.g. UBO-only forms). When role-scoped doc requirements ship (probably via the `role_requirements` / `role_document_requirements` table already in the schema), filter `requiredDocs` to only those that apply to the profile's roles. The math stays correct by structure — just the field count gets more accurate per role.
+  *Why deferred:* Today there's no consumed role-scope linkage for KYC doc types on this surface; introducing it cleanly means lifting that mapping into the loader. Out of scope for the truthful-% fix.
+
+- **Conditional KYC fields (`showWhen`) are excluded from the required denominator.**
+  *Spawned by:* [B-114](cli-brief-kyc-pct-truthful-b114.md).
+  *What:* `pep_details`, `legal_issues_details`, `source_of_funds_other` and similar fields only render when their parent toggle is set. The new `calcKycPct` filters them out of the required set entirely (`f.required && !f.showWhen`). When the toggle is on, they're effectively required but invisible to the denominator — a profile reads 100% even with the follow-up textarea blank. Acceptable tradeoff for B-114; revisit if it causes noticeable under-counting in practice.
+  *Why deferred:* Including `showWhen` fields correctly means evaluating each rule against the current values per profile (much like `visibleFields` already does for the form). Straightforward but not necessary for the immediate accuracy fix.
+
 - **`calcKycCompletion` still uses the old field list — dashboard + admin services list under-count CDD profiles.**
   *Spawned by:* [B-113](cli-brief-spacebar-kycpct-ddlevel-profilepending-b113.md).
   *What:* B-113 fixed `calcKycPct` (the per-profile helper on `/admin/services/[id]`) to drop optional `source_of_funds_description` and gate `source_of_wealth_description` behind `ddLevel === "edd"`. The shared `calcKycCompletion` util in `src/lib/utils/serviceCompletion.ts` keeps the original buggy list and still drives `/admin/services` (services list page) and `/dashboard` (client dashboard). CDD profiles on those surfaces will keep showing ~80% even when complete.
