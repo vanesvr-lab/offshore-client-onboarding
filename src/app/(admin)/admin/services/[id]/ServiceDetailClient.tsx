@@ -4474,15 +4474,26 @@ export function ServiceDetailClient({
   // Each profile contributes its full per-profile pct (record_type +
   // DD-aware fields + required-doc count) and we average across all
   // profiles with a `client_profiles` row.
-  const kycProfileEntries = typedRoles
-    .map((r) => r.client_profiles)
-    .filter((p): p is NonNullable<typeof p> => p !== null);
-  const kycPct = hasDirector && kycProfileEntries.length > 0
+  //
+  // B-116 — dedupe by profile id. `typedRoles` has one row per
+  // (profile × role) so a director+shareholder+UBO profile would be
+  // counted three times and over-weight its KYC % in the average.
+  const uniqueKycProfiles = useMemo(() => {
+    type ProfileRow = NonNullable<typeof typedRoles[number]["client_profiles"]>;
+    const byId = new Map<string, ProfileRow>();
+    for (const r of typedRoles) {
+      const p = r.client_profiles;
+      if (!p) continue;
+      if (!byId.has(p.id)) byId.set(p.id, p);
+    }
+    return Array.from(byId.values());
+  }, [typedRoles]);
+  const kycPct = hasDirector && uniqueKycProfiles.length > 0
     ? Math.round(
-        kycProfileEntries.reduce(
+        uniqueKycProfiles.reduce(
           (sum, p) => sum + calcKycPct(pctInputForProfile(p)),
           0,
-        ) / kycProfileEntries.length,
+        ) / uniqueKycProfiles.length,
       )
     : 0;
   const peopleKycPct = typedRoles.length === 0 ? 0 : hasDirector ? kycPct : Math.round(kycPct * 0.5);
@@ -4539,18 +4550,65 @@ export function ServiceDetailClient({
     }
     return out;
   }, [serviceLevelDocs]);
-  const documentsUploadedCount = uploadedServiceTypeIds.size;
-  const documentsExpectedCount = serviceDocTypes.length;
+
+  // B-116 — per-profile applicable KYC doc types (applies_to-aware via
+  // B-115's helper). Each unique profile contributes only the docs that
+  // apply to its record_type — org profiles drop individual-only types
+  // like Driving Licence, individual profiles drop org-only ones.
+  const applicableKycDocsByProfile = useMemo(() => {
+    const map = new Map<string, DocumentType[]>();
+    for (const p of uniqueKycProfiles) {
+      map.set(p.id, filterDocTypesForRecordType(kycDocTypes, p.record_type));
+    }
+    return map;
+  }, [uniqueKycProfiles, kycDocTypes]);
+  const kycDocsExpectedCount = useMemo(() => {
+    let n = 0;
+    applicableKycDocsByProfile.forEach((arr) => {
+      n += arr.length;
+    });
+    return n;
+  }, [applicableKycDocsByProfile]);
+  const kycDocsCompletedCount = useMemo(() => {
+    let n = 0;
+    for (const p of uniqueKycProfiles) {
+      const applicable = applicableKycDocsByProfile.get(p.id) ?? [];
+      for (const dt of applicable) {
+        const isUploaded = kycDocs.some(
+          (d) =>
+            d.document_type_id === dt.id && d.client_profile_id === p.id,
+        );
+        const isWaived = waivers.some(
+          (w) =>
+            w.scope === "person" &&
+            w.client_profile_id === p.id &&
+            w.document_type_id === dt.id,
+        );
+        if (isUploaded || isWaived) n++;
+      }
+    }
+    return n;
+  }, [uniqueKycProfiles, applicableKycDocsByProfile, kycDocs, waivers]);
+
   // B-107 — service-scope waivers count as "done" for the Documents
   // section pct. Filter by `scope === "application"` so per-profile
-  // waivers (already counted into peopleKycPct) don't double-count here.
+  // waivers are surfaced via the KYC-doc branch below, not this one.
   const documentsServiceWaivedCount = waivers.filter(
     (w) => w.scope === "application",
   ).length;
-  const documentsDoneCount = documentsUploadedCount + documentsServiceWaivedCount;
+  const documentsServiceCompleted =
+    uploadedServiceTypeIds.size + documentsServiceWaivedCount;
+  // B-116 — Documents step pill + section header now fold service-level
+  // docs and per-profile KYC docs into a single denominator/numerator so
+  // the pct reflects every doc on the service. Per-tab labels inside
+  // `AdminDocumentsSection` stay tab-scoped (computed independently).
+  const documentsUploadedCount =
+    documentsServiceCompleted + kycDocsCompletedCount;
+  const documentsExpectedCount =
+    serviceDocTypes.length + kycDocsExpectedCount;
   const documentsPct =
     documentsExpectedCount > 0
-      ? Math.round((documentsDoneCount / documentsExpectedCount) * 100)
+      ? Math.round((documentsUploadedCount / documentsExpectedCount) * 100)
       : 0;
 
   // B-111 — count of required service-level doc types with no upload AND

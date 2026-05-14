@@ -11,6 +11,11 @@ remove after 30 days.
 
 ## 2026-05-14
 
+- **Documents step and per-profile KYC % share the same underlying KYC-doc data.**
+  *Spawned by:* [B-116](cli-brief-peoplekyc-dedup-and-combined-docs-b116.md).
+  *What:* The Documents step pill now folds per-profile KYC docs into its denominator/numerator alongside service-level docs, and the per-profile KYC % already counts those same docs. Waiving a person-scope doc therefore bumps both metrics simultaneously. Conceptually correct — the doc is "done" at the profile level *and* at the service level — but worth flagging: a future all-up service-completion roll-up may want to dedupe further, or each metric should explicitly call out what it counts so admins reading two pills don't double-count progress in their head.
+  *Why deferred:* Both reads are correct in isolation. The shared-data overlap is a UX question, not a math bug.
+
 - **Native `<select>` rendering has visible OS variance.**
   *Spawned by:* [B-115](cli-brief-org-applies-to-and-native-dd-select-b115.md).
   *What:* `ProfileDdLevelSelector` was rewritten using a native `<select>` to dodge the parent's `stopPropagation` wrapper and base-ui's lowercase render quirk. The trigger is styled but the open menu draws with platform defaults (macOS / Windows / iOS Safari all differ). Acceptable for a 3-option DD picker; if visual parity becomes a need, build a small headless dropdown that doesn't fight the collapse handler at `ServiceDetailClient.tsx:2315`.

@@ -13,6 +13,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-116 — People & KYC dedup + combined Documents total (done 2026-05-14)
+
+### 2026-05-14 — Dedup peopleKycPct by profile id + Documents step counts service + KYC docs (Claude Code)
+
+Two aggregation corrections on `/admin/services/[id]`:
+
+- **`peopleKycPct` deduped by profile id.** The aggregator was reducing over `typedRoles` — one row per `(profile × role)` — so a profile with 3 roles (Director + Shareholder + UBO) had its KYC % counted 3 times in the average. Real-data example: Bruce 100% (3 roles), Elarix 24% (1 role), Vanessa 49% (2 roles) → `(100×3 + 24 + 49×2) / 6 = 70%` instead of the honest `(100 + 24 + 49) / 3 ≈ 58%`. New `uniqueKycProfiles` memo dedupes by `client_profiles.id` before the average. The legacy `kycProfileEntries` constant is gone. `incompleteProfileCount` was already iterating the deduped `uniqueRoles` so it stays correct without change.
+
+- **Documents step pill folds service-level + per-profile KYC docs.** Previously `documentsExpectedCount = serviceDocTypes.length` and `documentsUploadedCount = uploadedServiceTypeIds.size`, so the pill ignored every KYC doc on the service. Now: `applicableKycDocsByProfile` builds an `applies_to`-aware list per profile via B-115's `filterDocTypesForRecordType` (org profiles skip individual-only doc types and vice versa); `kycDocsExpectedCount` sums that across profiles; `kycDocsCompletedCount` counts `(profile, doc_type)` pairs that are uploaded OR person-scope-waived. Combined: `documentsUploadedCount = uploadedServiceTypeIds.size + applicationWaiverCount + kycDocsCompletedCount`, `documentsExpectedCount = serviceDocTypes.length + kycDocsExpectedCount`. The section-header text "Documents (X of N uploaded)" keeps its shape; both X and N rise to reflect every doc on the service. Per-tab labels inside `AdminDocumentsSection` ("Service Docs (0/11)" + "KYC Documents (12)") stay tab-scoped — they're computed off the individual tab arrays.
+
+One tech-debt entry added: the per-profile KYC % and the Documents % now share the same underlying KYC-doc data, so waiving a person-scope doc bumps both metrics. Conceptually correct (the doc is "done" both at the profile and at the service) but called out so a future all-up service-completion roll-up can choose how to dedupe.
+
+`npm run build` clean.
+
+---
+
 ## B-115 — Org-aware required docs + native DD selector (done 2026-05-14)
 
 ### 2026-05-14 — Filter required docs by `applies_to` + native `<select>` for inline DD picker (Claude Code)
