@@ -9,6 +9,25 @@ remove after 30 days.
 
 ---
 
+## 2026-05-14
+
+- **`calcKycCompletion` still uses the old field list — dashboard + admin services list under-count CDD profiles.**
+  *Spawned by:* [B-113](cli-brief-spacebar-kycpct-ddlevel-profilepending-b113.md).
+  *What:* B-113 fixed `calcKycPct` (the per-profile helper on `/admin/services/[id]`) to drop optional `source_of_funds_description` and gate `source_of_wealth_description` behind `ddLevel === "edd"`. The shared `calcKycCompletion` util in `src/lib/utils/serviceCompletion.ts` keeps the original buggy list and still drives `/admin/services` (services list page) and `/dashboard` (client dashboard). CDD profiles on those surfaces will keep showing ~80% even when complete.
+  *Why deferred:* Fixing `calcKycCompletion` properly means propagating `due_diligence_level` through every caller's `kycPersons` shape (currently the util only sees `client_profile_kyc`). Touches `services/page.tsx`, `dashboard/page.tsx`, and the util signature. ~1h follow-up; out of scope for B-113's per-page fix.
+
+- **`calcKycPct` uses an individual-shaped field list — under-counts organisation profiles.**
+  *Spawned by:* [B-113](cli-brief-spacebar-kycpct-ddlevel-profilepending-b113.md).
+  *What:* The helper hard-codes `date_of_birth / nationality / passport_number / passport_expiry / occupation / address / is_pep / legal_issues_declared` as the required set. None apply to organisation profiles (record_type === "organisation"), which have their own field shape on `client_profile_kyc`. Org profiles will always show low pct.
+  *Why deferred:* Needs a `KYC_REQUIRED_FIELDS_FOR_RECORD_TYPE` lookup with separate lists per record type × DD level. Real fix should align with whatever `KYC_SECTIONS_ORGANISATION` declares so the % matches what the user actually sees.
+
+- **Manual alerts have no profile linkage.**
+  *Spawned by:* [B-113](cli-brief-spacebar-kycpct-ddlevel-profilepending-b113.md).
+  *What:* `service_alerts` rows only carry a service id. B-113 Batch 3's per-profile Pending popover therefore can't include admin-authored manual alerts even when the alert is conceptually about a specific profile.
+  *Why deferred:* Schema change. Add `client_profile_id` (nullable) to `service_alerts`, surface a profile picker in the alert authoring dialog, and route alerts with a linked profile into the per-profile popover.
+
+---
+
 ## 2026-05-13
 
 - **`computePendingItems` recomputes on every render.**

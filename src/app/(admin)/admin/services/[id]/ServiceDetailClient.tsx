@@ -35,7 +35,6 @@ import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker"
 import type { VerificationResult } from "@/types";
 import {
   calcSectionCompletion,
-  calcKycCompletion,
   calcKycSectionRequiredPct,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
@@ -193,15 +192,27 @@ function ragFromPct(pct: number): RagStatus {
 // Local alias kept for the existing call sites in this file.
 const statusBadgeClass = getStatusBadgeClass;
 
-function calcKycPct(kyc: KycFull | null): number {
+// B-113 — DD-aware required-fields counter for a single profile's KYC.
+// - `source_of_funds_description` is the optional "Additional context"
+//   textarea (no `required: true` in src/lib/kyc/sections.ts) and must
+//   not count toward required-fields-filled %.
+// - `source_of_wealth_description` is `eddOnly: true` — only rendered
+//   for EDD profiles. Counting it for CDD/SDD made every CDD profile
+//   permanently capped at 80% even when all visible required fields
+//   were filled.
+function calcKycPct(kyc: KycFull | null, ddLevel?: string | null): number {
   if (!kyc) return 0;
-  const KYC_FIELDS = [
+  const KYC_FIELDS: string[] = [
     "date_of_birth", "nationality", "passport_number", "passport_expiry",
-    "occupation", "address", "source_of_funds_description", "source_of_wealth_description",
+    "occupation", "address",
     "is_pep", "legal_issues_declared",
   ];
+  if (ddLevel === "edd") {
+    KYC_FIELDS.push("source_of_wealth_description");
+  }
   const filled = KYC_FIELDS.filter((f) => {
     const v = kyc[f];
+    if (typeof v === "boolean") return true; // booleans count as filled once set
     return v !== null && v !== undefined && v !== "";
   }).length;
   return Math.round((filled / KYC_FIELDS.length) * 100);
@@ -859,7 +870,17 @@ function KycLongFormSection({
         onClick={onToggle}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        // B-113 — only act when focus is on the header itself, not bubbled
+        // from a descendant. Without this guard, typing space inside the
+        // SectionReviewPanel notes textarea (which portals to body but
+        // still bubbles through React) collapses the section under it.
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
         className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-2 flex-wrap">
@@ -1735,7 +1756,9 @@ function PersonCard({
   // last-known DB state and gets updated immediately on Save, so the
   // per-profile pill flips without waiting for the parent re-fetch.
   const kyc = savedFields as KycFull;
-  const kycPct = calcKycPct(kyc);
+  // B-113 — pass DD level so EDD-only fields are only counted for EDD
+  // profiles; otherwise CDD/SDD permanently top out below 100%.
+  const kycPct = calcKycPct(kyc, profile.due_diligence_level);
   const kycDone = kyc?.kyc_journey_completed === true;
 
   // B-100 — Local Director: profile is a director on this service AND
@@ -2473,7 +2496,12 @@ function PersonCard({
                 onClick={() => setDocsExpanded((v) => !v)}
                 role="button"
                 tabIndex={0}
+                // B-113 — same guard as the KycLongFormSection header
+                // (above): ignore bubbled keydowns from descendants so
+                // typing space in a portal'd dialog input doesn't
+                // collapse this row.
                 onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget) return;
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     setDocsExpanded((v) => !v);
@@ -4141,7 +4169,8 @@ export function ServiceDetailClient({
   function computeKycPctForProfile(person: RoleWithProfile): number {
     const raw = person.client_profiles?.client_profile_kyc;
     const kyc = (Array.isArray(raw) ? raw[0] ?? null : raw) as KycFull | null;
-    return calcKycPct(kyc);
+    // B-113 — DD-aware so EDD-only fields don't penalise CDD/SDD profiles.
+    return calcKycPct(kyc, person.client_profiles?.due_diligence_level);
   }
   const uniqueRoles = Array.from(profileRolesMap.values()).sort((a, b) => {
     const aPortal = a.allRoleRows.some((r) => r.can_manage) ? 1 : 0;
@@ -4246,14 +4275,26 @@ export function ServiceDetailClient({
   const bankingPct = calcSectionCompletion(serviceFields, serviceDetails, "banking").percentage;
 
   const hasDirector = typedRoles.some((r) => r.role === "director");
-  const kycPersons = typedRoles.map((r) => ({
-    client_profiles: r.client_profiles ? {
-      client_profile_kyc: (Array.isArray(r.client_profiles.client_profile_kyc)
-        ? r.client_profiles.client_profile_kyc[0] ?? null
-        : r.client_profiles.client_profile_kyc) as Record<string, unknown> | null,
-    } : null,
-  }));
-  const kycPct = hasDirector ? calcKycCompletion(kycPersons).percentage : 0;
+  // B-113 — aggregate People & KYC via per-profile DD-aware `calcKycPct`
+  // (instead of the shared `calcKycCompletion` util that's not yet
+  // DD-aware). EDD-only fields no longer drag CDD/SDD profiles down,
+  // which previously capped the step pct at 80% in every typical case.
+  const kycProfileEntries = typedRoles
+    .map((r) => r.client_profiles)
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .map((p) => {
+      const raw = p.client_profile_kyc;
+      const kyc = (Array.isArray(raw) ? raw[0] ?? null : raw) as KycFull | null;
+      return { kyc, ddLevel: p.due_diligence_level };
+    });
+  const kycPct = hasDirector && kycProfileEntries.length > 0
+    ? Math.round(
+        kycProfileEntries.reduce(
+          (sum, e) => sum + calcKycPct(e.kyc, e.ddLevel),
+          0,
+        ) / kycProfileEntries.length,
+      )
+    : 0;
   const peopleKycPct = typedRoles.length === 0 ? 0 : hasDirector ? kycPct : Math.round(kycPct * 0.5);
 
   // B-085 — service-level Documents pill. Universe is every active

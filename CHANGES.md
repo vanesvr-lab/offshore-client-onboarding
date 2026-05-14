@@ -13,6 +13,21 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-113 — Spacebar fix + KYC % + inline DD selector + per-profile Pending (in progress 2026-05-14)
+
+### 2026-05-14 — B-113 batch 1 — Spacebar fix + DD-aware KYC % (Claude Code)
+
+Two bug fixes on `/admin/services/[id]`:
+
+- **Spacebar in KYC review notes.** Both collapsible-row headers in `ServiceDetailClient.tsx` (`KycLongFormSection` at line ~862 and the per-profile docs expanded toggle at line ~2476) used `<div role="button">` with an `onKeyDown` that called `preventDefault()` on space. The `SectionReviewPanel` notes textarea (rendered via a portal) bubbled its keydowns through the React parent tree, so typing a space toggled the underlying section instead of inserting a space. Both handlers now early-return when `e.target !== e.currentTarget` — they only fire when the header itself has focus.
+- **`calcKycPct` over-counts.** Dropped `source_of_funds_description` (it's the optional "Additional context" textarea, no `required: true` on the field) and gated `source_of_wealth_description` behind `ddLevel === "edd"` (the field is `eddOnly: true` and only renders for EDD profiles). Bruce — CDD, all required fields filled — was capped at 80% because both fields were missing and counted as required. The helper now takes an optional `ddLevel` arg; both call sites pass `profile.due_diligence_level`. The service-level People & KYC aggregator (previously `calcKycCompletion(kycPersons).percentage`) now averages per-profile `calcKycPct(kyc, ddLevel)` so the right-rail Completed gauge no longer permanently shows 4/5 for an actually-complete service. The unused `calcKycCompletion` import was removed.
+
+Tech-debt entries logged for: (a) the dashboard + services-list pages still using the un-fixed `calcKycCompletion`, (b) the individual-shaped field list under-counting organisation profiles, (c) manual alerts having no profile linkage (relevant to Batch 3).
+
+`npm run build` clean.
+
+---
+
 ## B-112 — Pill gauges + rail progress meters + Pending resize (done 2026-05-14)
 
 ### 2026-05-14 — Step-pill G-2 redesign + right-rail Completed/Reviewed meters + Pending card 4-row cap (Claude Code)
