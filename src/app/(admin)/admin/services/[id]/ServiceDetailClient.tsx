@@ -6097,43 +6097,12 @@ export function ServiceDetailClient({
         style={railMaxHeight ? { maxHeight: railMaxHeight } : undefined}
       >
 
-        {/* B-091 — service-level View Summary entry point. Lives at the
-              very top of the right rail so it's the first action visible
-              once the rail pins (B-090). Falls back to a generic label
-              when the service has no number assigned. */}
-        <Button
-          onClick={() => setServiceSummaryOpen(true)}
-          className={`w-full justify-center h-10 ${BTN_PRIMARY}`}
-        >
-          <Eye className="h-4 w-4 mr-1.5" />
-          {service.service_number
-            ? `View Summary for ${service.service_number}`
-            : "View Service Summary"}
-        </Button>
-
-        {/* B-118 — Peer / Manager review requests card. Placed between
-              the View Summary button and the Pending card so it's the
-              second primary action visible when the rail pins. Opens
-              the request modal; lists open requests with reviewer
-              chips + Mark/Close actions. */}
-        <ReviewRequestsCard
-          serviceId={service.id}
-          currentUserId={currentUserId}
-          requests={reviewRequests}
-          profileNamesById={reviewProfileNamesById}
-          onOpenModal={() => setRequestReviewModalOpen(true)}
-          onClosed={(req, comms) => {
-            upsertReviewRequest(req);
-            appendCommunications(comms);
-            router.refresh();
-          }}
-          highlightRequestId={highlightReviewRequestId}
-        />
-
-        {/* B-112 — progress meters card sits above the Pending card.
-              Two circular gauges (Completed n/5 + Reviewed n/5) give
-              the one-second answer for "how far through this service".
-              Counts re-derive live from the section-reviews context. */}
+        {/* B-120 — Progress meters card is the first item in the right
+              rail so the at-a-glance state is what admin sees the moment
+              the rail pins. Two circular gauges (Completed n/5 + Reviewed
+              n/5) give the one-second answer for "how far through this
+              service". Counts re-derive live from the section-reviews
+              context. */}
         <ProgressMetersWithState
           pcts={
             hasActionBindings
@@ -6154,6 +6123,36 @@ export function ServiceDetailClient({
                 ]
           }
           steps={adminSteps}
+        />
+
+        {/* B-091 — service-level View Summary entry point. Falls back to
+              a generic label when the service has no number assigned. */}
+        <Button
+          onClick={() => setServiceSummaryOpen(true)}
+          className={`w-full justify-center h-10 ${BTN_PRIMARY}`}
+        >
+          <Eye className="h-4 w-4 mr-1.5" />
+          {service.service_number
+            ? `View Summary for ${service.service_number}`
+            : "View Service Summary"}
+        </Button>
+
+        {/* B-118 — Peer / Manager review requests card. Sits between the
+              View Summary button and the Pending card. Opens the request
+              modal; lists open requests with reviewer chips + Mark/Close
+              actions. */}
+        <ReviewRequestsCard
+          serviceId={service.id}
+          currentUserId={currentUserId}
+          requests={reviewRequests}
+          profileNamesById={reviewProfileNamesById}
+          onOpenModal={() => setRequestReviewModalOpen(true)}
+          onClosed={(req, comms) => {
+            upsertReviewRequest(req);
+            appendCommunications(comms);
+            router.refresh();
+          }}
+          highlightRequestId={highlightReviewRequestId}
         />
 
         {/* B-111 Batch 2 — Pending card sits at the top of the right

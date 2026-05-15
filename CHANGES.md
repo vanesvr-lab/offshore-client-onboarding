@@ -13,6 +13,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-120 — Reference Forms library + right-rail Progress-card reorder (in progress 2026-05-15)
+
+### 2026-05-15 — Batch 1: right-rail Progress card promoted to slot 1 (Claude Code)
+
+`ServiceDetailClient.tsx` right-rail block (around the existing `lg:sticky lg:top-[300px]` shell) reordered: `<ProgressMetersWithState>` is now the **first** child, above the View Summary button. The Review Requests card (B-118) and Pending card (B-111) keep their relative order and shift down by one slot. The sticky offset math (`top-[300px]`) is untouched — the rail pins as a single block from the shell above, so the first child changing doesn't affect the pin point. Comment on the gauge block updated to reference B-120 + the "at-a-glance first" rationale. View Summary's old top-of-rail justification trimmed since it no longer leads.
+
+`npm run build` clean.
+
+Next: Batch 2 — Reference Forms schema migration + storage + admin settings page + library API endpoints.
+
+---
+
 ## B-119 — Actions as top-level section + email popup & milestones hotfixes (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: email popup width + sender + milestones compact (Claude Code)
