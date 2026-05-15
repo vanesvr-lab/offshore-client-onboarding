@@ -46,6 +46,23 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max - 1) + "…";
 }
 
+// B-121 — strip HTML for the body-preview column. Regex-only (no DOM
+// parser); collapses whitespace runs so wrapped <p>/<br> output reads as
+// a single line. We keep this conservative — anything that looks even
+// vaguely like a tag is removed, since the preview is text-only.
+function htmlToTextPreview(html: string, max = 80): string {
+  if (!html) return "";
+  const stripped = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+  return truncate(stripped, max);
+}
+
 export function ServiceCommunicationsDialog({
   open,
   onClose,
@@ -72,7 +89,11 @@ export function ServiceCommunicationsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-        <DialogContent className="max-w-5xl w-[min(100vw-2rem,72rem)]">
+        {/* B-121 — width bumped from max-w-5xl (64rem) to max-w-7xl
+            (80rem) — the closest +50%-ish step on Tailwind's standard
+            scale — so the new body-preview column has room to breathe.
+            Responsive cap follows. */}
+        <DialogContent className="max-w-7xl w-[min(100vw-2rem,80rem)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5 text-brand-navy" />
@@ -118,13 +139,16 @@ export function ServiceCommunicationsDialog({
                   <th className="text-left py-2 px-3 font-semibold">To</th>
                   <th className="text-left py-2 px-3 font-semibold">Type</th>
                   <th className="text-left py-2 px-3 font-semibold">Subject</th>
+                  {/* B-121 — body preview column gives admins enough
+                       context to identify the email without opening it. */}
+                  <th className="text-left py-2 px-3 font-semibold">Preview</th>
                   <th className="text-right py-2 px-3 font-semibold">View</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-sm text-gray-400">
+                    <td colSpan={7} className="py-8 text-center text-sm text-gray-400">
                       No emails match this filter.
                     </td>
                   </tr>
@@ -150,6 +174,11 @@ export function ServiceCommunicationsDialog({
                       </td>
                       <td className="py-2 px-3 text-gray-700">
                         {truncate(c.subject, 80)}
+                      </td>
+                      <td className="py-2 px-3 text-gray-500 max-w-[24rem]">
+                        <span className="block truncate">
+                          {htmlToTextPreview(c.body_html, 80) || "—"}
+                        </span>
                       </td>
                       <td className="py-2 px-3 text-right">
                         <button

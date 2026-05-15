@@ -34,6 +34,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 Next: Batch 2 — right-rail polish (Status to slot 3, Milestones / Audit Trail border parity, View All emails popup widen + sender/preview columns).
 
+### 2026-05-15 — Batch 2: right-rail polish (Status to slot 3 + border parity + View All widen) (Claude Code)
+
+**Right-rail order** (`ServiceDetailClient.tsx`) — Status card promoted from slot 4 to slot 3 (just below View Summary, above Pending). The override confirmation Dialog stays co-located with the Status block (it's portaled so position in the JSX tree doesn't matter, but co-location keeps reading easy). Final order: Progress → View Summary → Review Requests → Status → Pending → Communications → Milestones → Audit Trail. The Pending card now appears AFTER Status with an updated comment calling out the new slot rationale.
+
+**Border parity** (`ServiceCollapsibleSection.tsx`) — the shadcn Card primitive defaults to `ring-1 ring-foreground/10`. Default-variant sections (Milestones, Audit Trail in the right rail; Internal Notes, Risk Assessment in the left column) were stacking that ring on top of the inline `border border-gray-200` — visible as a "doubled" border vs the top right-rail cards which use plain `<div className="bg-white border rounded-xl …">`. Added `ring-0` to the default-variant Card className so the border is now a single gray-200 line matching the top cards. Step-variant header pill (the `bg-[#06629c]` blue strip) is untouched — that's the section-step treatment and stays as-is.
+
+**View All emails popup** (`ServiceCommunicationsDialog.tsx`):
+- Width bumped from `max-w-5xl` (64rem) / `w-[min(100vw-2rem,72rem)]` to `max-w-7xl` (80rem) / `w-[min(100vw-2rem,80rem)]` — closest +50%-ish step on Tailwind's standard scale.
+- New **Preview** column shows the first 80 characters of the email body, stripped of HTML via a new `htmlToTextPreview` regex helper (removes tags + decodes `&nbsp;` / `&amp;` / `&lt;` / `&gt;` + collapses whitespace + truncates with `…`). Column lives between Subject and View with `max-w-[24rem]` + `truncate` so long previews don't blow out the table layout.
+- "Sent by" column was already present (snapshot of `sent_by_name`), so the Sender ask from the brief was met without additional plumbing.
+- `colSpan` on the empty-state row bumped from 6 → 7 to match the new column count.
+
+`npm run build` clean. No migration in this batch.
+
+Next: Batch 3 — local director count: `service_templates.min_local_directors` migration + People & KYC header chip + Pending row when shortfall > 0.
+
 ---
 
 ## B-120 — Reference Forms library + right-rail Progress-card reorder (done 2026-05-15)

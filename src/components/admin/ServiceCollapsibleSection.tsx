@@ -99,10 +99,15 @@ export function ServiceCollapsibleSection({
   return (
     <Card
       id={anchorId}
+      // B-121 — default variant zeroes the shadcn Card's `ring-1` so the
+      // border is a single gray-200 line (no doubled ring + border). This
+      // brings Milestones / Audit Trail in the right rail in line with the
+      // top cards' `bg-white border rounded-xl` treatment. Internal Notes
+      // / Risk Assessment pick the same cleaner border up as a side-effect.
       className={
         isStep
           ? "overflow-hidden scroll-mt-80 border border-gray-900 shadow-sm"
-          : "overflow-hidden scroll-mt-80 border border-gray-200 shadow-sm"
+          : "overflow-hidden scroll-mt-80 border border-gray-200 shadow-sm ring-0"
       }
     >
       <div className={`flex items-center gap-2 ${isStep ? "px-2 py-2" : "px-5 py-4"}`}>

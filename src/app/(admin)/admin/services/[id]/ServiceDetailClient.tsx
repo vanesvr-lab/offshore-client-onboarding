@@ -6200,43 +6200,14 @@ export function ServiceDetailClient({
           highlightRequestId={highlightReviewRequestId}
         />
 
-        {/* B-111 Batch 2 — Pending card sits at the top of the right
-              rail (above Status / Communications / Milestones). One row
-              per actionable item; click drills to the right place. */}
-        <PendingCardWithState
-          pcts={
-            hasActionBindings
-              ? [
-                  companySetupPct,
-                  financialPct,
-                  bankingPct,
-                  peopleKycPct,
-                  documentsPct,
-                  actionsPct,
-                ]
-              : [
-                  companySetupPct,
-                  financialPct,
-                  bankingPct,
-                  peopleKycPct,
-                  documentsPct,
-                ]
-          }
-          profiles={profilesForPending}
-          missingDocCount={missingDocCount}
-          autoAlerts={visibleAutoAlerts}
-          manualAlerts={openManualAlerts}
-          onAction={handlePendingAction}
-          steps={adminSteps}
-          actionSubsections={actionSubsectionRows}
-        />
-
-        {/* ── Status Change (B-093) ───────────────────────────────────────
-              Four-row layout: label → current status badge → "updated on
-              <date> by <name>" → action row (forward Move + Override
-              dropdown). Forward button advances along FORWARD_CHAIN;
-              greyed at terminals. Override fires a confirmation Dialog
-              before applying. */}
+        {/* ── Status Change (B-093) — B-121 promoted to slot 3 of the
+              right rail (above the Pending card) so admin sees the
+              current stage + move/override controls before the action
+              list. Four-row layout: label → current status badge →
+              "updated on <date> by <name>" → action row (forward Move +
+              Override dropdown). Forward button advances along
+              FORWARD_CHAIN; greyed at terminals. Override fires a
+              confirmation Dialog before applying. */}
         <div className="bg-white border rounded-xl px-4 py-3 space-y-2">
           {/* Row 1 — label */}
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</p>
@@ -6340,6 +6311,38 @@ export function ServiceDetailClient({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* B-111 Batch 2 — Pending card. B-121 — moved to slot 4 (after
+              Status) so admins see stage + controls first, then the
+              action list. One row per actionable item; click drills to
+              the right place. */}
+        <PendingCardWithState
+          pcts={
+            hasActionBindings
+              ? [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                  actionsPct,
+                ]
+              : [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                ]
+          }
+          profiles={profilesForPending}
+          missingDocCount={missingDocCount}
+          autoAlerts={visibleAutoAlerts}
+          manualAlerts={openManualAlerts}
+          onAction={handlePendingAction}
+          steps={adminSteps}
+          actionSubsections={actionSubsectionRows}
+        />
 
         {/* ── Assigned Officer ────────────────────────────────────────────── */}
         <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
