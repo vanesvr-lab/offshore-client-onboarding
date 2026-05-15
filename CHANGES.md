@@ -42,6 +42,27 @@ The wrapper builds the gauges array via a memo: always `[Completed, Reviewed]`, 
 
 Next: Batch 2 — rewrite `ReferenceFormsPanel` as a four-column table with inline icons.
 
+### 2026-05-15 — Batch 2: Reference Forms tabular layout (Claude Code)
+
+**`ReferenceFormsPanel` rewrite** — replaced the card-per-form `<ul>/<li>` shape (one stacked block with title, status pill, action button, separate submitted line) with a real `<table>` whose four columns are:
+
+1. **Reference form** — name + version chip + `Eye` (preview blank) + `Download` (blank).
+2. **Status** — active / replaced / deactivated chip (same colour treatment as before).
+3. **Submitted file** — when present: filename + `Eye` (preview) + `Download` + `ArrowUpFromLine` (upload-new-version, replaces current). When absent: a labelled "Upload submitted" button (Batch 3 will swap this empty-state cell for a drag-drop zone).
+4. **Submitted date** — date of the latest submission + a small `history (N)` link when older versions exist; em-dash when never uploaded.
+
+The previous inline-disclosure pattern for "View history" was replaced by a Dialog modal (`HistoryDialog`) that lists every past submission with file name, date, uploader, and Preview / Download per row. The current row is tagged with an emerald "current" chip so admins can tell at a glance which one is live.
+
+All icon buttons are 16px (`h-4 w-4`) with `text-gray-500 hover:text-gray-900` and a `title` attribute so screen readers + hover tooltips both pick up the action label.
+
+**`DocumentPreviewDialog` extension** — added an optional `urlEndpoint?: string` prop that overrides the default `/api/documents/{id}/download` lookup. When provided, the dialog hits the caller-specified endpoint (must still return `{ url: string }`) for the signed URL. This lets the new table reuse the existing viewer for both blank reference templates (`/api/admin/reference-forms/{id}/blank-download-url`) and submitted copies (`/api/admin/submitted-forms/{id}/download-url`) without a fork. Mime types are inferred from the filename extension via a small local helper so the dialog picks the right surface (image / pdf / fallback download). The legacy call sites (`documentId` only) are unaffected.
+
+**No new API endpoints.** All clicks reuse Batch-2-of-B-120 routes; the visual change is purely client-side.
+
+Component file went from 305 lines (card layout) to ~470 lines (table + preview wiring + history dialog) — bigger because the history-as-dialog pattern carries its own table; offsetting the visual real-estate is the win Vanessa asked for. `npm run build` clean.
+
+Next: Batch 3 — build `SubmittedFileDropZone` and swap the empty-state "Upload submitted" button for a click-or-drop zone.
+
 ---
 
 ## B-121 — Review Wizard regression fix + right-rail polish + local director count (done 2026-05-15)

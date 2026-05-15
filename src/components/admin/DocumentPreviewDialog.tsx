@@ -23,6 +23,13 @@ interface DocumentPreviewDialogProps {
   /** B-070 — when provided, renders a small banner above the preview body
    * indicating which KYC field the dialog was opened to defend. */
   sourceFieldLabel?: string;
+  /** B-122 — override the endpoint we hit for the signed URL. Defaults
+   * to `/api/documents/{id}/download` (the documents-table lookup). Let
+   * reference-form / submitted-form callers pass their own endpoint
+   * (e.g. `/api/admin/reference-forms/{id}/blank-download-url`) so they
+   * can reuse this dialog without forking the viewer. The endpoint must
+   * return `{ url: string }` like the documents endpoint. */
+  urlEndpoint?: string;
 }
 
 function formatDate(dateStr?: string): string {
@@ -43,6 +50,7 @@ export function DocumentPreviewDialog({
   open,
   onOpenChange,
   sourceFieldLabel,
+  urlEndpoint,
 }: DocumentPreviewDialogProps) {
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,7 +62,8 @@ export function DocumentPreviewDialog({
     setError(null);
     setSignedUrl(null);
 
-    fetch(`/api/documents/${documentId}/download`)
+    const endpoint = urlEndpoint ?? `/api/documents/${documentId}/download`;
+    fetch(endpoint)
       .then((r) => r.json())
       .then((data: { url?: string; error?: string }) => {
         if (data.url) {
@@ -65,7 +74,7 @@ export function DocumentPreviewDialog({
       })
       .catch(() => setError("Could not load document"))
       .finally(() => setLoading(false));
-  }, [open, documentId]);
+  }, [open, documentId, urlEndpoint]);
 
   const isImage = mimeType?.startsWith("image/");
   const isPdf = mimeType === "application/pdf";
