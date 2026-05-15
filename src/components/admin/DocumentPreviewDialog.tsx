@@ -81,8 +81,17 @@ export function DocumentPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
+      {/* B-123 — bigger default size + native 2-axis resize so admins
+           can read multi-page regulatory forms without the iframe
+           clipping the top half. Default ~80rem × 80vh (mirrors the
+           Communications list cap). Mins (60rem × 40rem) keep the
+           handle usable; the shadcn Dialog's `max-w-7xl` cap is a
+           default-width hint that the native resize handle isn't
+           bound by. `overflow-auto` (instead of the previous
+           `overflow-hidden`) is required for the resize handle to
+           show in browsers. */}
       <DialogContent
-        className="max-w-4xl w-full p-0 flex flex-col overflow-hidden"
+        className="max-w-7xl w-[min(100vw-2rem,80rem)] h-[80vh] max-h-[80vh] p-0 flex flex-col resize overflow-auto min-w-[60rem] min-h-[40rem]"
         showCloseButton={false}
       >
         {/* Header */}
@@ -117,8 +126,13 @@ export function DocumentPreviewDialog({
           </div>
         )}
 
-        {/* Preview body */}
-        <div className="flex-1 overflow-hidden" style={{ height: "calc(80vh - 112px)" }}>
+        {/* Preview body — B-123: switched from a hard-coded
+            calc(80vh - 112px) to pure flex sizing (flex-1 + min-h-0)
+            so the preview iframe/image stretches to whatever height
+            the (now resizable) DialogContent has. `min-h-0` is what
+            lets a flex child actually shrink below its content's
+            natural height, which the iframe needs to size correctly. */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           {loading && (
             <div className="flex items-center justify-center h-full text-sm text-gray-400">
               Loading preview…

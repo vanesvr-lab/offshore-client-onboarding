@@ -92,8 +92,13 @@ export function ServiceCommunicationsDialog({
         {/* B-121 — width bumped from max-w-5xl (64rem) to max-w-7xl
             (80rem) — the closest +50%-ish step on Tailwind's standard
             scale — so the new body-preview column has room to breathe.
-            Responsive cap follows. */}
-        <DialogContent className="max-w-7xl w-[min(100vw-2rem,80rem)]">
+            Responsive cap follows.
+            B-123 — added `resize-x overflow-auto min-w-[60rem]` so admin
+            can drag the dialog wider on big displays. min-w guards
+            against collapsing below the column-width sum. Native
+            resize handle isn't constrained by `max-w-7xl`, so the
+            cap is a default-width hint, not a hard ceiling. */}
+        <DialogContent className="max-w-7xl w-[min(100vw-2rem,80rem)] resize-x overflow-auto min-w-[60rem]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5 text-brand-navy" />
@@ -131,18 +136,27 @@ export function ServiceCommunicationsDialog({
           </div>
 
           <div className="max-h-[70vh] overflow-y-auto">
-            <table className="w-full text-sm">
+            {/* B-123 — explicit per-column widths so the row total
+                comes in under the modal's max-w-7xl cap (was 7 columns
+                fighting for space and overflowing horizontally on a
+                1440px display). table-fixed keeps the widths honest
+                even if a cell's content would normally stretch its
+                column. Subject + Preview rely on `truncate` + `title`
+                for hover-tooltip access to the full text. */}
+            <table className="w-full text-sm table-fixed">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
                 <tr>
-                  <th className="text-left py-2 px-3 font-semibold">Date</th>
-                  <th className="text-left py-2 px-3 font-semibold">Sent by</th>
-                  <th className="text-left py-2 px-3 font-semibold">To</th>
-                  <th className="text-left py-2 px-3 font-semibold">Type</th>
-                  <th className="text-left py-2 px-3 font-semibold">Subject</th>
+                  <th className="text-left py-2 px-3 font-semibold w-[9rem]">Date</th>
+                  <th className="text-left py-2 px-3 font-semibold w-[11rem]">Sent by</th>
+                  <th className="text-left py-2 px-3 font-semibold w-[14rem]">To</th>
+                  <th className="text-left py-2 px-3 font-semibold w-[10rem]">Type</th>
+                  <th className="text-left py-2 px-3 font-semibold w-[14rem]">Subject</th>
                   {/* B-121 — body preview column gives admins enough
-                       context to identify the email without opening it. */}
-                  <th className="text-left py-2 px-3 font-semibold">Preview</th>
-                  <th className="text-right py-2 px-3 font-semibold">View</th>
+                       context to identify the email without opening it.
+                       B-123 — narrowed from max-w-[24rem] to w-[12rem]
+                       so the row fits without horizontal scroll. */}
+                  <th className="text-left py-2 px-3 font-semibold w-[12rem]">Preview</th>
+                  <th className="text-right py-2 px-3 font-semibold w-[4rem]">View</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -158,10 +172,16 @@ export function ServiceCommunicationsDialog({
                       <td className="py-2 px-3 text-gray-700 whitespace-nowrap">
                         {formatDateTime(c.sent_at)}
                       </td>
-                      <td className="py-2 px-3 text-gray-700 whitespace-nowrap">
+                      <td
+                        className="py-2 px-3 text-gray-700 truncate"
+                        title={c.sent_by_name ?? undefined}
+                      >
                         {c.sent_by_name ?? "—"}
                       </td>
-                      <td className="py-2 px-3 text-gray-700">
+                      <td
+                        className="py-2 px-3 text-gray-700 truncate"
+                        title={c.sent_to_email ?? undefined}
+                      >
                         {c.sent_to_email ?? "—"}
                         {c.status === "failed" && (
                           <span className="ml-1.5 text-xs text-red-600 font-medium">
@@ -169,16 +189,14 @@ export function ServiceCommunicationsDialog({
                           </span>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-gray-600">
+                      <td className="py-2 px-3 text-gray-600 truncate" title={labelForEmailType(c.email_type)}>
                         {labelForEmailType(c.email_type)}
                       </td>
-                      <td className="py-2 px-3 text-gray-700">
-                        {truncate(c.subject, 80)}
+                      <td className="py-2 px-3 text-gray-700 truncate" title={c.subject}>
+                        {c.subject}
                       </td>
-                      <td className="py-2 px-3 text-gray-500 max-w-[24rem]">
-                        <span className="block truncate">
-                          {htmlToTextPreview(c.body_html, 80) || "—"}
-                        </span>
+                      <td className="py-2 px-3 text-gray-500 truncate" title={htmlToTextPreview(c.body_html, 240)}>
+                        {htmlToTextPreview(c.body_html, 80) || "—"}
                       </td>
                       <td className="py-2 px-3 text-right">
                         <button

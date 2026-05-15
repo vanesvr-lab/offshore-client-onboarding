@@ -11,6 +11,16 @@ remove after 30 days.
 
 ## 2026-05-15
 
+- **Modal sizing has no persistence (Communications list + DocumentPreviewDialog).**
+  *Spawned by:* [B-123](cli-brief-modal-sizing-polish-b123.md).
+  *What:* Both modals now expose a native resize handle (horizontal on the list dialog, two-axis on the preview). Width/height resets every time admin closes the modal. If admins find themselves repeatedly resizing in the same session, add `localStorage` persistence keyed on the dialog name (`gwms.modalSize.communications-list`, `gwms.modalSize.document-preview`).
+  *Why deferred:* Native resize is sufficient for the POC; persistence is plumbing without immediate value. Revisit if Vanessa flags this.
+
+- **`DocumentPreviewDialog` is shared across many callers with one default size.**
+  *Spawned by:* [B-123](cli-brief-modal-sizing-polish-b123.md).
+  *What:* The bigger default size (max-w-7xl × 80vh) was applied unconditionally and is fine for every current caller — KYC doc detail, AI viewer, field-provenance preview, reference-form blank, submitted-form preview. If a future caller wants a smaller default (e.g., a thumbnail-style inline preview), formalise a `size?: 'compact' | 'default' | 'large'` prop and migrate that caller. Don't preemptively introduce the variant — premature abstraction.
+  *Why deferred:* Single visual default works today.
+
 - **`SubmittedFileDropZone` is purpose-built for submitted-form uploads.**
   *Spawned by:* [B-122](cli-brief-progress-gauges-and-reference-forms-table-b122.md).
   *What:* The drop-zone component lives at `src/components/admin/actions/SubmittedFileDropZone.tsx` and hard-codes the `/api/admin/services/[id]/submitted-forms` endpoint + the submitted-form MIME allow-list. If we add more "upload a file here" surfaces (e.g., the reference-form library upload modal, a future bulk-document upload), refactor into a generic `<FileDropZone>` that takes the upload endpoint + accepted MIME list as props. Today's component is the only consumer so generalising now is premature.

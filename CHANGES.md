@@ -13,6 +13,41 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-123 — Modal sizing polish (Communications list + Reference form preview) (done 2026-05-15)
+
+### 2026-05-15 — Communications list rebalance + DocumentPreviewDialog larger / resizable (Claude Code)
+
+**Communications list dialog (`ServiceCommunicationsDialog.tsx`).** The B-121 width bump (`max-w-7xl` / 80rem) wasn't enough on a 1440px laptop because the body-preview column was 384px (`max-w-[24rem]`) and the other columns had no explicit widths — total cell content was overflowing horizontally.
+
+Column-width rebalance (table now uses `table-fixed` so the widths are honoured):
+- Date: `w-[9rem]` (144px)
+- Sent by: `w-[11rem]` (176px) + `truncate` + `title` for hover-tooltip
+- To: `w-[14rem]` (224px) + `truncate` + `title`
+- Type: `w-[10rem]` (160px) + `truncate` + `title`
+- Subject: `w-[14rem]` (224px) + `truncate` + `title`  — dropped the JS-side `truncate(c.subject, 80)` in favour of CSS truncation, so the column shows as much as the cell can hold and the full string lives in the tooltip.
+- Preview: `w-[12rem]` (192px) + `truncate` + `title` — the title gets a longer 240-char preview so the tooltip is informative.
+- View: `w-[4rem]` (64px) — just the icon button.
+
+Sum ≈ 1184px, comfortably under the 1280px max-w-7xl cap on the desktop default.
+
+**Horizontal resize handle.** `DialogContent` className gained `resize-x overflow-auto min-w-[60rem]`. The min-w guards against admin collapsing the modal below the column widths' total; the native handle isn't bound by `max-w-7xl`, so it can grow past 80rem on big displays. No persistence — resets on close (tech-debt entry tracks this).
+
+**`DocumentPreviewDialog` (`DocumentPreviewDialog.tsx`).** Default size was `max-w-4xl` (~56rem) — fine for ID-card-sized images but clipped the upper half of multi-page regulatory PDFs (Vanessa flagged this on FORM A — A CHECKLIST FOR GBC APPLICATION).
+
+- **New default:** `max-w-7xl w-[min(100vw-2rem,80rem)] h-[80vh] max-h-[80vh]` — matches the Communications list cap, plus an explicit 80vh height so the iframe gets real vertical space instead of just hugging its natural size.
+- **Native two-axis resize:** added `resize overflow-auto min-w-[60rem] min-h-[40rem]`. Mins are 60rem × 40rem so admin can't shrink past readable territory. `overflow-auto` replaces the previous `overflow-hidden` (required for the resize handle to render in browsers).
+- **Inner body sizing:** the previous `style={{ height: "calc(80vh - 112px)" }}` was a hard-coded subtraction tuned to the old fixed-80vh container. Switched to pure flex sizing (`flex-1 min-h-0`) so the iframe/image fills whatever height the now-resizable container has. `min-h-0` is what lets a flex child shrink below its content's natural height — required for iframes inside flex columns.
+
+Bigger-default applied unconditionally to every `DocumentPreviewDialog` caller (admin doc viewer, AI viewer, field-provenance preview, reference-form blank, submitted-form preview). The brief noted the new size should improve all of them; tech-debt entry covers the "introduce a size variant prop" follow-up if a specific call site needs a smaller default later.
+
+No new tests required — pure sizing tweaks. 270 / 270 existing vitest passing. `npm run build` clean.
+
+**Tech-debt** (`docs/tech-debt.md`, newest at top):
+- Modal sizing has no persistence — add localStorage if admins frequently re-resize within a session.
+- `DocumentPreviewDialog` uses one default size; formalise a `size` variant prop if site-by-site sizing becomes a need.
+
+---
+
 ## B-122 — Progress gauges mini + Reference Forms table + drop-zone upload (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: Progress meters mini gauges + Actions gauge (Claude Code)
