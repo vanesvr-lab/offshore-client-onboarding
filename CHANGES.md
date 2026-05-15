@@ -13,6 +13,33 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-117 — Field provenance icons + mismatch detection + doc expiry SoT + Re-apply fix (in progress 2026-05-14)
+
+### 2026-05-14 — Batch 1: state-driven field icons, mismatch detection, click-to-fix popover (Claude Code)
+
+Collapsed the admin KYC long-form's twin-sparkle UX (hardcoded `aiExtractable` marker + dynamic provenance marker) into a single state-driven marker. Each AI-extractable field now renders **two icon slots** next to its label:
+
+- **Left slot — state:** `PenLine` black (manual, no doc) / `ShieldOff` amber (doc uploaded, OCR couldn't extract) / `Sparkles` blue (auto-filled, untouched) / `Check` green (manual edit matches OCR) / `Flag` red (manual edit doesn't match OCR).
+- **Right slot — action:** `Eye` blue, opens `DocumentPreviewDialog`. Renders only when a source doc exists.
+
+`FieldProvenanceMarker` now accepts `currentValue`, `fieldType`, and `onApplyValue`. Match state is computed each render from `(latestOcrExtraction, currentValue, fieldType)`. The legacy `admin_override` → amber-pencil branch is removed: an edit that matches OCR shows green check, an edit that differs shows red flag. The DB still records the edit's `source` as `admin_override` for audit-log integrity — the icon just no longer reads that column.
+
+**Mismatch detection** runs on the field's `commitValue` (not the live `value`), which is synced from `value` only when the field is not actively being typed in — so the red flag doesn't flicker keystroke-by-keystroke. Atomic-change fields (select/date/boolean/country) update commitValue on every change (their changes are commits); text/textarea wait for blur.
+
+**Click-to-fix popover**: clicking the red `Flag` opens a small base-ui popover with `OCR extracted from {file}` + the OCR value + a "Use uploaded value" button. Click → calls `onApplyValue(ocrValue)` which both sets the form field and the marker's commitValue. No save is triggered; admin still presses Save.
+
+**Normalization** (`src/lib/kyc/normalizeForCompare.ts`): text → lowercase + collapsed whitespace + trimmed; date → `YYYY-MM-DD`; country → ISO-3 via `toIso3`; boolean → `"true"`/`"false"`. Empty after normalization = "no comparison" (falls back to "manual" or "skipped" depending on which side is empty). 23 unit tests cover case-insensitivity, whitespace collapse, US-vs-ISO dates, country name vs ISO-3, empty handling — all pass.
+
+New files: `src/lib/kyc/normalizeForCompare.ts`, `src/components/ui/popover.tsx` (base-ui Popover wrapper), `tests/unit/lib/normalizeForCompare.test.ts`.
+
+Modified: `src/components/admin/FieldProvenanceMarker.tsx` (rewrite), `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (removed hardcoded `<Sparkles>` capability marker, added focus/blur tracking + commitValue state, wired `onApplyValue` to update both `onChange` and `commitValue`).
+
+`npm run build` clean.
+
+Next: Batch 2 — OCR writeback to `service_documents.expiry_date` + backfill migration + doc-card "Expiring soon" badge.
+
+---
+
 ## B-116 — People & KYC dedup + combined Documents total (done 2026-05-14)
 
 ### 2026-05-14 — Dedup peopleKycPct by profile id + Documents step counts service + KYC docs (Claude Code)

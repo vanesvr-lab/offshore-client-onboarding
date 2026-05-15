@@ -9,7 +9,7 @@ import {
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
   StickyNote, ShieldCheck, Milestone, Clock,
   AlertTriangle, Bell, Eye,
-  Sparkles, Trash2,
+  Trash2,
   Wand2, ChevronLeft, ChevronRight, X,
   Ban, RotateCcw,
 } from "lucide-react";
@@ -1210,9 +1210,14 @@ function KycLongFormSection({
 
 // B-075 — single field renderer for the admin KYC long form.
 // Handles every type the shared schema supports (text/textarea/date/select/
-// boolean/country) and wires the FieldProvenanceMarker + Sparkles AI marker
-// next to the label so the admin sees the same provenance affordances the
-// client wizard has.
+// boolean/country) and wires the FieldProvenanceMarker next to the label
+// so the admin sees the same provenance affordances the client wizard has.
+//
+// B-117 — collapsed the twin sparkle (hardcoded `field.aiExtractable` marker
+// + dynamic provenance marker) into a single state-driven marker. Mismatch
+// detection runs on `commitValue` which is synced from `value` only when the
+// field is not actively being typed in — so the red flag doesn't flicker
+// keystroke-by-keystroke.
 function KycLongFormField({
   field,
   value,
@@ -1247,6 +1252,22 @@ function KycLongFormField({
     (Array.isArray(value) && !value.some((x) => x != null && x !== ""));
   const missing = !!field.required && empty && !!sectionHasData;
 
+  // B-117 — committed value drives mismatch detection. For text/textarea we
+  // wait for blur; for atomic-change fields (select/date/boolean/country)
+  // every change is already a commit, so the isFocused guard never trips.
+  const isFocusedRef = useRef(false);
+  const [commitValue, setCommitValue] = useState<unknown>(value);
+  useEffect(() => {
+    if (!isFocusedRef.current) setCommitValue(value);
+  }, [value]);
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+  };
+  const handleBlur = () => {
+    isFocusedRef.current = false;
+    setCommitValue(value);
+  };
+
   return (
     <div className="space-y-1">
       <label className={`flex items-center gap-1.5 text-sm font-medium ${missing ? "text-red-600" : "text-gray-900"}`}>
@@ -1254,19 +1275,24 @@ function KycLongFormField({
         {field.required && (
           <span className="text-red-600" aria-hidden="true">*</span>
         )}
-        {field.aiExtractable && (
-          <Sparkles className="h-3 w-3 text-blue-500" aria-label="AI-extractable" />
-        )}
         <FieldProvenanceMarker
           extractions={extractions}
           sourceDocs={sourceDocs}
           fieldLabel={field.label}
+          currentValue={commitValue}
+          fieldType={field.type}
+          onApplyValue={(v) => {
+            onChange(v);
+            setCommitValue(v);
+          }}
         />
       </label>
       {field.type === "textarea" ? (
         <Textarea
           value={stringValue}
           onChange={(e) => onChange(e.target.value)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           rows={3}
           placeholder={field.placeholder}
           disabled={disabled}
@@ -1324,6 +1350,8 @@ function KycLongFormField({
           type="text"
           value={stringValue}
           onChange={(e) => onChange(e.target.value)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder={field.placeholder}
           disabled={disabled}
           className="text-sm disabled:opacity-100 disabled:bg-gray-50 disabled:cursor-default"
