@@ -3792,6 +3792,8 @@ function PendingCardWithState({
   onAction,
   steps: stepsOverride,
   actionSubsections,
+  requiredLocalDirectors,
+  localDirectorCount,
 }: {
   pcts: number[];
   profiles: PendingProfileInput[];
@@ -3804,6 +3806,10 @@ function PendingCardWithState({
   steps?: AdminStep[];
   /** B-119 — per-subsection rows for the Actions step. */
   actionSubsections?: Parameters<typeof computePendingItems>[0]["actionSubsections"];
+  /** B-121 — local director compliance inputs. Optional so unrelated
+   *  callers (none today) don't have to thread them. */
+  requiredLocalDirectors?: number;
+  localDirectorCount?: number;
 }) {
   const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
   const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
@@ -3834,6 +3840,8 @@ function PendingCardWithState({
         autoAlerts,
         manualAlerts,
         actionSubsections,
+        requiredLocalDirectors,
+        localDirectorCount,
       }),
     [
       steps,
@@ -3843,6 +3851,8 @@ function PendingCardWithState({
       autoAlerts,
       manualAlerts,
       actionSubsections,
+      requiredLocalDirectors,
+      localDirectorCount,
     ],
   );
 
@@ -4698,6 +4708,39 @@ export function ServiceDetailClient({
     const bName = b.person.client_profiles?.full_name ?? "";
     return aName.localeCompare(bName);
   });
+
+  // B-121 — local director compliance counts. A profile is counted as
+  // a director when any of its `profile_service_roles.role` rows on this
+  // service is `director`; it counts as LOCAL when the same profile's
+  // `client_profile_kyc.is_local_resident_director` is true. The flag is
+  // admin-managed (no client-portal UI in this batch) and defaults to
+  // false, so freshly seeded services will read as 0-local until admin
+  // flips it via SQL or a follow-up admin toggle (tech-debt).
+  const directorCount = useMemo(() => {
+    let n = 0;
+    Array.from(profileRolesMap.values()).forEach((entry) => {
+      if (entry.roles.includes("director")) n += 1;
+    });
+    return n;
+  }, [profileRolesMap]);
+  const localDirectorCount = useMemo(() => {
+    let n = 0;
+    Array.from(profileRolesMap.values()).forEach((entry) => {
+      if (!entry.roles.includes("director")) return;
+      const rawKyc = entry.person.client_profiles?.client_profile_kyc;
+      const kyc = (Array.isArray(rawKyc) ? rawKyc[0] ?? null : rawKyc) as
+        | { is_local_resident_director?: boolean | null }
+        | null;
+      if (kyc?.is_local_resident_director === true) n += 1;
+    });
+    return n;
+  }, [profileRolesMap]);
+  const requiredLocalDirectors =
+    service.service_templates?.min_local_directors ?? 0;
+  const localDirectorShortfall = Math.max(
+    0,
+    requiredLocalDirectors - localDirectorCount,
+  );
 
   // ── B-102 Review Wizard derived state ─────────────────────────────────────
   // When in reviewMode + step 3 + `?profile=<id>` is set, narrow the People
@@ -5781,6 +5824,29 @@ export function ServiceDetailClient({
         {(!reviewMode || reviewStep === 3) && (
         <ServiceCollapsibleSection
           title={`People & KYC (${uniqueRoles.length} ${uniqueRoles.length === 1 ? "person" : "people"})`}
+          // B-121 — director count chip with local-resident shortfall
+          // tinted amber when the template requires more than we have.
+          titleSuffix={
+            directorCount > 0 || requiredLocalDirectors > 0 ? (
+              <span
+                className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${
+                  localDirectorShortfall > 0
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-white/10 text-white"
+                }`}
+                title={
+                  requiredLocalDirectors > 0
+                    ? `${requiredLocalDirectors} local director${
+                        requiredLocalDirectors === 1 ? "" : "s"
+                      } required`
+                    : "No local director rule for this template"
+                }
+              >
+                {directorCount} director{directorCount === 1 ? "" : "s"} ·{" "}
+                {localDirectorCount} local
+              </span>
+            ) : undefined
+          }
           percentage={peopleKycPct}
           ragStatus={ragFromPct(peopleKycPct)}
           sectionKey="people"
@@ -6342,6 +6408,8 @@ export function ServiceDetailClient({
           onAction={handlePendingAction}
           steps={adminSteps}
           actionSubsections={actionSubsectionRows}
+          requiredLocalDirectors={requiredLocalDirectors}
+          localDirectorCount={localDirectorCount}
         />
 
         {/* ── Assigned Officer ────────────────────────────────────────────── */}

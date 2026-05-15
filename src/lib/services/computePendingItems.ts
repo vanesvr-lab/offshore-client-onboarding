@@ -107,6 +107,14 @@ export interface ComputePendingInput {
    *  `pending` or `in_progress` are emitted; `done` / `blocked` /
    *  `not_applicable` are filtered out at the consumer. */
   actionSubsections?: PendingActionSubsection[];
+  /** B-121 — number of local (Mauritius-resident) directors the
+   *  template requires for compliance. Defaults to 0 when the template
+   *  has no rule (covers Trust / Domestic Co). */
+  requiredLocalDirectors?: number;
+  /** B-121 — actual count of local-resident directors currently
+   *  assigned to the service. Combined with `requiredLocalDirectors`
+   *  to emit a warning row when short. */
+  localDirectorCount?: number;
 }
 
 function severityForSection(status: SectionReviewStatus): PendingSeverity {
@@ -258,6 +266,28 @@ export function computePendingItems(input: ComputePendingInput): PendingItem[] {
       // direct profile case here.
       profileId:
         a.sourceEntityType === "profile" ? a.sourceEntityId : undefined,
+    });
+  }
+
+  // 4a. B-121 — local director compliance shortfall. Emitted as a
+  //     warning when the template specifies min_local_directors > 0
+  //     and the actual count is below the threshold. Click → scrolls
+  //     to People & KYC (same anchor the section row uses) so admin
+  //     can review director profiles and flip the
+  //     `is_local_resident_director` flag where appropriate.
+  const required = input.requiredLocalDirectors ?? 0;
+  const localCount = input.localDirectorCount ?? 0;
+  const localShortfall = Math.max(0, required - localCount);
+  if (required > 0 && localShortfall > 0) {
+    items.push({
+      id: "local_director_required",
+      severity: "warning",
+      label: `Local director required (${localShortfall} more needed)`,
+      detail: `Template requires ${required} local resident director${
+        required === 1 ? "" : "s"
+      }; currently have ${localCount}.`,
+      actionType: "scroll_to_section",
+      actionPayload: "step-people-kyc",
     });
   }
 

@@ -47,6 +47,9 @@ export type ServiceWithTemplate = ServiceRecord & {
     name: string;
     description: string | null;
     service_fields: ServiceField[] | null;
+    /** B-121 — per-template compliance counter; null/undefined falls
+     *  back to 0 in the page logic. */
+    min_local_directors?: number | null;
   } | null;
 };
 

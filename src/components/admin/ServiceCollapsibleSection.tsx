@@ -11,6 +11,10 @@ type RagStatus = "green" | "amber" | "red";
 
 interface Props {
   title: string;
+  /** B-121 — small chip / annotation rendered right after the title text.
+   *  Used to surface compliance counts (e.g. "3 directors · 1 local")
+   *  without forcing the parent to put HTML inside the title string. */
+  titleSuffix?: React.ReactNode;
   icon?: React.ReactNode;
   percentage?: number;
   ragStatus?: RagStatus;
@@ -60,6 +64,7 @@ const RAG_LABEL: Record<RagStatus, string> = {
 
 export function ServiceCollapsibleSection({
   title,
+  titleSuffix,
   icon,
   percentage,
   ragStatus,
@@ -122,6 +127,7 @@ export function ServiceCollapsibleSection({
               <span className="inline-flex items-center gap-2 min-w-0">
                 {icon && <span className="text-white/80 shrink-0">{icon}</span>}
                 <span className="font-medium truncate">{title}</span>
+                {titleSuffix && <span className="shrink-0">{titleSuffix}</span>}
               </span>
               {/* Right cluster: progress → % → ● Complete → Show ▾ */}
               {percentage !== undefined && ragStatus && (
@@ -155,6 +161,7 @@ export function ServiceCollapsibleSection({
               <div className="flex items-center gap-2.5 min-w-0">
                 {icon && <span className="text-gray-400 shrink-0">{icon}</span>}
                 <span className="font-semibold text-brand-navy truncate">{title}</span>
+                {titleSuffix && <span className="shrink-0">{titleSuffix}</span>}
                 {adminOnly && (
                   <span className="text-[9px] font-semibold uppercase tracking-wide bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded shrink-0">
                     Admin

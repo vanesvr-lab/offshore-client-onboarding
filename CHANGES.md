@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-121 — Review Wizard regression fix + right-rail polish + local director count (in progress 2026-05-15)
+## B-121 — Review Wizard regression fix + right-rail polish + local director count (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: Review Wizard regression — Actions as its own step (Claude Code)
 
@@ -49,6 +49,49 @@ Next: Batch 2 — right-rail polish (Status to slot 3, Milestones / Audit Trail 
 `npm run build` clean. No migration in this batch.
 
 Next: Batch 3 — local director count: `service_templates.min_local_directors` migration + People & KYC header chip + Pending row when shortfall > 0.
+
+### 2026-05-15 — Batch 3: local director count — schema + chip + Pending row (Claude Code)
+
+**Investigation outcome.** Grepped `supabase/schema.sql` + `supabase/migrations/`: no existing "is local resident director" flag, and no `country_of_residence` for individuals (only `nationality` + `passport_country`). `jurisdiction_tax_residence` exists but is **org-only**. Per the brief's third branch ("If neither: add the column"), we add `client_profile_kyc.is_local_resident_director boolean DEFAULT false` and rely on admin to flip it via SQL/Supabase editor for the POC. Tech-debt entry tracks the future admin-UI checkbox and the residence-vs-flag truthfulness question.
+
+**Migration `20260515151141_local_director_count.sql`** (pushed; `npm run db:status` paired Local + Remote):
+- `service_templates.min_local_directors integer NOT NULL DEFAULT 0` — per-template threshold.
+- `client_profile_kyc.is_local_resident_director boolean NOT NULL DEFAULT false` — per-individual flag.
+- Seed: `UPDATE service_templates SET min_local_directors = 1 WHERE name ILIKE '%GBC%' OR name ILIKE '%Global Business%'`.
+- `COMMENT ON COLUMN` for both columns explaining the no-UI-yet POC state.
+
+**Type plumbing.**
+- `ServiceTemplate` (in `src/types/index.ts`) gains optional `min_local_directors?: number`.
+- `ClientProfileKyc` gains optional `is_local_resident_director?: boolean`.
+- `ServiceWithTemplate` (in service-detail `page.tsx`) gains the same optional column on its joined `service_templates` shape.
+- `loadServiceDetail.ts` extends the service select from `(id, name, description, service_fields)` to also include `min_local_directors`. `client_profile_kyc(*)` already returns the new column for free since it's `SELECT *`.
+
+**Derivation** (`ServiceDetailClient.tsx`):
+- Right after `uniqueRoles` is built, two memos compute `directorCount` and `localDirectorCount` by walking `profileRolesMap` — a profile counts as a Director when any of its `profile_service_roles.role` rows is `'director'`, and counts as LOCAL when its joined `client_profile_kyc.is_local_resident_director` is `true`. Array unwrap on the joined relation mirrors existing patterns (Supabase returns arrays for joined relations; we read element 0).
+- `requiredLocalDirectors = service.service_templates?.min_local_directors ?? 0`.
+- `localDirectorShortfall = max(0, required - count)`.
+
+**Display 1 — header chip.** `ServiceCollapsibleSection` extended with an optional `titleSuffix?: React.ReactNode` prop rendered next to the title (works in both step + default variants). People & KYC section now passes a chip showing `"{N} director(s) · {N} local"`, only when there is at least one director OR a template rule. Chip tone: amber (`bg-amber-100 text-amber-800`) when `localDirectorShortfall > 0`, otherwise translucent white (the section-step pill is on a navy background, so plain gray would disappear). Tooltip surfaces the requirement count.
+
+**Display 2 — Pending card row.** `computePendingItems` accepts two new optional inputs (`requiredLocalDirectors`, `localDirectorCount`) and emits a warning row `"Local director required (N more needed)"` when shortfall > 0. Detail: `"Template requires X local resident director(s); currently have Y."` Action: `scroll_to_section` → `step-people-kyc`. `PendingCardWithState` wrapper threads the two values through from the page; the main right-rail mount passes the derived values.
+
+**Tests.** New `tests/unit/lib/computePendingItems-local-director.test.ts` — 6 cases covering: required=0 (no row), met (no row), exceeded (no row), 1-short (row with `1 more needed`), 2-short (pluralised + detail), and the legacy/missing-inputs path. 259 / 259 vitest passing (was 253 before).
+
+**Tech-debt** (`docs/tech-debt.md` — newest at top):
+- `service_templates.min_local_directors` has no admin UI — managed via SQL.
+- First per-template numeric threshold; refactor to a shared helper if more land.
+- `is_local_resident_director` checkbox UI is deferred — schema is ready, UX is the next step.
+- Manual flag risk: nationality vs residence truthfulness; revisit when client KYC captures residence.
+
+`npm run build` clean. `npm run db:status` paired.
+
+---
+
+## End-of-brief checklist
+
+1. `git status` clean and up-to-date with `origin/main`. ✅ (after Batch 3 push)
+2. CHANGES.md tail has one entry per batch dated 2026-05-15. ✅
+3. Dev-server reset to run from the **main project root** in background.
 
 ---
 

@@ -117,7 +117,7 @@ export async function loadServiceDetail(
   ] = await Promise.all([
     supabase
       .from("services")
-      .select(`*, service_templates(id, name, description, service_fields)`)
+      .select(`*, service_templates(id, name, description, service_fields, min_local_directors)`)
       .eq("id", serviceId)
       .eq("tenant_id", tenantId)
       .eq("is_deleted", false)

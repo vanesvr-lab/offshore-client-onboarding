@@ -11,6 +11,26 @@ remove after 30 days.
 
 ## 2026-05-15
 
+- **`service_templates.min_local_directors` has no admin UI for editing.**
+  *Spawned by:* [B-121](cli-brief-review-wizard-fix-and-right-rail-polish-b121.md).
+  *What:* The column is seeded (GBC = 1, everything else = 0) via the B-121 migration. There's no admin-side surface to change the value — managed only via Supabase SQL editor for the POC. Add a UI when more per-template compliance counters appear (Local Secretary, Local Registered Agent, Min Directors Total, etc.) or when regulators change requirements often. Likely lands on `/admin/settings/templates` as a small numeric input per row.
+  *Why deferred:* Single counter today, edits are rare, SQL is acceptable for now.
+
+- **First per-template numeric compliance threshold — refactor to a shared helper if more land.**
+  *Spawned by:* [B-121](cli-brief-review-wizard-fix-and-right-rail-polish-b121.md).
+  *What:* `min_local_directors` is the first per-template numeric rule. Its Pending derivation is hand-coded in `computePendingItems` and its display chip is hand-coded in `ServiceDetailClient`. If we add `min_local_secretaries` / `min_local_registered_agents` / `min_directors_total` / `min_shareholders`, refactor the Pending derivation into a `forEachTemplateThreshold(template, counts, emit)` helper rather than copy-pasting the if-branch each time. Same for the chip — extract a `<ComplianceCountChip>` component that takes a list of `{ label, count, required }` rows.
+  *Why deferred:* Single rule today doesn't justify the abstraction. Premature.
+
+- **Admin UI for `client_profile_kyc.is_local_resident_director` checkbox.**
+  *Spawned by:* [B-121](cli-brief-review-wizard-fix-and-right-rail-polish-b121.md).
+  *What:* B-121 added the column with `DEFAULT false`. The chip + Pending row read it, but there's no UI to flip it — admins set it via Supabase SQL editor for the POC. Surface a checkbox in the admin profile-detail surface (`/admin/profiles/[id]`) or per-profile under the People & KYC section of the service detail page, scoped to profiles assigned the Director role on this service. Should write to `client_profile_kyc.is_local_resident_director` via the existing KYC PATCH route plumbing.
+  *Why deferred:* Brief's third branch said "expose a checkbox on the Director KYC subsection's identity step" — that's client-portal UX work which felt out of scope for a polish brief. Schema is in place; UX layer can land cleanly later.
+
+- **`is_local_resident_director` is a manual admin flag — risk that nationality `MUS` is more truthful than residence.**
+  *Spawned by:* [B-121](cli-brief-review-wizard-fix-and-right-rail-polish-b121.md).
+  *What:* The brief allowed picking between adding the flag and inferring from `country_of_residence === 'MUS'`. We picked the flag because there's no `country_of_residence` for individuals (only `nationality` + `passport_country`). A director might be a Mauritius national but live abroad — they'd still pass our flag if admin ticks it. Revisit whether a residence-based inference (when we capture residence on the client KYC form) would be more truthful, or whether to keep the manual flag as the override surface and add residence as supporting context.
+  *Why deferred:* The data needed for the inferred path doesn't exist yet. Manual flag is the minimum-viable bridge.
+
 - **Reference forms are bound per `(service_template, action_key)` — same form on multiple templates means re-uploading per template.**
   *Spawned by:* [B-120](cli-brief-reference-forms-and-right-rail-reorder-b120.md).
   *What:* `reference_forms.service_template_id` is a single FK and the lookup index is `(service_template_id, action_key, status, sort_order)`. So if FSC Form A applies to both GBC and Authorised Company templates, admin must upload it twice (once per template). Replace flow only touches the template you're working on; cross-template "bulk replace" isn't supported. If duplication becomes painful — i.e., admins are uploading the same regulatory form to ≥3 templates — revisit with a `linked_templates uuid[]` array column or a junction table.

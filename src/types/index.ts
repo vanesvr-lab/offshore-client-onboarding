@@ -153,6 +153,11 @@ export interface ServiceTemplate {
   created_at: string;
   updated_at: string;
   document_requirements?: DocumentRequirement[];
+  /** B-121 — minimum local (Mauritius-resident) directors required for
+   *  compliance. Defaults to 0 server-side when the column doesn't apply
+   *  to this template. Drives the People & KYC count chip + Pending row.
+   */
+  min_local_directors?: number;
 }
 
 export interface DocumentRequirement {
@@ -730,6 +735,11 @@ export interface ClientProfileKyc {
   // Progress
   completion_status: 'incomplete' | 'complete';
   kyc_journey_completed: boolean;
+  /** B-121 — admin-managed flag set when the individual is a
+   *  Mauritius-resident director. Drives the People & KYC chip + the
+   *  local-director Pending row when the template's min_local_directors
+   *  threshold is unmet. */
+  is_local_resident_director?: boolean;
   created_at: string;
   updated_at: string;
 }
