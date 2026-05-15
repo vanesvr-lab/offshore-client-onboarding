@@ -11,6 +11,21 @@ remove after 30 days.
 
 ## 2026-05-15
 
+- **`SubmittedFileDropZone` is purpose-built for submitted-form uploads.**
+  *Spawned by:* [B-122](cli-brief-progress-gauges-and-reference-forms-table-b122.md).
+  *What:* The drop-zone component lives at `src/components/admin/actions/SubmittedFileDropZone.tsx` and hard-codes the `/api/admin/services/[id]/submitted-forms` endpoint + the submitted-form MIME allow-list. If we add more "upload a file here" surfaces (e.g., the reference-form library upload modal, a future bulk-document upload), refactor into a generic `<FileDropZone>` that takes the upload endpoint + accepted MIME list as props. Today's component is the only consumer so generalising now is premature.
+  *Why deferred:* Premature abstraction — single call site.
+
+- **Progress meters card has three mini gauges; revisit if more sections land.**
+  *Spawned by:* [B-122](cli-brief-progress-gauges-and-reference-forms-table-b122.md).
+  *What:* The compact 3-up layout fits in the rail's ~280px today (Completed / Reviewed / Actions). If we add a new top-level section that warrants its own gauge (or split Documents into "service" vs "person" KYC gauges), three may stop being the right shape. Likely move to a single horizontal bar with per-section breakdowns, or stack two rows of gauges.
+  *Why deferred:* Three is the current ceiling; not adding more sections in the immediate pipeline.
+
+- **Reference Forms table is rendered as a manual `<table>`, not a reusable DataTable.**
+  *Spawned by:* [B-122](cli-brief-progress-gauges-and-reference-forms-table-b122.md).
+  *What:* `ReferenceFormsPanel` renders its own thead/tbody with Tailwind classes. If we add more admin tables of similar shape (likely audit log views, deactivated-form list, etc.), extract a shared `<DataTable>` primitive with column defs + cell renderers and migrate. Avoid jumping straight to a heavyweight library — the project's pattern is small, focused components, and a 50-line wrapper around `<table>` would cover most needs.
+  *Why deferred:* Single table today. Pattern emerges from the second + third use case.
+
 - **`service_templates.min_local_directors` has no admin UI for editing.**
   *Spawned by:* [B-121](cli-brief-review-wizard-fix-and-right-rail-polish-b121.md).
   *What:* The column is seeded (GBC = 1, everything else = 0) via the B-121 migration. There's no admin-side surface to change the value — managed only via Supabase SQL editor for the POC. Add a UI when more per-template compliance counters appear (Local Secretary, Local Registered Agent, Min Directors Total, etc.) or when regulators change requirements often. Likely lands on `/admin/settings/templates` as a small numeric input per row.

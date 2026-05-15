@@ -23,7 +23,6 @@ import {
   Eye,
   History,
   Loader2,
-  Upload,
 } from "lucide-react";
 
 import {
@@ -33,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DocumentPreviewDialog } from "@/components/admin/DocumentPreviewDialog";
+import { SubmittedFileDropZone } from "./SubmittedFileDropZone";
 
 export interface ReferenceFormSummary {
   id: string;
@@ -295,10 +295,11 @@ export function ReferenceFormsPanel({
                         </UploadIconBtn>
                       </div>
                     ) : (
-                      <UploadButtonStub
-                        formId={form.id}
-                        busy={busyId === `upload-${form.id}`}
-                        onUpload={uploadSubmitted}
+                      <SubmittedFileDropZone
+                        serviceId={serviceId}
+                        actionKey={actionKey}
+                        referenceFormId={form.id}
+                        onUploaded={() => router.refresh()}
                       />
                     )}
                   </td>
@@ -430,53 +431,6 @@ function UploadIconBtn({
         }
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : children}
-      </label>
-      <input
-        id={inputId}
-        type="file"
-        accept=".pdf,.doc,.docx,image/jpeg,image/png"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onUpload(formId, file);
-          e.target.value = "";
-        }}
-        disabled={busy}
-      />
-    </>
-  );
-}
-
-// B-122 — empty-state cell for the "no submitted file yet" case. Batch 3
-// replaces this with `<SubmittedFileDropZone>` to add drag-and-drop;
-// keeping it as a labelled button in Batch 2 means the table is fully
-// functional from this batch (drag-drop is layered on, not load-bearing).
-function UploadButtonStub({
-  formId,
-  busy,
-  onUpload,
-}: {
-  formId: string;
-  busy: boolean;
-  onUpload: (formId: string, file: File) => void;
-}) {
-  const inputId = `submitted-upload-${formId}`;
-  return (
-    <>
-      <label
-        htmlFor={inputId}
-        className={
-          busy
-            ? "inline-flex items-center gap-1 px-2 h-7 text-xs rounded-md border bg-gray-50 text-gray-400 cursor-not-allowed"
-            : "inline-flex items-center gap-1 px-2 h-7 text-xs rounded-md border bg-white hover:bg-gray-50 cursor-pointer"
-        }
-      >
-        {busy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Upload className="h-3.5 w-3.5" />
-        )}
-        Upload submitted
       </label>
       <input
         id={inputId}

@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-122 — Progress gauges mini + Reference Forms table + drop-zone upload (in progress 2026-05-15)
+## B-122 — Progress gauges mini + Reference Forms table + drop-zone upload (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: Progress meters mini gauges + Actions gauge (Claude Code)
 
@@ -62,6 +62,44 @@ All icon buttons are 16px (`h-4 w-4`) with `text-gray-500 hover:text-gray-900` a
 Component file went from 305 lines (card layout) to ~470 lines (table + preview wiring + history dialog) — bigger because the history-as-dialog pattern carries its own table; offsetting the visual real-estate is the win Vanessa asked for. `npm run build` clean.
 
 Next: Batch 3 — build `SubmittedFileDropZone` and swap the empty-state "Upload submitted" button for a click-or-drop zone.
+
+### 2026-05-15 — Batch 3: SubmittedFileDropZone — click + drag-drop empty-state cell (Claude Code)
+
+**New component** `src/components/admin/actions/SubmittedFileDropZone.tsx` — renders the dashed-border, click-or-drop cell described in the brief. Props: `serviceId`, `actionKey`, `referenceFormId`, optional `onUploaded`. Internals:
+- Hidden `<input type="file" accept=".pdf,.doc,.docx,image/jpeg,image/png">`; the visible cell triggers it programmatically on click (or Enter / Space for keyboard users; cell carries `role="button"` and `tabIndex`).
+- `onDragEnter` / `onDragOver` set a `dragOver` state which flips the border to blue + background to `bg-blue-50/60` so admins see a confirmed drop target.
+- `onDrop` reads `dataTransfer.files[0]` and runs the same upload as the click path.
+- Loading state swaps the icon for `Loader2` + "Uploading…" and disables click/drop with `cursor-not-allowed`.
+- Error state surfaces via `toast.error` with the server message; cell returns to drop-zone state automatically.
+- `data-testid="submitted-drop-zone"` for E2E hooks.
+
+**Pure-TS validator** `src/lib/services/submittedFileValidation.ts` — extracted `isAllowedSubmittedFile(file)` + `SUBMITTED_FILE_ACCEPT_ATTR` constant. The drop-zone component imports both; the unit test imports the validator directly. (Direct test import from a `.tsx` source is blocked by vitest's tsconfig — same `jsx: preserve` constraint flagged in B-120's tech debt. The pure-TS extraction is the workaround pattern this codebase now uses.)
+
+**Wire-up in `ReferenceFormsPanel`** — the empty-state branch in the Submitted file column swaps from the labelled `<UploadButtonStub>` (Batch-2 placeholder) to `<SubmittedFileDropZone>`. On `onUploaded` callback, the parent calls `router.refresh()` so the loader re-runs and the cell flips into the uploaded-state layout (filename + Eye / Download / ↑). Replace-current-submission keeps its plain `↑` icon button — the brief calls out that replace is a more deliberate action and shouldn't accept casual drops.
+
+**Unit test** `tests/unit/lib/submitted-file-drop-zone.test.ts` — 7 cases for `isAllowedSubmittedFile`:
+- Accepts standard PDF / JPEG / PNG / DOCX MIMEs.
+- Accepts the `application/octet-stream` fallback when the extension is valid (.doc / .docx) — covers the Chrome/Firefox quirk where MS Office files sometimes report octet-stream.
+- Rejects `.exe` even when the filename is `payload.pdf.exe` (mime is the authority when present).
+- Rejects unknown extensions (.txt, .sh).
+- Case-insensitive on the extension fallback (Report.PDF works).
+
+Full vitest run: 270 / 270 passing (was 264 before this batch — +6 from new test).
+
+**Tech-debt** (`docs/tech-debt.md`, newest at top):
+- Drop-zone is purpose-built for submitted forms; extract `<FileDropZone>` when a second consumer arrives.
+- Progress meters card capped at three gauges; revisit if more sections land.
+- Reference Forms table is hand-rolled; extract a shared `<DataTable>` once the second or third similar admin table shows up.
+
+`npm run build` clean. No migration.
+
+---
+
+## End-of-brief checklist
+
+1. `git status` clean and up-to-date with `origin/main`. ✅ (after Batch 3 push)
+2. CHANGES.md tail has one entry per batch dated 2026-05-15. ✅
+3. Dev-server reset to run from the **main project root** in background.
 
 ---
 
