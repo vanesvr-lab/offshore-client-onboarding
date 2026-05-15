@@ -29,6 +29,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 Next: Batch 2 — peer/manager review schema + API + modal.
 
+### 2026-05-15 — Batch 2: review-requests schema + API + modal (Claude Code)
+
+**Migration `20260515040305_review_requests.sql`** (pushed; `npm run db:status` paired Local + Remote). Three tables, all RLS-enabled with no policies (deny-by-default; access via `createAdminClient()` server-side, matching the `application_section_reviews` convention):
+
+- `review_requests` — top-level row; `status` enum `open|closed`, `closed_reason` enum `reviewer_marked|requester_force_closed`. Indexed on `(service_id)` + partial index on `(service_id) WHERE status='open'`.
+- `review_request_reviewers` — `(request_id, admin_id)` composite PK; FK to `profiles(id)` (admin_users.user_id → profiles.id in this project).
+- `review_request_sections` — `(request_id, section_key, profile_id)` with `NULLS NOT DISTINCT` unique index so duplicate top-level rows (`profile_id` NULL) for the same section are still rejected.
+
+**Three API endpoints** under `src/app/api/admin/services/[id]/review-requests/`:
+
+- `POST` — validates ≥1 reviewer (excludes self), ≥1 section, non-empty note. Validates section_key against the `company_setup|financial|banking|documents|people_kyc_profile` vocabulary and enforces `profile_id` required iff `people_kyc_profile`. Inserts request + reviewers + sections atomically (rollback on FK errors). Fan-out emails go through Resend + `logCommunication` (so the right-rail Communications card stays fresh via Hotfix 2). Writes `audit_log` row `review_request_created`. Returns the hydrated request (reviewer names + sections list) + the inserted comm rows.
+- `GET` — lists all open requests for the service + 10 most-recent closed, hydrated with reviewer names.
+- `POST /[requestId]/close` — body `{ reason }`. `reviewer_marked` requires caller in `review_request_reviewers`; `requester_force_closed` requires caller is the requester. Optimistic-locks on `status='open'` to avoid double-close races. Fan-out emails go to the counter-party (requester if reviewer closed; all reviewers if requester closed). Writes `audit_log` row `review_request_closed`.
+
+**Shared modules** in `src/lib/review-requests/`:
+- `sections.ts` — section-key vocabulary + display labels + anchor ids (single source of truth used by modal, banner, emails).
+- `types.ts` — wire shapes (`HydratedReviewRequest`, `CreateReviewRequestBody`, `CloseReviewRequestBody`).
+- `hydrate.ts` — `hydrateReviewRequests(supabase, rows)` joins reviewer names + sections in two queries.
+- `emails.ts` — three email helpers (created / closed-by-reviewer / closed-by-requester). Each call sends through Resend AND logs to `service_communications`, returning the comm row(s) so the calling route can echo them to the client for Hotfix-2-style splicing.
+
+**Modal `src/components/admin/RequestReviewModal.tsx`** — multi-select reviewer picker with search + select-all, section picker with top-level checkboxes + per-profile People & KYC sub-group + "Review all sections" toggle, required note textarea. Submit disabled until ≥1 reviewer + ≥1 section + non-empty note. On success: calls back with the hydrated request + comms, closes, resets state. Renders unwired so Batch 3 can drop it into `ServiceDetailClient` without further refactor.
+
+`npm run build` clean.
+
+Next: Batch 3 — right-rail card + sticky top banner + wiring into the service page + tech-debt entries.
+
 ---
 
 ## B-117 — Field provenance icons + mismatch detection + doc expiry SoT + Re-apply fix (done 2026-05-14)

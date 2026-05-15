@@ -19,7 +19,11 @@ export type EmailType =
   | "profile_kyc_invite"
   | "service_kyc_invite"
   | "document_update_request"
-  | "process_documents_request";
+  | "process_documents_request"
+  // B-118 — peer/manager review feature
+  | "review_request_created"
+  | "review_request_closed_by_reviewer"
+  | "review_request_closed_by_requester";
 
 export interface LogCommunicationInput {
   serviceId: string;
