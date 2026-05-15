@@ -228,7 +228,10 @@ export async function POST(
   });
 
   // B-108 — best-effort comms log; direct service id, no fanout needed.
-  await logCommunication({
+  // B-118 Hotfix 2 — capture the inserted comm row so the response can
+  // echo it back; the admin services page splices it into local state
+  // for instant right-rail freshness.
+  const commRow = await logCommunication({
     serviceId: params.id,
     tenantId,
     sentBy: session.user.id ?? null,
@@ -276,5 +279,6 @@ export async function POST(
     invites_sent_count_24h: nextCount,
     invites_count_window_start: nextWindowStart,
     invites_remaining: Math.max(0, RATE_LIMIT_MAX - nextCount),
+    communication: commRow,
   });
 }

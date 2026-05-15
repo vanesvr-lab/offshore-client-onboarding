@@ -13,6 +13,24 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-118 — Peer/Manager review feature + verification_codes & comm-card hotfixes (in progress 2026-05-15)
+
+### 2026-05-15 — Batch 1: verification_codes migration + comm-card freshness hotfix (Claude Code)
+
+**Hotfix 1 — `verification_codes.kyc_record_id` NOT NULL.** Migration `20260515035507_verification_codes_kyc_record_id_drop_not_null.sql` formalises the relaxation Vanessa applied via the Supabase SQL editor. `DROP NOT NULL` on an already-nullable column is a no-op so the migration is fully idempotent. Pushed; `npm run db:status` shows the row paired Local + Remote with no drift. The modern admin invite path (`/api/services/[id]/persons/[roleId]/send-invite`) now passes its `client_profile_id`-only insert without hitting the legacy NOT NULL.
+
+**Hotfix 2 — Communications right-rail freshness.** Newly-sent comms now appear in the right-rail Communications card without a page reload.
+
+- `src/lib/email/logCommunication.ts` — `logCommunication` now returns the inserted `service_communications` row (or null on failure). Type signature: `Promise<Record<string, unknown> | null>`. Best-effort behaviour preserved — callers can keep ignoring the return value.
+- `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts` + `src/app/api/admin/documents/[id]/request-update/route.ts` — both endpoints now include `communication` in their JSON response (the row `logCommunication` just inserted).
+- `src/components/shared/InviteKycDialog.tsx` — `onSent` signature widened to `(sentAt, communication)`. Forwards the row up.
+- `src/components/admin/DocumentUpdateRequestDialog.tsx` + `src/components/shared/DocumentDetailDialog.tsx` — `onSent` / `onRequestSent` signatures widened similarly.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `communications` lifted from prop to local state (synced via `useEffect([initialCommunications])`). New `appendCommunication` callback (de-dupes by `id`). Plumbed through `PersonCard` (new `onCommunicationSent` prop) into both dialog wirings, and into `AdminDocumentsSection` for the service-level Document Update Request flow. Each handler also calls `onRefresh()` so adjacent server-rendered state stays consistent.
+
+Next: Batch 2 — peer/manager review schema + API + modal.
+
+---
+
 ## B-117 — Field provenance icons + mismatch detection + doc expiry SoT + Re-apply fix (done 2026-05-14)
 
 ### 2026-05-14 — Batch 1: state-driven field icons, mismatch detection, click-to-fix popover (Claude Code)

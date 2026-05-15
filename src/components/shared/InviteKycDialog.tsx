@@ -16,7 +16,11 @@ interface InviteKycDialogProps {
   personEmail?: string | null;
   roleLabel: string;
   onClose: () => void;
-  onSent: (sentAt: string) => void;
+  /** B-118 Hotfix 2 — the second arg is the service_communications row
+   *  the route just inserted (null if logging failed). Caller can splice
+   *  it into local state for instant right-rail Communications card
+   *  freshness instead of waiting for a refetch. */
+  onSent: (sentAt: string, communication?: Record<string, unknown> | null) => void;
 }
 
 export function InviteKycDialog({
@@ -47,9 +51,14 @@ export function InviteKycDialog({
           body: JSON.stringify({ email: email.trim(), note: note.trim() || undefined }),
         }
       );
-      const data = (await res.json()) as { ok?: boolean; invite_sent_at?: string; error?: string };
+      const data = (await res.json()) as {
+        ok?: boolean;
+        invite_sent_at?: string;
+        error?: string;
+        communication?: Record<string, unknown> | null;
+      };
       if (!res.ok) throw new Error(data.error ?? "Failed to send");
-      onSent(data.invite_sent_at ?? new Date().toISOString());
+      onSent(data.invite_sent_at ?? new Date().toISOString(), data.communication ?? null);
       toast.success("Email Sent", { position: "top-right" });
       onClose();
     } catch (err: unknown) {

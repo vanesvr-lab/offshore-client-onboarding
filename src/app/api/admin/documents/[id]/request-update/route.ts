@@ -131,7 +131,9 @@ export async function POST(
 
   // B-108 — best-effort log to service_communications. Never blocks the
   // response; record the email body whether send succeeded or failed.
-  await logCommunication({
+  // B-118 Hotfix 2 — capture the inserted comm row for response-based
+  // patching into the admin services page right rail.
+  const commRow = await logCommunication({
     serviceId: body.service_id,
     tenantId,
     sentBy: session.user.id,
@@ -174,8 +176,14 @@ export async function POST(
       request_id: requestRow.id,
       sent_at: requestRow.sent_at,
       email_warning: emailError.message,
+      communication: commRow,
     });
   }
 
-  return NextResponse.json({ ok: true, request_id: requestRow.id, sent_at: requestRow.sent_at });
+  return NextResponse.json({
+    ok: true,
+    request_id: requestRow.id,
+    sent_at: requestRow.sent_at,
+    communication: commRow,
+  });
 }

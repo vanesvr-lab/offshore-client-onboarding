@@ -1680,6 +1680,7 @@ function PersonCard({
   pendingItems,
   onPendingAction,
   wizardSubStep,
+  onCommunicationSent,
 }: {
   roleRow: RoleWithProfile;
   allRoleRows: RoleWithProfile[];
@@ -1746,6 +1747,12 @@ function PersonCard({
     onBackToList: () => void;
     onProfileReviewed: () => void;
   } | null;
+  /** B-118 Hotfix 2 — fires when a child dialog (InviteKycDialog,
+   *  DocumentDetailDialog) just persisted an outbound email and the
+   *  route echoed the inserted `service_communications` row. Parent
+   *  splices the row into the right-rail Communications card for
+   *  instant freshness, no refetch needed. */
+  onCommunicationSent?: (communication: Record<string, unknown> | null | undefined) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   // B-077 Batch 2 — grouped Documents collapsible at the end of the
@@ -2949,7 +2956,10 @@ function PersonCard({
                 setDetailDoc(null);
                 onRefresh();
               }}
-              onRequestSent={() => onRefresh()}
+              onRequestSent={(_req, communication) => {
+                onCommunicationSent?.(communication);
+                onRefresh();
+              }}
               clientProfileIdForReplace={profile.id}
               onDocumentReplaced={() => {
                 // B-078 Batch 5 — Replace closes the dialog and the parent
@@ -2972,7 +2982,14 @@ function PersonCard({
           personEmail={profile.email}
           roleLabel={roleLabels}
           onClose={() => setShowInviteDialog(false)}
-          onSent={(sentAt) => setInviteSentAt(sentAt)}
+          onSent={(sentAt, communication) => {
+            setInviteSentAt(sentAt);
+            onCommunicationSent?.(communication);
+            // B-118 Hotfix 2 — RSC refresh so the parent re-fetches
+            // communications + other adjacent state. Comm-card already
+            // shows the spliced row immediately above.
+            onRefresh();
+          }}
         />
       )}
 
@@ -3173,6 +3190,7 @@ function AdminDocumentsSection({
   onDocumentAdded,
   onUpdateRequestAdded,
   onRefresh,
+  onCommunicationSent,
 }: {
   serviceId: string;
   /** B-085 — already filtered to service-level (`scope='application'`)
@@ -3196,6 +3214,9 @@ function AdminDocumentsSection({
   onDocumentAdded: (doc: ServiceDoc) => void;
   onUpdateRequestAdded: (req: DocumentUpdateRequest) => void;
   onRefresh: () => void;
+  /** B-118 Hotfix 2 — splice a freshly-sent communication row into the
+   *  right-rail Communications card without waiting for the RSC refetch. */
+  onCommunicationSent?: (communication: Record<string, unknown> | null | undefined) => void;
 }) {
   // B-097 — Service Docs / KYC Documents tab toggle.
   const [docTab, setDocTab] = useState<"service" | "kyc">("service");
@@ -3649,8 +3670,9 @@ function AdminDocumentsSection({
             setDetailDoc(null);
             onRefresh();
           }}
-          onRequestSent={(req) => {
+          onRequestSent={(req, communication) => {
             if (req) onUpdateRequestAdded(req as DocumentUpdateRequest);
+            onCommunicationSent?.(communication);
             onRefresh();
           }}
           onDocumentReplaced={() => {
@@ -4223,7 +4245,7 @@ export function ServiceDetailClient({
   fieldExtractions,
   lastStatusChange,
   waivers: initialWaivers,
-  communications,
+  communications: initialCommunications,
   manualAlerts,
   dismissedAutoAlerts,
   reviewMode = false,
@@ -4233,6 +4255,23 @@ export function ServiceDetailClient({
   const [service, setService] = useState(initialService);
   const [documents, setDocuments] = useState(initialDocuments);
   const [updateRequests, setUpdateRequests] = useState(initialUpdateRequests);
+  // B-118 Hotfix 2 — Communications state lifted so handlers can splice
+  // freshly-sent comm rows in without a full re-fetch. Prop re-syncs on
+  // RSC refresh so the splice and the server view stay aligned.
+  const [communications, setCommunications] = useState(initialCommunications);
+  useEffect(() => {
+    setCommunications(initialCommunications);
+  }, [initialCommunications]);
+  const appendCommunication = useCallback(
+    (row: Record<string, unknown> | null | undefined) => {
+      if (!row || !row.id) return;
+      setCommunications((prev) => {
+        if (prev.some((c) => c.id === (row.id as string))) return prev;
+        return [row as unknown as ServiceCommunication, ...prev];
+      });
+    },
+    [],
+  );
 
   // B-108 Batch 3 — dialog open state lives high so the button trigger
   // below can flip it. Alert derivation lives after `roles` state is
@@ -5589,6 +5628,7 @@ export function ServiceDetailClient({
                       onProfileSaved={handleProfileSaved}
                       onRemoved={handleProfileRemoved}
                       onDdLevelChanged={handleProfileDdLevelChanged}
+                      onCommunicationSent={appendCommunication}
                       pendingItems={
                         pid ? perProfilePending.get(pid) ?? [] : []
                       }
@@ -5661,6 +5701,7 @@ export function ServiceDetailClient({
             onDocumentAdded={(doc) => setDocuments((prev) => [...prev, doc])}
             onUpdateRequestAdded={(req) => setUpdateRequests((prev) => [req, ...prev])}
             onRefresh={handleRolesRefresh}
+            onCommunicationSent={appendCommunication}
           />
         </ServiceCollapsibleSection>
         )}

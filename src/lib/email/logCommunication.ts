@@ -37,28 +37,41 @@ export interface LogCommunicationInput {
   status?: "sent" | "failed";
 }
 
-export async function logCommunication(input: LogCommunicationInput): Promise<void> {
+// B-118 Hotfix 2 — return the inserted row so the calling route can echo
+// it back to the client. The admin services page then splices the row
+// into local state without a full re-fetch (matches the B-065 pattern),
+// so the right-rail Communications card reflects new sends immediately.
+export async function logCommunication(
+  input: LogCommunicationInput,
+): Promise<Record<string, unknown> | null> {
   try {
     const supabase = createAdminClient();
-    const { error } = await supabase.from("service_communications").insert({
-      tenant_id: input.tenantId,
-      service_id: input.serviceId,
-      sent_by: input.sentBy,
-      sent_by_name: input.sentByName,
-      sent_to_email: input.sentToEmail,
-      sent_to_profile_id: input.sentToProfileId,
-      email_type: input.emailType,
-      subject: input.subject,
-      body_html: input.bodyHtml,
-      related_entity_type: input.relatedEntityType ?? null,
-      related_entity_id: input.relatedEntityId ?? null,
-      resend_message_id: input.resendMessageId ?? null,
-      status: input.status ?? "sent",
-    });
+    const { data, error } = await supabase
+      .from("service_communications")
+      .insert({
+        tenant_id: input.tenantId,
+        service_id: input.serviceId,
+        sent_by: input.sentBy,
+        sent_by_name: input.sentByName,
+        sent_to_email: input.sentToEmail,
+        sent_to_profile_id: input.sentToProfileId,
+        email_type: input.emailType,
+        subject: input.subject,
+        body_html: input.bodyHtml,
+        related_entity_type: input.relatedEntityType ?? null,
+        related_entity_id: input.relatedEntityId ?? null,
+        resend_message_id: input.resendMessageId ?? null,
+        status: input.status ?? "sent",
+      })
+      .select()
+      .single();
     if (error) {
       console.error("[logCommunication] insert failed:", error);
+      return null;
     }
+    return (data ?? null) as Record<string, unknown> | null;
   } catch (err) {
     console.error("[logCommunication] unexpected error:", err);
+    return null;
   }
 }

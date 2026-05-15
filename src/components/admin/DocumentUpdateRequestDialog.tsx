@@ -27,7 +27,10 @@ interface DocumentUpdateRequestDialogProps {
   verificationFlags: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSent: (req: DocumentUpdateRequest) => void;
+  /** B-118 Hotfix 2 — `communication` is the service_communications row
+   *  the route just inserted (null if logging failed). Caller splices it
+   *  into local state for instant Communications card freshness. */
+  onSent: (req: DocumentUpdateRequest, communication?: Record<string, unknown> | null) => void;
 }
 
 export function DocumentUpdateRequestDialog({
@@ -84,24 +87,28 @@ export function DocumentUpdateRequestDialog({
         request_id?: string;
         sent_at?: string;
         error?: string;
+        communication?: Record<string, unknown> | null;
       };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed to send request");
 
       const recipient = recipients.find((r) => r.id === selectedRecipientId);
       toast.success("Update request sent", { position: "top-right" });
 
-      onSent({
-        id: data.request_id ?? "",
-        document_id: documentId,
-        service_id: serviceId,
-        requested_by: "",
-        requested_by_name: null,
-        sent_to_profile_id: selectedRecipientId,
-        sent_to_email: recipient?.email ?? null,
-        note: note.trim(),
-        auto_populated_from_flags: autoPopulate,
-        sent_at: data.sent_at ?? new Date().toISOString(),
-      });
+      onSent(
+        {
+          id: data.request_id ?? "",
+          document_id: documentId,
+          service_id: serviceId,
+          requested_by: "",
+          requested_by_name: null,
+          sent_to_profile_id: selectedRecipientId,
+          sent_to_email: recipient?.email ?? null,
+          note: note.trim(),
+          auto_populated_from_flags: autoPopulate,
+          sent_at: data.sent_at ?? new Date().toISOString(),
+        },
+        data.communication ?? null,
+      );
 
       onOpenChange(false);
     } catch (err: unknown) {

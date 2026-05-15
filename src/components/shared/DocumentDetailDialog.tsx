@@ -53,7 +53,9 @@ interface Props {
   updateRequests?: DocumentUpdateRequest[];
   serviceId?: string;
   onStatusChange?: (docId: string, status: string, note?: string) => void;
-  onRequestSent?: (req: DocumentUpdateRequest) => void;
+  /** B-118 Hotfix 2 — `communication` is the service_communications row
+   *  the route just inserted (null if logging failed). */
+  onRequestSent?: (req: DocumentUpdateRequest, communication?: Record<string, unknown> | null) => void;
   /** If provided, shows "Replace Document" upload */
   onDocumentReplaced?: (newDoc: Partial<DocumentDetailDoc>) => void;
   /** Admin only: when set, the replace flow PATCHes via the admin route
@@ -709,8 +711,8 @@ export function DocumentDetailDialog({
           verificationFlags={flags}
           open={requestDialogOpen}
           onOpenChange={setRequestDialogOpen}
-          onSent={(req) => {
-            onRequestSent?.(req);
+          onSent={(req, communication) => {
+            onRequestSent?.(req, communication);
             setRequestDialogOpen(false);
           }}
         />
