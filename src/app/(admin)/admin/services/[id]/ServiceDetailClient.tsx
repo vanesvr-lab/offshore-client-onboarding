@@ -40,6 +40,7 @@ import {
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement, ServiceCommunication, ManualServiceAlert, DismissedAutoAlert } from "./page";
+import type { ReferenceFormSummary, SubmittedFormSummary } from "./loadServiceDetail";
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useSectionReviews, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
 import { SectionReviewBadge } from "@/components/admin/SectionReviewBadge";
 import { SectionReviewButton } from "@/components/admin/SectionReviewButton";
@@ -3737,6 +3738,12 @@ interface Props {
    *  `isRequester` / `isInvitedReviewer`. Always provided from the
    *  server component (`page.tsx`). */
   currentUserId: string;
+  /** B-120 — active reference forms grouped by action_key for the four
+   *  Action subsection panels. */
+  referenceFormsByAction: Record<string, ReferenceFormSummary[]>;
+  /** B-120 — submitted forms grouped by reference_form_id, most-recent
+   *  first per reference form. */
+  submittedFormsByRefId: Record<string, SubmittedFormSummary[]>;
   // B-102 — Review Wizard chrome. When `reviewMode` is true the component
   // hides the stage strip + step indicator + right-rail + admin extras +
   // bottom save bar, and renders only the section card whose index matches
@@ -4294,6 +4301,8 @@ export function ServiceDetailClient({
   dismissedAutoAlerts,
   reviewRequests: initialReviewRequests,
   currentUserId,
+  referenceFormsByAction,
+  submittedFormsByRefId,
   reviewMode = false,
   reviewStep = 0,
 }: Props) {
@@ -5942,6 +5951,8 @@ export function ServiceDetailClient({
               templateActions={templateActions}
               actionsByKey={adminActions}
               initialSubstance={substance}
+              referenceFormsByAction={referenceFormsByAction}
+              submittedFormsByRefId={submittedFormsByRefId}
               onActionSaved={(updated) =>
                 setAdminActions((prev) => ({
                   ...prev,

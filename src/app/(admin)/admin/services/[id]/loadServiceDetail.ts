@@ -34,6 +34,29 @@ import type {
 import { hydrateReviewRequests } from "@/lib/review-requests/hydrate";
 import type { HydratedReviewRequest } from "@/lib/review-requests/types";
 
+// B-120 — Reference Forms + Submitted Forms surfaces. Active reference
+// forms are scoped per (service_template, action_key); submitted forms
+// belong to this service and are grouped by reference_form_id so each
+// inline panel can render its "current submitted file + history" without
+// a per-row refetch.
+export interface ReferenceFormSummary {
+  id: string;
+  action_key: string;
+  name: string;
+  version_label: string | null;
+  status: "active" | "deactivated";
+  replaced_by_id: string | null;
+  sort_order: number;
+}
+export interface SubmittedFormSummary {
+  id: string;
+  reference_form_id: string;
+  action_key: string;
+  file_name: string;
+  uploaded_at: string;
+  uploaded_by_name: string | null;
+}
+
 export interface ServiceDetailPayload {
   service: ServiceWithTemplate;
   roles: ProfileServiceRole[];
@@ -58,6 +81,12 @@ export interface ServiceDetailPayload {
   /** B-118 — peer/manager review requests for this service. Open first,
    *  then the 10 most-recent closed (matches GET API). */
   reviewRequests: HydratedReviewRequest[];
+  /** B-120 — active reference forms grouped by action_key for the four
+   *  Action subsections. */
+  referenceFormsByAction: Record<string, ReferenceFormSummary[]>;
+  /** B-120 — submitted form uploads for this service, grouped by
+   *  reference_form_id. Each list is sorted most-recent-first. */
+  submittedFormsByRefId: Record<string, SubmittedFormSummary[]>;
 }
 
 export async function loadServiceDetail(
@@ -259,7 +288,13 @@ export async function loadServiceDetail(
     service_template_id: string | null;
   }).service_template_id;
 
-  const [templateActionsRes, existingActionsRes, substanceRes] = await Promise.all([
+  const [
+    templateActionsRes,
+    existingActionsRes,
+    substanceRes,
+    referenceFormsRes,
+    submittedFormsRes,
+  ] = await Promise.all([
     serviceTemplateId
       ? supabase
           .from("service_template_actions")
@@ -279,6 +314,32 @@ export async function loadServiceDetail(
       .eq("service_id", serviceId)
       .eq("tenant_id", tenantId)
       .maybeSingle(),
+    // B-120 — active reference forms for this template, grouped per
+    // action_key. Deactivated rows are excluded; submitted-form FKs still
+    // point at historical reference_form_ids, so the panel resolves them
+    // via `submittedFormsRes` rather than this list.
+    serviceTemplateId
+      ? supabase
+          .from("reference_forms")
+          .select("id, action_key, name, version_label, status, replaced_by_id, sort_order")
+          .eq("service_template_id", serviceTemplateId)
+          .eq("status", "active")
+          .order("action_key")
+          .order("sort_order")
+      : Promise.resolve({ data: [] as Array<{
+          id: string;
+          action_key: string;
+          name: string;
+          version_label: string | null;
+          status: "active" | "deactivated";
+          replaced_by_id: string | null;
+          sort_order: number;
+        }>, error: null }),
+    supabase
+      .from("submitted_forms")
+      .select("id, reference_form_id, action_key, file_name, uploaded_at, uploaded_by")
+      .eq("service_id", serviceId)
+      .order("uploaded_at", { ascending: false }),
   ]);
 
   const profileIdsForFE = (filteredRoles as unknown as ProfileServiceRole[])
@@ -371,6 +432,60 @@ export async function loadServiceDetail(
   ) as Record<string, ServiceAction>;
   const substance = (substanceRes.data ?? null) as ServiceSubstance | null;
 
+  // B-120 — group reference forms by action_key and submitted forms by
+  // reference_form_id. We also resolve uploaded_by → uploaded_by_name via
+  // a single profiles lookup so the panel doesn't have to do per-row
+  // joins (Supabase select-join on submitted_forms.uploaded_by would
+  // require a declared FK; the lookup map keeps it simple).
+  const referenceFormRows =
+    (referenceFormsRes.data ?? []) as ReferenceFormSummary[];
+  const referenceFormsByAction: Record<string, ReferenceFormSummary[]> = {};
+  for (const row of referenceFormRows) {
+    const key = row.action_key;
+    if (!referenceFormsByAction[key]) referenceFormsByAction[key] = [];
+    referenceFormsByAction[key].push(row);
+  }
+
+  type SubmittedRow = {
+    id: string;
+    reference_form_id: string;
+    action_key: string;
+    file_name: string;
+    uploaded_at: string;
+    uploaded_by: string;
+  };
+  const submittedRows = (submittedFormsRes.data ?? []) as SubmittedRow[];
+  const uploaderIds = Array.from(new Set(submittedRows.map((r) => r.uploaded_by)));
+  let uploaderNameById: Record<string, string | null> = {};
+  if (uploaderIds.length > 0) {
+    const { data: uploaders } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", uploaderIds);
+    uploaderNameById = Object.fromEntries(
+      ((uploaders ?? []) as Array<{
+        id: string;
+        full_name: string | null;
+        email: string | null;
+      }>).map((u) => [u.id, u.full_name ?? u.email ?? null]),
+    );
+  }
+  const submittedFormsByRefId: Record<string, SubmittedFormSummary[]> = {};
+  for (const row of submittedRows) {
+    const summary: SubmittedFormSummary = {
+      id: row.id,
+      reference_form_id: row.reference_form_id,
+      action_key: row.action_key,
+      file_name: row.file_name,
+      uploaded_at: row.uploaded_at,
+      uploaded_by_name: uploaderNameById[row.uploaded_by] ?? null,
+    };
+    if (!submittedFormsByRefId[row.reference_form_id]) {
+      submittedFormsByRefId[row.reference_form_id] = [];
+    }
+    submittedFormsByRefId[row.reference_form_id].push(summary);
+  }
+
   const adminUsers: AdminUser[] = (adminUsersRes.data ?? []).map((u) => {
     const users = (u as unknown as {
       user_id: string;
@@ -434,5 +549,7 @@ export async function loadServiceDetail(
     dismissedAutoAlerts:
       (dismissedAutoAlertsRes.data ?? []) as unknown as DismissedAutoAlert[],
     reviewRequests: hydratedReviewRequests,
+    referenceFormsByAction,
+    submittedFormsByRefId,
   };
 }

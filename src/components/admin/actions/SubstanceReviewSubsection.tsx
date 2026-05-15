@@ -9,6 +9,11 @@
 import { ShieldCheck } from "lucide-react";
 import { ActionSubsection } from "./ActionSubsection";
 import { SubstanceReviewForm } from "../SubstanceReviewForm";
+import {
+  ReferenceFormsPanel,
+  type ReferenceFormSummary,
+  type SubmittedFormSummary,
+} from "./ReferenceFormsPanel";
 import type { ServiceAction, ServiceSubstance } from "@/types";
 
 interface Props {
@@ -18,6 +23,8 @@ interface Props {
   initialSubstance: ServiceSubstance | null;
   onSaved?: (action: ServiceAction) => void;
   defaultOpen?: boolean;
+  referenceForms?: ReferenceFormSummary[];
+  submittedFormsByRefId?: Record<string, SubmittedFormSummary[]>;
 }
 
 export function SubstanceReviewSubsection({
@@ -27,6 +34,8 @@ export function SubstanceReviewSubsection({
   initialSubstance,
   onSaved,
   defaultOpen,
+  referenceForms = [],
+  submittedFormsByRefId = {},
 }: Props) {
   return (
     <ActionSubsection
@@ -41,6 +50,12 @@ export function SubstanceReviewSubsection({
         serviceId={serviceId}
         serviceLabel={serviceLabel}
         initialSubstance={initialSubstance}
+      />
+      <ReferenceFormsPanel
+        serviceId={serviceId}
+        actionKey="substance_review"
+        referenceForms={referenceForms}
+        submittedFormsByRefId={submittedFormsByRefId}
       />
     </ActionSubsection>
   );

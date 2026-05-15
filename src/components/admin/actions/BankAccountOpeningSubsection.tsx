@@ -11,6 +11,11 @@ import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ActionSubsection } from "./ActionSubsection";
+import {
+  ReferenceFormsPanel,
+  type ReferenceFormSummary,
+  type SubmittedFormSummary,
+} from "./ReferenceFormsPanel";
 import type { ServiceAction } from "@/types";
 
 interface Props {
@@ -18,6 +23,8 @@ interface Props {
   action: ServiceAction;
   onSaved?: (action: ServiceAction) => void;
   defaultOpen?: boolean;
+  referenceForms?: ReferenceFormSummary[];
+  submittedFormsByRefId?: Record<string, SubmittedFormSummary[]>;
 }
 
 export function BankAccountOpeningSubsection({
@@ -25,6 +32,8 @@ export function BankAccountOpeningSubsection({
   action,
   onSaved,
   defaultOpen,
+  referenceForms = [],
+  submittedFormsByRefId = {},
 }: Props) {
   const [notes, setNotes] = useState<string>(action.notes ?? "");
 
@@ -79,6 +88,12 @@ export function BankAccountOpeningSubsection({
         />
         <p className="text-xs text-gray-400">Notes auto-save on blur.</p>
       </div>
+      <ReferenceFormsPanel
+        serviceId={serviceId}
+        actionKey="bank_account_opening"
+        referenceForms={referenceForms}
+        submittedFormsByRefId={submittedFormsByRefId}
+      />
     </ActionSubsection>
   );
 }

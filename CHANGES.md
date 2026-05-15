@@ -52,6 +52,30 @@ All five mutating endpoints write `audit_log` rows via `writeAuditLog`: `referen
 
 Next: Batch 3 — wire `<ReferenceFormsPanel>` into the four Action subsections so admin sees forms inline on each service detail page.
 
+### 2026-05-15 — Batch 3: inline Reference Forms panel on each Action subsection (Claude Code)
+
+**New component `src/components/admin/actions/ReferenceFormsPanel.tsx`** — shared "Reference forms" panel rendered inside every Action subsection's expanded body, below the existing form fields. Two-row layout per attached form: header (name · version · active/replaced/deactivated chip + Download blank button) → current submitted file (filename · date · uploader, click to download) + Upload submitted / Replace submitted action → "View history (N)" disclosure showing older uploads with per-row Download. Returns `null` when `referenceForms` is empty so subsections without attached forms don't show an empty header.
+
+**Server-side wiring in `loadServiceDetail.ts`:**
+- Parallel query `referenceFormsRes` fetches active reference_forms for the current `service_template_id`, ordered by `(action_key, sort_order)`.
+- Parallel query `submittedFormsRes` fetches submitted_forms for this service, ordered by `uploaded_at DESC`.
+- Uploader names resolved via a single `profiles` IN-query (no inline FK joins — keeps the loader resilient if the FK declaration drifts).
+- Two new grouped maps land on the payload: `referenceFormsByAction` (key: action_key) and `submittedFormsByRefId` (key: reference_form_id, value: list sorted most-recent first).
+
+**Prop plumbing** through `ServiceDetailClient` → `ServiceActionsSection` → each subsection:
+- `Props` gains `referenceFormsByAction` + `submittedFormsByRefId`. Both `page.tsx` and `review/page.tsx` spread the loader payload via `{...payload}` so they auto-pick up the new fields.
+- `ServiceActionsSection` slices `submittedFormsByRefId` per subsection (intersecting with the active reference_forms for that action_key) so a subsection never sees another subsection's submitted-form history even if FK ids overlap in the future.
+- Each subsection (`SubstanceReviewSubsection`, `BankAccountOpeningSubsection`, `CompanyRegistrationSubsection`, `FscChecklistSubsection`) accepts optional `referenceForms` + `submittedFormsByRefId` props (default `[]` / `{}`) and renders `<ReferenceFormsPanel>` after its body — keeps the panel out of the way until the subsection has at least one reference form attached.
+
+**Client API usage:**
+- Download blank: `GET /api/admin/reference-forms/{id}/blank-download-url` → opens signed URL in new tab.
+- Upload submitted: hidden `<input type="file">` triggered by a label, POSTs to `POST /api/admin/services/{serviceId}/submitted-forms` (multipart). Successful upload calls `router.refresh()` so the loader re-runs and the panel patches with the new "current" row.
+- Download submitted: `GET /api/admin/submitted-forms/{id}/download-url`.
+
+`npm run build` clean. No new endpoints in this batch — all five wire to existing Batch 2 routes.
+
+Next: Batch 4 — tests + audit-log assertions + tech-debt entries + dev-server restart.
+
 ---
 
 ## B-119 — Actions as top-level section + email popup & milestones hotfixes (done 2026-05-15)

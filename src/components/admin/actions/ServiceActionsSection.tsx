@@ -22,6 +22,10 @@ import { SubstanceReviewSubsection } from "./SubstanceReviewSubsection";
 import { BankAccountOpeningSubsection } from "./BankAccountOpeningSubsection";
 import { CompanyRegistrationSubsection } from "./CompanyRegistrationSubsection";
 import { FscChecklistSubsection } from "./FscChecklistSubsection";
+import type {
+  ReferenceFormSummary,
+  SubmittedFormSummary,
+} from "./ReferenceFormsPanel";
 
 interface Props {
   serviceId: string;
@@ -33,6 +37,13 @@ interface Props {
    *  per-action lookup, Pending card, and Progress meters all stay
    *  current without a router refresh. */
   onActionSaved?: (action: ServiceAction) => void;
+  /** B-120 — active reference forms keyed by action_key. Pulled from
+   *  the loader so each subsection can render its inline panel without
+   *  per-row server calls. */
+  referenceFormsByAction?: Record<string, ReferenceFormSummary[]>;
+  /** B-120 — submitted form uploads keyed by reference_form_id. The
+   *  panel slices its own list by joining on form.id. */
+  submittedFormsByRefId?: Record<string, SubmittedFormSummary[]>;
 }
 
 export function ServiceActionsSection({
@@ -42,6 +53,8 @@ export function ServiceActionsSection({
   actionsByKey,
   initialSubstance,
   onActionSaved,
+  referenceFormsByAction,
+  submittedFormsByRefId,
 }: Props) {
   const [actions, setActions] = useState<Record<string, ServiceAction>>(
     actionsByKey,
@@ -59,6 +72,17 @@ export function ServiceActionsSection({
       {templateActions.map((ta) => {
         const instance = actions[ta.action_key];
         if (!instance) return null;
+        const refForms = referenceFormsByAction?.[ta.action_key] ?? [];
+        // Slice submittedFormsByRefId to only the forms this subsection owns
+        // so the panel doesn't accidentally render a sibling subsection's
+        // submitted-form history if the keys overlapped (they don't today,
+        // but the FK is the single source of truth).
+        const submittedSlice: Record<string, SubmittedFormSummary[]> = {};
+        for (const f of refForms) {
+          if (submittedFormsByRefId?.[f.id]) {
+            submittedSlice[f.id] = submittedFormsByRefId[f.id];
+          }
+        }
         switch (ta.action_key as ActionKey) {
           case "substance_review":
             return (
@@ -68,6 +92,8 @@ export function ServiceActionsSection({
                 serviceLabel={serviceLabel}
                 action={instance}
                 initialSubstance={initialSubstance}
+                referenceForms={refForms}
+                submittedFormsByRefId={submittedSlice}
                 onSaved={handleSaved}
               />
             );
@@ -77,6 +103,8 @@ export function ServiceActionsSection({
                 key={ta.id}
                 serviceId={serviceId}
                 action={instance}
+                referenceForms={refForms}
+                submittedFormsByRefId={submittedSlice}
                 onSaved={handleSaved}
               />
             );
@@ -86,6 +114,8 @@ export function ServiceActionsSection({
                 key={ta.id}
                 serviceId={serviceId}
                 action={instance}
+                referenceForms={refForms}
+                submittedFormsByRefId={submittedSlice}
                 onSaved={handleSaved}
               />
             );
@@ -95,6 +125,8 @@ export function ServiceActionsSection({
                 key={ta.id}
                 serviceId={serviceId}
                 action={instance}
+                referenceForms={refForms}
+                submittedFormsByRefId={submittedSlice}
                 onSaved={handleSaved}
               />
             );

@@ -15,6 +15,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { CountrySelect } from "@/components/shared/CountrySelect";
 import { ActionSubsection } from "./ActionSubsection";
+import {
+  ReferenceFormsPanel,
+  type ReferenceFormSummary,
+  type SubmittedFormSummary,
+} from "./ReferenceFormsPanel";
 import type { ServiceAction } from "@/types";
 
 interface Props {
@@ -22,6 +27,8 @@ interface Props {
   action: ServiceAction;
   onSaved?: (action: ServiceAction) => void;
   defaultOpen?: boolean;
+  referenceForms?: ReferenceFormSummary[];
+  submittedFormsByRefId?: Record<string, SubmittedFormSummary[]>;
 }
 
 function normalize(s: string): string {
@@ -40,6 +47,8 @@ export function CompanyRegistrationSubsection({
   action,
   onSaved,
   defaultOpen,
+  referenceForms = [],
+  submittedFormsByRefId = {},
 }: Props) {
   const [date, setDate] = useState(isoOrEmpty(action.registration_date ?? null));
   const [number, setNumber] = useState(action.registration_number ?? "");
@@ -158,6 +167,12 @@ export function CompanyRegistrationSubsection({
           Save
         </Button>
       </div>
+      <ReferenceFormsPanel
+        serviceId={serviceId}
+        actionKey="company_registration"
+        referenceForms={referenceForms}
+        submittedFormsByRefId={submittedFormsByRefId}
+      />
     </ActionSubsection>
   );
 }
