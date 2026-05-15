@@ -25,6 +25,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 Next: Batch 2 — Actions top-level section + 4 subsections + migration.
 
+### 2026-05-15 — Batch 2: Actions promoted to top-level section + Company Registration (Claude Code)
+
+**Migration `20260515050536_actions_section_company_registration.sql`** (pushed; `npm run db:status` paired Local + Remote): three nullable columns added to `service_actions` (`registration_date`, `registration_number`, `registry_country`) so the new Company Registration subsection has somewhere to persist its body without a side-table. Template bindings: `company_registration` is added at `sort_order = 4` to every template that already has any action binding (mirrors the GBC + AC pattern from the original B-072 seed). `fsc_checklist` rows at or before sort_order 4 bump to 5 so the displayed order reads Substance → Bank → Registration → FSC.
+
+`action_key` is plain `text NOT NULL` with no CHECK constraint, so adding the new value needs no schema-side enum migration. The `ActionKey` TS union grows to four entries.
+
+**API extension.** `PATCH /api/admin/services/[id]/actions` now accepts `registration_date | registration_number | registry_country` alongside the existing `status | notes | assigned_to`. Empty strings on `registration_date` coerce to NULL so the date column never rejects a partial PATCH. Insert path threads the new fields through when present.
+
+**New components under `src/components/admin/actions/`:**
+- `ActionSubsection.tsx` — shared accordion shell. Header: chevron + label + status pill (pending / in_progress / done / blocked / N/A). Status pill is a styled `<select>` that PATCHes immediately; body collapses below.
+- `SubstanceReviewSubsection.tsx` — wraps the existing `SubstanceReviewForm` unchanged inside the shell. The form keeps its own ConnectedSectionHeader (drives `application_section_reviews`); the subsection header tracks `service_actions.status` — they're orthogonal surfaces.
+- `BankAccountOpeningSubsection.tsx` — replaces the standalone `BankAccountOpeningStub`. Status moved to the subsection header; body is notes (auto-saves on blur).
+- `CompanyRegistrationSubsection.tsx` — NEW. Form: registration_date (date), registration_number (text), registry_country (CountrySelect, ISO-3), notes (textarea). Save / Cancel bar appears when dirty.
+- `FscChecklistSubsection.tsx` — replaces the standalone `FscChecklistStub`. Status moved to the subsection header; body is notes (auto-saves on blur).
+- `ServiceActionsSection.tsx` — top-level wrapper. Composes the four subsections in `service_template_actions.sort_order`, holds a stateful `actionsByKey` copy so subsection saves flip the parent's `actionsPct` live.
+
+**Wiring in `ServiceDetailClient.tsx`:**
+- Legacy `AdminServiceActionsSection.tsx` deleted. Its old inline render slot is replaced by `<ServiceCollapsibleSection variant="step" anchorId="step-actions" sectionKey="actions" />` wrapping the new section body — appears between the Documents step pill and the admin divider, only when `templateActions.length > 0`.
+- `ADMIN_STEPS_SERVICES` gets a sibling `ACTIONS_STEP` + `buildAdminSteps(hasActionBindings)` helper. The three internal wrappers (`StepPillsWithState`, `PendingCardWithState`, `ProgressMetersWithState`) now accept an optional `steps` override — the page passes the dynamic list so the pill bar / pending derivation / gauge total all stay in sync with the 5- or 6-step world.
+- `adminActions` state (synced from `actionsByKey` prop via `useEffect`) drives `actionsPct = done_count / total_bound_subsections × 100`. Live updates without a router refresh.
+- `pcts` arrays passed to the wrappers conditionally append `actionsPct` so the 6th gauge / pill / pending row computes off the right denominator.
+
+`npm run build` clean. 210 tests pass.
+
+Next: Batch 3 — Progress meters visual layout (6 gauges may not fit a single row), Pending card row template for Actions, audit log writes, tech-debt notes.
+
 ---
 
 ## B-118 — Peer/Manager review feature + verification_codes & comm-card hotfixes (done 2026-05-15)

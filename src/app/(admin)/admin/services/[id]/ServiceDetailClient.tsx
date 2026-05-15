@@ -59,7 +59,7 @@ import {
   resolvePillState,
   resolveCountBadge,
 } from "@/lib/services/stepState";
-import { AdminServiceActionsSection } from "@/components/admin/AdminServiceActionsSection";
+import { ServiceActionsSection } from "@/components/admin/actions/ServiceActionsSection";
 import { CountrySelect } from "@/components/shared/CountrySelect";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -3753,6 +3753,9 @@ const getNextStage = getNextStatus;
 
 // B-073 — five wizard steps for the modern services detail page. Section keys
 // match what's wired into ServiceCollapsibleSection in this file.
+// B-119 — `Actions` joins as a sixth step when the current template has
+// ≥1 binding in `service_template_actions`. Templates without bindings
+// (Trust / Domestic Co) keep the 5-step bar unchanged.
 const ADMIN_STEPS_SERVICES: AdminStep[] = [
   { id: "step-company-setup", label: "Company Setup", sectionKeys: ["company_setup"] },
   { id: "step-financial",     label: "Financial",     sectionKeys: ["financial"] },
@@ -3760,6 +3763,14 @@ const ADMIN_STEPS_SERVICES: AdminStep[] = [
   { id: "step-people-kyc",    label: "People & KYC",  sectionKeys: ["people"] },
   { id: "step-documents",     label: "Documents",     sectionKeys: ["documents"] },
 ];
+const ACTIONS_STEP: AdminStep = {
+  id: "step-actions",
+  label: "Actions",
+  sectionKeys: ["actions"],
+};
+function buildAdminSteps(hasActions: boolean): AdminStep[] {
+  return hasActions ? [...ADMIN_STEPS_SERVICES, ACTIONS_STEP] : ADMIN_STEPS_SERVICES;
+}
 
 // B-111 Batch 2 — Pending card wrapper. Consumes the live section-reviews
 // context so the list re-derives immediately after a save without
@@ -3772,6 +3783,7 @@ function PendingCardWithState({
   autoAlerts,
   manualAlerts,
   onAction,
+  steps: stepsOverride,
 }: {
   pcts: number[];
   profiles: PendingProfileInput[];
@@ -3779,8 +3791,12 @@ function PendingCardWithState({
   autoAlerts: AutoAlert[];
   manualAlerts: ManualServiceAlert[];
   onAction: (item: PendingItem) => void;
+  /** B-119 — when provided, replaces the default 5-step list so the
+   *  Actions step joins the section-review hook + pending derivation. */
+  steps?: AdminStep[];
 }) {
-  const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
+  const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
+  const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
   const sectionReviewsLive = useMemo(
     () => rows.flatMap((r) => r.history),
@@ -3789,13 +3805,13 @@ function PendingCardWithState({
 
   const steps: PendingStepConfig[] = useMemo(
     () =>
-      ADMIN_STEPS_SERVICES.map((step, i) => ({
+      stepDefs.map((step, i) => ({
         stepId: step.id,
         sectionKey: step.sectionKeys[0],
         label: step.label,
         pct: pcts[i] ?? 0,
       })),
-    [pcts],
+    [pcts, stepDefs],
   );
 
   const items = useMemo(
@@ -3893,20 +3909,25 @@ function StepPillsWithState({
   incompleteProfileCount,
   missingDocCount,
   onStepClick,
+  steps: stepsOverride,
 }: {
   pcts: number[];
   incompleteProfileCount: number;
   missingDocCount: number;
   onStepClick: (stepId: string) => void;
+  /** B-119 — when provided, replaces the default 5-step list so the
+   *  Actions step appears in the pill bar. */
+  steps?: AdminStep[];
 }) {
-  const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
+  const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
+  const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
   // `resolveCountBadge` is still called only so we keep the legacy
   // helper warm for downstream callers; the badge value itself is no
   // longer fed to the pill in B-112.
   const stepsWithState: AdminStep[] = useMemo(
     () =>
-      ADMIN_STEPS_SERVICES.map((step, i) => {
+      stepDefs.map((step, i) => {
         const review = rows[i]?.latest ?? null;
         const pct = pcts[i] ?? 0;
         const state = resolvePillState({ review, pct });
@@ -3936,7 +3957,7 @@ function StepPillsWithState({
           tooltip,
         };
       }),
-    [rows, pcts, incompleteProfileCount, missingDocCount],
+    [stepDefs, rows, pcts, incompleteProfileCount, missingDocCount],
   );
   return (
     <AdminApplicationStepIndicator
@@ -3952,12 +3973,17 @@ function StepPillsWithState({
 // pct array fed to the pills; "complete" = pct >= 100.
 function ProgressMetersWithState({
   pcts,
+  steps: stepsOverride,
 }: {
   pcts: number[];
+  /** B-119 — when provided, drives the section-reviews hook + the
+   *  gauge total. Adds the Actions gauge to the right rail. */
+  steps?: AdminStep[];
 }) {
-  const sectionKeys = ADMIN_STEPS_SERVICES.map((s) => s.sectionKeys[0]);
+  const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
+  const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
-  const total = ADMIN_STEPS_SERVICES.length;
+  const total = stepDefs.length;
   const completedCount = useMemo(
     () => pcts.filter((p) => (p ?? 0) >= 100).length,
     [pcts],
@@ -4860,6 +4886,33 @@ export function ServiceDetailClient({
       ? Math.round((documentsUploadedCount / documentsExpectedCount) * 100)
       : 0;
 
+  // B-119 — Actions section state + completion %. We hold a stateful
+  // copy of `actionsByKey` so subsection saves immediately recompute
+  // `actionsPct` without a router refresh, mirroring the existing pcts.
+  const [adminActions, setAdminActions] = useState<Record<string, ServiceAction>>(
+    actionsByKey,
+  );
+  useEffect(() => {
+    setAdminActions(actionsByKey);
+  }, [actionsByKey]);
+  const hasActionBindings = templateActions.length > 0;
+  const actionsPct = useMemo(() => {
+    if (!hasActionBindings) return 0;
+    let done = 0;
+    for (const ta of templateActions) {
+      const inst = adminActions[ta.action_key];
+      if (inst?.status === "done") done += 1;
+    }
+    return Math.round((done / templateActions.length) * 100);
+  }, [hasActionBindings, templateActions, adminActions]);
+
+  // B-119 — dynamic step list. Adds the Actions step only when the
+  // current template has ≥1 binding.
+  const adminSteps = useMemo(
+    () => buildAdminSteps(hasActionBindings),
+    [hasActionBindings],
+  );
+
   // B-111 — count of required service-level doc types with no upload AND
   // no application-scope waiver. Drives the Documents pill's "N missing"
   // count badge + the right-rail Pending card (Batch 2).
@@ -5455,16 +5508,28 @@ export function ServiceDetailClient({
           viewports instead of overflowing horizontally. */}
       <div className="rounded-lg border bg-white px-4 py-3 flex items-center flex-wrap gap-3">
         <StepPillsWithState
-          pcts={[
-            companySetupPct,
-            financialPct,
-            bankingPct,
-            peopleKycPct,
-            documentsPct,
-          ]}
+          pcts={
+            hasActionBindings
+              ? [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                  actionsPct,
+                ]
+              : [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                ]
+          }
           incompleteProfileCount={incompleteProfileCount}
           missingDocCount={missingDocCount}
           onStepClick={handleStepClick}
+          steps={adminSteps}
         />
         {/* B-108 Batch 3 — Alerts + Review Wizard sit at the right edge,
             grouped with `gap-x-8` so they are visually separated from
@@ -5827,22 +5892,43 @@ export function ServiceDetailClient({
         </ServiceCollapsibleSection>
         )}
 
-        {/* B-102 — admin-only sections (Admin Actions / Internal Notes /
-            Risk Assessment) are hidden inside the Review Wizard — they
-            don't belong in a focused review flow. */}
-        {!reviewMode && (<>
-        {/* ── B-072 — Admin Actions (Substance / Bank / FSC) ─────────────── */}
-        {templateActions.length > 0 && (
-          <AdminServiceActionsSection
-            serviceId={service.id}
-            serviceLabel={service.service_templates?.name ?? "Service"}
-            templateActions={templateActions}
-            actionsByKey={actionsByKey}
-            initialSubstance={substance}
-            anchorId="step-admin-actions"
-          />
+        {/* ── B-119 — Actions (Substance / Bank / Registration / FSC) ──── */}
+        {/* Top-level section now — appears in the step pill bar between
+            Documents and the admin sections only when the current
+            template has ≥1 binding. Inside the review wizard it stays
+            visible because Actions is a reviewable step in its own
+            right (reviewMode hides the admin divider + Internal Notes /
+            Risk Assessment below, not this section). */}
+        {hasActionBindings && (
+          <ServiceCollapsibleSection
+            title="Actions"
+            percentage={actionsPct}
+            ragStatus={ragFromPct(actionsPct)}
+            sectionKey="actions"
+            anchorId="step-actions"
+            variant="step"
+            defaultOpen={reviewMode ? true : undefined}
+          >
+            <ServiceActionsSection
+              serviceId={service.id}
+              serviceLabel={service.service_templates?.name ?? "Service"}
+              templateActions={templateActions}
+              actionsByKey={adminActions}
+              initialSubstance={substance}
+              onActionSaved={(updated) =>
+                setAdminActions((prev) => ({
+                  ...prev,
+                  [updated.action_key]: updated,
+                }))
+              }
+            />
+          </ServiceCollapsibleSection>
         )}
 
+        {/* B-102 — admin-only sections (Internal Notes / Risk
+            Assessment) are hidden inside the Review Wizard — they don't
+            belong in a focused review flow. */}
+        {!reviewMode && (<>
         {/* ── Admin divider ─────────────────────────────────────────────────── */}
         <div className="flex items-center gap-3 py-2">
           <div className="flex-1 h-px bg-gray-200" />
@@ -6022,31 +6108,55 @@ export function ServiceDetailClient({
               the one-second answer for "how far through this service".
               Counts re-derive live from the section-reviews context. */}
         <ProgressMetersWithState
-          pcts={[
-            companySetupPct,
-            financialPct,
-            bankingPct,
-            peopleKycPct,
-            documentsPct,
-          ]}
+          pcts={
+            hasActionBindings
+              ? [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                  actionsPct,
+                ]
+              : [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                ]
+          }
+          steps={adminSteps}
         />
 
         {/* B-111 Batch 2 — Pending card sits at the top of the right
               rail (above Status / Communications / Milestones). One row
               per actionable item; click drills to the right place. */}
         <PendingCardWithState
-          pcts={[
-            companySetupPct,
-            financialPct,
-            bankingPct,
-            peopleKycPct,
-            documentsPct,
-          ]}
+          pcts={
+            hasActionBindings
+              ? [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                  actionsPct,
+                ]
+              : [
+                  companySetupPct,
+                  financialPct,
+                  bankingPct,
+                  peopleKycPct,
+                  documentsPct,
+                ]
+          }
           profiles={profilesForPending}
           missingDocCount={missingDocCount}
           autoAlerts={visibleAutoAlerts}
           manualAlerts={openManualAlerts}
           onAction={handlePendingAction}
+          steps={adminSteps}
         />
 
         {/* ── Status Change (B-093) ───────────────────────────────────────

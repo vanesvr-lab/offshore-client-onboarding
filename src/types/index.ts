@@ -826,6 +826,7 @@ export type ServiceActionStatus =
 export type ActionKey =
   | "substance_review"
   | "bank_account_opening"
+  | "company_registration"
   | "fsc_checklist";
 
 export interface ServiceTemplateAction {
@@ -848,6 +849,13 @@ export interface ServiceAction {
   completed_by: string | null;
   completed_at: string | null;
   notes: string | null;
+  /** B-119 — Company Registration subsection fields. Persisted on
+   *  `service_actions` (one row per action_key) so adding new
+   *  registration-style subsections in future doesn't need a fresh
+   *  side-table. Null for non-registration actions. */
+  registration_date?: string | null;
+  registration_number?: string | null;
+  registry_country?: string | null;
   created_at: string;
   updated_at: string;
 }

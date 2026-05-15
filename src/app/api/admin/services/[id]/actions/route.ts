@@ -118,6 +118,13 @@ interface PatchBody {
   status?: ServiceActionStatus | string;
   notes?: string | null;
   assigned_to?: string | null;
+  // B-119 — Company Registration subsection body. Only meaningful when
+  // action_key === "company_registration"; the route does not validate
+  // the action_key↔column relationship so future action types can reuse
+  // these columns without a code change here.
+  registration_date?: string | null;
+  registration_number?: string | null;
+  registry_country?: string | null;
 }
 
 /**
@@ -188,6 +195,20 @@ export async function PATCH(
 
   if (body.notes !== undefined) patch.notes = body.notes;
   if (body.assigned_to !== undefined) patch.assigned_to = body.assigned_to;
+  // B-119 — Company Registration body fields. Coerce "" → null so the
+  // db `date` column doesn't reject empty strings on partial PATCHes.
+  if (body.registration_date !== undefined) {
+    patch.registration_date =
+      typeof body.registration_date === "string" && body.registration_date.length === 0
+        ? null
+        : body.registration_date;
+  }
+  if (body.registration_number !== undefined) {
+    patch.registration_number = body.registration_number;
+  }
+  if (body.registry_country !== undefined) {
+    patch.registry_country = body.registry_country;
+  }
 
   if (existing) {
     const { data, error } = await supabase
@@ -234,6 +255,17 @@ export async function PATCH(
     assigned_to: (patch.assigned_to as string | null | undefined) ?? null,
     tenant_id: tenantId,
   };
+  // B-119 — only carry registration_* through on insert when the caller
+  // actually sent them. Leaves the columns NULL for other action types.
+  if (patch.registration_date !== undefined) {
+    insert.registration_date = patch.registration_date;
+  }
+  if (patch.registration_number !== undefined) {
+    insert.registration_number = patch.registration_number;
+  }
+  if (patch.registry_country !== undefined) {
+    insert.registry_country = patch.registry_country;
+  }
   if (insert.status === "done") {
     insert.completed_by = session.user.id;
     insert.completed_at = nowIso;
