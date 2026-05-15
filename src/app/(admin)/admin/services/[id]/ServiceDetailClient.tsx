@@ -4026,6 +4026,9 @@ const DD_LEVELS = [
 // B-102 — Review Wizard step → application_section_reviews.section_key
 // mapping. Lives next to ADMIN_STEPS_SERVICES so future step additions
 // stay obvious. `people` already exists for the People & KYC aggregate.
+// B-121 — when the current template has ≥1 action binding, Actions joins
+// as the 6th step (mirrors B-119's pill bar + Progress meters). Use the
+// `buildReviewSteps` helpers below to get the right list for a service.
 const REVIEW_STEP_SECTION_KEYS = [
   "company_setup",
   "financial",
@@ -4045,6 +4048,25 @@ const REVIEW_STEP_LABELS = [
   "Documents",
 ] as const;
 
+// B-121 — same template-conditional rule as `buildAdminSteps`: Actions
+// shows up as the 6th step only when service_template_actions has ≥1
+// binding for this service's template. The wizard never reads the
+// 5-element constants directly any more — always go through these helpers.
+const ACTIONS_REVIEW_SECTION_KEY = "actions" as const;
+const ACTIONS_REVIEW_LABEL = "Actions" as const;
+
+function buildReviewStepSectionKeys(hasActions: boolean): readonly string[] {
+  return hasActions
+    ? [...REVIEW_STEP_SECTION_KEYS, ACTIONS_REVIEW_SECTION_KEY]
+    : REVIEW_STEP_SECTION_KEYS;
+}
+
+function buildReviewStepLabels(hasActions: boolean): readonly string[] {
+  return hasActions
+    ? [...REVIEW_STEP_LABELS, ACTIONS_REVIEW_LABEL]
+    : REVIEW_STEP_LABELS;
+}
+
 const BRAND_REVIEW_BLUE = "#24a0ed";
 
 // ─── Review Wizard chrome ─────────────────────────────────────────────────────
@@ -4058,14 +4080,20 @@ function ReviewWizardTopBar({
   step,
   profileLabel,
   service,
+  hasActions,
 }: {
   serviceId: string;
   step: number;
   profileLabel: string | null;
   service: ServiceWithTemplate;
+  /** B-121 — when true, Actions joins as the 6th wizard step. */
+  hasActions: boolean;
 }) {
   const router = useRouter();
-  const stepLabel = ADMIN_STEPS_SERVICES[step]?.label ?? "Review";
+  const adminSteps = buildAdminSteps(hasActions);
+  const reviewSectionKeys = buildReviewStepSectionKeys(hasActions);
+  const reviewLabels = buildReviewStepLabels(hasActions);
+  const stepLabel = adminSteps[step]?.label ?? "Review";
 
   // B-109 Batch 2 — step click navigates within the wizard. We don't
   // flush dirty edits here because the indicator sits in the always-on
@@ -4088,7 +4116,7 @@ function ReviewWizardTopBar({
               {service.service_templates?.name ?? "Service"} · Review Wizard
             </p>
             <p className="text-sm font-semibold text-brand-navy truncate">
-              Step {step + 1} of {ADMIN_STEPS_SERVICES.length}: {stepLabel}
+              Step {step + 1} of {adminSteps.length}: {stepLabel}
               {profileLabel ? ` · ${profileLabel}` : ""}
             </p>
           </div>
@@ -4107,8 +4135,8 @@ function ReviewWizardTopBar({
       <div className="mt-2 pl-7">
         <AdminReviewWizardStepIndicator
           currentStep={step}
-          sectionKeys={REVIEW_STEP_SECTION_KEYS}
-          labels={REVIEW_STEP_LABELS}
+          sectionKeys={reviewSectionKeys}
+          labels={reviewLabels}
           onStepClick={handleStepClick}
         />
       </div>
@@ -4124,6 +4152,7 @@ function ReviewWizardBottomNav({
   profileSubstep,
   totalProfilesInStep,
   stepPct,
+  hasActions,
 }: {
   serviceId: string;
   step: number;
@@ -4141,9 +4170,13 @@ function ReviewWizardBottomNav({
   /** B-110 — completion % for the current step. Drives the
    *  Force-review override flow in the SectionReviewPanel dialog. */
   stepPct: number;
+  /** B-121 — wizard length depends on the template's action bindings. */
+  hasActions: boolean;
 }) {
   const router = useRouter();
-  const sectionKey = REVIEW_STEP_SECTION_KEYS[step];
+  const reviewSectionKeys = buildReviewStepSectionKeys(hasActions);
+  const reviewLabels = buildReviewStepLabels(hasActions);
+  const sectionKey = reviewSectionKeys[step];
   const { currentStatus, onReviewSaved } = useSectionReview(sectionKey);
   const [advancing, setAdvancing] = useState(false);
   // B-109 Batch 1 — Mark-as-Reviewed now opens the same SectionReviewPanel
@@ -4151,7 +4184,7 @@ function ReviewWizardBottomNav({
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
 
   const isFirstStep = step === 0;
-  const isLastStep = step === ADMIN_STEPS_SERVICES.length - 1;
+  const isLastStep = step === reviewSectionKeys.length - 1;
 
   async function flushIfDirty(): Promise<boolean> {
     if (!pendingChanges) return true;
@@ -4167,7 +4200,7 @@ function ReviewWizardBottomNav({
         return;
       }
       if (nextStep < 0) return;
-      if (nextStep >= ADMIN_STEPS_SERVICES.length) {
+      if (nextStep >= reviewSectionKeys.length) {
         router.replace(`/admin/services/${serviceId}`);
         return;
       }
@@ -4265,7 +4298,7 @@ function ReviewWizardBottomNav({
       <SectionReviewPanel
         applicationId={serviceId}
         sectionKey={sectionKey}
-        sectionLabel={REVIEW_STEP_LABELS[step] ?? "Review"}
+        sectionLabel={reviewLabels[step] ?? "Review"}
         currentStatus={currentStatus}
         open={reviewDialogOpen}
         onOpenChange={setReviewDialogOpen}
@@ -5440,6 +5473,7 @@ export function ServiceDetailClient({
           step={reviewStep}
           profileLabel={reviewProfileLabel}
           service={service}
+          hasActions={hasActionBindings}
         />
       )}
       {/* ── B-090 Sticky shell: back link + title row + stage strip + step
@@ -5931,11 +5965,11 @@ export function ServiceDetailClient({
         {/* ── B-119 — Actions (Substance / Bank / Registration / FSC) ──── */}
         {/* Top-level section now — appears in the step pill bar between
             Documents and the admin sections only when the current
-            template has ≥1 binding. Inside the review wizard it stays
-            visible because Actions is a reviewable step in its own
-            right (reviewMode hides the admin divider + Internal Notes /
-            Risk Assessment below, not this section). */}
-        {hasActionBindings && (
+            template has ≥1 binding. B-121 — Inside the Review Wizard,
+            Actions is its own step (#5, after Documents) instead of
+            bleeding into every section's body; gate by reviewStep so
+            only step 5 renders this block. */}
+        {hasActionBindings && (!reviewMode || reviewStep === 5) && (
           <ServiceCollapsibleSection
             title="Actions"
             percentage={actionsPct}
@@ -6478,7 +6512,7 @@ export function ServiceDetailClient({
             // B-110 — per-step completion drives the Force-review override
             // in `SectionReviewPanel`. Mirrors REVIEW_STEP_SECTION_KEYS
             // ordering: Company Setup / Financial / Banking / People & KYC
-            // / Documents.
+            // / Documents (/ Actions when bound — B-121).
             reviewStep === 0
               ? companySetupPct
               : reviewStep === 1
@@ -6487,8 +6521,11 @@ export function ServiceDetailClient({
                   ? bankingPct
                   : reviewStep === 3
                     ? peopleKycPct
-                    : documentsPct
+                    : reviewStep === 4
+                      ? documentsPct
+                      : actionsPct
           }
+          hasActions={hasActionBindings}
         />
       )}
 

@@ -20,7 +20,14 @@ export function ReviewWizardClient(
   const searchParams = useSearchParams();
   const stepRaw = searchParams.get("step");
   const parsed = stepRaw ? parseInt(stepRaw, 10) : 0;
-  const step = Number.isFinite(parsed) && parsed >= 0 && parsed < 5 ? parsed : 0;
+  // B-121 — wizard step count flexes with `service_template_actions`: 5
+  // by default, 6 when this service's template has ≥1 action binding (the
+  // 6th step is Actions; matches `buildAdminSteps` and the Review-step
+  // helpers in ServiceDetailClient).
+  const hasActions = props.templateActions.length > 0;
+  const stepCount = hasActions ? 6 : 5;
+  const step =
+    Number.isFinite(parsed) && parsed >= 0 && parsed < stepCount ? parsed : 0;
 
   return <ServiceDetailClient {...props} reviewMode reviewStep={step} />;
 }

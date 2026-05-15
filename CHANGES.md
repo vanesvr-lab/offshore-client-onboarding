@@ -13,6 +13,29 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-121 — Review Wizard regression fix + right-rail polish + local director count (in progress 2026-05-15)
+
+### 2026-05-15 — Batch 1: Review Wizard regression — Actions as its own step (Claude Code)
+
+**Bug:** After B-119 promoted Actions to a top-level section, the `<ServiceActionsSection>` block in `ServiceDetailClient.tsx` was gated only on `hasActionBindings`, with no `reviewStep` check. So inside the Review Wizard every step (Company Setup, Financial, Banking, People KYC, Documents) rendered its own section AND the Actions section below it — admins saw the Actions accordion bleed into every step's body.
+
+**Fix:**
+- Actions JSX block now also gated on `(!reviewMode || reviewStep === 5)`. In non-review mode the block still renders inline below Documents; in review mode it only appears when the wizard is on step 5.
+- `REVIEW_STEP_SECTION_KEYS` + `REVIEW_STEP_LABELS` stayed 5-element constants (5 stable base steps). Two new helpers `buildReviewStepSectionKeys(hasActions)` / `buildReviewStepLabels(hasActions)` mirror `buildAdminSteps` and append `actions` / "Actions" as the 6th step when bound — matches B-119's pill bar / Progress meters conditional.
+- `ReviewWizardTopBar` and `ReviewWizardBottomNav` both accept a new `hasActions: boolean` prop, build the dynamic lists internally, and replace every direct read of the 5-element constants. `isLastStep` now derives from `reviewSectionKeys.length - 1` (so the Finish button fires after step 4 for templates without bindings, after step 5 for templates with bindings). `Step N of M` chrome flexes too.
+- `stepPct` selector in the bottom-nav `<ReviewWizardBottomNav>` mount extended: review step 5 returns `actionsPct` (was capped at `documentsPct` for any reviewStep ≥ 4).
+- `ReviewWizardClient.tsx` URL clamp updated: step bound flexes from `< 5` → `< (hasActions ? 6 : 5)`, so `?step=5` is honoured for GBC-style templates and rejected (falls back to 0) for templates without action bindings.
+
+**Manual verification path** (per brief Batch 1 steps):
+- GBC service → Review Wizard → Company Setup / Financial / Banking / People KYC / Documents bodies are clean (no Actions bleed). Step 5 ("Actions") shows the four subsections with their reference-forms panels.
+- Trust template (no action bindings) → wizard has exactly 5 steps; `?step=5` clamps back to 0.
+
+`npm run build` clean. No migration in this batch.
+
+Next: Batch 2 — right-rail polish (Status to slot 3, Milestones / Audit Trail border parity, View All emails popup widen + sender/preview columns).
+
+---
+
 ## B-120 — Reference Forms library + right-rail Progress-card reorder (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: right-rail Progress card promoted to slot 1 (Claude Code)
