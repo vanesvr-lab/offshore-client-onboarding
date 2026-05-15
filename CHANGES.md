@@ -13,6 +13,37 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-122 — Progress gauges mini + Reference Forms table + drop-zone upload (in progress 2026-05-15)
+
+### 2026-05-15 — Batch 1: Progress meters mini gauges + Actions gauge (Claude Code)
+
+**`ServiceProgressMeters` refactor** — replaced the fixed-shape `{ completedCount, reviewedCount, total }` props with a generic `gauges: { label, count, total, color? }[]` array plus an optional `size: 'default' | 'compact'`. The caller decides how many gauges to render and in what order; the component automatically engages compact mode when 3+ gauges are present so they fit in the right rail's ~280px width.
+
+Compact dimensions:
+- SVG: 64px (from 80px)
+- Radius: 24 (from 35)
+- Stroke: 6 (from 8)
+- Count text: 14px (from 20px)
+- Label: `text-[10px]` (from `text-xs`)
+
+The 3-up grid uses `gridTemplateColumns: repeat(N, minmax(0, 1fr))` so it flexes if the rail narrows. SVG geometry now derives from the chosen size (radius, centre, dashTotal) instead of being hard-coded — no more 220-magic-number `dashTotal`.
+
+**`ProgressMetersWithState` wrapper** — added an optional `actionSubsections?: PendingActionSubsection[]` prop (same shape the Pending card already consumes). When present and non-empty, derives:
+- `actionsTotalCount = subsections.length`
+- `actionsDoneCount = subsections.filter(s => s.status === "done" || s.status === "not_applicable").length` — "not applicable" counts as done so admins who opted a subsection out aren't penalised in the gauge.
+
+The wrapper builds the gauges array via a memo: always `[Completed, Reviewed]`, with `Actions` appended only when `actionsTotalCount > 0`. Default colours stay blue / green / violet via `DEFAULT_COLORS` in the component.
+
+**Wire-up in `ServiceDetailClient.tsx`** — the existing right-rail mount of `<ProgressMetersWithState>` now also passes `actionSubsections={actionSubsectionRows}` (the same prop already feeding the Pending card). `PendingActionSubsection` added to the existing `@/lib/services/computePendingItems` import block.
+
+**Unit test** `tests/unit/lib/service-progress-meters.test.ts` — exercises the gauges-array contract: two gauges when no bindings, three when bound, `not_applicable` rolls into "done", and the Actions gauge is omitted when total=0. 4 cases, all passing.
+
+`npm run build` clean. No migration.
+
+Next: Batch 2 — rewrite `ReferenceFormsPanel` as a four-column table with inline icons.
+
+---
+
 ## B-121 — Review Wizard regression fix + right-rail polish + local director count (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: Review Wizard regression — Actions as its own step (Claude Code)

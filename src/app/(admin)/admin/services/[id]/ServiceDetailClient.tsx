@@ -87,6 +87,7 @@ import {
   type PendingItem,
   type PendingStepConfig,
   type PendingProfileInput,
+  type PendingActionSubsection,
 } from "@/lib/services/computePendingItems";
 import { ServiceAlertsDialog } from "@/components/admin/ServiceAlertsDialog";
 import {
@@ -3993,14 +3994,23 @@ function StepPillsWithState({
 // context (same hook as the pill row) so the Reviewed gauge advances
 // immediately after a save. Completed count is derived from the same
 // pct array fed to the pills; "complete" = pct >= 100.
+// B-122 — uses the new gauges-array prop on ServiceProgressMeters and
+// adds the Actions gauge (per-subsection done count) when this service's
+// template has ≥1 action binding. All gauges render at the `compact`
+// size so three fit horizontally in the rail.
 function ProgressMetersWithState({
   pcts,
   steps: stepsOverride,
+  actionSubsections,
 }: {
   pcts: number[];
   /** B-119 — when provided, drives the section-reviews hook + the
    *  gauge total. Adds the Actions gauge to the right rail. */
   steps?: AdminStep[];
+  /** B-122 — same per-subsection input the Pending card consumes. When
+   *  present, drives a third "Actions" gauge counting subsections at
+   *  status `done` / total bound subsections. */
+  actionSubsections?: PendingActionSubsection[];
 }) {
   const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
   const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
@@ -4018,13 +4028,44 @@ function ProgressMetersWithState({
       ),
     [rows],
   );
-  return (
-    <ServiceProgressMeters
-      completedCount={completedCount}
-      reviewedCount={reviewedCount}
-      total={total}
-    />
-  );
+
+  // B-122 — Actions gauge: count of bound subsections at status `done`
+  // over the total number of bound subsections. `not_applicable`
+  // collapses into "done" for gauge purposes (admin opted the subsection
+  // out → it shouldn't sit as outstanding work). When the template has
+  // no bindings, this gauge is omitted from the gauges array below.
+  const actionsTotalCount = actionSubsections?.length ?? 0;
+  const actionsDoneCount = useMemo(() => {
+    if (!actionSubsections || actionSubsections.length === 0) return 0;
+    return actionSubsections.reduce(
+      (acc, sub) =>
+        sub.status === "done" || sub.status === "not_applicable" ? acc + 1 : acc,
+      0,
+    );
+  }, [actionSubsections]);
+
+  const gauges = useMemo(() => {
+    const base = [
+      { label: "Completed", count: completedCount, total },
+      { label: "Reviewed", count: reviewedCount, total },
+    ];
+    if (actionsTotalCount > 0) {
+      base.push({
+        label: "Actions",
+        count: actionsDoneCount,
+        total: actionsTotalCount,
+      });
+    }
+    return base;
+  }, [
+    completedCount,
+    reviewedCount,
+    total,
+    actionsTotalCount,
+    actionsDoneCount,
+  ]);
+
+  return <ServiceProgressMeters gauges={gauges} size="compact" />;
 }
 
 const DD_LEVELS = [
@@ -6234,6 +6275,7 @@ export function ServiceDetailClient({
                 ]
           }
           steps={adminSteps}
+          actionSubsections={actionSubsectionRows}
         />
 
         {/* B-091 — service-level View Summary entry point. Falls back to
