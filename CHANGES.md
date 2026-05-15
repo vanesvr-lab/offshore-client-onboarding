@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-119 — Actions as top-level section + email popup & milestones hotfixes (in progress 2026-05-15)
+## B-119 — Actions as top-level section + email popup & milestones hotfixes (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: email popup width + sender + milestones compact (Claude Code)
 
@@ -50,6 +50,29 @@ Next: Batch 2 — Actions top-level section + 4 subsections + migration.
 `npm run build` clean. 210 tests pass.
 
 Next: Batch 3 — Progress meters visual layout (6 gauges may not fit a single row), Pending card row template for Actions, audit log writes, tech-debt notes.
+
+### 2026-05-15 — Batch 3: Pending rows + progress total + tech-debt + tests (Claude Code)
+
+**Progress meters.** Investigation confirmed `ServiceProgressMeters` renders **two aggregate gauges** (Completed n/total + Reviewed n/total), not five per-section gauges as the brief assumed. Batch 2 already plumbed `total` through the dynamic `adminSteps.length`, so the 6-step case shows `n/6` automatically. No visual refactor needed for the gauge card itself; tech-debt note added for the day per-section gauges are actually requested.
+
+**Pending card.** `computePendingItems` now accepts an `actionSubsections` input. For every subsection with status `pending` or `in_progress`, one row is emitted: severity `info` for pending / `warning` for in_progress, label `"{Action} — pending"` / `"{Action} — in progress"`, action `scroll_to_section` with payload `action-{key}` (matches the `<ActionSubsection>` anchor). `done` / `blocked` / `not_applicable` are filtered out — admin won't see noise once a subsection is complete or explicitly opted out. The Actions **step** row above continues to surface via the existing `step.pct < 100` branch, so admin gets both the high-level "Actions 50%" row and the per-subsection breakdown.
+
+**Audit log.** The existing `PATCH /api/admin/services/[id]/actions` route already writes `service_action_updated` rows on every status / notes / assigned_to change (`writeAuditLog` plumbed in B-072). New body fields (`registration_date`, `registration_number`, `registry_country`) are written via the same path. No new audit-log surface needed.
+
+**Wiring in `ServiceDetailClient.tsx`.** New `actionSubsectionRows` memo emits one entry per `templateAction` keyed off the live `adminActions` state; passed into `PendingCardWithState` alongside `adminSteps` so the row list stays in sync with subsection saves. `handlePendingAction`'s `scroll_to_section` branch already does the right thing for the `action-{key}` payload (the parent Actions section auto-opens when `ragStatus !== green`).
+
+**Tests added (18 new, 228 total).**
+- `tests/unit/lib/actionsPct.test.ts` — 8 cases covering the rounded `done/total × 100` math plus the `hasActionBindings` pill-visibility predicate. Includes empty-bindings → 0, all-done → 100, blocked/not_applicable not counted as done, and a stickier `1/3 → 33` rounding test.
+- `tests/unit/lib/computePendingItems-actions.test.ts` — 5 cases covering: no-input → no rows; only `pending`/`in_progress` emit rows; `scroll_to_section` action with the `action-{key}` payload; severity tier per status; empty-array input → empty output.
+- `tests/integration/api/services-actions-company-registration.test.ts` — 4 cases on the PATCH route covering: update path persists all four registration fields; empty `registration_date` coerces to NULL; insert path threads the new fields through when no row exists; other action keys don't accidentally write registration_* columns.
+
+**Tech-debt** appended to `docs/tech-debt.md`:
+- Action subsections don't plug into `application_section_reviews` (manual status pill is the done-state authority).
+- Status-pill UI duplicated across four subsections (extract `<ActionStatusPill>` once we hit ≥5).
+- `ServiceProgressMeters` hardcoded for two aggregate gauges (per-section gauges deferred until needed).
+- Pending-action rows scroll to the subsection anchor but don't auto-expand it (lift expand state up if admins find the chevron click annoying).
+
+`npm run build` clean; both new migrations from this brief plus the one from B-118 are paired Local + Remote on `npm run db:status`.
 
 ---
 

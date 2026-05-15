@@ -11,6 +11,26 @@ remove after 30 days.
 
 ## 2026-05-15
 
+- **Action subsections don't plug into `application_section_reviews`.**
+  *Spawned by:* [B-119](cli-brief-actions-section-and-ui-hotfixes-b119.md).
+  *What:* The four action subsections (Substance, Bank Opening, Company Registration, FSC Checklist) use `service_actions.status` as their done-state authority — no per-subsection review row in `application_section_reviews`. The top-level Actions section still gets reviewed via the standard step-level pattern (`sectionKey="actions"`). Substance Review's body keeps its own `ConnectedSectionHeader` (section_key `action:substance_review`) for legacy review trail, but the other three subsections don't have a peer/manager-review surface. If admin-on-admin review of Action subsections becomes a real need (B-118's peer-review covers ad-hoc requests but not per-section flow), wire each subsection to its own `section_key` and a `SectionReviewControls` row inside the accordion header.
+  *Why deferred:* Action subsections drive completion through manual status pills, which admins control directly. Review-on-review adds a second surface for the same signal.
+
+- **Action status-pill UI is duplicated across four subsections.**
+  *Spawned by:* [B-119](cli-brief-actions-section-and-ui-hotfixes-b119.md).
+  *What:* Each subsection (`SubstanceReviewSubsection`, `BankAccountOpeningSubsection`, `CompanyRegistrationSubsection`, `FscChecklistSubsection`) consumes the shared `<ActionSubsection>` shell that owns the status pill. The shell itself owns the dropdown + tone tables; if we add a fifth action subsection, or introduce a new status value, the duplication is already concentrated in one place. The TODO is: extract `ActionSubsection`'s status dropdown into a tiny `<ActionStatusPill>` so a future "review badge" sibling can drop in next to it without rewriting the shell every time.
+  *Why deferred:* Today there are exactly four subsections and five statuses. Refactor when the next action type lands.
+
+- **`ServiceProgressMeters` is hardcoded for two aggregate gauges.**
+  *Spawned by:* [B-119](cli-brief-actions-section-and-ui-hotfixes-b119.md).
+  *What:* The right-rail Progress card renders 2 aggregate gauges (Completed n/total + Reviewed n/total). `total` already flexes between 5 and 6 via the dynamic step list, but the layout is `grid-cols-2` and hard-coded. If we ever want a different gauge layout for the 6-step case, or a per-section gauge mode, the card needs a different grid. Today the n/total surface scales fine — defer until per-section gauges are explicitly requested.
+  *Why deferred:* The 2-gauge aggregate visual works at both 5 and 6 sections; no current need for a per-section variant.
+
+- **Pending action rows scroll to the subsection anchor but don't auto-expand it.**
+  *Spawned by:* [B-119](cli-brief-actions-section-and-ui-hotfixes-b119.md).
+  *What:* `handlePendingAction` with payload `action-{key}` scrolls to the `<ActionSubsection>` anchor; the parent `<ServiceCollapsibleSection>` auto-opens when ragStatus ≠ green (so when actions are pending the section is open by default). But the individual subsection accordions default to collapsed, so admin has to click the chevron to see the body. Lifting `ActionSubsection`'s expand state up to `ServiceActionsSection` would let the pending row open it directly. Skipped for B-119 to keep the refactor scoped; tracked here.
+  *Why deferred:* Two-click flow (Pending row → chevron) is acceptable for the POC; refactor lands once we have feedback on whether admins actually find the deeper-link annoying.
+
 - **Review requests can't be re-opened.**
   *Spawned by:* [B-118](cli-brief-peer-manager-review-and-hotfixes-b118.md).
   *What:* Once a `review_requests` row is closed (by a reviewer marking, or by the requester force-closing), there's no API to re-open it. If a requester wants more review on the same scope, they create a new request — the audit log still ties them together via service_id + entity history. Revisit if usage patterns make sequential review thrash awkward.

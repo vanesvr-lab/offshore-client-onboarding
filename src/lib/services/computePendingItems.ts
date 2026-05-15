@@ -81,6 +81,16 @@ export interface PendingManualAlert {
   status: "open" | "resolved";
 }
 
+// B-119 — Pending row per action subsection whose status is still
+// open (pending or in_progress). One row each so admin sees which of
+// the four subsections still need attention without expanding the
+// Actions accordion.
+export interface PendingActionSubsection {
+  action_key: string;
+  label: string;
+  status: "pending" | "in_progress" | "done" | "blocked" | "not_applicable";
+}
+
 export interface ComputePendingInput {
   steps: PendingStepConfig[];
   sectionReviews: ApplicationSectionReview[];
@@ -91,6 +101,12 @@ export interface ComputePendingInput {
   autoAlerts: AutoAlert[];
   /** Open manual alerts from B-108 (status === "open"). */
   manualAlerts: PendingManualAlert[];
+  /** B-119 — when the current service template has action bindings, the
+   *  page passes one entry per subsection so the pending list can break
+   *  out the Actions step into per-subsection rows. Items with status
+   *  `pending` or `in_progress` are emitted; `done` / `blocked` /
+   *  `not_applicable` are filtered out at the consumer. */
+  actionSubsections?: PendingActionSubsection[];
 }
 
 function severityForSection(status: SectionReviewStatus): PendingSeverity {
@@ -242,6 +258,26 @@ export function computePendingItems(input: ComputePendingInput): PendingItem[] {
       // direct profile case here.
       profileId:
         a.sourceEntityType === "profile" ? a.sourceEntityId : undefined,
+    });
+  }
+
+  // 4b. B-119 — per-action-subsection rows. The Actions step's row
+  //     above already drives admin to `step-actions`; this expands the
+  //     list so admin can see which of (Substance / Bank / Registration
+  //     / FSC) is still pending without opening the section. payload is
+  //     `action-{action_key}` so handlePendingAction can scroll directly
+  //     to the subsection anchor.
+  for (const sub of input.actionSubsections ?? []) {
+    if (sub.status !== "pending" && sub.status !== "in_progress") continue;
+    items.push({
+      id: `action_${sub.action_key}`,
+      severity: sub.status === "in_progress" ? "warning" : "info",
+      label:
+        sub.status === "in_progress"
+          ? `${sub.label} — in progress`
+          : `${sub.label} — pending`,
+      actionType: "scroll_to_section",
+      actionPayload: `action-${sub.action_key}`,
     });
   }
 

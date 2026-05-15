@@ -3784,6 +3784,7 @@ function PendingCardWithState({
   manualAlerts,
   onAction,
   steps: stepsOverride,
+  actionSubsections,
 }: {
   pcts: number[];
   profiles: PendingProfileInput[];
@@ -3794,6 +3795,8 @@ function PendingCardWithState({
   /** B-119 — when provided, replaces the default 5-step list so the
    *  Actions step joins the section-review hook + pending derivation. */
   steps?: AdminStep[];
+  /** B-119 — per-subsection rows for the Actions step. */
+  actionSubsections?: Parameters<typeof computePendingItems>[0]["actionSubsections"];
 }) {
   const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
   const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
@@ -3823,6 +3826,7 @@ function PendingCardWithState({
         missingDocCount,
         autoAlerts,
         manualAlerts,
+        actionSubsections,
       }),
     [
       steps,
@@ -3831,6 +3835,7 @@ function PendingCardWithState({
       missingDocCount,
       autoAlerts,
       manualAlerts,
+      actionSubsections,
     ],
   );
 
@@ -4912,6 +4917,28 @@ export function ServiceDetailClient({
     () => buildAdminSteps(hasActionBindings),
     [hasActionBindings],
   );
+
+  // B-119 — per-subsection pending rows. Surfaces the four action
+  // subsections directly under the Actions step row so admin can see
+  // which one still needs attention.
+  const actionSubsectionRows = useMemo(() => {
+    if (!hasActionBindings) return [];
+    return templateActions.map((ta) => {
+      const inst = adminActions[ta.action_key];
+      return {
+        action_key: ta.action_key,
+        label: ta.action_label,
+        status:
+          (inst?.status as
+            | "pending"
+            | "in_progress"
+            | "done"
+            | "blocked"
+            | "not_applicable"
+            | undefined) ?? "pending",
+      };
+    });
+  }, [hasActionBindings, templateActions, adminActions]);
 
   // B-111 — count of required service-level doc types with no upload AND
   // no application-scope waiver. Drives the Documents pill's "N missing"
@@ -6157,6 +6184,7 @@ export function ServiceDetailClient({
           manualAlerts={openManualAlerts}
           onAction={handlePendingAction}
           steps={adminSteps}
+          actionSubsections={actionSubsectionRows}
         />
 
         {/* ── Status Change (B-093) ───────────────────────────────────────
