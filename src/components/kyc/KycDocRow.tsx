@@ -138,32 +138,53 @@ export function KycDocRow({
           )}
         </div>
       </div>
-      {expiry && doc.uploaded_at && (
-        <div className="text-xs text-gray-500 flex items-center gap-2 pl-6">
-          <span>Uploaded {formatDate(doc.uploaded_at)}</span>
-          {expiry.status !== "never_expires" && expiry.expiresAt && (
-            <>
-              <span aria-hidden="true">•</span>
-              <span>Good until {formatDate(expiry.expiresAt.toISOString())}</span>
-              <span
-                className={
-                  expiry.status === "expired"
-                    ? "bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                    : "bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                }
-              >
-                {expiry.status === "expired" ? "Expired" : "Valid"}
-              </span>
-            </>
-          )}
-          {expiry.status === "never_expires" && (
-            <>
-              <span aria-hidden="true">•</span>
-              <span className="italic">Never expires</span>
-            </>
-          )}
-        </div>
-      )}
+      {expiry && doc.uploaded_at && (() => {
+        // B-117 — surface "Expiring soon" at the doc-card level whenever
+        // the document is still valid but within 60 days of expiry. We
+        // compute at display so computeDocumentExpiry can keep its strict
+        // valid|expired|never_expires enum that other consumers rely on.
+        let daysUntilExpiry: number | null = null;
+        let isExpiringSoon = false;
+        if (expiry.status === "valid" && expiry.expiresAt) {
+          const ms = expiry.expiresAt.getTime() - Date.now();
+          daysUntilExpiry = Math.ceil(ms / (1000 * 60 * 60 * 24));
+          isExpiringSoon = daysUntilExpiry <= 60;
+        }
+        return (
+          <div className="text-xs text-gray-500 flex items-center gap-2 pl-6">
+            <span>Uploaded {formatDate(doc.uploaded_at)}</span>
+            {expiry.status !== "never_expires" && expiry.expiresAt && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span>Good until {formatDate(expiry.expiresAt.toISOString())}</span>
+                {expiry.status === "expired" ? (
+                  <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                    Expired
+                  </span>
+                ) : isExpiringSoon && daysUntilExpiry !== null ? (
+                  <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                    {daysUntilExpiry <= 0
+                      ? "Expires today"
+                      : daysUntilExpiry === 1
+                      ? "Expires in 1 day"
+                      : `Expires in ${daysUntilExpiry} days`}
+                  </span>
+                ) : (
+                  <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+                    Valid
+                  </span>
+                )}
+              </>
+            )}
+            {expiry.status === "never_expires" && (
+              <>
+                <span aria-hidden="true">•</span>
+                <span className="italic">Never expires</span>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

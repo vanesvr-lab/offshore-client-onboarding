@@ -82,6 +82,14 @@ export interface AiExtractionField {
   ai_hint?: string;
   type: "string" | "date";
   prefill_field: string | null; // column on client_profile_kyc, or null
+  /**
+   * B-117 — When true, OCR-extracted value for this field is also written
+   * back to `documents.expiry_date` on the source upload row. Makes the
+   * uploaded document the canonical source of truth for its own expiry,
+   * which then drives the doc-card badge AND `computeAutoAlerts`' 60-day
+   * window.
+   */
+  is_document_expiry?: boolean;
 }
 
 export type DocumentCategory = "corporate" | "kyc" | "compliance";

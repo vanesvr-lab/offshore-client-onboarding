@@ -19,7 +19,10 @@ const DEFAULTS: DefaultEntry[] = [
     ai_extraction_enabled: true,
     ai_extraction_fields: [
       { key: "passport_number", label: "Passport number", ai_hint: "MRZ or printed number", type: "string", prefill_field: "passport_number" },
-      { key: "expiry_date", label: "Expiry date", ai_hint: "Expiry / date of expiry", type: "date", prefill_field: "passport_expiry" },
+      // B-117 — is_document_expiry tells recordAiExtractionProvenance to
+      // also write this value into documents.expiry_date on the source
+      // upload, making the passport itself canonical for its own expiry.
+      { key: "expiry_date", label: "Expiry date", ai_hint: "Expiry / date of expiry", type: "date", prefill_field: "passport_expiry", is_document_expiry: true },
       { key: "full_name", label: "Full name", ai_hint: "Name as printed in MRZ", type: "string", prefill_field: "full_name" },
       { key: "nationality", label: "Nationality", ai_hint: "Country code or nationality", type: "string", prefill_field: "nationality" },
       { key: "date_of_birth", label: "Date of birth", ai_hint: "DOB on passport", type: "date", prefill_field: "date_of_birth" },

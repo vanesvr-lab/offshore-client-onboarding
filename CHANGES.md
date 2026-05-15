@@ -36,7 +36,32 @@ Modified: `src/components/admin/FieldProvenanceMarker.tsx` (rewrite), `src/app/(
 
 `npm run build` clean.
 
-Next: Batch 2 — OCR writeback to `service_documents.expiry_date` + backfill migration + doc-card "Expiring soon" badge.
+Next: Batch 2 — OCR writeback to `documents.expiry_date` + backfill migration + doc-card "Expiring soon" badge.
+
+### 2026-05-14 — Batch 2: doc expiry source-of-truth + 60-day "Expiring soon" badge (Claude Code)
+
+The Passport-is-expired bug had a single root cause: passport OCR extracted `expiry_date` into `field_extractions` (which feeds the `passport_expiry` form field), but never wrote it back to `documents.expiry_date`. `computeDocumentExpiry` therefore fell through to `valid_for_months` (also NULL for passports) and returned `"Never expires"`. With no source data, `computeAutoAlerts` had nothing to surface on the right rail either.
+
+**Fix:** the document type's `ai_extraction_fields` config now carries a boolean `is_document_expiry` per entry. When `recordAiExtractionProvenance` records an extraction whose entry has the flag, it also writes `extracted_value` (normalized to YYYY-MM-DD) into `documents.expiry_date` on the source upload. Best-effort — never blocks the primary provenance write.
+
+Files:
+
+- `src/types/index.ts` — `AiExtractionField.is_document_expiry?: boolean`.
+- `src/lib/ai/recordProvenance.ts` — extends `recordAiExtractionProvenance` to issue the conditional `documents.expiry_date` update. Uses `normalizeForCompare(value, "date")` to coerce strings like `"05/25/2027"` → `"2027-05-25"`.
+- `src/app/api/admin/migrations/seed-ai-defaults/route.ts` — sets `is_document_expiry: true` on Certified Passport Copy's `expiry_date` entry. Other identity doc types (Driver's Licence, Residence Permit, Visa) don't yet ship an expiry extraction at all; once they do, set the same flag.
+- `src/components/kyc/KycDocRow.tsx` — adds an **amber "Expires in N days" pill** when `expiry.status === "valid"` AND `expiresAt - now <= 60 days`. Computed at display so `computeDocumentExpiry` keeps its `valid | expired | never_expires` enum that other consumers depend on.
+
+**Migration: `20260515031541_backfill_documents_expiry_from_extractions.sql`** (pushed). Two idempotent operations:
+1. Tag the existing Certified Passport Copy row's `ai_extraction_fields[expiry_date]` with `is_document_expiry: true` so prod config matches the seed.
+2. For every existing `documents` row whose `expiry_date IS NULL` and whose `document_type` has a flagged extraction field, copy the most recent `field_extractions.extracted_value` (filtered through a strict YYYY-MM-DD regex) into `documents.expiry_date`. Never overwrites a manually-set expiry. `npm run db:push` succeeded; `npm run db:status` shows paired Local + Remote with no drift.
+
+**Right-rail alerts**: `computeAutoAlerts` already implements `≤30d → warning, 31-60d → info, expired → critical`. Now that `documents.expiry_date` is populated, the Pending card surfaces these automatically — zero code change in `ServicePendingCard`.
+
+Tests: `tests/unit/lib/recordProvenance.test.ts` covers the writeback path: ISO input, US-format input → normalized ISO, unparseable input → no write, no flag → no write. 27 unit tests pass total.
+
+`npm run build` clean.
+
+Next: Batch 3 — diagnose + fix Re-apply non-persistence.
 
 ---
 

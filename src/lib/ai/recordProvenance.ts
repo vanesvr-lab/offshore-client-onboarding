@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AiExtractionField, FieldSource } from "@/types";
+import { normalizeForCompare } from "@/lib/kyc/normalizeForCompare";
 
 /**
  * B-070 — Records where each KYC field value came from. The marker UI in
@@ -109,5 +110,23 @@ export async function recordAiExtractionProvenance(args: RecordAiExtractionArgs)
       source: "ai_extraction",
       sourceDocumentId,
     });
+
+    // B-117 — when this AI extraction field is configured as the source
+    // document's own expiry, also write it back to documents.expiry_date.
+    // Best-effort: a parse failure or RLS quirk must not break the primary
+    // provenance write above.
+    if (f.is_document_expiry) {
+      const iso = normalizeForCompare(value, "date");
+      if (iso) {
+        try {
+          await supabase
+            .from("documents")
+            .update({ expiry_date: iso })
+            .eq("id", sourceDocumentId);
+        } catch {
+          // best-effort
+        }
+      }
+    }
   }
 }
