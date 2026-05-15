@@ -9,6 +9,28 @@ remove after 30 days.
 
 ---
 
+## 2026-05-15
+
+- **Review requests can't be re-opened.**
+  *Spawned by:* [B-118](cli-brief-peer-manager-review-and-hotfixes-b118.md).
+  *What:* Once a `review_requests` row is closed (by a reviewer marking, or by the requester force-closing), there's no API to re-open it. If a requester wants more review on the same scope, they create a new request — the audit log still ties them together via service_id + entity history. Revisit if usage patterns make sequential review thrash awkward.
+  *Why deferred:* Single-shared-status is the agreed POC pattern. Re-opening adds branching to the email + audit logic for marginal benefit at this stage.
+
+- **Per-reviewer accountability on a single review request is intentionally absent.**
+  *Spawned by:* [B-118](cli-brief-peer-manager-review-and-hotfixes-b118.md).
+  *What:* `review_request_reviewers` carries no per-row status — any one invited reviewer marking closes for everyone. When admin role hierarchy (Officer / Manager / Super User / Junior Officer) ships, revisit whether Manager vs Junior Officer reviews should have separate accountable tracks. Today, requesters needing independent sign-offs send N requests by hand.
+  *Why deferred:* Single shared status is the agreed POC model; the role hierarchy that would motivate parallel accountability isn't in tree yet.
+
+- **Email-template visual styling is duplicated.**
+  *Spawned by:* [B-118](cli-brief-peer-manager-review-and-hotfixes-b118.md).
+  *What:* Inline HTML envelope + CTA-button rendering now exists in three places: `src/lib/review-requests/emails.ts`, `src/app/api/services/[id]/persons/[roleId]/send-invite/route.ts`, and `src/app/api/admin/documents/[id]/request-update/route.ts`. Extract to a shared template helper once a fourth template appears, or when a brand refresh forces a one-pass edit across all three.
+  *Why deferred:* Premature abstraction across 3 callers; each currently has slightly different layout requirements.
+
+- **Legacy `/api/admin/profiles/[id]/send-invite` route can probably be deleted.**
+  *Spawned by:* [B-118](cli-brief-peer-manager-review-and-hotfixes-b118.md).
+  *What:* The verification_codes NOT NULL fix in this brief unblocks the modern path. The legacy route still inserts `kyc_record_id`, so it works either way — but if nothing calls it anymore, it can go (closes tech-debt #28 too). Confirm zero callers via grep + Vercel logs over a release cycle, then delete.
+  *Why deferred:* Cleanup is mechanical but needs a release cycle of "no traffic" evidence before deleting.
+
 ## 2026-05-14
 
 - **Doc-card title-level mismatch chip.**

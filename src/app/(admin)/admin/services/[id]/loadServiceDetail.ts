@@ -31,6 +31,8 @@ import type {
   ManualServiceAlert,
   DismissedAutoAlert,
 } from "./page";
+import { hydrateReviewRequests } from "@/lib/review-requests/hydrate";
+import type { HydratedReviewRequest } from "@/lib/review-requests/types";
 
 export interface ServiceDetailPayload {
   service: ServiceWithTemplate;
@@ -53,6 +55,9 @@ export interface ServiceDetailPayload {
   communications: ServiceCommunication[];
   manualAlerts: ManualServiceAlert[];
   dismissedAutoAlerts: DismissedAutoAlert[];
+  /** B-118 — peer/manager review requests for this service. Open first,
+   *  then the 10 most-recent closed (matches GET API). */
+  reviewRequests: HydratedReviewRequest[];
 }
 
 export async function loadServiceDetail(
@@ -78,6 +83,8 @@ export async function loadServiceDetail(
     communicationsRes,
     manualAlertsRes,
     dismissedAutoAlertsRes,
+    reviewRequestsOpenRes,
+    reviewRequestsClosedRes,
   ] = await Promise.all([
     supabase
       .from("services")
@@ -203,6 +210,29 @@ export async function loadServiceDetail(
       .select("auto_alert_key, dismissed_at, dismissed_by")
       .eq("service_id", serviceId)
       .eq("tenant_id", tenantId),
+
+    // B-118 — open peer/manager review requests for this service.
+    supabase
+      .from("review_requests")
+      .select(
+        "id, service_id, requester_id, note, status, closed_at, closed_by, closed_reason, created_at",
+      )
+      .eq("service_id", serviceId)
+      .eq("tenant_id", tenantId)
+      .eq("status", "open")
+      .order("created_at", { ascending: false }),
+
+    // B-118 — last 10 closed peer/manager review requests for this service.
+    supabase
+      .from("review_requests")
+      .select(
+        "id, service_id, requester_id, note, status, closed_at, closed_by, closed_reason, created_at",
+      )
+      .eq("service_id", serviceId)
+      .eq("tenant_id", tenantId)
+      .eq("status", "closed")
+      .order("closed_at", { ascending: false })
+      .limit(10),
   ]);
 
   if (!serviceRes.data) notFound();
@@ -353,6 +383,28 @@ export async function loadServiceDetail(
     };
   });
 
+  // B-118 — hydrate review requests with reviewer names + section list
+  // before returning. Mirrors what the GET API endpoint does.
+  type RawReviewRow = {
+    id: string;
+    service_id: string;
+    requester_id: string;
+    note: string;
+    status: string;
+    closed_at: string | null;
+    closed_by: string | null;
+    closed_reason: string | null;
+    created_at: string;
+  };
+  const reviewRequestRows: RawReviewRow[] = [
+    ...((reviewRequestsOpenRes.data ?? []) as RawReviewRow[]),
+    ...((reviewRequestsClosedRes.data ?? []) as RawReviewRow[]),
+  ];
+  const hydratedReviewRequests = await hydrateReviewRequests(
+    supabase,
+    reviewRequestRows,
+  );
+
   return {
     service: serviceRes.data as unknown as ServiceWithTemplate,
     roles: filteredRoles as unknown as ProfileServiceRole[],
@@ -381,5 +433,6 @@ export async function loadServiceDetail(
       (manualAlertsRes.data ?? []) as unknown as ManualServiceAlert[],
     dismissedAutoAlerts:
       (dismissedAutoAlertsRes.data ?? []) as unknown as DismissedAutoAlert[],
+    reviewRequests: hydratedReviewRequests,
   };
 }

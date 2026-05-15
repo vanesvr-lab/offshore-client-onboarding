@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-118 — Peer/Manager review feature + verification_codes & comm-card hotfixes (in progress 2026-05-15)
+## B-118 — Peer/Manager review feature + verification_codes & comm-card hotfixes (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: verification_codes migration + comm-card freshness hotfix (Claude Code)
 
@@ -54,6 +54,30 @@ Next: Batch 2 — peer/manager review schema + API + modal.
 `npm run build` clean.
 
 Next: Batch 3 — right-rail card + sticky top banner + wiring into the service page + tech-debt entries.
+
+### 2026-05-15 — Batch 3: right-rail card + sticky banner + page wiring + tech-debt (Claude Code)
+
+**Server-side load.** `loadServiceDetail` now fetches open + last-10-closed `review_requests` for the service and hydrates them via the shared `hydrateReviewRequests` helper. The hydrated array lands on `ServiceDetailPayload.reviewRequests`. Both `page.tsx` and `review/page.tsx` thread `session.user.id` through to `ServiceDetailClient` as `currentUserId` so the right-rail card + banner can branch on `isRequester` vs `isInvitedReviewer`.
+
+**Components added:**
+- `src/components/admin/ReviewRequestsCard.tsx` — right-rail card, sits between the View Summary button and the Pending card. Header counts open requests; primary button opens the modal; rows show requester, reviewer chips, section count (expandable), Open pill, and an action button per role (`Mark as reviewed` for invited reviewers, `Close` for the requester). Collapsed closed-history fold at the bottom.
+- `src/components/admin/ReviewRequestBanner.tsx` — sticky `top-0 z-30` amber banner above the left column. Shows only when the current admin is in `review_request_reviewers` for ≥1 open request. Renders requester name + truncated/expandable note + anchor pills for each section + a primary `Mark as reviewed` button. When ≥2 open requests target the current user, the most recent shows with a `(+N more)` chip pointing at the right-rail card.
+
+**Wiring.**
+- `ServiceDetailClient` lifts `reviewRequests` to local state (synced via `useEffect([initialReviewRequests])`). New `upsertReviewRequest` replaces by id; `appendCommunications` splices the comm rows returned from create/close (re-using Hotfix 2's right-rail freshness path).
+- `useSearchParams().get("reviewRequest")` reads the email deep-link param; the banner scrolls itself into view on mount when the URL targets a specific request.
+- `<ReviewRequestBanner />` renders at the top of the left column (hidden in `reviewMode`).
+- `<ReviewRequestsCard />` renders in the right rail just after the View Summary button.
+- `<RequestReviewModal />` mounted alongside the alerts dialog; opens from the card.
+- `reviewProfileNamesById` is built from `allProfiles` + `typedRoles` so people-KYC section rows show real names in the banner / card / emails. `reviewModalProfiles` is derived from `profileRolesMap` so the modal's People-KYC subgroup mirrors the service's People & KYC list.
+
+**Section anchor map.** `src/lib/review-requests/sections.ts` exports `SECTION_ANCHORS` keyed by top-level section name → the `anchorId` the existing `<ServiceCollapsibleSection />` uses (`step-company-setup`, `step-financial`, `step-banking`, `step-documents`). People-KYC anchor pills link to `#person-card-<profile_id>` (PersonCard already mounts that id).
+
+**Tests.** `tests/integration/api/review-requests-create.test.ts` — 8 cases covering: 403 for unauthenticated, 400 for empty note / empty reviewer list / requesting from yourself / unknown section_key / people_kyc_profile without profile_id / top-level section carrying profile_id, plus the happy-path create which asserts the reviewer + section inserts and the hydrated response shape. 210 tests pass overall.
+
+**Tech-debt** appended to `docs/tech-debt.md`: (a) re-opening closed requests not supported, (b) per-reviewer accountability intentionally absent, (c) email-template HTML duplicated across three routes, (d) legacy `/api/admin/profiles/[id]/send-invite` probably deletable after the verification_codes unblock.
+
+`npm run build` clean; both new migrations paired Local + Remote on `npm run db:status`.
 
 ---
 

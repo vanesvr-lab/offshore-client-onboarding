@@ -75,6 +75,10 @@ import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycDocumentsTable } from "@/components/admin/KycDocumentsTable";
 import { ServiceCommunicationsCard } from "@/components/admin/ServiceCommunicationsCard";
+import { ReviewRequestsCard } from "@/components/admin/ReviewRequestsCard";
+import { ReviewRequestBanner } from "@/components/admin/ReviewRequestBanner";
+import { RequestReviewModal } from "@/components/admin/RequestReviewModal";
+import type { HydratedReviewRequest } from "@/lib/review-requests/types";
 import { ServicePendingCard } from "@/components/admin/ServicePendingCard";
 import {
   computePendingItems,
@@ -3724,6 +3728,15 @@ interface Props {
   // dismissals match keys against this list.
   manualAlerts: ManualServiceAlert[];
   dismissedAutoAlerts: DismissedAutoAlert[];
+  /** B-118 — server-fetched peer/manager review requests for this service.
+   *  Open first, then up to 10 most-recent closed. Hydrated with
+   *  reviewer names + section list. */
+  reviewRequests: HydratedReviewRequest[];
+  /** B-118 — current admin's user_id (= profiles.id). Threaded through so
+   *  the right-rail card + sticky banner can branch on
+   *  `isRequester` / `isInvitedReviewer`. Always provided from the
+   *  server component (`page.tsx`). */
+  currentUserId: string;
   // B-102 — Review Wizard chrome. When `reviewMode` is true the component
   // hides the stage strip + step indicator + right-rail + admin extras +
   // bottom save bar, and renders only the section card whose index matches
@@ -4248,6 +4261,8 @@ export function ServiceDetailClient({
   communications: initialCommunications,
   manualAlerts,
   dismissedAutoAlerts,
+  reviewRequests: initialReviewRequests,
+  currentUserId,
   reviewMode = false,
   reviewStep = 0,
 }: Props) {
@@ -4272,6 +4287,39 @@ export function ServiceDetailClient({
     },
     [],
   );
+  const appendCommunications = useCallback(
+    (rows: Record<string, unknown>[] | undefined) => {
+      if (!rows || rows.length === 0) return;
+      setCommunications((prev) => {
+        const seen = new Set(prev.map((c) => c.id));
+        const next: ServiceCommunication[] = [];
+        for (const r of rows) {
+          const id = (r as { id?: string }).id;
+          if (!id || seen.has(id)) continue;
+          next.push(r as unknown as ServiceCommunication);
+          seen.add(id);
+        }
+        return next.length > 0 ? [...next, ...prev] : prev;
+      });
+    },
+    [],
+  );
+
+  // B-118 — review-requests state, splicing helpers, modal toggle.
+  const [reviewRequests, setReviewRequests] = useState(initialReviewRequests);
+  useEffect(() => {
+    setReviewRequests(initialReviewRequests);
+  }, [initialReviewRequests]);
+  const upsertReviewRequest = useCallback(
+    (req: HydratedReviewRequest) => {
+      setReviewRequests((prev) => {
+        const next = prev.filter((r) => r.id !== req.id);
+        return [req, ...next];
+      });
+    },
+    [],
+  );
+  const [requestReviewModalOpen, setRequestReviewModalOpen] = useState(false);
 
   // B-108 Batch 3 — dialog open state lives high so the button trigger
   // below can flip it. Alert derivation lives after `roles` state is
@@ -4471,6 +4519,23 @@ export function ServiceDetailClient({
   // B-084 Batch 1 — `typedRoles` is now an alias for the stateful `roles`
   // so callers below pick up live splices from `handleProfileSaved`.
   const typedRoles = roles;
+
+  // B-118 — Profile-name lookup for the review-request card + banner.
+  // Use allProfiles (loader pulls every active client_profile on the
+  // tenant) so people-KYC rows referencing a profile that isn't yet on
+  // this service still get a label.
+  const reviewProfileNamesById = useMemo<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const p of allProfiles) {
+      out[p.id] = p.full_name ?? "(unnamed profile)";
+    }
+    for (const r of typedRoles) {
+      const pid = r.client_profiles?.id;
+      const name = r.client_profiles?.full_name;
+      if (pid && name) out[pid] = name;
+    }
+    return out;
+  }, [allProfiles, typedRoles]);
   const serviceFields = (service.service_templates?.service_fields ?? []) as ServiceField[];
 
   // Deduplicate roles by profile ID — collect all roles per profile
@@ -4489,6 +4554,18 @@ export function ServiceDetailClient({
       profileRolesMap.set(r.id, { person: r, roles: [r.role], allRoleRows: [r] });
     }
   }
+  // B-118 — Profiles passed to the request modal — one row per profile
+  // on this service. Role labels keep it scannable when multiple people
+  // share the same name. Built off `profileRolesMap` above so it stays
+  // in sync with `typedRoles`.
+  const reviewModalProfiles = Array.from(profileRolesMap.values()).map(
+    ({ person, roles: pRoles }) => ({
+      id: (person.client_profiles?.id ?? person.id) as string,
+      full_name: person.client_profiles?.full_name ?? "(unnamed profile)",
+      role_label: pRoles.join(", "),
+    }),
+  );
+
   // B-114 — scope-filtered list of person-scope KYC doc types feeds
   // every `calcKycPct` call below (sort comparator + aggregator). Same
   // filter the parent `kycDocTypes` memo uses further down; memoized so
@@ -4556,6 +4633,10 @@ export function ServiceDetailClient({
   const rawReviewProfile = reviewMode && reviewStep === 3
     ? searchParams.get("profile")
     : null;
+  // B-118 — deep-link from review-request emails surfaces the banner +
+  // highlights the relevant card row.
+  const highlightReviewRequestId =
+    searchParams?.get("reviewRequest") ?? null;
   const reviewProfileId = rawReviewProfile && uniqueRoles.some(
     ({ person }) => person.client_profiles?.id === rawReviewProfile,
   )
@@ -5433,6 +5514,27 @@ export function ServiceDetailClient({
         autoAlerts={visibleAutoAlerts}
         manualAlerts={manualAlerts}
       />
+
+      {/* B-118 — Peer / Manager review modal. Opened from the right-rail
+          card; on success, splice the request into state + splice the
+          generated comm rows into the Communications card. */}
+      <RequestReviewModal
+        open={requestReviewModalOpen}
+        onOpenChange={setRequestReviewModalOpen}
+        serviceId={service.id}
+        currentUserId={currentUserId}
+        admins={adminUsers.map((u) => ({
+          user_id: u.user_id,
+          full_name: u.full_name,
+          email: u.email,
+        }))}
+        profiles={reviewModalProfiles}
+        onCreated={(req, comms) => {
+          upsertReviewRequest(req);
+          appendCommunications(comms);
+          router.refresh();
+        }}
+      />
       </div>
       )}
       {/* ── End sticky shell ────────────────────────────────────────────── */}
@@ -5445,6 +5547,25 @@ export function ServiceDetailClient({
       {/* ── LEFT: Main Sections (col-span-2) ────────────────────────────── */}
       {/* Each section is its own boxed Card; outer container provides spacing only */}
       <div ref={leftColumnRef} className={reviewMode ? "space-y-4" : "lg:col-span-2 space-y-4"}>
+
+        {/* B-118 — Sticky review-request banner for reviewers. Renders only
+              when the current admin is an invited reviewer on at least one
+              open request for this service. Honours the ?reviewRequest=<id>
+              deep-link from review-request emails. */}
+        {!reviewMode && (
+          <ReviewRequestBanner
+            serviceId={service.id}
+            currentUserId={currentUserId}
+            requests={reviewRequests}
+            highlightRequestId={highlightReviewRequestId}
+            profileNamesById={reviewProfileNamesById}
+            onClosed={(req, comms) => {
+              upsertReviewRequest(req);
+              appendCommunications(comms);
+              router.refresh();
+            }}
+          />
+        )}
 
         {/* ── Section 1: Company Setup ────────────────────────────────────── */}
         {(!reviewMode || reviewStep === 0) && (
@@ -5876,6 +5997,25 @@ export function ServiceDetailClient({
             ? `View Summary for ${service.service_number}`
             : "View Service Summary"}
         </Button>
+
+        {/* B-118 — Peer / Manager review requests card. Placed between
+              the View Summary button and the Pending card so it's the
+              second primary action visible when the rail pins. Opens
+              the request modal; lists open requests with reviewer
+              chips + Mark/Close actions. */}
+        <ReviewRequestsCard
+          serviceId={service.id}
+          currentUserId={currentUserId}
+          requests={reviewRequests}
+          profileNamesById={reviewProfileNamesById}
+          onOpenModal={() => setRequestReviewModalOpen(true)}
+          onClosed={(req, comms) => {
+            upsertReviewRequest(req);
+            appendCommunications(comms);
+            router.refresh();
+          }}
+          highlightRequestId={highlightReviewRequestId}
+        />
 
         {/* B-112 — progress meters card sits above the Pending card.
               Two circular gauges (Completed n/5 + Reviewed n/5) give

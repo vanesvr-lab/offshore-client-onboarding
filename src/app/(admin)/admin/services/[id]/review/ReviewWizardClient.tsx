@@ -14,7 +14,9 @@ import { useSearchParams } from "next/navigation";
 import { ServiceDetailClient } from "../ServiceDetailClient";
 import type { ServiceDetailPayload } from "../loadServiceDetail";
 
-export function ReviewWizardClient(props: ServiceDetailPayload) {
+export function ReviewWizardClient(
+  props: ServiceDetailPayload & { currentUserId: string },
+) {
   const searchParams = useSearchParams();
   const stepRaw = searchParams.get("step");
   const parsed = stepRaw ? parseInt(stepRaw, 10) : 0;

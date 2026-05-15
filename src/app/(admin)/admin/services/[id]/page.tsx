@@ -139,7 +139,7 @@ export default async function ServiceDetailPage({
 
   return (
     <div>
-      <ServiceDetailClient {...payload} />
+      <ServiceDetailClient {...payload} currentUserId={session.user.id as string} />
     </div>
   );
 }

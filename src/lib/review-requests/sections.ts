@@ -24,12 +24,14 @@ export const SECTION_LABELS: Record<TopLevelSectionKey, string> = {
 
 // Anchor ids each top-level section uses on the service page. Kept here
 // so the banner and the right-rail detail dialog don't need to know
-// about the page's internal DOM structure beyond a single import.
+// about the page's internal DOM structure beyond a single import. Must
+// match the `anchorId` props passed to `<ServiceCollapsibleSection />`
+// inside `ServiceDetailClient`.
 export const SECTION_ANCHORS: Record<TopLevelSectionKey, string> = {
-  company_setup: "service-company-setup",
-  financial: "service-financial",
-  banking: "service-banking",
-  documents: "service-documents",
+  company_setup: "step-company-setup",
+  financial: "step-financial",
+  banking: "step-banking",
+  documents: "step-documents",
 };
 
 export function isTopLevelSectionKey(key: string): key is TopLevelSectionKey {

@@ -28,7 +28,7 @@ export default async function ServiceReviewPage({
 
   return (
     <div>
-      <ReviewWizardClient {...payload} />
+      <ReviewWizardClient {...payload} currentUserId={session.user.id as string} />
     </div>
   );
 }
