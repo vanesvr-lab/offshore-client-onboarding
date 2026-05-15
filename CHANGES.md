@@ -13,6 +13,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-119 — Actions as top-level section + email popup & milestones hotfixes (in progress 2026-05-15)
+
+### 2026-05-15 — Batch 1: email popup width + sender + milestones compact (Claude Code)
+
+**Hotfix 1 — email body popup.** `ServiceCommunicationsDialog`'s nested body dialog widened from `max-w-3xl w-[min(100vw-2rem,48rem)]` to `max-w-4xl w-[min(100vw-2rem,60rem)]` (~25% wider while snapping to the standard Tailwind scale and keeping the responsive cap). The metadata block above the iframe now also surfaces `Sent by {sent_by_name}` between Sent-at and To — sourced from the existing `service_communications.sent_by_name` snapshot (no extra query needed). The list table also gains a "Sent by" column for at-a-glance scan; nullable sender renders as `—`. Three B-118 review-request email types added to the label map so the filter chips read in plain English.
+
+**Hotfix 2 — milestones card compact.** Right-rail Milestones section reflowed from `space-y-4` / `py-4` / `text-sm` per row to a `divide-y` list with `py-1.5` / `text-xs` rows. Each row is now a single line: toggle + label on the left (truncated when needed), date input on the right (shrink-0). When a milestone is disabled, the right slot shows an em-dash so the row keeps a consistent height. Toggle icons dropped from `h-4` to `h-3.5` to match the new font scale. No behavioural changes — the underlying milestone state, save plumbing, and audit log are untouched.
+
+`npm run build` clean.
+
+Next: Batch 2 — Actions top-level section + 4 subsections + migration.
+
+---
+
 ## B-118 — Peer/Manager review feature + verification_codes & comm-card hotfixes (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: verification_codes migration + comm-card freshness hotfix (Claude Code)

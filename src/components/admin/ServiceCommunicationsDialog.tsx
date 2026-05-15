@@ -31,6 +31,10 @@ const EMAIL_TYPE_LABELS: Record<string, string> = {
   service_kyc_invite: "Service KYC invite",
   document_update_request: "Document update request",
   process_documents_request: "Process documents request",
+  // B-118 — peer / manager review
+  review_request_created: "Review requested",
+  review_request_closed_by_reviewer: "Review closed (by reviewer)",
+  review_request_closed_by_requester: "Review closed (by requester)",
 };
 
 function labelForEmailType(key: string): string {
@@ -110,6 +114,7 @@ export function ServiceCommunicationsDialog({
               <thead className="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0">
                 <tr>
                   <th className="text-left py-2 px-3 font-semibold">Date</th>
+                  <th className="text-left py-2 px-3 font-semibold">Sent by</th>
                   <th className="text-left py-2 px-3 font-semibold">To</th>
                   <th className="text-left py-2 px-3 font-semibold">Type</th>
                   <th className="text-left py-2 px-3 font-semibold">Subject</th>
@@ -119,7 +124,7 @@ export function ServiceCommunicationsDialog({
               <tbody className="divide-y divide-gray-100">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="py-8 text-center text-sm text-gray-400">
                       No emails match this filter.
                     </td>
                   </tr>
@@ -128,6 +133,9 @@ export function ServiceCommunicationsDialog({
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="py-2 px-3 text-gray-700 whitespace-nowrap">
                         {formatDateTime(c.sent_at)}
+                      </td>
+                      <td className="py-2 px-3 text-gray-700 whitespace-nowrap">
+                        {c.sent_by_name ?? "—"}
                       </td>
                       <td className="py-2 px-3 text-gray-700">
                         {c.sent_to_email ?? "—"}
@@ -163,9 +171,13 @@ export function ServiceCommunicationsDialog({
 
       {/* Nested body dialog. `sandbox=""` with no allow-flags blocks
           scripts, forms, popups, and same-origin access. The HTML still
-          renders for visual review. */}
+          renders for visual review.
+          B-119 hotfix 1 — widened ~25% (max-w-3xl 48rem → max-w-4xl
+          56rem; responsive cap 48rem → 60rem) and the metadata block
+          gains a "Sent by" field sourced from the comm row's
+          sent_by_name snapshot (no extra query). */}
       <Dialog open={viewing !== null} onOpenChange={(o) => { if (!o) setViewing(null); }}>
-        <DialogContent className="max-w-3xl w-[min(100vw-2rem,48rem)]">
+        <DialogContent className="max-w-4xl w-[min(100vw-2rem,60rem)]">
           {viewing && (
             <>
               <DialogHeader>
@@ -173,6 +185,7 @@ export function ServiceCommunicationsDialog({
               </DialogHeader>
               <div className="text-xs text-gray-500 space-y-0.5 pb-2">
                 <p>Sent {formatDateTime(viewing.sent_at)}</p>
+                <p>Sent by {viewing.sent_by_name ?? "—"}</p>
                 <p>To {viewing.sent_to_email ?? "—"}</p>
                 <p>Type: {labelForEmailType(viewing.email_type)}</p>
               </div>

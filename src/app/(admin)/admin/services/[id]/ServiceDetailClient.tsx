@@ -6189,7 +6189,10 @@ export function ServiceDetailClient({
           adminOnly
           defaultOpen={true}
         >
-          <div className="pt-4 space-y-4">
+          {/* B-119 hotfix 2 — compact rows. Single row per milestone:
+              toggle+label flex-1 on the left, date input shrink-0 on the
+              right, py-1.5 instead of space-y-4 + py-4 wasted whitespace. */}
+          <div className="pt-2 divide-y divide-gray-100">
             {(
               [
                 {
@@ -6215,33 +6218,36 @@ export function ServiceDetailClient({
                 },
               ] as const
             ).map((m) => (
-              <div key={m.label} className="flex items-center gap-4">
-                {/* Toggle */}
+              <div
+                key={m.label}
+                className="flex items-center justify-between gap-2 py-1.5"
+              >
                 <button
                   onClick={() => void toggleMilestone(m.field, m.boolField)}
                   disabled={savingMilestone === m.field}
-                  className={`flex items-center gap-2 min-w-[160px] text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-2 text-xs font-medium transition-colors min-w-0 truncate ${
                     m.enabled ? "text-green-700" : "text-gray-400 hover:text-gray-600"
                   }`}
                 >
                   {savingMilestone === m.field ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
                   ) : m.enabled ? (
-                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
                   ) : (
-                    <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                    <div className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 shrink-0" />
                   )}
-                  {m.label}
+                  <span className="truncate">{m.label}</span>
                 </button>
 
-                {/* Date picker (shown when enabled) */}
-                {m.enabled && (
+                {m.enabled ? (
                   <input
                     type="date"
                     value={m.date ? new Date(m.date).toISOString().split("T")[0] : ""}
                     onChange={(e) => void updateMilestoneDate(m.field, e.target.value)}
-                    className="border rounded-lg px-2 py-1 text-sm text-gray-700"
+                    className="border rounded px-1.5 py-0.5 text-xs text-gray-700 shrink-0"
                   />
+                ) : (
+                  <span className="text-xs text-gray-300 shrink-0">—</span>
                 )}
               </div>
             ))}
