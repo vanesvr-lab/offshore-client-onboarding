@@ -23,6 +23,35 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 Next: Batch 2 — Reference Forms schema migration + storage + admin settings page + library API endpoints.
 
+### 2026-05-15 — Batch 2: Reference Forms schema + library + API (Claude Code)
+
+**Migration `20260515052901_reference_forms.sql`** (pushed; `npm run db:status` paired Local + Remote): two new tables under default-deny RLS, mirrors the `review_requests` pattern.
+
+- `reference_forms` — blank regulatory templates per `(service_template_id, action_key)`. Columns: name, file_path, source_url, version_label, status (`active`/`deactivated`), deactivated_reason (`no_longer_required`/`replaced_by_newer_version`), deactivated_at/note, replaced_by_id (self-FK, ON DELETE SET NULL), sort_order, created_by → `profiles(id)`. Composite index on `(service_template_id, action_key, status, sort_order)` keeps the per-Action lookup cheap.
+- `submitted_forms` — filled copies admin uploads back per service. Columns: service_id (FK CASCADE), action_key, reference_form_id (FK RESTRICT — historical version stays pinned even after a Replace), file_path, file_name, notes, uploaded_at, uploaded_by. Composite index on `(service_id, action_key, reference_form_id, uploaded_at DESC)` for "latest per slot" reads.
+
+Tenant column defaults to the existing GWMS tenant constant; no app-layer tenant filtering yet (POC pattern).
+
+**Storage helper `src/lib/supabase/storage.ts`** — centralises bucket access (`documents` reused, no new bucket). Exports: `sanitizeFilename`, `referenceFormPath(id, filename)`, `submittedFormPath(serviceId, actionKey, refFormId, filename)`, `createDocumentsSignedUrl(supabase, path, ttlSeconds=300)`. Keeps reference-forms / submitted-forms / future similar features from inlining `.createSignedUrl()` everywhere.
+
+**API endpoints** (all under `src/app/api/admin/`, `session.user.role === "admin"` gated, audit-logged):
+- `GET/POST /reference-forms` — list (filterable by `service_template_id` + `action_key` + `include_deactivated`) / create. POST supports the Replace flow via `replace_for_form_id`: on success the old row is set `status='deactivated' / deactivated_reason='replaced_by_newer_version' / replaced_by_id={new.id}`. New row inherits the previous row's `sort_order` so it slots in the same place. Storage upload happens after the insert (id available for the path); insert is rolled back if storage fails.
+- `POST /reference-forms/[id]/deactivate` — idempotent, sets `no_longer_required` + optional note.
+- `POST /reference-forms/[id]/reactivate` — 409 if `replaced_by_id IS NOT NULL` (can't reactivate a superseded row).
+- `GET /reference-forms/[id]/blank-download-url` — 5-minute signed URL for the blank template.
+- `GET/POST /services/[id]/submitted-forms` — list (filterable by `action_key`) / upload. Insert is rolled back (storage `remove`) if the row insert fails so we don't leak storage. Cross-checks that the supplied `reference_form_id.action_key` matches the submission's `action_key`.
+- `GET /submitted-forms/[id]/download-url` — 5-minute signed URL for a submitted copy.
+
+All five mutating endpoints write `audit_log` rows via `writeAuditLog`: `reference_form_created`, `reference_form_replaced`, `reference_form_deactivated`, `reference_form_reactivated`, `submitted_form_uploaded`.
+
+**Settings page** `/admin/settings/reference-forms` — server component fetches reference_forms + service_template_actions (for binding labels) + service_templates (for template names). Renders a filterable table with toolbar (template select + action select + include-deactivated toggle) and an "Upload new reference form" CTA. Per-row actions: Download (signed URL → opens in new tab), Replace (opens upload dialog in replace mode), Deactivate (window.prompt for optional note), Reactivate (active rows where `replaced_by_id IS NULL`). New sidebar entry "Reference Forms" added to `ADMIN_SETTINGS_NAV` between Document Types and Due Diligence.
+
+**Upload dialog** `src/components/admin/ReferenceFormUploadDialog.tsx` — shared between new-upload and replace flows. In replace mode, template/action/name are pre-filled and disabled; the same `POST /reference-forms` route handles both via the optional `replace_for_form_id` field. Accepts PDF, DOC/DOCX, JPEG, PNG; 25 MB cap.
+
+`npm run build` clean. New route count: 6 (1 page + 5 API).
+
+Next: Batch 3 — wire `<ReferenceFormsPanel>` into the four Action subsections so admin sees forms inline on each service detail page.
+
 ---
 
 ## B-119 — Actions as top-level section + email popup & milestones hotfixes (done 2026-05-15)
