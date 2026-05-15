@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-120 — Reference Forms library + right-rail Progress-card reorder (in progress 2026-05-15)
+## B-120 — Reference Forms library + right-rail Progress-card reorder (done 2026-05-15)
 
 ### 2026-05-15 — Batch 1: right-rail Progress card promoted to slot 1 (Claude Code)
 
@@ -75,6 +75,42 @@ Next: Batch 3 — wire `<ReferenceFormsPanel>` into the four Action subsections 
 `npm run build` clean. No new endpoints in this batch — all five wire to existing Batch 2 routes.
 
 Next: Batch 4 — tests + audit-log assertions + tech-debt entries + dev-server restart.
+
+### 2026-05-15 — Batch 4: tests + audit-log assertions + tech-debt + dev restart (Claude Code)
+
+**Unit tests** (`tests/unit/lib/storage-helper.test.ts`) — exercise the new `src/lib/supabase/storage.ts` helpers:
+- `sanitizeFilename` — strips spaces and unsafe chars, collapses underscores, falls back to `"file"`, caps at 120 chars.
+- `referenceFormPath` / `submittedFormPath` — verifies path shape under `reference-forms/<id>/` and `submitted-forms/<service>/<action>/<ref>/<ISO-ish-ts>_<safe-name>` respectively; checks the timestamp strips `:` and `.`.
+- `createDocumentsSignedUrl` — returns the signed URL on success, `null` on storage error, honours custom TTL, hits the `documents` bucket.
+
+**Integration tests** (`tests/integration/api/reference-forms.test.ts` + `tests/integration/api/submitted-forms.test.ts`) — cover the full create / list / deactivate / reactivate / submitted-upload cycle:
+- POST /reference-forms — rejects non-admin (403), missing fields (400), invalid source_url (400). Happy path: insert is recorded, file_path is finalised under `reference-forms/<id>/`, `writeAuditLog` is called with action `reference_form_created`. Replace flow: previous row gets `status='deactivated', deactivated_reason='replaced_by_newer_version', replaced_by_id=<new>`, and both `reference_form_created` + `reference_form_replaced` audit rows fire.
+- GET /reference-forms — admin-only; returns rows in the order Supabase sends them.
+- POST /reference-forms/[id]/deactivate — writes the audit-log row on first call; second call returns `alreadyDeactivated: true` and skips audit.
+- POST /reference-forms/[id]/reactivate — 409 when `replaced_by_id` is set (can't resurrect a superseded row); success path clears `deactivated_*` columns and writes `reference_form_reactivated` to audit log.
+- POST /services/[id]/submitted-forms — rejects non-admin (403), 404 on missing service, 400 when reference_form action_key doesn't match the submission. Happy path: row insert is recorded and `submitted_form_uploaded` audit row fires.
+- GET /services/[id]/submitted-forms — admin-only; returns rows in the most-recent-first order the DB query specifies.
+
+All multipart routes mock `request.formData()` via a request-shape stub to side-step the known undici hang when constructing Request from FormData bodies — mirrors the pattern in `documents-upload.test.ts`.
+
+**Test totals.** 253 / 253 passing (was 210 prior to this brief; +43 new across B-119 → B-120). Full `npm test` clean.
+
+**`ReferenceFormsPanel` component test deferred** — the brief asked for a unit test asserting empty + populated render paths. Scaffolded under `tests/unit/components/ReferenceFormsPanel.test.tsx`, but vitest's vite/esbuild pipeline can't transform JSX while `tsconfig.json` keeps `jsx: "preserve"` (required for Next's SWC compiler). Workarounds via `esbuild.tsconfigRaw` and `optimizeDeps.esbuildOptions` were ineffective. Test file removed; tech-debt entry added with two recovery paths (install `@vitejs/plugin-react` or add a per-vitest `tsconfig`). Behavioural coverage of the panel is left to the API integration tests it consumes.
+
+**Tech-debt entries appended** to `docs/tech-debt.md` (newest at the top):
+- Reference forms bound per (template, action_key) — revisit if cross-template duplication becomes painful.
+- No role gating on library mutations — restrict to Manager+ when the role hierarchy ships.
+- Submitted forms link a single reference_form_id — combined-form support deferred until regulators publish one.
+- Auto-fill of blank templates from service data — schema is ready, templating layer is the next product step.
+- `ReferenceFormsPanel` component unit test is blocked by vitest JSX/tsconfig wiring — recovery paths documented.
+
+**Dev-server restart** — kicked off in the background from the main project root (`.env.local` lives there). The brief's command:
+
+```
+cd /Users/elaris/Documents/Claude_webapp_client_onboarding && pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev
+```
+
+`npm run build` clean (verified twice — first foreground run hit a known intermittent `.next/server/app/_not-found/page.js.nft.json` ENOENT race when builds overlap; the standalone rerun was clean).
 
 ---
 

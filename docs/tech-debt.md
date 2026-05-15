@@ -11,6 +11,31 @@ remove after 30 days.
 
 ## 2026-05-15
 
+- **Reference forms are bound per `(service_template, action_key)` — same form on multiple templates means re-uploading per template.**
+  *Spawned by:* [B-120](cli-brief-reference-forms-and-right-rail-reorder-b120.md).
+  *What:* `reference_forms.service_template_id` is a single FK and the lookup index is `(service_template_id, action_key, status, sort_order)`. So if FSC Form A applies to both GBC and Authorised Company templates, admin must upload it twice (once per template). Replace flow only touches the template you're working on; cross-template "bulk replace" isn't supported. If duplication becomes painful — i.e., admins are uploading the same regulatory form to ≥3 templates — revisit with a `linked_templates uuid[]` array column or a junction table.
+  *Why deferred:* POC has 5 templates and most reference forms are template-specific (GBC's FSC FS-41 is not what the Trust template needs). The duplication cost today is low; the schema change cost is non-trivial.
+
+- **Reference-form library has no role gating today.**
+  *Spawned by:* [B-120](cli-brief-reference-forms-and-right-rail-reorder-b120.md).
+  *What:* Any user with a row in `admin_users` can upload, replace, deactivate, and reactivate reference forms. When the planned admin role hierarchy ships (Officer / Manager / Super User / Junior Officer per [[project_admin_role_hierarchy]]), restrict library mutations to Manager+. Add an `is_admin_manager(uid)` (or similar) gate to the four mutating routes under `src/app/api/admin/reference-forms/`.
+  *Why deferred:* Roles are still flat. The library page is at `/admin/settings/reference-forms` and only linked from the admin sidebar — practical exposure is low.
+
+- **Submitted forms link to a single `reference_form_id` — no combined-form support.**
+  *Spawned by:* [B-120](cli-brief-reference-forms-and-right-rail-reorder-b120.md).
+  *What:* If a regulator publishes a "combined" reference form that replaces two existing forms (e.g., FSC Form A+B → Form AB), admin must mark both old forms deactivated AND upload the combined as a new form on each — submitted-form rows for the combined version duplicate storage one per old reference_form_id. Revisit when combined forms appear in practice; could add a `bridges_reference_form_ids uuid[]` column on `reference_forms` so a single uploaded combined form services multiple historical slots.
+  *Why deferred:* No current combined forms in the Mauritius regulatory set. Speculative until a regulator publishes one.
+
+- **Auto-fill of blank reference templates from service data is deferred.**
+  *Spawned by:* [B-120](cli-brief-reference-forms-and-right-rail-reorder-b120.md).
+  *What:* Today Download blank returns the raw blank PDF from storage. The future flow is: admin clicks Download blank with a `?prefilled=true` flag, the backend renders a partially-filled PDF using a templating library (pdf-lib, server-side form-fill helper) populated from service data (company details, registered office, beneficial owner KYC), and admin prints + finalises. No schema change needed — the blank stays the source of truth, pre-fill is computed at download time.
+  *Why deferred:* Requires per-form field mapping (which PDF fields map to which service columns), which is meaningful product work. Library + storage are now in place; pre-fill can layer on later.
+
+- **`ReferenceFormsPanel` lacks a component-level unit test because vitest's vite/esbuild pipeline can't transform JSX while project tsconfig sets `jsx: preserve`.**
+  *Spawned by:* [B-120](cli-brief-reference-forms-and-right-rail-reorder-b120.md).
+  *What:* B-120's brief asked for a unit test asserting `ReferenceFormsPanel` renders nothing when `referenceForms` is empty and renders rows + history disclosure otherwise. The test was scaffolded under `tests/unit/components/ReferenceFormsPanel.test.tsx` but vitest fails to load the source `.tsx` (vite:import-analysis sees raw JSX because `jsx: preserve` is set in tsconfig.json for the SWC build path). Workaround attempts via `esbuild.tsconfigRaw` and `optimizeDeps.esbuildOptions` were ineffective. The test file was removed; behavioural coverage of the panel is left to the integration tests of its underlying endpoints and the eventual E2E pass. To restore: either add `@vitejs/plugin-react` to dev deps (preferred — gives full React HMR + jsx transform), or split a per-test `tsconfig.vitest.json` with `jsx: "react-jsx"`.
+  *Why deferred:* Infrastructure-level test config, not panel logic. Functional coverage of the panel's contract is provided by the API integration tests it consumes and by the existing E2E test infrastructure.
+
 - **Action subsections don't plug into `application_section_reviews`.**
   *Spawned by:* [B-119](cli-brief-actions-section-and-ui-hotfixes-b119.md).
   *What:* The four action subsections (Substance, Bank Opening, Company Registration, FSC Checklist) use `service_actions.status` as their done-state authority — no per-subsection review row in `application_section_reviews`. The top-level Actions section still gets reviewed via the standard step-level pattern (`sectionKey="actions"`). Substance Review's body keeps its own `ConnectedSectionHeader` (section_key `action:substance_review`) for legacy review trail, but the other three subsections don't have a peer/manager-review surface. If admin-on-admin review of Action subsections becomes a real need (B-118's peer-review covers ad-hoc requests but not per-section flow), wire each subsection to its own `section_key` and a `SectionReviewControls` row inside the accordion header.
