@@ -13,7 +13,7 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-117 — Field provenance icons + mismatch detection + doc expiry SoT + Re-apply fix (in progress 2026-05-14)
+## B-117 — Field provenance icons + mismatch detection + doc expiry SoT + Re-apply fix (done 2026-05-14)
 
 ### 2026-05-14 — Batch 1: state-driven field icons, mismatch detection, click-to-fix popover (Claude Code)
 
@@ -62,6 +62,34 @@ Tests: `tests/unit/lib/recordProvenance.test.ts` covers the writeback path: ISO 
 `npm run build` clean.
 
 Next: Batch 3 — diagnose + fix Re-apply non-persistence.
+
+### 2026-05-14 — Batch 3: Re-apply persistence root-cause fix (Claude Code)
+
+**Root cause.** The admin per-section `Re-apply` button POSTed to the legacy `/api/profiles/kyc/save` endpoint. That endpoint routes any field in its `PROFILE_FIELDS` list (`email / phone / full_name / address`) to `client_profiles` **only** — it never writes those columns to `client_profile_kyc`. The admin per-profile form reads its baseline from the joined `client_profiles(... client_profile_kyc(*))` row and spreads `client_profile_kyc[0]` into `initialFields`. So for `address` specifically, the re-applied value persisted to `client_profiles.address` but the kyc copy stayed stale; the next parent re-fetch reset `savedFields`/`draftFields` to that stale baseline and silently wiped the re-applied value out of the visible form. The Save button correctly stayed inactive (per B-078 Batch 1) because `savedFields` and `draftFields` were both updated locally — but the next render's `initialFields` recomputation overwrote both.
+
+Secondary issue: the legacy endpoint never spliced post-update rows back into the parent's `roles` state, so even non-`address` fields could revert on a sibling-triggered re-render that bumped `initialFields`' reference.
+
+**Fix.** Switch `handleReapplySection` to `PATCH /api/admin/profiles/[id]/kyc-fields` — the same endpoint Save uses. That endpoint:
+- Handles `address` as dual-table via `DUAL_TABLE_KEYS` (writes to BOTH columns).
+- Returns the post-update `kyc` + `profile` rows.
+- Writes an `audit_log` row.
+
+`onAfterReapply` was renamed from a `(patched) => void` shape to `(server: { kyc, profile }) => void` so PersonCard can:
+1. Reset BOTH `savedFields` AND `draftFields` from the server-authoritative rows (zeros the dirty tracker without a refetch).
+2. Splice into the parent's `roles` via `onProfileSaved` (`peopleKycPct` / per-profile pill recompute immediately).
+3. Trigger `onRefresh()` so the audit-log panel and adjacent UI pick up the change.
+
+The new `PersonCard.handleAfterReapply` mirrors `handleKycBarSave` exactly so the two flows can't drift.
+
+Files:
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `handleReapplySection` now hits the modern endpoint and splits payload into `kyc_fields` / `profile_fields`. `onAfterReapply` signature widened. New `handleAfterReapply` helper in PersonCard.
+- `tests/integration/api/admin-profile-kyc-fields-reapply.test.ts` — 2 new tests assert (a) `address` is written to BOTH tables and `passport_number` doesn't leak into the profile branch, (b) the endpoint returns the post-update `kyc` and `profile` rows in the shape `handleAfterReapply` consumes.
+
+Legacy `/api/profiles/kyc/save` is untouched — still used by the client wizard. Only the admin path moved.
+
+202 tests pass (`npm test --run`). `npm run build` clean.
+
+Tech debt added: doc-card title-level mismatch chip; collapsing `field_extractions.source = 'admin_override'` into `manual`. Both in `docs/tech-debt.md`.
 
 ---
 

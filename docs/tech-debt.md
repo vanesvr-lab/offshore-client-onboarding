@@ -11,6 +11,16 @@ remove after 30 days.
 
 ## 2026-05-14
 
+- **Doc-card title-level mismatch chip.**
+  *Spawned by:* [B-117](cli-brief-field-provenance-icons-and-doc-expiry-flow-b117.md).
+  *What:* When any field tied to a doc disagrees with that doc's OCR value, surface a red flag chip on the doc card itself (the card title row), so admins notice mismatches without opening the per-section form. Deferred until per-field flags are observed in practice — the card is already visually busy and we don't want to multiply noise. If Vanessa reports the per-field flags get lost in the form's visual density, add this chip; otherwise leave the per-field flag as the single signal.
+  *Why deferred:* Adds visual noise on top of an already busy card; per-field flag may be sufficient signal.
+
+- **`field_extractions.source = 'admin_override'` is no longer rendered.**
+  *Spawned by:* [B-117](cli-brief-field-provenance-icons-and-doc-expiry-flow-b117.md).
+  *What:* The new icon vocabulary derives state from `(latest OCR extraction, current form value)` and ignores whether the row's `source` is `manual` or `admin_override`. The DB still records the distinction for audit-log integrity. When confidence is high that the distinction is not surfacing anywhere user-visible, collapse `admin_override` into `manual` in a follow-up migration + recordProvenance simplification.
+  *Why deferred:* Audit-log integrity for the legacy distinction is non-zero value; cheap to keep until the icon design has had time in production.
+
 - **Documents step and per-profile KYC % share the same underlying KYC-doc data.**
   *Spawned by:* [B-116](cli-brief-peoplekyc-dedup-and-combined-docs-b116.md).
   *What:* The Documents step pill now folds per-profile KYC docs into its denominator/numerator alongside service-level docs, and the per-profile KYC % already counts those same docs. Waiving a person-scope doc therefore bumps both metrics simultaneously. Conceptually correct — the doc is "done" at the profile level *and* at the service level — but worth flagging: a future all-up service-completion roll-up may want to dedupe further, or each metric should explicitly call out what it counts so admins reading two pills don't double-count progress in their head.

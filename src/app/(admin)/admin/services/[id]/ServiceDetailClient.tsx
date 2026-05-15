@@ -591,8 +591,25 @@ function KycLongForm({
   fields: Record<string, unknown>;
   setFields: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   /** B-078 Batch 1 — after a server-side re-apply, PersonCard syncs
-   *  savedFields so dirty tracking resets. */
-  onAfterReapply?: (patched: Record<string, unknown>) => void;
+   *  savedFields so dirty tracking resets.
+   *
+   *  B-117 Batch 3 — receives the server-authoritative post-update rows
+   *  so PersonCard can (a) reset both savedFields AND draftFields, (b)
+   *  splice the new rows into the parent's `roles` state via
+   *  `onProfileSaved`, and (c) trigger `onRefresh` for audit-log + KYC%
+   *  recomputation. The old shape (just the dirty patch) couldn't drive
+   *  the parent splice, so `initialFields` stayed stale on the next
+   *  re-render and silently reset the re-applied values. */
+  onAfterReapply?: (server: {
+    kyc: Record<string, unknown> | null;
+    profile: {
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      phone: string | null;
+      address: string | null;
+    } | null;
+  }) => void;
   /** B-109 Batch 3 — sub-wizard filter: when set, only sections whose
    *  `title` is in the list render. Lets `AdminPerProfileReviewWizard`
    *  reuse this component to show one section per sub-step without
@@ -731,10 +748,22 @@ function KycLongForm({
   // in `section` and PATCH them into the form. Mirrors the client wizard's
   // `Re-apply` behaviour. Admin can still trigger this even though they don't
   // edit the form; useful when a doc has been re-uploaded.
+  //
+  // B-117 Batch 3 — moved off the legacy `/api/profiles/kyc/save` endpoint
+  // onto the same `PATCH /api/admin/profiles/[id]/kyc-fields` endpoint Save
+  // uses. The legacy route routed `address` to `client_profiles` only,
+  // leaving `client_profile_kyc.address` stale; the next parent re-fetch
+  // pulled the stale kyc copy back into `initialFields`, which the dirty-
+  // tracker's `useEffect` then reset `savedFields`/`draftFields` to — wiping
+  // the re-applied values out of the visible form even though SOME columns
+  // had persisted to the DB. The modern endpoint handles `address` as
+  // dual-table, writes audit-log rows, and returns the post-update state
+  // so the parent can splice via the same `onAfterReapply → onProfileSaved`
+  // chain that Save uses.
   async function handleReapplySection(section: KycSection) {
-    const kycId = kyc.id as string | undefined;
-    if (!kycId) return;
-    const payload: Record<string, unknown> = {};
+    if (!profileId) return;
+    const kycPatch: Record<string, unknown> = {};
+    const profilePatch: Record<string, unknown> = {};
     for (const f of section.fields) {
       const rows = extractionsByField[f.key];
       if (!rows || rows.length === 0) continue;
@@ -748,26 +777,70 @@ function KycLongForm({
             new Date(b.extracted_at).getTime() - new Date(a.extracted_at).getTime(),
         )[0];
       if (latest && latest.extracted_value != null) {
-        payload[f.key] = latest.extracted_value;
+        // Mirror PersonCard's split: full_name / email / phone live on
+        // `client_profiles`; everything else (including `address`, which
+        // the server dual-writes) goes through kyc_fields.
+        if (f.key === "full_name" || f.key === "email" || f.key === "phone") {
+          profilePatch[f.key] = latest.extracted_value;
+        } else {
+          kycPatch[f.key] = latest.extracted_value;
+        }
       }
     }
-    if (Object.keys(payload).length === 0) {
+    if (
+      Object.keys(kycPatch).length === 0 &&
+      Object.keys(profilePatch).length === 0
+    ) {
       toast.info("No extracted values to re-apply.", { position: "top-right" });
       return;
     }
     setReapplyingSection(section.title);
     try {
-      const res = await fetch("/api/profiles/kyc/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kycRecordId: kycId, fields: payload }),
+      const body: Record<string, unknown> = {};
+      if (Object.keys(kycPatch).length > 0) body.kyc_fields = kycPatch;
+      if (Object.keys(profilePatch).length > 0) body.profile_fields = profilePatch;
+      const res = await fetch(
+        `/api/admin/profiles/${profileId}/kyc-fields`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      const data = (await res.json()) as {
+        error?: string;
+        profile?: {
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          phone: string | null;
+          address: string | null;
+        } | null;
+        kyc?: Record<string, unknown> | null;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Re-apply failed");
+
+      // Merge server-authoritative values into the form state. The kyc
+      // object is the full row, so we spread it; profile fields override
+      // the three flat keys the form holds.
+      const patched: Record<string, unknown> = {
+        ...((data.kyc as Record<string, unknown> | null) ?? {}),
+      };
+      if (data.profile) {
+        patched.full_name = data.profile.full_name ?? "";
+        patched.email = data.profile.email ?? "";
+        patched.phone = data.profile.phone ?? "";
+      }
+      setFields((prev) => ({ ...prev, ...patched }));
+      // PersonCard syncs `savedFields` AND splices the post-update rows
+      // into the parent's `roles` state. Without that splice the parent's
+      // `client_profile_kyc[0]` stays stale, and on the next re-render
+      // `initialFields` resets the form back to the pre-re-apply baseline
+      // — which was the reported "doesn't persist" bug.
+      onAfterReapply?.({
+        kyc: (data.kyc as Record<string, unknown> | null) ?? null,
+        profile: data.profile ?? null,
       });
-      if (!res.ok) throw new Error("Re-apply failed");
-      setFields((prev) => ({ ...prev, ...payload }));
-      // B-078 Batch 1 — re-apply persists immediately, so sync savedFields
-      // in PersonCard or the per-profile dirty tracker would falsely flag
-      // these freshly-saved values as dirty.
-      onAfterReapply?.(payload);
       toast.success("Re-applied extracted values.", { position: "top-right" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Re-apply failed", {
@@ -2064,6 +2137,38 @@ function PersonCard({
     toast.info("Changes discarded.", { position: "top-right" });
   }
 
+  // B-117 Batch 3 — single sync handler for Re-apply, mirroring what
+  // handleKycBarSave does for the manual Save bar. KycLongForm hits the
+  // same kyc-fields endpoint and hands us the post-update rows; we
+  // (a) reset both savedFields AND draftFields off the server data so
+  // the dirty tracker zeroes out, (b) splice into the parent's `roles`
+  // so the per-profile KYC% pill and peopleKycPct recompute immediately,
+  // and (c) trigger onRefresh for the audit-log + adjacent UI.
+  function handleAfterReapply(server: {
+    kyc: Record<string, unknown> | null;
+    profile: {
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      phone: string | null;
+      address: string | null;
+    } | null;
+  }) {
+    const nextSaved: Record<string, unknown> = { ...savedFields };
+    for (const [k, v] of Object.entries(server.kyc ?? {})) {
+      nextSaved[k] = v;
+    }
+    if (server.profile) {
+      nextSaved.full_name = server.profile.full_name ?? "";
+      nextSaved.email = server.profile.email ?? "";
+      nextSaved.phone = server.profile.phone ?? "";
+    }
+    setSavedFields(nextSaved);
+    setDraftFields(nextSaved);
+    onProfileSaved?.(profile.id, server.kyc, server.profile);
+    onRefresh();
+  }
+
   // B-076 — old handleRemoveRole / handleAddRole + dropdown picker
   // were replaced by `toggleRoleAdmin` (above) which the shared
   // `KycRolesPicker` calls per checkbox toggle.
@@ -2567,9 +2672,7 @@ function PersonCard({
                   uploadingDocTypeId={uploadingDocTypeId}
                   fields={draftFields}
                   setFields={setDraftFields}
-                  onAfterReapply={(patched) =>
-                    setSavedFields((prev) => ({ ...prev, ...patched }))
-                  }
+                  onAfterReapply={(server) => handleAfterReapply(server)}
                   restrictToSectionTitles={[sectionTitle]}
                   forceOpenAll
                 />
@@ -2666,9 +2769,7 @@ function PersonCard({
                 uploadingDocTypeId={uploadingDocTypeId}
                 fields={draftFields}
                 setFields={setDraftFields}
-                onAfterReapply={(patched) =>
-                  setSavedFields((prev) => ({ ...prev, ...patched }))
-                }
+                onAfterReapply={(server) => handleAfterReapply(server)}
               />
             </div>
           )}
