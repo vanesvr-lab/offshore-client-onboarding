@@ -13,6 +13,34 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-124 — Review Requests tabular + Milestones redesign (done 2026-05-15)
+
+### 2026-05-15 — Right-rail card refactors (Claude Code)
+
+Two right-rail cards compressed to free up vertical space — the rail's natural height was outgrowing the viewport on standard laptops, forcing internal scroll on every service.
+
+**ReviewRequestsCard rewrite.** Body shifted from `<ul>` of card-per-request blocks (each ~80–120px tall) to a tight `<table>` with 3 columns: **Requester** (display name + relative time underneath), **Reviewers + sections** (`{N} reviewers · {M} sections` with reviewer names in a `title` tooltip), and **Actions** (eye-icon "View details" + contextual close/mark-reviewed icon). The previous implicit row-click affordance is gone — only the eye button opens detail. Row height target ~36px; 1–2 typical open requests now fit in two rows of card height.
+
+New `ReviewRequestDetailDialog` (co-located in the card file) renders the full note + section list + reviewer roster + audit timestamps (created_at / closed_at / closed_by_name) and surfaces the Mark-as-reviewed / Close-request affordances when the current admin is in the right role. Closing the dialog re-uses the parent's `onClosed` splice so state stays consistent.
+
+Closed history left its inline disclosure and now lives in `ClosedHistoryDialog`, opened from a new "View closed history (N)" link in the card header. Six-column table (Requester · Reviewers + sections · Closed by · Closed at · Reason · 👁 View) sorted most-recent-first, hard-capped at 50 rows with a "Showing 50 of N" footer when truncated. Eye-icon on a closed row opens the same `ReviewRequestDetailDialog` — the dialog already handles closed requests cleanly.
+
+**MilestonesCard redesign** — extracted to `src/components/admin/MilestonesCard.tsx`. Wrapper now matches the rest of the right rail (`bg-white border rounded-xl px-4 py-3`) — the previous `<ServiceCollapsibleSection>` shell made it a visual outlier. Three side-by-side cells (LOE / INV / PAY) replace the row-per-milestone layout: short column label on top, then either `✓ 12 May` (current-year date drops the year) or `—` below. Whole cell is a Popover trigger; popover content has a date picker + "Mark today" button + "Clear" (visible when the milestone is already set). Each cell is independently busy-tracked via `savingField`.
+
+The legacy `toggleMilestone` helper (which co-flipped the `loe_received` boolean column alongside `loe_received_at`) is removed — the new card's "set vs unset" derives purely from `_at` nullness, which keeps the write path simpler. `services.loe_received` is now write-orphaned; tech-debt entry tracks the eventual cleanup.
+
+`Milestone` icon import dropped from `lucide-react`; `MilestoneField` type re-exported from `MilestonesCard` so the parent can cast `savingMilestone` (string|null) into the tight union.
+
+**Tech-debt** (`docs/tech-debt.md`, newest at top):
+- Closed-history popup hard-capped at 50; real pagination is the follow-up.
+- Milestones card hides anything beyond LOE / INV / PAY; expand or disclose when more land.
+- Right rail has evolved through ten briefs; extract a `<RightRail slots={…}>` once the pattern stabilises.
+- `services.loe_received` boolean is write-orphaned; drop or backfill in the next schema cleanup.
+
+270 / 270 vitest passing. `npm run build` clean. No migration.
+
+---
+
 ## B-123 — Modal sizing polish (Communications list + Reference form preview) (done 2026-05-15)
 
 ### 2026-05-15 — Communications list rebalance + DocumentPreviewDialog larger / resizable (Claude Code)

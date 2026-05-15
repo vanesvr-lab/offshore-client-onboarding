@@ -11,6 +11,26 @@ remove after 30 days.
 
 ## 2026-05-15
 
+- **Closed-review-requests popup is hard-capped at 50 rows.**
+  *Spawned by:* [B-124](cli-brief-review-requests-tabular-and-milestones-redesign-b124.md).
+  *What:* `ReviewRequestsCard`'s new "View closed history" popup pages via `slice(0, 50)` and shows "Showing 50 of N" when there are more. Real pagination (cursor or page-N) is deferred until services routinely accumulate >50 closed requests, which doesn't happen for the current usage pattern. Easiest upgrade: paginate against the existing GET endpoint with `?limit=&before=` style params.
+  *Why deferred:* Premature for the POC volume.
+
+- **Milestones card hides anything beyond LOE / INV / PAY.**
+  *Spawned by:* [B-124](cli-brief-review-requests-tabular-and-milestones-redesign-b124.md).
+  *What:* The new `MilestonesCard` is hard-coded to three columns. If we add new milestones (audit letter sent / engagement letter received / etc.), the card needs to either (a) grow horizontally — fine for 4 columns, awkward beyond, (b) add a "more milestones" disclosure, or (c) switch to a vertical layout once we exceed ~4 cells. The data model on `services` is unaffected by this UI cap.
+  *Why deferred:* Single set of three milestones today; no pressure to generalise.
+
+- **Right rail JSX has evolved through ten briefs — extract a `<RightRail>` component.**
+  *Spawned by:* [B-124](cli-brief-review-requests-tabular-and-milestones-redesign-b124.md).
+  *What:* The right rail in `ServiceDetailClient.tsx` is now a hand-ordered JSX list of cards (Progress → View Summary → Review Requests → Status → Pending → Officer → Communications → Milestones → Audit Trail). Reordering means moving JSX blocks every brief. Once the rail stabilises, extract a `<RightRail slots={[...]} />` component with a typed prop for ordered card slots so future reorders become a single config edit. Don't preemptively — wait for one more reorder so the right abstraction reveals itself.
+  *Why deferred:* The pattern is still moving; abstracting now would lock in shape that's likely to shift.
+
+- **Legacy `services.loe_received` boolean is now write-orphaned from the UI.**
+  *Spawned by:* [B-124](cli-brief-review-requests-tabular-and-milestones-redesign-b124.md).
+  *What:* The old row-per-milestone card flipped both `loe_received_at` (timestamp) and `loe_received` (boolean) when admin toggled the LOE row. The new MilestonesCard only writes `loe_received_at` (null = unset). The legacy boolean column still exists and is still readable, but no UI writes it. Either drop it in a follow-up migration (when we're sure no other consumer reads it) or keep it as a redundant flag synced via a trigger. CLI greps showed no other consumer today, so dropping is safe — left in place to avoid a migration just for this.
+  *Why deferred:* Migration churn without functional gain. Tag for the next schema cleanup pass.
+
 - **Modal sizing has no persistence (Communications list + DocumentPreviewDialog).**
   *Spawned by:* [B-123](cli-brief-modal-sizing-polish-b123.md).
   *What:* Both modals now expose a native resize handle (horizontal on the list dialog, two-axis on the preview). Width/height resets every time admin closes the modal. If admins find themselves repeatedly resizing in the same session, add `localStorage` persistence keyed on the dialog name (`gwms.modalSize.communications-list`, `gwms.modalSize.document-preview`).

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle,
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
-  StickyNote, ShieldCheck, Milestone, Clock,
+  StickyNote, ShieldCheck, Clock,
   AlertTriangle, Bell, Eye,
   Trash2,
   Wand2, ChevronLeft, ChevronRight, X,
@@ -76,6 +76,7 @@ import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import { KycDocRow, type KycDocRowData } from "@/components/kyc/KycDocRow";
 import { KycDocumentsTable } from "@/components/admin/KycDocumentsTable";
 import { ServiceCommunicationsCard } from "@/components/admin/ServiceCommunicationsCard";
+import { MilestonesCard, type MilestoneField } from "@/components/admin/MilestonesCard";
 import { ReviewRequestsCard } from "@/components/admin/ReviewRequestsCard";
 import { ReviewRequestBanner } from "@/components/admin/ReviewRequestBanner";
 import { RequestReviewModal } from "@/components/admin/RequestReviewModal";
@@ -5352,37 +5353,12 @@ export function ServiceDetailClient({
   }
 
   // ── Milestones ────────────────────────────────────────────────────────────
-
-  async function toggleMilestone(
-    field: "loe_received_at" | "invoice_sent_at" | "payment_received_at",
-    boolField?: "loe_received"
-  ) {
-    setSavingMilestone(field);
-    const current = milestones[field as keyof typeof milestones] as string | null | boolean;
-    const isOn = boolField ? milestones.loe_received : !!current;
-    const newDate = !isOn ? new Date().toISOString() : null;
-    const patch: Record<string, unknown> = { [field]: newDate };
-    if (boolField) patch[boolField] = !isOn;
-    try {
-      const res = await fetch(`/api/admin/services/${service.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      setMilestones((prev) => ({
-        ...prev,
-        [field]: newDate,
-        ...(boolField ? { [boolField]: !isOn } : {}),
-      }));
-      toast.success("Milestone updated");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setSavingMilestone(null);
-    }
-  }
+  // B-124 — the legacy `toggleMilestone` helper (which flipped both the
+  // date column and the legacy `loe_received` boolean) is no longer
+  // called from the new MilestonesCard. The new card treats "set vs
+  // unset" purely as "date is null vs non-null"; `updateMilestoneDate`
+  // is the single write path. If anything ever needs to revive the
+  // boolean toggle, git history has the implementation.
 
   async function updateMilestoneDate(
     field: "loe_received_at" | "invoice_sent_at" | "payment_received_at",
@@ -6477,77 +6453,49 @@ export function ServiceDetailClient({
         {/* ── Communications (B-108) ──────────────────────────────────────── */}
         <ServiceCommunicationsCard communications={communications} />
 
-        {/* ── Section 8: Milestones ────────────────────────────────────────── */}
-        <ServiceCollapsibleSection
-          title="Milestones"
-          icon={<Milestone className="h-4 w-4" />}
-          adminOnly
-          defaultOpen={true}
-        >
-          {/* B-119 hotfix 2 — compact rows. Single row per milestone:
-              toggle+label flex-1 on the left, date input shrink-0 on the
-              right, py-1.5 instead of space-y-4 + py-4 wasted whitespace. */}
-          <div className="pt-2 divide-y divide-gray-100">
-            {(
-              [
-                {
-                  label: "LOE Received",
-                  field: "loe_received_at" as const,
-                  boolField: "loe_received" as const,
-                  enabled: milestones.loe_received,
-                  date: milestones.loe_received_at,
-                },
-                {
-                  label: "Invoice Sent",
-                  field: "invoice_sent_at" as const,
-                  boolField: undefined,
-                  enabled: !!milestones.invoice_sent_at,
-                  date: milestones.invoice_sent_at,
-                },
-                {
-                  label: "Payment Received",
-                  field: "payment_received_at" as const,
-                  boolField: undefined,
-                  enabled: !!milestones.payment_received_at,
-                  date: milestones.payment_received_at,
-                },
-              ] as const
-            ).map((m) => (
-              <div
-                key={m.label}
-                className="flex items-center justify-between gap-2 py-1.5"
-              >
-                <button
-                  onClick={() => void toggleMilestone(m.field, m.boolField)}
-                  disabled={savingMilestone === m.field}
-                  className={`flex items-center gap-2 text-xs font-medium transition-colors min-w-0 truncate ${
-                    m.enabled ? "text-green-700" : "text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  {savingMilestone === m.field ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                  ) : m.enabled ? (
-                    <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                  ) : (
-                    <div className="h-3.5 w-3.5 rounded-full border-2 border-gray-300 shrink-0" />
-                  )}
-                  <span className="truncate">{m.label}</span>
-                </button>
-
-                {m.enabled ? (
-                  <input
-                    type="date"
-                    value={m.date ? new Date(m.date).toISOString().split("T")[0] : ""}
-                    onChange={(e) => void updateMilestoneDate(m.field, e.target.value)}
-                    className="border rounded px-1.5 py-0.5 text-xs text-gray-700 shrink-0"
-                  />
-                ) : (
-                  <span className="text-xs text-gray-300 shrink-0">—</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </ServiceCollapsibleSection>
+        {/* B-124 — Milestones redesigned as a 3-column LOE / INV / PAY
+              card with click-to-popover edits. Wrapper now matches the
+              other rail cards (`bg-white border rounded-xl`) — the old
+              ServiceCollapsibleSection wrapper made it a visual outlier.
+              The legacy `loe_received` boolean column is no longer set
+              from this card: the new card derives "set vs unset" from
+              `loe_received_at`'s nullness, which keeps the data model
+              simpler and the chip honest. */}
+        <MilestonesCard
+          cells={[
+            {
+              label: "LOE Received",
+              field: "loe_received_at",
+              date: milestones.loe_received_at,
+            },
+            {
+              label: "Invoice Sent",
+              field: "invoice_sent_at",
+              date: milestones.invoice_sent_at,
+            },
+            {
+              label: "Payment Received",
+              field: "payment_received_at",
+              date: milestones.payment_received_at,
+            },
+          ]}
+          // savingMilestone is a `string | null` state from the legacy
+          // helper; the new card expects the narrower MilestoneField
+          // union. Cast at the boundary — the only writer is
+          // updateMilestoneDate, which only ever sets one of the three
+          // valid field names.
+          savingField={savingMilestone as MilestoneField | null}
+          onSave={async (field, isoDate) => {
+            // The existing PATCH /api/admin/services/[id] endpoint
+            // accepts {field: ISO|null}; updateMilestoneDate already
+            // handles the round-trip + state splice. We feed it the
+            // YYYY-MM-DD slice it expects (or empty to clear).
+            const value = isoDate
+              ? new Date(isoDate).toISOString().slice(0, 10)
+              : "";
+            await updateMilestoneDate(field, value);
+          }}
+        />
 
         {/* ── Section 9: Audit Trail ───────────────────────────────────────── */}
         <ServiceCollapsibleSection
