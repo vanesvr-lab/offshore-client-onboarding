@@ -59,10 +59,22 @@ The "View All" affordance on the Communications card opens a list of all emails 
 
 **First clarifying question tomorrow:** width target — same +25% bump as the single-email dialog (B-119), or larger? And: any specific fields she wants surfaced in the wider row (since we have more horizontal room)?
 
+### 5. Review Wizard — Actions section bleeding into subsections (B-119 regression)
+
+Vanessa's exact phrasing: "that new action section that we added is showing up on all the subsections now in the review."
+
+The Review Wizard is the focused-review mode on `/admin/services/[id]` (the gate around B-102 hides the stage strip / step indicator / right rail / admin extras when active — see `ServiceDetailClient.tsx:3577+`). After B-119 promoted Actions to a top-level section, it's rendering inside every subsection in the Review Wizard, which it shouldn't.
+
+Most likely cause: the new `ServiceActionsSection` is being unconditionally rendered alongside the per-subsection review content, instead of being scoped to its own step like the other top-level sections. Should be hidden inside Review Wizard, or scoped to its own step like Company Setup / Financial / Banking / People KYC / Documents.
+
+**First clarifying question tomorrow:** in Review Wizard, do you want Actions to (a) be a reviewable step on its own (like the other 5 top-level sections), or (b) be hidden from Review Wizard entirely (review only verifies KYC + Documents work; Actions are operational not compliance)?
+
+Probably (a) for consistency, but worth confirming. After answering, this is a bug-fix more than a design item — should be the **first batch** of the B-121 brief because it's a regression and quick to fix.
+
 ## Tomorrow's flow
 
 1. Check B-120 status (`git log --oneline -10`, look for the four B-120 batch commits + the migration in `db:status`).
 2. If B-120 is done, archive its completion in CHANGES.md if not already.
 3. Start brainstorm on the four items above, **one question at a time** per Vanessa's preferred cadence.
-4. Default order to ask in: (1) People/KYC local director — the meatiest, needs unblocking first; (2) View All width — small, quick lock-in; (3) Border consistency — small; (4) Status card reorder — already locked, just goes into the brief.
-5. Once all four are designed, write the B-121 brief.
+4. Default order to ask in: (1) Review-Wizard Actions regression — bug, quick fix; (2) People/KYC local director — the meatiest, needs unblocking; (3) View All width — small, quick lock-in; (4) Border consistency — small; (5) Status card reorder — already locked, just goes into the brief.
+5. Once all five are designed, write the B-121 brief.
