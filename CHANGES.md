@@ -15,6 +15,14 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (done 2026-05-18)
 
+### 2026-05-18 — Followup: section bullets in review-request modal now jump to the section (Claude Desktop)
+
+The eye-button detail dialog inside `ReviewRequestsCard` listed `request.sections` as plain text bullets, so a reviewer who opened a request had to mentally translate "Company Setup" into a manual scroll. The reviewer banner already had clickable anchor chips via a local `sectionAnchorHref` helper — same plumbing, different rendering.
+
+Moved `sectionAnchorHref` from `ReviewRequestBanner.tsx` into the shared `src/lib/review-requests/sections.ts` so both surfaces share one implementation. Banner now imports the helper from there (local copy deleted, behavior unchanged). In the detail dialog's Sections list, each section that resolves to an anchor (`step-company-setup` / `step-financial` / `step-banking` / `step-documents` / `person-card-<profileId>`) is now a button: clicking it closes the modal, then after a 100ms delay (Radix locks body scroll while the dialog is open) the page smooth-scrolls to the matching DOM anchor. Sections without an anchor (unknown section_key fallback) still render as plain text — same as the banner's behavior.
+
+No schema change. Build clean.
+
 ### 2026-05-18 — Hotfix: substance autosave duplicate-key race (Claude Desktop)
 
 **Bug.** Reported in chat: `duplicate key value violates unique constraint "service_substance_service_id_key"`. Reproducer: click two substance Yes/No/Unknown radios in quick succession on a service that has no `service_substance` row yet.

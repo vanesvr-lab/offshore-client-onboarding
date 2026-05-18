@@ -41,3 +41,19 @@ export function isTopLevelSectionKey(key: string): key is TopLevelSectionKey {
 export function isReviewSectionKey(key: string): key is ReviewSectionKey {
   return isTopLevelSectionKey(key) || key === PEOPLE_KYC_PROFILE_KEY;
 }
+
+// Resolve a section to its on-page anchor (#…). Returns null when the
+// section key has no anchor in the current page layout. Shared by the
+// reviewer banner and the right-rail detail dialog.
+export function sectionAnchorHref(section: {
+  section_key: string;
+  profile_id?: string | null;
+}): string | null {
+  if (isTopLevelSectionKey(section.section_key)) {
+    return `#${SECTION_ANCHORS[section.section_key]}`;
+  }
+  if (section.section_key === PEOPLE_KYC_PROFILE_KEY && section.profile_id) {
+    return `#person-card-${section.profile_id}`;
+  }
+  return null;
+}

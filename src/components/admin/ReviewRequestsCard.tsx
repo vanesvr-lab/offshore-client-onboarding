@@ -25,6 +25,7 @@ import {
   SECTION_LABELS,
   isTopLevelSectionKey,
   PEOPLE_KYC_PROFILE_KEY,
+  sectionAnchorHref,
 } from "@/lib/review-requests/sections";
 import type {
   HydratedReviewRequest,
@@ -470,9 +471,36 @@ function ReviewRequestDetailDialog({
             Sections ({request.sections.length})
           </p>
           <ul className="list-disc pl-5 text-gray-700 space-y-0.5">
-            {request.sections.map((s) => (
-              <li key={s.id}>{sectionLabel(s, profileNamesById)}</li>
-            ))}
+            {request.sections.map((s) => {
+              const href = sectionAnchorHref(s);
+              const label = sectionLabel(s, profileNamesById);
+              if (!href) {
+                return <li key={s.id}>{label}</li>;
+              }
+              return (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      // Defer scroll until the dialog has begun its close
+                      // animation — Radix locks body scroll while the
+                      // dialog is open, so scrollIntoView on the same
+                      // tick is a no-op.
+                      const targetId = href.replace(/^#/, "");
+                      setTimeout(() => {
+                        document
+                          .getElementById(targetId)
+                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }, 100);
+                    }}
+                    className="text-left text-brand-navy hover:text-brand-blue underline underline-offset-2 hover:no-underline"
+                  >
+                    {label}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
 

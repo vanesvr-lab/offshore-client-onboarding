@@ -10,9 +10,9 @@ import { Inbox, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   SECTION_LABELS,
-  SECTION_ANCHORS,
   isTopLevelSectionKey,
   PEOPLE_KYC_PROFILE_KEY,
+  sectionAnchorHref,
 } from "@/lib/review-requests/sections";
 import type {
   HydratedReviewRequest,
@@ -32,19 +32,6 @@ interface Props {
     communications: Record<string, unknown>[],
   ) => void;
   profileNamesById: Record<string, string>;
-}
-
-function sectionAnchorHref(
-  section: HydratedReviewRequest["sections"][number],
-): string | null {
-  if (isTopLevelSectionKey(section.section_key)) {
-    return `#${SECTION_ANCHORS[section.section_key]}`;
-  }
-  if (section.section_key === PEOPLE_KYC_PROFILE_KEY && section.profile_id) {
-    // PersonCard mounts a `<div id="person-card-${profile.id}">`.
-    return `#person-card-${section.profile_id}`;
-  }
-  return null;
 }
 
 function sectionLabel(
