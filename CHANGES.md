@@ -13,7 +13,39 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (in progress 2026-05-18)
+## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (done 2026-05-18)
+
+### 2026-05-18 — Batch 2: Milestones polish + Audit Trail enhancements (Claude Code)
+
+**Milestones card spelled out + year + calendar icon.** The three rail cells used to display short three-letter labels (`LOE` / `INV` / `PAY`) and a year-less date that dropped the year when it matched the current calendar year. Both have changed.
+
+`src/components/admin/MilestonesCard.tsx` now reads the long-form `label` prop directly as the cell header instead of mapping the field name through a `shortLabel` lookup. Labels wrap to two lines (`whitespace-normal break-words leading-tight`) so they fit the rail's ~93px-wide cells without overflowing or eliding. Dates always show the year (`12 May 2026`) — the previous `sameYear` branch is gone — so admin can tell a milestone touched this cycle apart from one set in a prior cycle without hovering for a tooltip. A small `Calendar` icon (Lucide, `h-3 w-3 text-gray-400`) sits between the green check and the date as a visual editability cue; the click handler is unchanged (cell-wide popover trigger). For the empty state the calendar icon dims to `text-gray-300` and sits next to the em-dash.
+
+The call site in `ServiceDetailClient.tsx` passes the brief's exact strings: `Letter of Engagement` / `Invoice` / `Payment Received`.
+
+**Audit Trail rebuilt as a standard rail card with CSV export + date-range filter.** Until B-125 the Audit Trail section was wrapped in `ServiceCollapsibleSection` (a card with its own `border border-gray-200 shadow-sm` treatment + chevron toggle), which made it the only right-rail card that *didn't* look like the rest of the rail. Replaced with a new `ServiceAuditTrailCard` component using the standard `bg-white border rounded-xl px-4 py-3` wrapper that Status / Pending / Communications / Milestones / Progress meters all share.
+
+The card has a slim header row (clock icon + "Audit Trail" label + CSV download button), a row of date-range preset chips, the existing per-actor / per-action filters (kept, narrower styling), and the audit list below. Pill chips are `Today` / `7 days` / `30 days` / `All time` — default selection `30 days`, active chip `bg-brand-blue text-white`, inactive `bg-gray-100 text-gray-600`. A fifth `Custom` chip opens a small popover with two `<input type="date">` fields (From / To) plus Clear + Apply buttons; the chip's label flips to `YYYY-MM-DD → YYYY-MM-DD` once admin commits a range. Filtering is client-side over the entries already loaded by `loadServiceDetail.ts` (server fetches the most recent 100 — see tech-debt #29 for the "lift the 100-cap before audit becomes lossy" follow-up).
+
+CSV download is a plain `<a download href="…">` against the new endpoint, so no JS-fetch is needed. The export endpoint mirrors the filter window so the downloaded CSV equals what admin is looking at on screen.
+
+**Date display rule.** `src/components/admin/AuditTrail.tsx`'s `timeAgo` helper now flips at 3 days. ≤3 days → `2h ago` / `1d ago` / `3d ago`. >3 days → `12 May 2026` (single-line absolute date with year — the full date+time is still on the row's `title` attribute for hover). Was 7 days before; the brief picked 3 to match the new Milestones year-always rule.
+
+**New CSV export endpoint** at `GET /api/admin/services/[id]/audit-log/export?from=&to=`. Auth: admin only via `auth()` + role check. Tenant guard: confirms the service exists in the admin's tenant before reading any audit rows (same pattern as `PUT /substance`). Body filter: `entity_type=service` + `entity_id=<id>` + optional `created_at` bounds. Returns `text/csv; charset=utf-8` with `Content-Disposition: attachment; filename="audit-{service_number-or-id}-{YYYY-MM-DD}.csv"`. Columns: `timestamp`, `actor_name`, `actor_role`, `entity_type`, `entity_id`, `action`, `note`, `previous_value`, `new_value`. CSV escaping is RFC-4180-compliant (only quote cells with comma / newline / double-quote; double-quote within a quoted cell). JSON columns serialise via `JSON.stringify`. No row cap — admin gets the full filtered window. The `note` column extracts `detail.note` for `status_changed` events, matching what the UI already surfaces.
+
+**Files touched (Batch 2):**
+
+- `src/components/admin/MilestonesCard.tsx` — long labels, year always shown, Calendar icon, cell label allowed to wrap.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — milestone call-site labels updated; Audit Trail section replaced with `ServiceAuditTrailCard`; old `auditActorFilter` / `auditActionFilter` state + `filteredAudit` derivation removed; unused `Clock`, `AuditTrail`, `AuditLogEntry` imports dropped.
+- `src/components/admin/AuditTrail.tsx` — `timeAgo` flips to absolute date at >3 days.
+- `src/components/admin/ServiceAuditTrailCard.tsx` *(new)* — card wrapper, preset chips, custom-range popover, actor/action filters, CSV link, AuditTrail render.
+- `src/app/api/admin/services/[id]/audit-log/export/route.ts` *(new)* — CSV export endpoint with RFC-4180 escaping.
+
+Build green (two pre-existing `react-hooks/exhaustive-deps` warnings on `profileRolesMap` are unrelated to this brief).
+
+---
+
+### 2026-05-18 — Batch 1: Substance Review buttons fixed + local director count unified (Claude Code)
 
 ### 2026-05-18 — Batch 1: Substance Review buttons fixed + local director count unified (Claude Code)
 

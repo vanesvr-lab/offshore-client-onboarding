@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle,
   UserCheck, Building2, Users2, Plus, Loader2, Mail,
-  StickyNote, ShieldCheck, Clock,
+  StickyNote, ShieldCheck,
   AlertTriangle, Bell, Eye,
   Trash2,
   Wand2, ChevronLeft, ChevronRight, X,
@@ -30,7 +30,7 @@ import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
 import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
-import { AuditTrail } from "@/components/admin/AuditTrail";
+import { ServiceAuditTrailCard } from "@/components/admin/ServiceAuditTrailCard";
 import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker";
 import type { VerificationResult } from "@/types";
 import {
@@ -38,7 +38,7 @@ import {
   calcKycSectionRequiredPct,
 } from "@/lib/utils/serviceCompletion";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
-import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, AuditLogEntry, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
+import type { ProfileServiceRole, ServiceSectionOverride, ClientProfile, DueDiligenceRequirement, DocumentType, ApplicationSectionReview, ServiceTemplateAction, ServiceAction, ServiceSubstance, FieldExtraction } from "@/types";
 import type { ServiceWithTemplate, ServiceDoc, AdminUser, ServiceAuditEntry, DocumentUpdateRequest, WaivedDocumentRequirement, ServiceCommunication, ManualServiceAlert, DismissedAutoAlert } from "./page";
 import type { ReferenceFormSummary, SubmittedFormSummary } from "./loadServiceDetail";
 import { AdminApplicationSectionsProvider, ConnectedNotesHistory, useSectionReview, useSectionReviews, useAggregateStatus } from "@/components/admin/AdminApplicationSections";
@@ -4619,9 +4619,10 @@ export function ServiceDetailClient({
   });
   const [savingMilestone, setSavingMilestone] = useState<string | null>(null);
 
-  // Audit trail filters
-  const [auditActorFilter, setAuditActorFilter] = useState("all");
-  const [auditActionFilter, setAuditActionFilter] = useState("all");
+  // B-125 — audit trail filters (actor / action / date-range preset)
+  // moved into `ServiceAuditTrailCard` along with the new wrapper +
+  // CSV download + preset chips. The card consumes the entries directly
+  // from props and owns its filter state internally.
 
   // B-091 — service-level View Summary modal state
   const [serviceSummaryOpen, setServiceSummaryOpen] = useState(false);
@@ -5404,19 +5405,9 @@ export function ServiceDetailClient({
     }
   }
 
-  // ── Audit trail filters ───────────────────────────────────────────────────
-
-  const auditActors = Array.from(new Set(auditEntries.map((e) => e.actor_name).filter(Boolean))) as string[];
-  const auditActions = Array.from(new Set(auditEntries.map((e) => e.action).filter(Boolean)));
-
-  const filteredAudit = auditEntries.filter((e) => {
-    if (auditActorFilter !== "all" && e.actor_name !== auditActorFilter) return false;
-    if (auditActionFilter !== "all" && e.action !== auditActionFilter) return false;
-    return true;
-  });
-
-  // Cast to AuditLogEntry[] for the AuditTrail component
-  const auditForComponent = filteredAudit as unknown as AuditLogEntry[];
+  // B-125 — actor/action filter derivation and date-range filtering
+  // moved into `ServiceAuditTrailCard`. Raw `auditEntries` flow straight
+  // into the card from props.
 
   const [newlyAddedProfileId, setNewlyAddedProfileId] = useState<string | null>(null);
 
@@ -6467,12 +6458,15 @@ export function ServiceDetailClient({
         <MilestonesCard
           cells={[
             {
-              label: "LOE Received",
+              // B-125 — labels spelled out (was "LOE Received"). The
+              // card now displays this string directly as the column
+              // header and wraps it to two lines if narrow.
+              label: "Letter of Engagement",
               field: "loe_received_at",
               date: milestones.loe_received_at,
             },
             {
-              label: "Invoice Sent",
+              label: "Invoice",
               field: "invoice_sent_at",
               date: milestones.invoice_sent_at,
             },
@@ -6500,59 +6494,12 @@ export function ServiceDetailClient({
           }}
         />
 
-        {/* ── Section 9: Audit Trail ───────────────────────────────────────── */}
-        <ServiceCollapsibleSection
-          title="Audit Trail"
-          icon={<Clock className="h-4 w-4" />}
-          adminOnly
-          defaultOpen={true}
-        >
-          <div className="pt-4">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">By user:</span>
-                <select
-                  value={auditActorFilter}
-                  onChange={(e) => setAuditActorFilter(e.target.value)}
-                  className="border rounded px-2 py-1 text-xs"
-                >
-                  <option value="all">All users</option>
-                  {auditActors.map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Action:</span>
-                <select
-                  value={auditActionFilter}
-                  onChange={(e) => setAuditActionFilter(e.target.value)}
-                  className="border rounded px-2 py-1 text-xs"
-                >
-                  <option value="all">All actions</option>
-                  {auditActions.map((a) => (
-                    <option key={a} value={a}>{a.replace(/_/g, " ")}</option>
-                  ))}
-                </select>
-              </div>
-              {(auditActorFilter !== "all" || auditActionFilter !== "all") && (
-                <button
-                  onClick={() => { setAuditActorFilter("all"); setAuditActionFilter("all"); }}
-                  className="text-xs text-gray-400 hover:text-gray-600"
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
-
-            {auditEntries.length === 0 ? (
-              <p className="text-sm text-gray-400">No audit events for this service yet.</p>
-            ) : (
-              <AuditTrail entries={auditForComponent} />
-            )}
-          </div>
-        </ServiceCollapsibleSection>
+        {/* ── Section 9: Audit Trail ─────────────────────────────────────────
+            B-125 — replaced the `ServiceCollapsibleSection` shell with a
+            standard rail card (`bg-white border rounded-xl`) and moved
+            actor / action / date-range filters + CSV download into
+            `ServiceAuditTrailCard`. */}
+        <ServiceAuditTrailCard serviceId={service.id} entries={auditEntries} />
 
       </div>
       )}{/* End right column / !reviewMode */}

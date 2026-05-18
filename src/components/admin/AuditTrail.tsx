@@ -9,6 +9,12 @@ interface AuditTrailProps {
   entries: (AuditLogEntry & { profiles?: { full_name: string | null } })[];
 }
 
+// B-125 — entries ≤3 days old read as relative ("2h ago" / "3d ago"); older
+// entries flip to a single-line absolute date with year ("12 May 2026"),
+// matching the format used in other admin date surfaces. The 3-day cutoff
+// was picked so the Audit Trail still feels live for the immediate past
+// week's work but doesn't keep showing "37d ago" for events from prior
+// onboardings where the calendar date is the more useful anchor.
 function timeAgo(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
   const m = Math.floor(diff / 60000);
@@ -17,8 +23,18 @@ function timeAgo(ts: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return formatDateTime(ts);
+  if (d <= 3) return `${d}d ago`;
+  // >3 days — show "12 May 2026" rather than the full date+time, which is
+  // already available on hover via the row's `title` attribute.
+  try {
+    return new Date(ts).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return formatDateTime(ts);
+  }
 }
 
 function getInitials(name: string): string {

@@ -8,9 +8,17 @@
 // Wrapper matches the rest of the right rail (`bg-white border
 // rounded-xl px-4 py-3`) so it stops looking like a visual outlier
 // next to Status / Pending / Communications.
+//
+// B-125 — labels spelled out ("Letter of Engagement" / "Invoice" /
+// "Payment Received") instead of the LOE / INV / PAY abbreviations, the
+// date always shows the year ("12 May 2026"), and a small Calendar icon
+// sits next to the date as a visual editability cue. Cells are ~93px
+// wide at the rail's typical width so the label is allowed to wrap to
+// two lines (`whitespace-normal break-words`); the date row stays
+// single-line.
 
 import { useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Calendar, Check, Loader2 } from "lucide-react";
 
 import {
   Popover,
@@ -42,16 +50,16 @@ interface Props {
   onSave: (field: MilestoneField, isoDate: string | null) => Promise<void>;
 }
 
-/** Short "12 May" / "12 May 2025" — drops the year when it matches the
- *  current year so the cell stays narrow. */
+/** Short "12 May 2026" — year is always shown after B-125 so admins
+ *  can tell a milestone last touched this year apart from one set in a
+ *  prior cycle without hovering for the tooltip. */
 function formatShortDate(iso: string): string {
   try {
     const d = new Date(iso);
-    const sameYear = d.getFullYear() === new Date().getFullYear();
     return d.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
-      ...(sameYear ? {} : { year: "numeric" }),
+      year: "numeric",
     });
   } catch {
     return iso;
@@ -95,13 +103,6 @@ function MilestoneCell({
   onSave: (isoDate: string | null) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  // Short three-letter label for the column header — separate from the
-  // long label so the wide names don't blow out the narrow 3-up grid.
-  const shortLabel = ({
-    loe_received_at: "LOE",
-    invoice_sent_at: "INV",
-    payment_received_at: "PAY",
-  } as const)[cell.field];
   const isSet = cell.date != null;
 
   async function setToToday() {
@@ -132,7 +133,7 @@ function MilestoneCell({
               isSet ? ` set on ${formatShortDate(cell.date!)}` : " not set"
             }`}
             className={
-              "flex flex-col items-center gap-0.5 rounded-md px-2 py-1.5 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed " +
+              "flex flex-col items-center gap-1 rounded-md px-2 py-1.5 transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed " +
               (isSet
                 ? "bg-emerald-50/60 hover:bg-emerald-100/60"
                 : "hover:bg-gray-50")
@@ -140,12 +141,12 @@ function MilestoneCell({
           />
         }
       >
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-          {shortLabel}
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 leading-tight whitespace-normal break-words">
+          {cell.label}
         </span>
         <span
           className={
-            "inline-flex items-center gap-1 text-xs font-medium " +
+            "inline-flex items-center gap-1 text-xs font-medium whitespace-nowrap " +
             (isSet ? "text-emerald-700" : "text-gray-300")
           }
         >
@@ -153,11 +154,15 @@ function MilestoneCell({
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : isSet ? (
             <>
-              <Check className="h-3.5 w-3.5 text-emerald-600" />
+              <Check className="h-3 w-3 text-emerald-600 shrink-0" />
+              <Calendar className="h-3 w-3 text-gray-400 shrink-0" aria-hidden="true" />
               {formatShortDate(cell.date!)}
             </>
           ) : (
-            "—"
+            <>
+              <Calendar className="h-3 w-3 text-gray-300 shrink-0" aria-hidden="true" />
+              —
+            </>
           )}
         </span>
       </PopoverTrigger>
