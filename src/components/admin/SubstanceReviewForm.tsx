@@ -157,38 +157,49 @@ const TRI_OPTIONS: { label: string; value: Tri }[] = [
   { label: "Unknown", value: null },
 ];
 
+// B-125 — switched from `<label>` wrapping a hidden `<input type="radio">`
+// to a proper `<button type="button" role="radio">`. The previous markup
+// occasionally surfaced the option label as a Chrome text-fragment in the
+// URL (`#:text=Yes`) on certain interactions because clicking the label
+// without an explicit handler could be interpreted as a text selection.
+// A real button with onClick has no such ambiguity and also lets the
+// parent wire inline autosave directly.
 function TriRadio({
   name,
   value,
   onChange,
+  disabled = false,
 }: {
   name: string;
   value: Tri;
   onChange: (v: Tri) => void;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3" role="radiogroup">
+    <div className="flex items-center gap-3" role="radiogroup" aria-label={name}>
       {TRI_OPTIONS.map((opt) => {
         const active = value === opt.value;
         return (
-          <label
+          <button
             key={String(opt.value)}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onChange(opt.value);
+            }}
             className={cn(
-              "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors",
+              "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50",
               active
                 ? "border-brand-blue bg-brand-blue/10 text-brand-navy font-medium"
                 : "border-gray-200 text-gray-600 hover:bg-gray-50",
             )}
           >
-            <input
-              type="radio"
-              name={name}
-              checked={active}
-              onChange={() => onChange(opt.value)}
-              className="sr-only"
-            />
             {opt.label}
-          </label>
+          </button>
         );
       })}
     </div>
@@ -272,6 +283,28 @@ export function SubstanceReviewForm({
     setState((prev) => ({ ...prev, [key]: value }));
   }
 
+  // B-125 — inline autosave for the Yes/No/Unknown answer buttons.
+  // Optimistically updates local state, then fires a single-field PUT to
+  // the substance endpoint. The endpoint already accepts partial bodies
+  // (any subset of EDITABLE_FIELDS). Text inputs + admin_assessment still
+  // save through the manual "Save substance review" button at the bottom.
+  async function saveTri<K extends keyof FormState>(key: K, value: Tri) {
+    setState((prev) => ({ ...prev, [key]: value as FormState[K] }));
+    try {
+      const res = await fetch(`/api/admin/services/${serviceId}/substance`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(json.error ?? "Save failed");
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
   const notesRequired =
     state.admin_assessment === "fail" || state.admin_assessment === "review";
   const canSave =
@@ -312,22 +345,22 @@ export function SubstanceReviewForm({
           <>
             <Section title="§3.2 — Mandatory Criteria" subtitle="All must be Yes for the service to satisfy §3.2.">
               <FieldRow label="Has 2 Mauritius-resident directors?">
-                <TriRadio name="r1" value={state.has_two_mu_resident_directors} onChange={(v) => setField("has_two_mu_resident_directors", v)} />
+                <TriRadio name="r1" value={state.has_two_mu_resident_directors} onChange={(v) => void saveTri("has_two_mu_resident_directors", v)} />
               </FieldRow>
               <FieldRow label="Principal bank account in Mauritius?">
-                <TriRadio name="r2" value={state.principal_bank_account_in_mu} onChange={(v) => setField("principal_bank_account_in_mu", v)} />
+                <TriRadio name="r2" value={state.principal_bank_account_in_mu} onChange={(v) => void saveTri("principal_bank_account_in_mu", v)} />
               </FieldRow>
               <FieldRow label="Accounting records kept in Mauritius?">
-                <TriRadio name="r3" value={state.accounting_records_in_mu} onChange={(v) => setField("accounting_records_in_mu", v)} />
+                <TriRadio name="r3" value={state.accounting_records_in_mu} onChange={(v) => void saveTri("accounting_records_in_mu", v)} />
               </FieldRow>
               <FieldRow label="Audited in Mauritius?">
-                <TriRadio name="r4" value={state.audited_in_mu} onChange={(v) => setField("audited_in_mu", v)} />
+                <TriRadio name="r4" value={state.audited_in_mu} onChange={(v) => void saveTri("audited_in_mu", v)} />
               </FieldRow>
               <FieldRow label="Board meetings with Mauritius quorum?">
-                <TriRadio name="r5" value={state.board_meetings_with_mu_quorum} onChange={(v) => setField("board_meetings_with_mu_quorum", v)} />
+                <TriRadio name="r5" value={state.board_meetings_with_mu_quorum} onChange={(v) => void saveTri("board_meetings_with_mu_quorum", v)} />
               </FieldRow>
               <FieldRow label="CIS administered from Mauritius?" hint="Only relevant for Collective Investment Schemes — leave Unknown if N/A.">
-                <TriRadio name="r6" value={state.cis_administered_from_mu} onChange={(v) => setField("cis_administered_from_mu", v)} />
+                <TriRadio name="r6" value={state.cis_administered_from_mu} onChange={(v) => void saveTri("cis_administered_from_mu", v)} />
               </FieldRow>
             </Section>
 
@@ -335,7 +368,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="Office premises in Mauritius?"
                 value={state.has_office_premises_in_mu}
-                onChange={(v) => setField("has_office_premises_in_mu", v)}
+                onChange={(v) => void saveTri("has_office_premises_in_mu", v)}
                 evidence={
                   <Input
                     placeholder="Office address"
@@ -347,7 +380,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="Full-time Mauritius employee?"
                 value={state.has_full_time_mu_employee}
-                onChange={(v) => setField("has_full_time_mu_employee", v)}
+                onChange={(v) => void saveTri("has_full_time_mu_employee", v)}
                 evidence={
                   <Input
                     type="number"
@@ -361,7 +394,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="Arbitration clause specifying Mauritius?"
                 value={state.arbitration_clause_in_mu}
-                onChange={(v) => setField("arbitration_clause_in_mu", v)}
+                onChange={(v) => void saveTri("arbitration_clause_in_mu", v)}
                 evidence={
                   <Textarea
                     rows={2}
@@ -374,7 +407,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="MU assets > USD 100,000?"
                 value={state.holds_mu_assets_above_100k_usd}
-                onChange={(v) => setField("holds_mu_assets_above_100k_usd", v)}
+                onChange={(v) => void saveTri("holds_mu_assets_above_100k_usd", v)}
                 evidence={
                   <div className="space-y-2">
                     <Input
@@ -397,7 +430,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="Listed on a Mauritius exchange?"
                 value={state.shares_listed_on_mu_exchange}
-                onChange={(v) => setField("shares_listed_on_mu_exchange", v)}
+                onChange={(v) => void saveTri("shares_listed_on_mu_exchange", v)}
                 evidence={
                   <Input
                     placeholder="Exchange + listing reference"
@@ -409,7 +442,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="Reasonable Mauritius expenditure?"
                 value={state.has_reasonable_mu_expenditure}
-                onChange={(v) => setField("has_reasonable_mu_expenditure", v)}
+                onChange={(v) => void saveTri("has_reasonable_mu_expenditure", v)}
                 evidence={
                   <div className="space-y-2">
                     <Input
@@ -435,7 +468,7 @@ export function SubstanceReviewForm({
               <Conditional
                 label="Related corporation satisfies §3.3?"
                 value={state.related_corp_satisfies_3_3}
-                onChange={(v) => setField("related_corp_satisfies_3_3", v)}
+                onChange={(v) => void saveTri("related_corp_satisfies_3_3", v)}
                 evidence={
                   <Input
                     placeholder="Related corporation name"

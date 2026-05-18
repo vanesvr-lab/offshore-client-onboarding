@@ -9,6 +9,30 @@ remove after 30 days.
 
 ---
 
+## 2026-05-18
+
+- **`client_profile_kyc.is_local_resident_director` is no longer read by app code.**
+  *Spawned by:* [B-125](cli-brief-substance-review-and-audit-trail-polish-b125.md).
+  *What:* B-125 unified the People & KYC header chip's local-director count to use the same predicate as the badge in `ProfileRowBadges` (`passport_country === "MUS"` + role includes `director` + not `is_representative`). The legacy manually-managed `is_local_resident_director` boolean on `client_profile_kyc` is now write-orphaned: nothing in the app reads it and only the original B-100 seed and ad-hoc admin SQL write it. Drop the column in a cleanup migration once a final grep confirms zero consumers (CLI checked at B-125 time — 0 reads). Leaving in place to avoid a migration just for this; safe to drop.
+  *Why deferred:* Migration churn without functional gain.
+
+- **Substance Review autosave has no inline saved-state indicator.**
+  *Spawned by:* [B-125](cli-brief-substance-review-and-audit-trail-polish-b125.md).
+  *What:* The Yes/No/Unknown buttons now PUT each answer inline (fire-and-forget). On error a toast appears, but there's no positive "saved" cue per row — admin has to trust that the button visually showing as picked = saved. If admins flag the silent flow, add a small per-row check-or-spinner indicator that flips after the PUT resolves. Today's UX is acceptable since the toast covers the error case; success is the common path.
+  *Why deferred:* Visual minimalism; adding per-row spinners adds noise where success is the default outcome.
+
+- **Audit Trail CSV export is unauthenticated against rate limits.**
+  *Spawned by:* [B-125](cli-brief-substance-review-and-audit-trail-polish-b125.md).
+  *What:* `GET /api/admin/services/[id]/audit-log/export` checks the admin role but doesn't rate-limit. Heavy services with thousands of audit entries could produce large downloads and be abused by an automated script logged in as admin. If this becomes a real concern, add a per-admin-per-minute limiter on the export endpoint (re-using `src/lib/rate-limit.ts`) and a maximum row cap with pagination.
+  *Why deferred:* Admin-only surface, internal tool, no abuse seen.
+
+- **Audit Trail date filter state is not URL-persisted.**
+  *Spawned by:* [B-125](cli-brief-substance-review-and-audit-trail-polish-b125.md).
+  *What:* The Today / 7 days / 30 days / All time / Custom preset lives in React state on the AuditTrail card. Deep-linking to a filtered view (e.g., "share a link to Bruce's audit trail for the last 7 days") doesn't work. Sync the preset + custom range to URL query-params (`?auditFrom=&auditTo=`) when admin starts sharing filtered audit views.
+  *Why deferred:* No sharing pattern yet; the filter is per-admin-session.
+
+---
+
 ## 2026-05-15
 
 - **Closed-review-requests popup is hard-capped at 50 rows.**

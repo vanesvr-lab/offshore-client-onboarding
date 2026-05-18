@@ -4751,13 +4751,15 @@ export function ServiceDetailClient({
     return aName.localeCompare(bName);
   });
 
-  // B-121 — local director compliance counts. A profile is counted as
+  // B-125 — local director compliance counts. A profile is counted as
   // a director when any of its `profile_service_roles.role` rows on this
   // service is `director`; it counts as LOCAL when the same profile's
-  // `client_profile_kyc.is_local_resident_director` is true. The flag is
-  // admin-managed (no client-portal UI in this batch) and defaults to
-  // false, so freshly seeded services will read as 0-local until admin
-  // flips it via SQL or a follow-up admin toggle (tech-debt).
+  // KYC `passport_country` is "MUS". This matches the badge predicate
+  // in ProfileRowBadges (ServiceDetailClient ~line 1988) so the chip
+  // and the badge can never disagree. The legacy
+  // `client_profile_kyc.is_local_resident_director` column is no longer
+  // read by app code (see docs/tech-debt.md) and will be removed in a
+  // follow-up cleanup batch.
   const directorCount = useMemo(() => {
     let n = 0;
     Array.from(profileRolesMap.values()).forEach((entry) => {
@@ -4769,11 +4771,12 @@ export function ServiceDetailClient({
     let n = 0;
     Array.from(profileRolesMap.values()).forEach((entry) => {
       if (!entry.roles.includes("director")) return;
+      if (entry.person.client_profiles?.is_representative) return;
       const rawKyc = entry.person.client_profiles?.client_profile_kyc;
       const kyc = (Array.isArray(rawKyc) ? rawKyc[0] ?? null : rawKyc) as
-        | { is_local_resident_director?: boolean | null }
+        | { passport_country?: string | null }
         | null;
-      if (kyc?.is_local_resident_director === true) n += 1;
+      if (kyc?.passport_country === "MUS") n += 1;
     });
     return n;
   }, [profileRolesMap]);

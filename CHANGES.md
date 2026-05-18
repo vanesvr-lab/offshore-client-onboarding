@@ -13,6 +13,39 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (in progress 2026-05-18)
+
+### 2026-05-18 — Batch 1: Substance Review buttons fixed + local director count unified (Claude Code)
+
+**Substance Review answer buttons now persist on click.** Previously the Yes / No / Unknown row in the Substance Review subsection used `<label>` wrapping a hidden `<input type="radio">` with no PATCH on selection — the radio toggled local state only and admin had to scroll to the bottom of the form and click the explicit "Save substance review" button to commit. On certain interactions the label-wrapped-input markup also surfaced the option text as a Chrome text-fragment in the URL (`#:text=Yes`) which made the page appear to "navigate to a broken anchor" when the click was misinterpreted as text selection.
+
+Rewrote `TriRadio` in `src/components/admin/SubstanceReviewForm.tsx` to render a proper `<button type="button" role="radio" aria-checked>` with `e.preventDefault(); e.stopPropagation();` in the click handler. No more label/input ambiguity, no fragment surface, and the markup is one less layer of indirection between admin and the action.
+
+Wired a new `saveTri(key, value)` helper that optimistically updates local state and immediately fires a single-field `PUT /api/admin/services/[id]/substance` with `{ [key]: value }` — the endpoint's `EDITABLE_FIELDS` allowlist already supports partial bodies. On error a toast appears; on success the optimistic state stands. All Yes/No/Unknown selectors across §3.2 / §3.3 / §3.4 are now autosaved per click. Text inputs (office_address, employee_count, justification text etc.) and the admin_assessment panel + notes textarea still flow through the explicit "Save substance review" button at the bottom — that button now functions as a "commit everything else" affordance for the deliberative fields.
+
+**Local director count unified with the badge predicate.** Previously the People & KYC header chip read `2 DIRECTORS · 0 LOCAL` even when one of the directors (Bruce Banner) clearly carried the "Local Director" pill on their profile card. Root cause: two divergent code paths.
+
+- **Badge** (`ServiceDetailClient.tsx:1988`, `ProfileRowBadges`): derived from `kyc.passport_country === "MUS"` + role includes `director` + not `is_representative`.
+- **Count** (`ServiceDetailClient.tsx:4768`, `localDirectorCount` memo): derived from `kyc.is_local_resident_director === true`. The boolean is admin-managed, defaults to `false`, was never flipped for seeded profiles, and disagreed with the badge.
+
+Unified the count to match the badge. `localDirectorCount` now requires:
+
+1. The profile holds the `director` role on this service.
+2. The profile is not a representative (`is_representative` is false).
+3. The KYC row's `passport_country` is `"MUS"`.
+
+The `client_profile_kyc.is_local_resident_director` column is no longer read by app code. It stays in the DB for now — see `docs/tech-debt.md` 2026-05-18 entry for the cleanup follow-up.
+
+**Files touched (Batch 1):**
+
+- `src/components/admin/SubstanceReviewForm.tsx` — new `TriRadio` button markup + `saveTri` inline-PUT helper, all 12 tri-state callsites switched from `setField` to `saveTri`.
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — `localDirectorCount` predicate unified with badge.
+- `docs/tech-debt.md` — four new entries dated 2026-05-18 (`is_local_resident_director` column removal, substance autosave saved-state indicator, audit CSV rate-limit, audit filter URL persistence).
+
+Build green. Batch 2 (Milestones polish + Audit Trail enhancements) follows in this brief.
+
+---
+
 ## B-124 — Review Requests tabular + Milestones redesign (done 2026-05-15)
 
 ### 2026-05-15 — Right-rail card refactors (Claude Code)
