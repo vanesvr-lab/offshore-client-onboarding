@@ -15,6 +15,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (done 2026-05-18)
 
+### 2026-05-18 — Hotfix: substance autosave duplicate-key race (Claude Desktop)
+
+**Bug.** Reported in chat: `duplicate key value violates unique constraint "service_substance_service_id_key"`. Reproducer: click two substance Yes/No/Unknown radios in quick succession on a service that has no `service_substance` row yet.
+
+**Root cause.** B-125's Batch 1 autosave (`saveTri` in `SubstanceReviewForm.tsx`) fires one PUT per click with no debouncing or serialization. The server handler at `src/app/api/admin/services/[id]/substance/route.ts` did a classic read-then-insert: read existing row by `service_id`, branch to INSERT if null else UPDATE. Two concurrent PUTs both saw `existing = null`, both fell into the INSERT branch, and the second hit `UNIQUE(service_id)` and 500'd.
+
+**Fix.** Replaced `.insert(insert)` with `.upsert(insert, { onConflict: "service_id" })` in the no-existing-row branch. Postgres `INSERT … ON CONFLICT (service_id) DO UPDATE` handles the race atomically — the race-loser's call becomes an in-DB update rather than a constraint violation. UPDATE branch and audit-log branching unchanged. No client-side debounce was added (would only mask the symptom; two devices, two tabs, or two admins could still race).
+
+No migration, no schema change, no API contract change. Build clean.
+
 ### 2026-05-18 — Batch 2: Milestones polish + Audit Trail enhancements (Claude Code)
 
 **Milestones card spelled out + year + calendar icon.** The three rail cells used to display short three-letter labels (`LOE` / `INV` / `PAY`) and a year-less date that dropped the year when it matched the current calendar year. Both have changed.

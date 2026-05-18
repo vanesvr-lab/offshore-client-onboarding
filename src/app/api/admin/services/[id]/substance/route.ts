@@ -193,9 +193,13 @@ export async function PUT(
     service_id: id,
     tenant_id: tenantId,
   };
+  // B-125 hotfix — upsert (not insert) to survive autosave races. Two
+  // near-simultaneous PUTs both read existing=null and both fell into the
+  // INSERT branch; the second hit UNIQUE(service_id) and 500'd. With
+  // onConflict the race-loser becomes an in-DB UPDATE.
   const { data, error } = await supabase
     .from("service_substance")
-    .insert(insert)
+    .upsert(insert, { onConflict: "service_id" })
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
