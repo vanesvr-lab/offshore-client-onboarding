@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { getTenantBrand, formatFooter } from "@/lib/tenant-brand";
 import { Resend } from "resend";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { logCommunication } from "@/lib/email/logCommunication";
@@ -28,6 +29,9 @@ export async function POST(
   }
 
   const supabase = createAdminClient();
+  const tenantId = getTenantId(session);
+  const brand = await getTenantBrand(supabase, tenantId);
+  const footerLine = formatFooter(brand) || brand.portal_name;
 
   // Fetch the client_process with client info
   const { data: proc } = await supabase
@@ -86,7 +90,7 @@ export async function POST(
   const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">Mauritius Offshore Client Portal</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">${brand.portal_name}</h1>
         </div>
         <div style="padding: 30px; background: #ffffff;">
           <p>Dear ${clientData?.company_name ?? "Client"},</p>
@@ -97,13 +101,13 @@ export async function POST(
           <p>If you have any questions, please contact your account manager.</p>
         </div>
         <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
-          Mauritius Offshore Client Portal | 365 Royal Road, Rose Hill, Mauritius | +230 454 9670
+          ${footerLine}
         </div>
       </div>
     `;
 
   const { data: resendData, error: emailError } = await resend.emails.send({
-    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
     to: ownerEmail,
     subject: emailSubject,
     html: emailHtml,
@@ -128,7 +132,6 @@ export async function POST(
   // tied to that client. Each row's related_entity_id points at its own
   // service so the comms list groups naturally per service.
   try {
-    const tenantId = getTenantId(session);
     const serviceIds = proc.client_id
       ? await findServiceIdsForClient(supabase, proc.client_id, tenantId)
       : [];

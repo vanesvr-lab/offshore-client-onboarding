@@ -350,6 +350,9 @@ export function SubstanceReviewForm({
           <p className="text-sm text-gray-400">Loading substance review…</p>
         ) : (
           <>
+            {/* FSC §3.2-3.4 — Mauritius-specific compliance labels. If the
+                tenant expands to other jurisdictions, this whole section
+                needs a per-tenant compliance template. (B-129) */}
             <Section title="§3.2 — Mandatory Criteria" subtitle="All must be Yes for the service to satisfy §3.2.">
               <FieldRow label="Has 2 Mauritius-resident directors?">
                 <TriRadio name="r1" value={state.has_two_mu_resident_directors} onChange={(v) => void saveTri("has_two_mu_resident_directors", v)} />

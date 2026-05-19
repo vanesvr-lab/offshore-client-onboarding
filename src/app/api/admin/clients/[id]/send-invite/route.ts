@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { getTenantBrand, formatFooter } from "@/lib/tenant-brand";
 import { Resend } from "resend";
 import { SignJWT } from "jose";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
@@ -21,6 +22,9 @@ export async function POST(
   }
 
   const supabase = createAdminClient();
+  const tenantId = getTenantId(session);
+  const brand = await getTenantBrand(supabase, tenantId);
+  const footerLine = formatFooter(brand) || brand.portal_name;
 
   const { data: client } = await supabase
     .from("clients")
@@ -52,11 +56,11 @@ export async function POST(
 
   const inviteUrl = `${appUrl}/auth/set-password?token=${encodeURIComponent(token)}`;
 
-  const emailSubject = "Welcome to Mauritius Offshore Client Portal — Set up your account";
+  const emailSubject = `Welcome to ${brand.portal_name} — Set up your account`;
   const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 22px;">Mauritius Offshore Client Portal</h1>
+          <h1 style="color: white; margin: 0; font-size: 22px;">${brand.portal_name}</h1>
           <p style="color: #90cdf4; margin: 6px 0 0; font-size: 13px;">The intelligent portal for client due diligence and compliance</p>
         </div>
         <div style="padding: 36px; background: #ffffff;">
@@ -77,13 +81,13 @@ export async function POST(
           </p>
         </div>
         <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
-          Mauritius Offshore Client Portal | 365 Royal Road, Rose Hill, Mauritius | +230 454 9670
+          ${footerLine}
         </div>
       </div>
     `;
 
   const { data: emailResult, error: emailError } = await resend.emails.send({
-    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
     to: email!,
     subject: emailSubject,
     html: emailHtml,
@@ -119,7 +123,6 @@ export async function POST(
   // services yet (the common signup-invite case) silently produce zero
   // rows. Comms log is best-effort, never blocks.
   try {
-    const tenantId = getTenantId(session);
     const serviceIds = await findServiceIdsForClient(supabase, params.id, tenantId);
     for (const sid of serviceIds) {
       await logCommunication({

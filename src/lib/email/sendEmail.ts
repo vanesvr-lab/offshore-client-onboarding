@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { DEFAULT_TENANT_ID } from "@/lib/tenant";
+import { getTenantBrand, formatFooter } from "@/lib/tenant-brand";
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
@@ -19,22 +21,24 @@ export async function sendClientEmail({
   sentBy,
 }: SendEmailParams) {
   const supabase = createAdminClient();
+  const brand = await getTenantBrand(supabase, DEFAULT_TENANT_ID);
+  const footerLine = formatFooter(brand) || brand.portal_name;
 
   const { data, error } = await resend.emails.send({
-    from: `Mauritius Offshore Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
     to,
     subject,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 20px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">Mauritius Offshore Client Portal</h1>
+          <h1 style="color: white; margin: 0; font-size: 20px;">${brand.portal_name}</h1>
           <p style="color: #90cdf4; margin: 4px 0 0; font-size: 12px;">The intelligent portal for client due diligence and compliance</p>
         </div>
         <div style="padding: 30px; background: #ffffff;">
           ${body.replace(/\n/g, "<br>")}
         </div>
         <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
-          Mauritius Offshore Client Portal | 365 Royal Road, Rose Hill, Mauritius | +230 454 9670
+          ${footerLine}
         </div>
       </div>
     `,

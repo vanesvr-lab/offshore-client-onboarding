@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { HelpCircle, X } from "lucide-react";
+import { TENANT_BRAND_DEFAULTS } from "@/lib/tenant-brand";
 
 /**
  * Click-to-open / hover-to-open ELI10 tooltip for the People & KYC step
@@ -10,6 +12,11 @@ import { HelpCircle, X } from "lucide-react";
 export function KycIntroTooltip() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { data: session } = useSession();
+  const brand = session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS;
+  const regulatorOrigin = brand.country
+    ? `${brand.country} regulators require`
+    : "Regulators require";
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +67,7 @@ export function KycIntroTooltip() {
           <div>
             <p className="font-semibold text-brand-navy mb-1">Why we ask for this</p>
             <p className="text-xs leading-relaxed">
-              Mauritius regulators require us to verify everyone with significant control or
+              {regulatorOrigin} us to verify everyone with significant control or
               ownership of your company. This is called Know Your Customer (KYC) and it&apos;s the
               law for licensed management companies.
             </p>
