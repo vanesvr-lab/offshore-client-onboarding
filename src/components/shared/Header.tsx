@@ -4,7 +4,7 @@ import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Menu } from "lucide-react";
-import { portalName } from "@/lib/portal-name";
+import { BrandedHeader } from "@/components/shared/BrandedHeader";
 
 interface HeaderProps {
   userName?: string | null;
@@ -48,13 +48,8 @@ export function Header({ userName, avatarUrl, variant = "admin", onOpenMobileNav
       )}
 
       <div className="flex-1 min-w-0">
-        <p className="text-white font-bold text-base sm:text-lg leading-none truncate">
-          {/* B-101 Batch 5 — role-based portal name. */}
-          {portalName(variant === "admin")}
-        </p>
-        <p className="hidden sm:block text-brand-muted text-xs mt-0.5 truncate">
-          The intelligent portal for client due diligence and compliance
-        </p>
+        {/* B-129 — two-line tenant + platform brand. */}
+        <BrandedHeader isAdmin={variant === "admin"} variant="dark" />
       </div>
       <div className="flex items-center gap-2 sm:gap-4">
         {/* B-103 — unified avatar treatment for admin + client variants:

@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BrandMark } from "@/components/shared/BrandMark";
-import { portalName } from "@/lib/portal-name";
+import { BrandedHeader } from "@/components/shared/BrandedHeader";
 import type { PermissionFlag } from "@/lib/admin-permissions";
 
 // B-127 — Sidebar accepts a permissions snapshot so the admin nav can
@@ -179,23 +179,14 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col bg-brand-dark">
-      {/* Brand — B-101 Batch 5: logo + role-based portal name. */}
+      {/* Brand — B-129: tenant + platform brand (compact mode for sidebar width). */}
       <div className="px-5 py-5 border-b border-white/10">
         <Link
           href={role === "admin" ? "/admin/dashboard" : "/dashboard"}
           className="flex items-center gap-2.5"
         >
           <BrandMark size={32} fallbackClassName="text-white" />
-          <div className="text-white font-semibold text-[14px] leading-snug">
-            {portalName(role === "admin")
-              .split(" - ")
-              .map((part, idx, arr) => (
-                <span key={idx}>
-                  {part}
-                  {idx < arr.length - 1 && <br />}
-                </span>
-              ))}
-          </div>
+          <BrandedHeader isAdmin={role === "admin"} variant="dark" compact />
         </Link>
       </div>
 

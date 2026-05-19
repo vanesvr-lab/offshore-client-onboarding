@@ -17,7 +17,8 @@ import {
 import { isEmail, isRequired } from "@/lib/validation";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/shared/BrandMark";
-import { BRAND_NAME } from "@/lib/portal-name";
+import { authPageHeading } from "@/lib/portal-name";
+import { PLATFORM_BRAND } from "@/lib/platform-brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -84,10 +85,11 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4">
       <div className="mb-8 flex flex-col items-center text-center">
-        {/* B-101 Batch 5 — brand logo + brand-only name (role unknown pre-auth). */}
+        {/* B-129 — pre-auth header. Tenant identity stays hidden until
+            sign-in; we show the platform tagline only. */}
         <BrandMark size={48} className="mb-3" />
-        <h1 className="text-3xl font-bold text-brand-navy">{BRAND_NAME}</h1>
-        <p className="text-sm text-gray-600 mt-1">The intelligent portal for client due diligence and compliance</p>
+        <h1 className="text-3xl font-bold text-brand-navy">{authPageHeading()}</h1>
+        <p className="text-sm text-gray-600 mt-1">{PLATFORM_BRAND.tagline}</p>
       </div>
       <Card className="w-full max-w-sm">
         <CardHeader>
