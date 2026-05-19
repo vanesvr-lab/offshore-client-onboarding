@@ -13,6 +13,36 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-133 — Respect service_profile_removals (done 2026-05-19)
+
+"Remove from service" already upserts `service_profile_removals(service_id, client_profile_id)` server-side (leaving the underlying `profile_service_roles` row intact so future re-add restores roles cleanly per B-101 Batch 3's intent), but two display surfaces still rendered the removed profile.
+
+### Batch 1 — Queue page (Claude Code)
+
+- `src/app/(admin)/admin/queue/page.tsx`:
+  - Services select now joins `service_profile_removals(client_profile_id)` and adds `profile_service_roles.client_profile_id` so the per-row filter has the key it needs.
+  - `RawServiceRow` type extended accordingly.
+  - Row mapping computes `removedIds = new Set(...)` then filters `profile_service_roles` to `activeRoles` before picking the primary `can_manage` profile for the MANAGERS column.
+
+### Batch 2 — Service detail page (no code change — already filtered)
+
+- `loadServiceDetail.ts` was audited end-to-end: B-101 Batch 3 already loads `service_profile_removals` and returns `roles` filtered to the active set; B-132 wires the document-inheritance "attached profile set" off the same `filteredRoles`; the audit-log per-profile lookup also keys off the filtered set. `ServiceDetailClient` consumes only the filtered `roles` (via `typedRoles` → `profileRolesMap`), so downstream surfaces inherit the filter without further changes:
+  - People & KYC list iterates `typedRoles`.
+  - KYC progress aggregation builds `profiles` from `typedRoles` before passing to `computePendingItems`.
+  - B-132 document inheritance uses `filteredRoles` for `attachedProfileIds`.
+  - Peer review section picker is fed by `reviewModalProfiles` built from `profileRolesMap`.
+  - `application_section_reviews` aggregates are keyed by `section_key`; the per-profile `useAggregateStatus` calls are emitted by per-profile components, which only mount for filtered profiles.
+- Batch 2 therefore produced no diff. Verification logged here so the audit trail explains the missing commit.
+
+### Batch 3 — Tech debt (Claude Code)
+
+- Two new Open entries appended to `docs/tech-debt.md` (and Tech Debt Tracker below):
+  - Hide-vs-cascade convention for `service_profile_removals`: rows in `profile_service_roles` stay intact for re-add convenience, so any caller that reads the table outside the central `loadServiceDetail` path needs to remember to filter against removals.
+  - Removals-filter audit for surfaces not touched in B-133 (audit-log readouts, Communications dialog recipient picker, etc.). Fix in a small follow-up if a removed profile reappears anywhere.
+  - Pre-existing "No UI to restore removed profiles" item is unchanged — restoring through the AddDirector modal currently works but isn't explicitly framed as an undo.
+
+---
+
 ## B-132 — Profile-scoped documents (done 2026-05-19)
 
 Personal KYC documents (identity / financial / compliance) now follow the person rather than a single service. A passport uploaded for Bruce on Service A automatically surfaces on every other service Bruce is on; replacing it anywhere replaces it everywhere. Service-scoped corporate docs (e.g. Certificate of Incorporation for the entity being formed) remain tied to their service.
@@ -6885,6 +6915,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 30 | **Fine-grained role gating sweep** | Medium | B-127 wired the 5 highest-leverage gates (settings, admin mgmt, status change, destructive, review buttons) but the remaining ~20 admin surfaces still grant unconditional access where they should check the matching `adminPermissions` flag. Examples: KYC editing affordances on `/admin/services/[id]` (should consult `data_access`), the Communications dialog send button (`send_communications`), the edit affordances on the clients list, the Document Replace actions on `DocumentDetailDialog`, etc. Walk every `/admin/*` page + `/api/admin/*` route and wire the matching permission check. Estimate: 1-2 days; new brief B-128. |
 | 31 | **Chatbot multi-turn memory** | Low | Each question is independent today — `useChatbot.ask` only passes the current question to `/api/chatbot/ask`, with no prior turns in the body. If users start asking follow-ups ("what about that one?", "and the next step?"), wire a `history` array through to the search API + the LLM context window. Wait until paste-style usage data shows this is a real pain point — multi-turn is one of those features that's easy to add badly and hard to add well. Spawned by [B-128](docs/cli-brief-chatbot-wire-up-b128.md). |
 | 32 | **Chatbot "Was this helpful?" feedback capture** | Low | No thumbs-up / thumbs-down or any feedback signal on chatbot answers today. To drive content tuning we want at minimum a per-answer 👍/👎 with optional free-text comment, written to a new `chatbot_feedback` table keyed on `(question_text, answer_text, mode, audience, voted_at)`. New brief once the KB content needs refining beyond Vanessa's manual review. Spawned by [B-128](docs/cli-brief-chatbot-wire-up-b128.md). |
+| 33 | **Hide-vs-cascade convention for `service_profile_removals`** | Low | B-133 makes the queue + service detail HIDE per-service-removed profiles, but `profile_service_roles` rows stay intact so re-add via AddDirector restores cleanly. Any future caller that reads `profile_service_roles` directly outside `loadServiceDetail.ts` (a report, an external integration, ad-hoc SQL) will surface the removed profile unless it joins `service_profile_removals` too. Mitigations: introduce an `active_profile_service_roles` view that pre-joins the exclusion, or document the invariant loudly in the schema. Spawned by [B-133](docs/cli-brief-respect-profile-removals-b133.md). |
+| 34 | **Removals-filter audit for other admin surfaces** | Low | B-133 fixed the queue + service detail (and the four knock-on consumers: People & KYC, KYC progress %, B-132 document inheritance, peer review picker, section review aggregates). Remaining admin surfaces weren't audited — audit-log readouts, Communications dialog recipient picker, `/admin/services` (services list), `/admin/profiles/[id]`, etc. If a removed profile pops up anywhere, fix in a small follow-up. Spawned by [B-133](docs/cli-brief-respect-profile-removals-b133.md). |
 
 ### Resolved
 

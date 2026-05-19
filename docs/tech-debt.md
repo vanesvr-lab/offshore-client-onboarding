@@ -9,6 +9,20 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-133)
+
+- **Hide-vs-cascade convention for `service_profile_removals`.** *Severity: Low.*
+  *Spawned by:* [B-133](cli-brief-respect-profile-removals-b133.md).
+  *What:* B-133 makes the queue + service detail HIDE per-service-removed profiles, but the underlying `profile_service_roles` rows stay intact (so re-add via AddDirector restores roles cleanly). Any future caller that reads `profile_service_roles` directly outside `loadServiceDetail.ts` (a report query, an external integration, an ad-hoc SQL export) will surface the removed profile unless it also joins `service_profile_removals`. Two options: (a) introduce a DB view `active_profile_service_roles` that pre-joins the exclusion and migrate readers, or (b) document the invariant loudly in the schema. Either way, a single canonical "active roles" entry point would prevent the bug class. Estimate: 1-2 hours for option (a).
+  *Why deferred:* The two surfaces that actually rendered the bug are fixed; no other surface has surfaced yet.
+
+- **Removals-filter audit for other admin surfaces.** *Severity: Low.*
+  *Spawned by:* [B-133](cli-brief-respect-profile-removals-b133.md).
+  *What:* B-133 fixed the queue + service detail (and the four knock-on consumers — People & KYC, KYC progress %, B-132 document inheritance, peer review picker, section review aggregates). The remaining admin surfaces weren't audited: audit-log readouts, Communications dialog recipient picker, `/admin/services` services-list page, `/admin/profiles/[id]` detail, etc. If a removed profile pops up on any of these, fix in a small follow-up. Estimate: 1-2 hours per surface.
+  *Why deferred:* No bug reports against those surfaces yet — the visible ones (queue + service detail) were the user-reported regressions.
+
+---
+
 ## 2026-05-19 (B-132)
 
 - **Document expiry alerts.** *Severity: Low.*
