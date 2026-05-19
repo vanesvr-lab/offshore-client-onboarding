@@ -3195,25 +3195,63 @@ function PersonCard({
         </div>
       )}
 
-      {/* Invite dialog */}
-      {showInviteDialog && (
-        <InviteKycDialog
-          serviceId={serviceId}
-          roleId={roleRow.id}
-          personName={profile.full_name}
-          personEmail={profile.email}
-          roleLabel={roleLabels}
-          onClose={() => setShowInviteDialog(false)}
-          onSent={(sentAt, communication) => {
-            setInviteSentAt(sentAt);
-            onCommunicationSent?.(communication);
-            // B-118 Hotfix 2 — RSC refresh so the parent re-fetches
-            // communications + other adjacent state. Comm-card already
-            // shows the spliced row immediately above.
-            onRefresh();
-          }}
-        />
-      )}
+      {/* Invite dialog — B-134 multi-select email picker */}
+      {showInviteDialog && (() => {
+        const directorRoleLabel = profile.is_representative
+          ? "Representative"
+          : (combinedRoles ?? [roleRow.role])
+              .map((r) =>
+                r === "ubo" ? "UBO" : r.charAt(0).toUpperCase() + r.slice(1),
+              )
+              .join(", ") || "Director";
+        const recipients: Array<{ email: string; name: string; role: string }> = [];
+        if (profile.email) {
+          recipients.push({
+            email: profile.email,
+            name: profile.full_name ?? "(unnamed)",
+            role: directorRoleLabel,
+          });
+        }
+        const repEmail = profile.filing_rep?.email ?? null;
+        if (
+          repEmail &&
+          profile.filing_rep?.is_representative === true
+        ) {
+          recipients.push({
+            email: repEmail,
+            name: profile.filing_rep?.full_name ?? "Filing rep",
+            role: "Filing Representative",
+          });
+        }
+        // Default selection: rep's email when set, else director's.
+        const defaultSelected: string[] = [];
+        if (repEmail && profile.filing_rep?.is_representative === true) {
+          defaultSelected.push(repEmail);
+        } else if (profile.email) {
+          defaultSelected.push(profile.email);
+        }
+        return (
+          <InviteKycDialog
+            serviceId={serviceId}
+            roleId={roleRow.id}
+            personName={profile.full_name}
+            roleLabel={roleLabels}
+            recipients={recipients}
+            defaultSelectedEmails={defaultSelected}
+            onClose={() => setShowInviteDialog(false)}
+            onSent={(sentAt, communications) => {
+              setInviteSentAt(sentAt);
+              for (const c of communications) {
+                onCommunicationSent?.(c);
+              }
+              // B-118 Hotfix 2 — RSC refresh so the parent re-fetches
+              // communications + other adjacent state. Comm-card already
+              // shows the spliced rows immediately above.
+              onRefresh();
+            }}
+          />
+        );
+      })()}
 
       {/* B-101 Batch 3 — Remove-from-service confirm dialog. */}
       <Dialog open={removeOpen} onOpenChange={(open) => { if (!removing) setRemoveOpen(open); }}>

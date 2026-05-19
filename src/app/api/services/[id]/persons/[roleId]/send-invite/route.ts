@@ -44,8 +44,34 @@ export async function POST(
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json().catch(() => ({})) as { email?: string; note?: string };
+  // B-134 — body now accepts a recipientEmails array so admin can pick
+  // the director, the filing rep, or both. Legacy single-email body is
+  // still accepted for backwards compat (no caller in-tree, but keeps
+  // direct-API callers from breaking on first request).
+  const body = await request.json().catch(() => ({})) as {
+    recipientEmails?: string[];
+    email?: string;
+    note?: string;
+  };
   const senderNote = typeof body.note === "string" && body.note.trim() ? body.note.trim() : null;
+  const rawRecipients = Array.isArray(body.recipientEmails) && body.recipientEmails.length > 0
+    ? body.recipientEmails
+    : body.email
+      ? [body.email]
+      : [];
+  const recipientEmails = Array.from(
+    new Set(
+      rawRecipients
+        .map((e) => (typeof e === "string" ? e.trim().toLowerCase() : ""))
+        .filter((e) => e.length > 0),
+    ),
+  );
+  if (recipientEmails.length === 0) {
+    return NextResponse.json(
+      { error: "At least one recipient is required" },
+      { status: 400 },
+    );
+  }
 
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
@@ -127,64 +153,67 @@ export async function POST(
 
   const profile = (roleRow.client_profiles as unknown as { id: string; full_name: string | null; email: string | null } | null);
   const roleLabel = roleToLabel((roleRow as unknown as { role: string }).role ?? "");
-  if (!profile?.email) {
+  if (!profile) {
     return NextResponse.json(
-      { error: "This person has no email address — add one before sending an invite" },
-      { status: 400 }
+      { error: "Profile not found for this role" },
+      { status: 404 },
     );
   }
 
-  // Generate invite token and code
-  const accessToken = generateToken();
-  const code = generateCode();
-  const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
-
-  // B-056 §1.2 — store the invite keyed on (email, client_profile_id) so a
-  // user with multiple roles (Director + Shareholder + UBO on the same
-  // service) doesn't see their first link wiped by the second invite. Any
-  // earlier ACTIVE row is marked `superseded_at` (instead of deleted) so
-  // verify-code can return a clear "your invite was updated" 410 if the
-  // old link is opened. The unique partial index on (email,
-  // client_profile_id) WHERE verified_at IS NULL AND superseded_at IS NULL
-  // (B-056 migration) keeps at most one active row per pair.
-  const supersededAt = new Date().toISOString();
-  await supabase
-    .from("verification_codes")
-    .update({ superseded_at: supersededAt })
-    .eq("email", profile.email)
-    .eq("client_profile_id", profile.id)
-    .is("verified_at", null)
-    .is("superseded_at", null);
-
-  const { error: insertErr } = await supabase
-    .from("verification_codes")
-    .insert({
-      access_token: accessToken,
-      code,
-      email: profile.email,
-      client_profile_id: profile.id,
-      expires_at: expiresAt,
-    });
-  if (insertErr) {
-    return NextResponse.json(
-      { error: `Failed to create invite: ${insertErr.message}` },
-      { status: 500 }
-    );
-  }
-
-  // Send invite email
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const accessUrl = `${baseUrl}/kyc/fill/${accessToken}`;
-
   const senderName = session.user.name ?? brand.display_name;
   const noteHtml = senderNote
     ? `<p style="color: #4a5568; font-size: 14px; line-height: 1.6; margin-top: 24px; border-left: 3px solid #e2e8f0; padding-left: 12px;">
         <strong>Sender&rsquo;s Note:</strong> ${senderNote}
        </p>`
     : "";
-
   const emailSubject = `Complete your KYC — ${serviceName} at ${brand.display_name}`;
-  const emailHtml = `
+
+  // B-134 — one verification_code + one Resend send + one
+  // service_communications row per recipient. The rate-limit window/
+  // count below ticks once per call (matching today's "I clicked
+  // Send Request" semantics), not once per recipient.
+  const communications: Array<Record<string, unknown> | null> = [];
+  for (const recipientEmail of recipientEmails) {
+    const accessToken = generateToken();
+    const code = generateCode();
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+
+    // B-056 §1.2 — store the invite keyed on (email, client_profile_id) so a
+    // user with multiple roles (Director + Shareholder + UBO on the same
+    // service) doesn't see their first link wiped by the second invite. Any
+    // earlier ACTIVE row is marked `superseded_at` (instead of deleted) so
+    // verify-code can return a clear "your invite was updated" 410 if the
+    // old link is opened. The unique partial index on (email,
+    // client_profile_id) WHERE verified_at IS NULL AND superseded_at IS NULL
+    // (B-056 migration) keeps at most one active row per pair.
+    const supersededAt = new Date().toISOString();
+    await supabase
+      .from("verification_codes")
+      .update({ superseded_at: supersededAt })
+      .eq("email", recipientEmail)
+      .eq("client_profile_id", profile.id)
+      .is("verified_at", null)
+      .is("superseded_at", null);
+
+    const { error: insertErr } = await supabase
+      .from("verification_codes")
+      .insert({
+        access_token: accessToken,
+        code,
+        email: recipientEmail,
+        client_profile_id: profile.id,
+        expires_at: expiresAt,
+      });
+    if (insertErr) {
+      return NextResponse.json(
+        { error: `Failed to create invite: ${insertErr.message}` },
+        { status: 500 }
+      );
+    }
+
+    const accessUrl = `${baseUrl}/kyc/fill/${accessToken}`;
+    const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0; font-size: 22px;">${brand.portal_name}</h1>
@@ -223,38 +252,40 @@ export async function POST(
       </div>
     `;
 
-  const { data: resendData, error: emailError } = await resend.emails.send({
-    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
-    to: profile.email,
-    subject: emailSubject,
-    html: emailHtml,
-  });
+    const { data: resendData, error: emailError } = await resend.emails.send({
+      from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
+      to: recipientEmail,
+      subject: emailSubject,
+      html: emailHtml,
+    });
 
-  // B-108 — best-effort comms log; direct service id, no fanout needed.
-  // B-118 Hotfix 2 — capture the inserted comm row so the response can
-  // echo it back; the admin services page splices it into local state
-  // for instant right-rail freshness.
-  const commRow = await logCommunication({
-    serviceId: params.id,
-    tenantId,
-    sentBy: session.user.id ?? null,
-    sentByName: session.user.name ?? session.user.email ?? null,
-    sentToEmail: profile.email,
-    sentToProfileId: profile.id,
-    emailType: "service_kyc_invite",
-    subject: emailSubject,
-    bodyHtml: emailHtml,
-    relatedEntityType: "profile",
-    relatedEntityId: profile.id,
-    resendMessageId: resendData?.id ?? null,
-    status: emailError ? "failed" : "sent",
-  });
+    // B-108 — best-effort comms log; direct service id, no fanout needed.
+    // B-118 Hotfix 2 — capture each inserted comm row so the response
+    // can echo them back; the admin page splices them into local state
+    // for instant right-rail freshness.
+    const commRow = await logCommunication({
+      serviceId: params.id,
+      tenantId,
+      sentBy: session.user.id ?? null,
+      sentByName: session.user.name ?? session.user.email ?? null,
+      sentToEmail: recipientEmail,
+      sentToProfileId: profile.id,
+      emailType: "service_kyc_invite",
+      subject: emailSubject,
+      bodyHtml: emailHtml,
+      relatedEntityType: "profile",
+      relatedEntityId: profile.id,
+      resendMessageId: resendData?.id ?? null,
+      status: emailError ? "failed" : "sent",
+    });
+    communications.push(commRow);
 
-  if (emailError) {
-    return NextResponse.json(
-      { error: `Failed to send email: ${emailError.message}` },
-      { status: 500 }
-    );
+    if (emailError) {
+      return NextResponse.json(
+        { error: `Failed to send email to ${recipientEmail}: ${emailError.message}` },
+        { status: 500 }
+      );
+    }
   }
 
   // Update invite_sent_at, invite_sent_by, and rate-limit window/count on the role row.
@@ -282,6 +313,6 @@ export async function POST(
     invites_sent_count_24h: nextCount,
     invites_count_window_start: nextWindowStart,
     invites_remaining: Math.max(0, RATE_LIMIT_MAX - nextCount),
-    communication: commRow,
+    communications: communications.filter((c): c is Record<string, unknown> => !!c),
   });
 }
