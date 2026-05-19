@@ -11,7 +11,7 @@ import {
   AlertTriangle, Bell, Eye,
   Trash2,
   Wand2, ChevronLeft, ChevronRight, X,
-  Ban, RotateCcw,
+  Ban, RotateCcw, Pencil, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -185,6 +185,15 @@ type RoleWithProfile = ProfileServiceRole & {
     due_diligence_level: string;
     user_id: string | null;
     client_profile_kyc: KycFull[] | null;
+    /** B-134 — FK + joined rep profile for the per-director filing-rep
+     *  picker on the service detail page. Null when no rep is set. */
+    filing_rep_profile_id: string | null;
+    filing_rep: {
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      is_representative: boolean | null;
+    } | null;
   } | null;
 };
 
@@ -1820,6 +1829,7 @@ function PersonCard({
   onPendingAction,
   wizardSubStep,
   onCommunicationSent,
+  allProfiles,
 }: {
   roleRow: RoleWithProfile;
   allRoleRows: RoleWithProfile[];
@@ -1892,6 +1902,9 @@ function PersonCard({
    *  splices the row into the right-rail Communications card for
    *  instant freshness, no refetch needed. */
   onCommunicationSent?: (communication: Record<string, unknown> | null | undefined) => void;
+  /** B-134 — full tenant client_profiles list, used to populate the
+   *  filing-rep picker dropdown (filtered to is_representative=true). */
+  allProfiles?: ClientProfile[];
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   // B-077 Batch 2 — grouped Documents collapsible at the end of the
@@ -1918,6 +1931,15 @@ function PersonCard({
   // B-101 Batch 3 — soft-delete confirm + in-flight state.
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
+  // B-134 — filing-rep picker state. Picker is a small inline modal:
+  // dropdown of existing reps + "+ Add new representative" inline-create
+  // via CreateProfileDialog. On confirm, PATCH the director's
+  // filing_rep_profile_id and refresh.
+  const [repPickerOpen, setRepPickerOpen] = useState(false);
+  const [repPickerSelectedId, setRepPickerSelectedId] = useState<string | null>(null);
+  const [showCreateRepDialog, setShowCreateRepDialog] = useState(false);
+  const [extraReps, setExtraReps] = useState<ClientProfile[]>([]);
+  const [savingRep, setSavingRep] = useState(false);
 
   // B-078 Batch 1 — per-profile dirty tracking. `savedFields` is the last-
   // known-from-DB snapshot; `draftFields` holds in-flight edits that flow
@@ -2717,16 +2739,73 @@ function PersonCard({
               placeholder="Full legal name"
               className="text-sm font-semibold text-brand-navy bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-brand-blue focus:outline-none focus:ring-0 px-0 py-0.5 min-w-[120px] max-w-[260px]"
             />
-            <input
-              type="email"
-              aria-label="Profile email"
-              value={(draftFields.email as string) ?? ""}
-              onChange={(e) =>
-                setDraftFields((prev) => ({ ...prev, email: e.target.value }))
-              }
-              placeholder="email@example.com"
-              className="text-xs text-gray-600 bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-brand-blue focus:outline-none focus:ring-0 px-0 py-0.5 min-w-[140px] max-w-[260px]"
-            />
+            {/* B-134 — wrap email in a hover-tinted container with a
+                pencil icon so the inline-edit affordance is obvious
+                (Vanessa flagged that the field looked read-only). */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <div className="inline-flex items-center gap-1 rounded px-1 -mx-1 hover:bg-gray-100 transition-colors group" />
+                  }
+                >
+                  <input
+                    type="email"
+                    aria-label="Profile email"
+                    value={(draftFields.email as string) ?? ""}
+                    onChange={(e) =>
+                      setDraftFields((prev) => ({ ...prev, email: e.target.value }))
+                    }
+                    placeholder="email@example.com"
+                    className="text-xs text-gray-600 bg-transparent border-0 border-b border-transparent hover:border-gray-300 focus:border-brand-blue focus:outline-none focus:ring-0 px-0 py-0.5 min-w-[140px] max-w-[260px]"
+                  />
+                  <Pencil className="h-3 w-3 text-gray-400 group-hover:text-gray-600 shrink-0" />
+                </TooltipTrigger>
+                <TooltipContent>Edit director&rsquo;s email</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            {/* B-134 — Filing-rep affordance inline in the banner. When
+                no rep is set, show "+ Add representative for KYC"; when
+                set, show "Filed by [name]" with a [change] link. Both
+                open the same rep picker (Batch 3 dropdown + inline
+                create). Reps don't have reps of their own. */}
+            {!profile.is_representative && (
+              <div className="text-xs text-gray-600 shrink-0">
+                {!profile.filing_rep_profile_id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRepPickerSelectedId(profile.filing_rep_profile_id ?? null);
+                      setRepPickerOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-brand-navy hover:text-brand-blue underline-offset-2 hover:underline"
+                  >
+                    <UserPlus className="h-3 w-3" />
+                    + Add representative for KYC
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-2">
+                    <UserCheck className="h-3 w-3 text-purple-600" />
+                    <span>
+                      Filed by{" "}
+                      <span className="font-medium">
+                        {profile.filing_rep?.full_name ?? "representative"}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRepPickerSelectedId(profile.filing_rep_profile_id ?? null);
+                        setRepPickerOpen(true);
+                      }}
+                      className="text-[10px] text-gray-500 hover:text-gray-700 underline"
+                    >
+                      change
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             {(combinedRoles ?? [roleRow.role]).map((r) => (
               <span
                 key={r}
@@ -3194,6 +3273,174 @@ function PersonCard({
           onOpenChange={setReviewSummaryOpen}
           profileName={profile.full_name ?? "this profile"}
           subsections={kycSubsections}
+        />
+      )}
+
+      {/* B-134 — filing-rep picker. Dropdown of existing reps in this
+          tenant + "+ Add new representative" inline-create. On Save,
+          PATCH the director's filing_rep_profile_id. */}
+      <Dialog
+        open={repPickerOpen}
+        onOpenChange={(open) => {
+          if (!savingRep) setRepPickerOpen(open);
+        }}
+      >
+        <DialogContent className="bg-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Filing representative for {profile.full_name ?? "this director"}
+            </DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const repsById = new Map<string, ClientProfile>();
+            for (const p of (allProfiles ?? [])) {
+              if (p.is_representative && !p.is_deleted) repsById.set(p.id, p);
+            }
+            for (const p of extraReps) repsById.set(p.id, p);
+            // Ensure the currently-linked rep shows in the dropdown
+            // even if it didn't come through allProfiles (e.g. a rep
+            // created by another admin since this page loaded).
+            if (
+              profile.filing_rep_profile_id &&
+              profile.filing_rep &&
+              !repsById.has(profile.filing_rep_profile_id)
+            ) {
+              repsById.set(profile.filing_rep_profile_id, {
+                id: profile.filing_rep_profile_id,
+                full_name: profile.filing_rep.full_name ?? "",
+                email: profile.filing_rep.email ?? null,
+                is_representative: true,
+              } as unknown as ClientProfile);
+            }
+            const reps = Array.from(repsById.values()).sort((a, b) =>
+              (a.full_name ?? "").localeCompare(b.full_name ?? ""),
+            );
+            return (
+              <div className="space-y-3 mt-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700">
+                    Representative
+                  </label>
+                  <select
+                    value={repPickerSelectedId ?? ""}
+                    onChange={(e) =>
+                      setRepPickerSelectedId(e.target.value || null)
+                    }
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                  >
+                    <option value="">— No representative —</option>
+                    {reps.map((rep) => (
+                      <option key={rep.id} value={rep.id}>
+                        {rep.full_name}
+                        {rep.email ? ` — ${rep.email}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateRepDialog(true)}
+                    className="text-xs text-brand-navy hover:underline"
+                  >
+                    + Add new representative
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  The selected representative can complete KYC paperwork
+                  on this director&rsquo;s behalf and will receive a
+                  one-time login link.
+                </p>
+              </div>
+            );
+          })()}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              className={BTN_OUTLINE}
+              disabled={savingRep}
+              onClick={() => setRepPickerOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className={BTN_PRIMARY}
+              disabled={
+                savingRep ||
+                (repPickerSelectedId ?? null) === (profile.filing_rep_profile_id ?? null)
+              }
+              onClick={async () => {
+                setSavingRep(true);
+                try {
+                  const res = await fetch(
+                    `/api/admin/profiles-v2/${profile.id}`,
+                    {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        filing_rep_profile_id: repPickerSelectedId ?? null,
+                      }),
+                    },
+                  );
+                  const data = (await res.json().catch(() => ({}))) as {
+                    error?: string;
+                  };
+                  if (!res.ok) {
+                    throw new Error(data.error ?? "Failed to update");
+                  }
+                  toast.success(
+                    repPickerSelectedId
+                      ? "Representative linked"
+                      : "Representative removed",
+                    { position: "top-right" },
+                  );
+                  setRepPickerOpen(false);
+                  onRefresh();
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Failed to update",
+                    { position: "top-right" },
+                  );
+                } finally {
+                  setSavingRep(false);
+                }
+              }}
+            >
+              {savingRep ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+              ) : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* B-134 — inline rep create (forced-rep mode). Splices the new
+          rep into local state so the picker dropdown above shows it
+          immediately. */}
+      {showCreateRepDialog && (
+        <CreateProfileDialog
+          open
+          onClose={() => setShowCreateRepDialog(false)}
+          forceIsRepresentative
+          onCreated={(summary) => {
+            setShowCreateRepDialog(false);
+            setExtraReps((prev) =>
+              prev.find((r) => r.id === summary.id)
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      id: summary.id,
+                      full_name: summary.full_name,
+                      email: summary.email,
+                      record_type: summary.record_type,
+                      is_representative: true,
+                      is_deleted: false,
+                      due_diligence_level: summary.due_diligence_level,
+                    } as unknown as ClientProfile,
+                  ],
+            );
+            setRepPickerSelectedId(summary.id);
+          }}
         />
       )}
 
@@ -6109,6 +6356,7 @@ export function ServiceDetailClient({
                       }
                       onDdLevelChanged={handleProfileDdLevelChanged}
                       onCommunicationSent={appendCommunication}
+                      allProfiles={allProfiles}
                       pendingItems={
                         pid ? perProfilePending.get(pid) ?? [] : []
                       }

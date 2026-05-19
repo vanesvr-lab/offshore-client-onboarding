@@ -655,12 +655,23 @@ export interface ClientProfile {
   address: string | null;
   due_diligence_level: DueDiligenceLevel;
   is_deleted: boolean;
+  /** B-134 — FK to another client_profiles row (where
+   *  is_representative = true) that files KYC on this director's
+   *  behalf. Null when no rep is assigned. */
+  filing_rep_profile_id?: string | null;
   created_at: string;
   updated_at: string;
   // Joined relations (optional)
   client_profile_kyc?: ClientProfileKyc | null;
   profile_service_roles?: ProfileServiceRole[];
   users?: { email: string } | null;
+  /** B-134 — joined rep profile when loaded via the FK alias. */
+  filing_rep?: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    is_representative: boolean | null;
+  } | null;
 }
 
 export interface ClientProfileKyc {

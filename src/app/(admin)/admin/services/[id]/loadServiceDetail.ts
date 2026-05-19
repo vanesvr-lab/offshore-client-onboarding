@@ -129,7 +129,8 @@ export async function loadServiceDetail(
         *,
         client_profiles(
           id, full_name, email, phone, is_representative, record_type,
-          due_diligence_level, user_id,
+          due_diligence_level, user_id, filing_rep_profile_id,
+          filing_rep:filing_rep_profile_id(id, full_name, email, is_representative),
           client_profile_kyc(*)
         )
       `)
