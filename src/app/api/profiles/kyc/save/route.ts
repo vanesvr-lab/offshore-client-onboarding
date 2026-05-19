@@ -145,13 +145,20 @@ export async function POST(request: Request) {
     }
   }
 
-  // Update email/phone on client_profiles if provided
+  // Update email/phone on client_profiles if provided. B-135 — also
+  // SELECT the row back so the caller can splice the canonical
+  // post-UPDATE profile fields into local React state alongside the
+  // kyc record, avoiding stale-state merges.
+  let updatedProfile: Record<string, unknown> | null = null;
   if (Object.keys(profileUpdates).length > 0) {
-    await supabase
+    const { data: profileRow } = await supabase
       .from("client_profiles")
       .update(profileUpdates)
       .eq("id", existing.client_profile_id)
-      .eq("tenant_id", tenantId);
+      .eq("tenant_id", tenantId)
+      .select("id, full_name, email, phone, address")
+      .single();
+    updatedProfile = (profileRow as Record<string, unknown> | null) ?? null;
   }
 
   // B-131 — capture rep-driven KYC saves in audit_log so the paper
@@ -175,5 +182,5 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ record: updated });
+  return NextResponse.json({ record: updated, profile: updatedProfile });
 }

@@ -15,6 +15,7 @@ import { useAutoSave } from "@/hooks/useAutoSave";
 import { calculateKycCompletion } from "@/lib/utils/completionCalculator";
 import { computeAvailableExtracts, computePrefillableFields } from "@/lib/kyc/computePrefillable";
 import type { PrefillableField } from "@/lib/kyc/computePrefillable";
+import { KYC_PREFILLABLE_FIELDS } from "@/lib/constants/prefillFields";
 import { FieldPrefillIcon } from "@/components/kyc/FieldPrefillIcon";
 import { cn } from "@/lib/utils";
 import type { KycRecord, DocumentRecord, DocumentType } from "@/types";
@@ -276,9 +277,43 @@ export function IndividualKycForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kycRecordId: initialRecord.id, fields: payload }),
       });
-      if (!res.ok) throw new Error("save failed");
+      const data = (await res.json().catch(() => ({}))) as {
+        record?: Record<string, unknown> | null;
+        profile?: Record<string, unknown> | null;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "save failed");
 
-      setFields((prev) => ({ ...prev, ...payload }));
+      // B-135 — replace React state from the canonical post-UPDATE row
+      // returned by the route, instead of merging the requested payload
+      // into stale state. The previous `{...prev, ...payload}` merge let
+      // a concurrent auto-save with an older `fields` closure clobber
+      // specific extracted columns (reproduced: date_of_birth +
+      // passport_country went null on the demo passport). Reading from
+      // the server's post-write snapshot makes the bulk Re-apply
+      // deterministic — whatever the DB now holds for each prefillable
+      // column is what the form shows, no merge logic required.
+      const kycRow = data.record;
+      const profileRow = data.profile;
+      if (kycRow || profileRow) {
+        setFields((prev) => {
+          const next = { ...prev } as Record<string, unknown>;
+          for (const key of KYC_PREFILLABLE_FIELDS) {
+            if (kycRow && key in kycRow) {
+              next[key] = kycRow[key] ?? "";
+            } else if (profileRow && key in profileRow) {
+              next[key] = profileRow[key] ?? "";
+            } else if (key in payload) {
+              next[key] = payload[key];
+            }
+          }
+          return next as Partial<KycRecord>;
+        });
+      } else {
+        // Defensive fallback if the route didn't echo a record (older
+        // deployment, etc.). Same behaviour as before B-135.
+        setFields((prev) => ({ ...prev, ...payload }));
+      }
       const n = Object.keys(payload).length;
       toast.success(`Filled ${n} field${n === 1 ? "" : "s"} from your uploaded document.`);
     } catch {

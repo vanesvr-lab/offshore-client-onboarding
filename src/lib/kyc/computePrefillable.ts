@@ -78,8 +78,21 @@ export function computeAvailableExtracts(args: {
 
     const fields = Array.isArray(type.ai_extraction_fields) ? type.ai_extraction_fields : [];
     for (const f of fields) {
-      const target = f.prefill_field;
-      if (!target || !PREFILLABLE_SET.has(target)) continue;
+      // B-135 — fall back to the extraction key itself when the
+      // doc_type config doesn't carry an explicit prefill_field. The
+      // AI extraction prompt keys the response on `f.key`, which for
+      // identity fields (date_of_birth, passport_country, etc.) is
+      // already a valid KYC column name. The fallback unblocks docs
+      // whose `ai_extraction_fields` was seeded before the explicit
+      // prefill_field mapping landed for that key (Vanessa's
+      // "Certified Passport Copy" type was a real case).
+      const target =
+        f.prefill_field && PREFILLABLE_SET.has(f.prefill_field)
+          ? f.prefill_field
+          : PREFILLABLE_SET.has(f.key)
+            ? f.key
+            : null;
+      if (!target) continue;
       if (seenTargets.has(target)) continue;
 
       const raw = (extracted as Record<string, unknown>)[f.key];
@@ -143,8 +156,18 @@ export function computePrefillableFields(args: {
 
     const fields = Array.isArray(type.ai_extraction_fields) ? type.ai_extraction_fields : [];
     for (const f of fields) {
-      const target = f.prefill_field;
-      if (!target || !PREFILLABLE_SET.has(target)) continue;
+      // B-135 — same fallback as computeAvailableExtracts: when the
+      // doc_type config has no explicit prefill_field for this key but
+      // the key itself names a whitelisted KYC column, treat it as an
+      // implicit mapping. Keeps the bulk Re-apply button writing every
+      // extractable value even when the doc_type seed has drifted.
+      const target =
+        f.prefill_field && PREFILLABLE_SET.has(f.prefill_field)
+          ? f.prefill_field
+          : PREFILLABLE_SET.has(f.key)
+            ? f.key
+            : null;
+      if (!target) continue;
       if (seenTargets.has(target)) continue;
 
       const raw = (extracted as Record<string, unknown>)[f.key];
