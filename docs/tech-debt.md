@@ -9,6 +9,19 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19
+
+- **Fine-grained role gating sweep.** *Severity: Medium.*
+  *Spawned by:* [B-127](cli-brief-admin-role-hierarchy-b127.md).
+  *What:* B-127 wired the 5 highest-leverage gates (settings, admin mgmt, status-change, destructive, review buttons). The remaining ~20 admin surfaces still render their affordances unconditionally even when the actor's role should block them. Walk every `/admin/*` page + `/api/admin/*` route and add the matching `session.user.adminPermissions.<flag>` check (UI hide/disable + API 403). Examples: the KYC edit affordances inside `KycLongForm` should consult `data_access`, the Communications dialog send button should check `send_communications`, the Document Replace surfaces should check `data_access` ≥ `edit`. Audit log + CSV export visibility should branch on `view_audit_log` / `export_data`. Estimate: 1-2 days; tracked as B-128.
+  *Why deferred:* The 5 in-scope gates cover the highest-blast-radius actions; the rest is a methodical sweep that benefits from being its own brief with a per-page checklist rather than getting buried in the schema/UI batch.
+
+- ~~All admins are equal~~ — *resolved B-127 (2026-05-19).* Five system roles seeded with the Vanessa-approved defaults; `admin_users.role_id` populated for every existing admin (Super User on backfill). Coarse gating in place across 5 surfaces; fine-grained sweep tracked above as B-128.
+
+- ~~No invite/onboarding flow for admins~~ — *resolved B-127 (2026-05-19).* `/admin/settings/admins` ships with magic-link invite + role assignment + remove + per-role permission editor. JWT pattern mirrors `/api/admin/clients/[id]/send-invite` with `purpose = "admin_invite"`. Page is gated on the `admin_mgmt_access` flag.
+
+---
+
 ## 2026-05-18
 
 - **Legacy clients/applications cleanup.** *Severity: Medium.*

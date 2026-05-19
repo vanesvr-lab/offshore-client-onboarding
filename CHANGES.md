@@ -13,15 +13,79 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-127 — Admin role hierarchy + /admin/settings/admins (in progress 2026-05-19)
+## B-127 — Admin role hierarchy + /admin/settings/admins (done 2026-05-19)
+
+### 2026-05-19 — Batch 6: tech debt rollup (Claude Code)
+
+`CHANGES.md` Tech Debt Tracker:
+
+- **#2 "All admins are equal"** moved to Resolved with note: "B-127 introduced five system roles (Super User / Manager / Officer / Junior Officer / Auditor) with 10 configurable permission flags. Coarse gating wired (settings, admin mgmt, status change, destructive, review buttons). Fine-grained gating across the remaining ~20 admin surfaces is deferred to B-128."
+- **#4 "No invite/onboarding flow for admins"** moved to Resolved with note: "B-127 ships `/admin/settings/admins` with magic-link invite + role assignment + remove + per-role permission editor. The page is gated on the `admin_mgmt_access` flag."
+- **#30 (new Open)** "Fine-grained role gating sweep" — B-127 wired the 5 highest-leverage gates but the remaining ~20 admin surfaces (KYC editing, communications dialog send button, edit affordances on the clients list, etc.) still grant unconditional access where they should check the matching flag. Walk every `/admin/*` page + `/api/admin/*` route and wire the matching permission check. Estimate: 1-2 days; new brief B-128.
+
+`docs/tech-debt.md` (canonical newest-at-top log): new 2026-05-19 entry mirrors #30 + strike-through markers for #2 and #4.
+
+End-of-brief dev-server restart per memory: from the main project dir, `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`.
+
+### 2026-05-19 — Batch 5: self-protection guards (folded into Batch 3)
+
+The five self-protection guards were implemented inline with the Batch 3 endpoints, since they live in the same try-blocks as the auth-check + role-resolve flow. No separate Batch 5 commit was needed.
+
+Guards in place:
+
+- `PATCH /api/admin/admins/[id]` — rejects with 400 if (a) the target is the last Super User and the new role is anything else, or (b) the target is the caller AND the new role's `admin_mgmt_access` is false (you can't strip your own admin management access). Errors message names the exact constraint.
+- `DELETE /api/admin/admins/[id]` — rejects with 400 if the target is the caller (self-delete) or the target is the last Super User.
+- `PATCH /api/admin/admin-roles/[slug]` — rejects with 400 if `slug === "super_user"` AND `body.admin_mgmt_access === false`. Mirrors the UI lock on the Super User card's switch.
+- **Migration re-run safety:** the seed insert uses `ON CONFLICT (tenant_id, slug) DO NOTHING` so re-running the migration is a no-op against an already-seeded tenant — Vanessa's permission tweaks survive.
+
+### 2026-05-19 — Batch 4: coarse permission gating (Claude Code)
+
+Five highest-leverage gates wired at both the UI (hide / disable + tooltip) and the API (403). Fine-grained sweep across the remaining ~20 admin surfaces is deferred to B-128.
+
+1. **`/admin/settings/*` on `settings_access`** — new `src/app/(admin)/admin/settings/layout.tsx` redirects non-`settings_access` admins to `/admin/dashboard`. Sidebar group hidden when the flag is off; existing nav items inside the group (`Templates`, `Verification Rules`, `Document Types`, `Reference Forms`, `Due Diligence`, `Role Requirements`, `Knowledge Base`, `Workflow`, plus the new `Admins`) all live behind it.
+2. **`/admin/settings/admins` on `admin_mgmt_access`** — double-checked at the page level (Batch 3) and the sidebar item (`requireFlag` property on the nav-item descriptor). Deep-linking bypasses neither.
+3. **Move-forward + Override on the right-rail Status card** — visibility / disabled state branches on `change_status` + `approve_status_change`. `change_status === false` hides the row; `change_status && !approve_status_change` shows the Move-forward button disabled with a "Awaiting approver — your role can propose but not commit" tooltip; `approve_status_change` renders the Override dropdown. Server-side, `PATCH /api/admin/services/[id]` returns 403 when `status` is in the body and the caller's `approve_status_change` is false.
+4. **Destructive actions on `destructive_actions`** — `DeleteClientButton` (on `/admin/clients/[id]`) and the profile Remove dialog (on `/admin/services/[id]`) are hidden when the flag is off. APIs return 403: `POST /api/admin/clients/[id]/delete`, `POST /api/admin/services/[id]/profiles/[profileId]/remove`.
+5. **Review actions on `can_review`** — the existing review affordances grey out with a "Your role can't sign off on reviews." tooltip:
+   - `SectionReviewButton` (Mark Section Reviewed) on `ServiceCollapsibleSection` / `SectionHeader`.
+   - `SubstanceReviewForm` bottom Save button (only when the form's `admin_assessment` is being committed; tri-state Yes/No/Unknown autosaves stay unblocked since they're plain `data_access = edit` work).
+   - `ReviewRequestsCard`'s "Mark as reviewed" icon (the green check) + the same button inside the eye-icon detail dialog.
+   - `ReviewRequestBanner`'s "Mark as reviewed" CTA.
+   APIs return 403: `POST /api/admin/applications/[id]/section-reviews`, `PUT /api/admin/services/[id]/substance` (only when body contains `admin_assessment`), `POST /api/admin/services/[id]/review-requests/[requestId]/close` (only when `reason === "reviewer_marked"` — requester force-close stays unrestricted because it's not a review event).
+
+New helper: `src/lib/admin-permissions-context.tsx` — React context with `useAdminPermissions()` / `useHasFlag(flag)`. `ServiceDetailClient` wraps its body in `<AdminPermissionsProvider value={adminPermissions}>` so deeply nested review buttons read the flag without prop drilling. `ServiceDetailClient` also accepts an `adminPermissions` prop directly for the right-rail status + profile-Remove gates (used outside the context boundary).
+
+### 2026-05-19 — Batch 3: /admin/settings/admins page + 5 APIs (Claude Code)
+
+Admin-mgmt-gated settings page with three sections.
+
+**Section 1 — Admins list (table).** Columns: Name (with `(you)` chip on the caller's row) · Email · Role (inline `<select>` of the 5 system roles, change fires `PATCH /api/admin/admins/[id]` with optimistic splice + toast) · Status ("Active" if `users.password_hash IS NOT NULL`, "Invited" otherwise, with a small dot) · Actions (Resend invite — visible only for Invited rows — and Remove with confirmation dialog). Self-protection: own Remove is disabled.
+
+**Section 2 — Invite modal.** Triggered by the "+ Invite admin" button. Fields: Name (required), Email (required, lowercased server-side), Role (default Officer). On submit: `POST /api/admin/admins` looks-up-or-creates `users` + `profiles` (with `password_hash = null`), inserts `admin_users` with the resolved `role_id`, mints a 24h JWT with `purpose = "admin_invite"`, sends a Resend email with a magic link to `/auth/set-password?token=…`, and writes an `admin_invited` audit row. The set-password POST now accepts the `admin_invite` purpose alongside `invite` + `profile_invite`.
+
+**Section 3 — Role editor.** Five system-role cards. Tier ladder (Super User → Manager → Officer → Junior Officer) renders as a 2-col grid; Auditor lives in its own "External" group at the bottom — visually distinct since it isn't a tier above/below the others, it's a read-only-with-export lane for compliance auditors. Each card shows: a one-line `formatAccount` summary, a `Data access` tri-state `<select>` (none / view / edit), and 9 boolean switches with hint copy under each label. Super User's `admin_mgmt_access` switch is locked on (UI title attr + API 400). Toggling a flag PATCHes `/api/admin/admin-roles/[slug]` with the single field; the DB trigger added in Batch 1 writes one `audit_log` row per UPDATE so every Vanessa tweak is traceable.
+
+Five new API routes:
+
+- `POST   /api/admin/admins` — invite (above).
+- `PATCH  /api/admin/admins/[id]` — change role. Self-protection: cannot demote last Super User; cannot strip own `admin_mgmt_access`.
+- `DELETE /api/admin/admins/[id]` — remove. Self-protection: cannot delete self; cannot remove last Super User. Soft-delete by `admin_users.delete` (keeps the `users` + `profiles` rows so audit history points back to a name).
+- `POST   /api/admin/admins/[id]/resend-invite` — resend the magic-link if the recipient hasn't set their password yet. Refuses for Active admins.
+- `PATCH  /api/admin/admin-roles/[slug]` — toggle a permission flag. Body is a partial of the 10 columns. Self-protection: `admin_mgmt_access` cannot be disabled on `super_user`. Audit-log written by the DB trigger from Batch 1.
+
+Each route validates `session.user.adminPermissions.admin_mgmt_access` before touching anything. Sidebar gains a new `Admins` nav entry under the Settings group, gated via a new `requireFlag` pattern (`Sidebar.tsx` filters nav items by an optional flag name). The settings group as a whole is gated on `settings_access` via the new `src/app/(admin)/admin/settings/layout.tsx` redirect.
+
+### 2026-05-19 — Batch 2: admin-permissions helper + session enrichment (Claude Code)
+
+New `src/lib/admin-permissions.ts` exports the `AdminPermissions` type, a `loadAdminPermissions(supabase, userId)` server helper that resolves the admin's role + 10 flags from `admin_users → admin_roles`, plus two narrow helpers: `hasFlag(perms, flag)` for the 9 booleans and `hasDataAccess(perms, level)` for the tri-state. Both null-safely return false when permissions are absent.
+
+`src/lib/auth.ts`'s NextAuth `authorize` now calls `loadAdminPermissions` for admin users (skipped for client users — they get `adminPermissions = null`). The result threads through the JWT callback onto `token.adminPermissions` and out through `session.user.adminPermissions`. Mid-session permission edits take effect after the admin signs out + back in — acceptable for now (the alternative is a per-request DB hit). The type addition is mirrored in `src/types/next-auth.d.ts` so every consumer gets the field on `session.user`.
 
 ### 2026-05-19 — Batch 1: admin_roles schema + seed + backfill (Claude Code)
 
 Five-tier admin hierarchy landed at the schema layer. `admin_roles` table stores 10 permission flags per role (9 booleans + a tri-state `data_access`); five system rows seeded with the Vanessa-approved defaults — Super User (everything on), Manager (no settings/admin-mgmt/destructive), Officer (no approve_status_change / destructive / export / review), Junior Officer (view-only + audit-log read), Auditor (view-only + audit-log read + export, no change/communicate/review). `admin_users.role_id` added (nullable for now) with every existing admin backfilled to Super User so no one loses access. RLS admin-only via `is_admin()`. An `AFTER UPDATE` trigger on `admin_roles` writes one `audit_log` row per permission edit so Vanessa's tweaks in the UI are fully traceable.
 
 Migration: `supabase/migrations/20260519021442_admin_role_hierarchy.sql`. Pushed via `npm run db:push`; `npm run db:status` shows Local + Remote paired at `20260519021442`. The seed uses `ON CONFLICT (tenant_id, slug) DO NOTHING` so re-running the migration won't reset Vanessa's later permission edits. Trigger creation is guarded with `DROP TRIGGER IF EXISTS` before `CREATE TRIGGER` so the migration is replay-safe.
-
-Batches 2-6 (permission resolution on the NextAuth session, the `/admin/settings/admins` page + invite API, coarse gating across the five highest-leverage surfaces, self-protection on the admin APIs, CHANGES.md / tech-debt rollup) follow in this brief.
 
 ---
 
@@ -6453,9 +6517,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | # | Item | Severity | Notes |
 |---|------|----------|-------|
 | 1 | **No multi-tenancy / tenant isolation** | High | All admins see ALL clients across the platform. SaaS model needs an `organizations` table, tenant-aware queries, and per-tenant RLS. |
-| 2 | **All admins are equal** | High | No admin roles (super-admin, manager, reviewer). Anyone in `admin_users` can do everything. |
 | 3 | **RLS bypassed app-wide (partial)** | Medium | The anon key can no longer hit raw tables — RLS is enabled default-deny on every public-schema table (B-045). The service role still bypasses everything and all server-side queries go through `createAdminClient()`. Before production SaaS launch we need real per-tenant policies so we can move app queries off the service role. |
-| 4 | **No invite/onboarding flow for admins** | Medium | Adding an admin requires manual SQL/API. Build `/admin/settings/admins` page with invite-by-email + accept-flow. |
 | 5 | **No audit log of admin-on-admin actions** | Medium | Adding/removing admins isn't tracked in `audit_log`. |
 | 6 | **`src/lib/supabase/client.ts` is dead code** | Low | No longer imported anywhere after Auth.js migration. Safe to delete. |
 | 7 | **`src/components/shared/Navbar.tsx` is dead code** | Low | Replaced by `Sidebar.tsx`. Safe to delete. |
@@ -6475,6 +6537,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 27 | **No identity-attribute uniqueness constraints** | Medium | B-059 added a unique-email constraint on `client_profiles` `(tenant_id, lower(email))`. Identity-level checks (passport_number, tax_identification_number, legal_name + date_of_birth) live on `client_profile_kyc` and aren't constrained — meaning two profiles could legitimately end up with the same passport number through two separate flows. Revisit when the data model around manager-vs-KYC roles is settled. Strongest candidates for a future constraint: `(tenant_id, passport_number) WHERE passport_number IS NOT NULL`, and a soft warning on `(tenant_id, full_name, date_of_birth)`. |
 | 28 | **Legacy `kyc_records`-based profile-create routes still in tree** | Low | `src/app/api/admin/create-profile/route.ts` and `src/app/api/profiles/create/route.ts` insert into the legacy `kyc_records` + `profile_roles` tables instead of the modern `client_profiles` + `profile_service_roles`. They escaped the B-059 unique-email guard for that reason. Confirm they're no longer hit (grep callers, watch logs for a release cycle), then delete both routes. If still hit, port them to `client_profiles` and add the same lookup-then-insert guard. |
 | 29 | **Legacy clients/applications cleanup** | Medium | `clients`, `client_users`, and `applications` are read by ~25 admin surfaces (queue, clients list, applications detail header, breadcrumbs on `/admin/clients/[id]/*`, AI verification context, audit-log writes) but no new work routes through them. Retire by porting every reader to the services-first model, then dropping the tables in one migration with FK cascades + audit_log entity_type backfill. Estimate: 2-3 days; needs a dedicated brief and a feature flag rollout. Spawned by [B-126](docs/cli-brief-register-cleanup-claude-md-rewrite-b126.md). |
+| 30 | **Fine-grained role gating sweep** | Medium | B-127 wired the 5 highest-leverage gates (settings, admin mgmt, status change, destructive, review buttons) but the remaining ~20 admin surfaces still grant unconditional access where they should check the matching `adminPermissions` flag. Examples: KYC editing affordances on `/admin/services/[id]` (should consult `data_access`), the Communications dialog send button (`send_communications`), the edit affordances on the clients list, the Document Replace actions on `DocumentDetailDialog`, etc. Walk every `/admin/*` page + `/api/admin/*` route and wire the matching permission check. Estimate: 1-2 days; new brief B-128. |
 
 ### Resolved
 
@@ -6486,4 +6549,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 25 | Admin KYC view is parallel, not inline read-only mirror | 2026-05-07 | B-074 made the inline review affordances appear inside `KycLongForm` but kept every field hardcoded `disabled`, treating admin as a read-only reviewer. **B-078 corrects that** — admin now has full edit rights on `/admin/services/[id]` Step 4: KYC long-form fields are typeable, role assignments toggle through the same dirty tracker, the sticky banner is inline-editable for full_name + email, and document Replace is wired into `DocumentDetailDialog`. One Save / Cancel bar per profile commits everything via `PATCH /api/admin/profiles/[id]/kyc-fields`; nav guard prevents losing changes; `audit_log` writes `profile_kyc_updated` per save event and `document_replaced` per replace. Per-section doc-row visibility was also corrected to category-based instead of extraction-only — fixes the bug where uploaded docs didn't show as source docs unless they had AI extractions. |
 | 16 | Shell `ANTHROPIC_API_KEY=""` overrode `.env.local` | 2026-04-19 | B-031: `package.json` `dev` script now prefixes `unset ANTHROPIC_API_KEY &&` so `.env.local` always wins. |
 | 13 | CLAUDE.md is partially outdated | 2026-05-18 | B-126: CLAUDE.md Data Model + Admin Setup + Known Future Migration sections rewritten to reflect services-first model (no Supabase Auth, services has no client_id, client_profiles for KYC subjects, invite-only flow). |
+| 2 | All admins are equal | 2026-05-19 | B-127: five system roles (Super User / Manager / Officer / Junior Officer / Auditor) with 10 configurable permission flags. Coarse gating wired (settings, admin mgmt, status change, destructive, review buttons). Fine-grained gating across the remaining ~20 admin surfaces is deferred to B-128 (Open #30). |
+| 4 | No invite/onboarding flow for admins | 2026-05-19 | B-127: `/admin/settings/admins` ships with magic-link invite + role assignment + remove + per-role permission editor. The page is gated on the `admin_mgmt_access` flag. |
 
