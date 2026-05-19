@@ -18,13 +18,15 @@ function getAnthropic(): Anthropic {
   return _anthropic;
 }
 
-const SYSTEM_PROMPT = `You are the in-portal assistant for the GWMS Mauritius client onboarding portal.
+function buildSystemPrompt(portalName: string): string {
+  return `You are the in-portal assistant for ${portalName}.
 Answer the user's question using ONLY the knowledge entries provided in the user message.
 If the knowledge entries don't contain the answer, say exactly:
 "I don't have that information yet — try asking your account manager."
 Do NOT invent procedures, paths, page names, or terms. Do not extrapolate.
 Keep answers short (≤4 sentences) unless the user explicitly asks for detail.
 Markdown is OK (bold, lists, inline links).`;
+}
 
 export interface LlmFallbackResult {
   answer: string;
@@ -34,6 +36,7 @@ export interface LlmFallbackResult {
 export async function answerWithLlm(
   question: string,
   candidates: KbEntry[],
+  portalName: string,
 ): Promise<LlmFallbackResult> {
   const anthropic = getAnthropic();
 
@@ -52,7 +55,7 @@ Question: ${question}`;
   const completion = await anthropic.messages.create({
     model: "claude-opus-4-6",
     max_tokens: 600,
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(portalName),
     messages: [{ role: "user", content: userMessage }],
   });
 

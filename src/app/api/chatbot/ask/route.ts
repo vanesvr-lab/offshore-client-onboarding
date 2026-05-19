@@ -5,6 +5,9 @@ import {
   type Audience,
 } from "@/lib/chatbot/search";
 import { answerWithLlm } from "@/lib/chatbot/llmFallback";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { DEFAULT_TENANT_ID } from "@/lib/tenant";
+import { getTenantBrand } from "@/lib/tenant-brand";
 
 // B-128 — Chatbot search endpoint. Public (no auth) because the client
 // widget calls it from the unauthenticated `ClientShell`; audience
@@ -101,7 +104,11 @@ export async function POST(request: Request) {
       } as LlmResponse);
     }
 
-    const llm = await answerWithLlm(question, candidates);
+    // B-129 — resolve tenant brand so the LLM system prompt names the
+    // current portal instead of a hardcoded "GWMS" reference. Route is
+    // public, so we read the default tenant via the admin client.
+    const brand = await getTenantBrand(createAdminClient(), DEFAULT_TENANT_ID);
+    const llm = await answerWithLlm(question, candidates, brand.portal_name);
     return NextResponse.json({
       mode: "llm",
       answer: llm.answer,

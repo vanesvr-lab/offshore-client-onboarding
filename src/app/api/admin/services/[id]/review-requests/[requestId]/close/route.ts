@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { getTenantBrand } from "@/lib/tenant-brand";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { hydrateReviewRequests } from "@/lib/review-requests/hydrate";
 import {
@@ -148,11 +149,13 @@ export async function POST(
     session.user.email ??
     "an admin";
 
+  const brand = await getTenantBrand(supabase, tenantId);
   const commRows: Record<string, unknown>[] = [];
   if (reason === "reviewer_marked") {
     const commRow = await sendReviewRequestClosedByReviewerEmail({
       supabase,
       tenantId,
+      brand,
       serviceId,
       serviceNumber: serviceRow?.service_number ?? null,
       requestId,
@@ -167,6 +170,7 @@ export async function POST(
     const rows = await sendReviewRequestClosedByRequesterEmails({
       supabase,
       tenantId,
+      brand,
       serviceId,
       serviceNumber: serviceRow?.service_number ?? null,
       requestId,

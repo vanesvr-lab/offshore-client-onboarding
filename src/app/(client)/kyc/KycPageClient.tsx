@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { CheckCircle, UserCheck } from "lucide-react";
+import { TENANT_BRAND_DEFAULTS } from "@/lib/tenant-brand";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -73,6 +75,8 @@ export function KycPageClient({
   isPrimary = true,
 }: KycPageClientProps) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const brand = session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS;
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(!!kycCompletedAt);
 
@@ -146,7 +150,7 @@ export function KycPageClient({
       <div className="max-w-2xl mx-auto text-center py-16 text-gray-400">
         <UserCheck className="h-12 w-12 mx-auto mb-4 opacity-30" />
         <p className="text-sm">No KYC records found.</p>
-        <p className="text-xs mt-1">Please contact GWMS to set up your KYC profile.</p>
+        <p className="text-xs mt-1">Please contact {brand.display_name} to set up your KYC profile.</p>
       </div>
     );
   }
@@ -215,7 +219,7 @@ export function KycPageClient({
           <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
           <div>
             <p className="text-sm font-medium text-green-800">KYC submitted for review</p>
-            <p className="text-xs text-green-600">GWMS will review and contact you if additional information is needed.</p>
+            <p className="text-xs text-green-600">{brand.display_name} will review and contact you if additional information is needed.</p>
           </div>
         </div>
       ) : (

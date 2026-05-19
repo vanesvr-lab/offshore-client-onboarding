@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { getTenantBrand, formatFooter } from "@/lib/tenant-brand";
 import { Resend } from "resend";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { logCommunication } from "@/lib/email/logCommunication";
@@ -19,6 +20,8 @@ export async function POST(
 
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
+  const brand = await getTenantBrand(supabase, tenantId);
+  const footerLine = formatFooter(brand) || brand.portal_name;
 
   const body = await request.json() as {
     service_id: string;
@@ -85,19 +88,19 @@ export async function POST(
 
   // Send email
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const senderName = session.user.name ?? "GWMS";
+  const senderName = session.user.name ?? brand.display_name;
   const emailSubject = `Document Update Required — ${docTypeName} for ${serviceName}`;
   const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 22px;">GWMS Client Portal</h1>
+          <h1 style="color: white; margin: 0; font-size: 22px;">${brand.portal_name}</h1>
           <p style="color: #90cdf4; margin: 6px 0 0; font-size: 13px;">KYC / AML Compliance Portal</p>
         </div>
         <div style="padding: 36px; background: #ffffff;">
           <p style="color: #1a365d; font-size: 16px; margin: 0 0 12px;">Dear ${profile.full_name ?? ""},</p>
           <p style="color: #4a5568; font-size: 14px; line-height: 1.6;">
             An update is required for your <strong>${docTypeName}</strong> submitted for the
-            <strong>${serviceName}</strong> application at GWMS.
+            <strong>${serviceName}</strong> application at ${brand.display_name}.
           </p>
           <p style="color: #4a5568; font-size: 14px; line-height: 1.6; margin-top: 16px;">
             <strong>Note from reviewer:</strong>
@@ -117,13 +120,13 @@ export async function POST(
           </p>
         </div>
         <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
-          GWMS Client Portal | Mauritius
+          ${footerLine}
         </div>
       </div>
     `;
 
   const { data: resendData, error: emailError } = await resend.emails.send({
-    from: `GWMS Client Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
     to: profile.email,
     subject: emailSubject,
     html: emailHtml,

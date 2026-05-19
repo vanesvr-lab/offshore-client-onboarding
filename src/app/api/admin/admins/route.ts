@@ -5,6 +5,7 @@ import { SignJWT } from "jose";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { getTenantBrand, formatFooter } from "@/lib/tenant-brand";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 // B-127 — Invite a new admin. Body: { name, email, role_slug }.
@@ -53,6 +54,8 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
+  const brand = await getTenantBrand(supabase, tenantId);
+  const footerLine = formatFooter(brand) || brand.portal_name;
 
   // Resolve role
   const { data: role, error: roleErr } = await supabase
@@ -149,16 +152,16 @@ export async function POST(request: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const inviteUrl = `${appUrl}/auth/set-password?token=${encodeURIComponent(token)}`;
 
-  const subject = "You've been invited to the GWMS admin portal";
+  const subject = `You've been invited to the ${brand.portal_name} admin portal`;
   const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 22px;">Mauritius Offshore Admin Portal</h1>
+          <h1 style="color: white; margin: 0; font-size: 22px;">${brand.portal_name}</h1>
         </div>
         <div style="padding: 36px; background: #ffffff;">
           <p style="color: #1a365d; font-size: 16px; margin: 0 0 12px;">Hi ${name},</p>
           <p style="color: #4a5568; font-size: 14px; line-height: 1.6;">
-            You've been invited to join the GWMS admin portal as <strong>${role.name}</strong>.
+            You've been invited to join the ${brand.portal_name} admin portal as <strong>${role.name}</strong>.
             Click the button below to set your password and sign in.
           </p>
           <div style="text-align: center; margin: 32px 0;">
@@ -173,13 +176,13 @@ export async function POST(request: Request) {
           </p>
         </div>
         <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
-          Mauritius Offshore Admin Portal
+          ${footerLine}
         </div>
       </div>
     `;
 
   const { error: emailErr } = await resend.emails.send({
-    from: `Mauritius Offshore Admin Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
     to: email,
     subject,
     html,

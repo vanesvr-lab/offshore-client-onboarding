@@ -4,6 +4,7 @@
 import { Resend } from "resend";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logCommunication } from "@/lib/email/logCommunication";
+import { formatFooter, type TenantBrand } from "@/lib/tenant-brand";
 import {
   SECTION_LABELS,
   PEOPLE_KYC_PROFILE_KEY,
@@ -23,8 +24,8 @@ export interface EmailSection {
   profile_id: string | null;
 }
 
-function fromHeader(): string {
-  return `GWMS Client Portal <${process.env.RESEND_FROM_EMAIL!}>`;
+function fromHeader(brand: TenantBrand): string {
+  return `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`;
 }
 
 function reviewLink(serviceId: string, requestId: string): string {
@@ -62,18 +63,19 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function envelope(inner: string): string {
+function envelope(inner: string, brand: TenantBrand): string {
+  const footerLine = formatFooter(brand) || brand.portal_name;
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: #1a365d; padding: 24px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 22px;">GWMS Client Portal</h1>
+        <h1 style="color: white; margin: 0; font-size: 22px;">${brand.portal_name}</h1>
         <p style="color: #90cdf4; margin: 6px 0 0; font-size: 13px;">Internal Review</p>
       </div>
       <div style="padding: 36px; background: #ffffff;">
         ${inner}
       </div>
       <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
-        GWMS Client Portal | Mauritius
+        ${footerLine}
       </div>
     </div>
   `;
@@ -94,6 +96,7 @@ function ctaButton(href: string, label: string): string {
 interface SendCreatedArgs {
   supabase: SupabaseClient;
   tenantId: string;
+  brand: TenantBrand;
   serviceId: string;
   serviceNumber: string | null;
   requesterId: string;
@@ -135,9 +138,9 @@ export async function sendReviewRequestCreatedEmails(
         Any reviewer marking this request as reviewed closes it for everyone.
       </p>
     `;
-    const html = envelope(inner);
+    const html = envelope(inner, args.brand);
     const { data: sendData, error: sendError } = await resend.emails.send({
-      from: fromHeader(),
+      from: fromHeader(args.brand),
       to: reviewer.email,
       subject,
       html,
@@ -165,6 +168,7 @@ export async function sendReviewRequestCreatedEmails(
 interface SendClosedByReviewerArgs {
   supabase: SupabaseClient;
   tenantId: string;
+  brand: TenantBrand;
   serviceId: string;
   serviceNumber: string | null;
   requestId: string;
@@ -191,9 +195,9 @@ export async function sendReviewRequestClosedByReviewerEmail(
     </p>
     ${ctaButton(link, "Open the service")}
   `;
-  const html = envelope(inner);
+  const html = envelope(inner, args.brand);
   const { data: sendData, error: sendError } = await resend.emails.send({
-    from: fromHeader(),
+    from: fromHeader(args.brand),
     to: args.requesterEmail,
     subject,
     html,
@@ -218,6 +222,7 @@ export async function sendReviewRequestClosedByReviewerEmail(
 interface SendClosedByRequesterArgs {
   supabase: SupabaseClient;
   tenantId: string;
+  brand: TenantBrand;
   serviceId: string;
   serviceNumber: string | null;
   requestId: string;
@@ -245,9 +250,9 @@ export async function sendReviewRequestClosedByRequesterEmails(
       </p>
       ${ctaButton(link, "Open the service")}
     `;
-    const html = envelope(inner);
+    const html = envelope(inner, args.brand);
     const { data: sendData, error: sendError } = await resend.emails.send({
-      from: fromHeader(),
+      from: fromHeader(args.brand),
       to: reviewer.email,
       subject,
       html,

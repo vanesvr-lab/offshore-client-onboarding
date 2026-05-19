@@ -3,6 +3,8 @@ import { Resend } from "resend";
 import { SignJWT } from "jose";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantId } from "@/lib/tenant";
+import { getTenantBrand, formatFooter } from "@/lib/tenant-brand";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 // B-127 — Resend the magic-link invite for an admin who hasn't set a
@@ -26,6 +28,9 @@ export async function POST(
 
   const { id: adminUserId } = await params;
   const supabase = createAdminClient();
+  const tenantId = getTenantId(session);
+  const brand = await getTenantBrand(supabase, tenantId);
+  const footerLine = formatFooter(brand) || brand.portal_name;
 
   const { data: row } = await supabase
     .from("admin_users")
@@ -61,16 +66,16 @@ export async function POST(
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const inviteUrl = `${appUrl}/auth/set-password?token=${encodeURIComponent(token)}`;
 
-  const subject = "Reminder: your GWMS admin invite";
+  const subject = `Reminder: your ${brand.portal_name} admin invite`;
   const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #1a365d; padding: 24px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 22px;">Mauritius Offshore Admin Portal</h1>
+          <h1 style="color: white; margin: 0; font-size: 22px;">${brand.portal_name}</h1>
         </div>
         <div style="padding: 36px; background: #ffffff;">
           <p style="color: #1a365d; font-size: 16px; margin: 0 0 12px;">Hi ${r.users.full_name || ""},</p>
           <p style="color: #4a5568; font-size: 14px; line-height: 1.6;">
-            Just a reminder — your invite to the GWMS admin portal as
+            Just a reminder — your invite to the ${brand.portal_name} admin portal as
             <strong>${r.admin_roles.name}</strong> is still pending.
             Use the button below to set your password.
           </p>
@@ -85,11 +90,14 @@ export async function POST(
             This link expires in 24 hours.
           </p>
         </div>
+        <div style="padding: 20px; background: #f7fafc; text-align: center; font-size: 12px; color: #718096;">
+          ${footerLine}
+        </div>
       </div>
     `;
 
   const { error: emailErr } = await resend.emails.send({
-    from: `Mauritius Offshore Admin Portal <${process.env.RESEND_FROM_EMAIL!}>`,
+    from: `${brand.portal_name} <${process.env.RESEND_FROM_EMAIL!}>`,
     to: r.users.email,
     subject,
     html,

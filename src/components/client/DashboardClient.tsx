@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getClientStatusLabel } from "@/lib/utils/clientLabels";
 import { getStatusBadgeClass } from "@/lib/services/statusChain";
+import { TENANT_BRAND_DEFAULTS } from "@/lib/tenant-brand";
 
 type ServiceSection = {
   label: string;
@@ -156,6 +158,8 @@ function ServiceCard({ svc }: { svc: ServiceCardRow }) {
 export function DashboardClient({ userName, firstName, services }: Props) {
   // Welcome banner uses first name when available; falls back to full name.
   const greetingName = firstName ?? userName;
+  const { data: session } = useSession();
+  const brand = session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-5">
@@ -166,7 +170,7 @@ export function DashboardClient({ userName, firstName, services }: Props) {
       <div className="rounded-xl border border-brand-navy/15 bg-brand-blue/5 px-5 py-4">
         <p className="text-sm text-brand-navy">
           <span className="font-semibold">Welcome {greetingName}.</span>{" "}
-          Thank you for choosing GWMS.
+          Thank you for choosing {brand.display_name}.
         </p>
       </div>
 

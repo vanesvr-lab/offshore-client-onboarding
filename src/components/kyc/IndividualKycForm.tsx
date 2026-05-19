@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, CheckCircle, AlertTriangle, Loader2, Save, Sparkles } from "lucide-react";
+import { TENANT_BRAND_DEFAULTS } from "@/lib/tenant-brand";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +69,8 @@ function SectionHeader({
 }
 
 function FieldRow({ children, prefilled, mandatory }: { children: React.ReactNode; prefilled?: boolean; mandatory?: boolean }) {
+  const { data: session } = useSession();
+  const brand = session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS;
   return (
     <div className="space-y-1.5 relative">
       {children}
@@ -76,7 +80,7 @@ function FieldRow({ children, prefilled, mandatory }: { children: React.ReactNod
         </div>
       )}
       {prefilled && (
-        <p className="text-[11px] text-brand-blue/70">ℹ️ Pre-filled by GWMS</p>
+        <p className="text-[11px] text-brand-blue/70">ℹ️ Pre-filled by {brand.display_name}</p>
       )}
     </div>
   );

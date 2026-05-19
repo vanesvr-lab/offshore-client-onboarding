@@ -5,20 +5,25 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { MessageCircle, X } from "lucide-react";
 import { ChatbotPanel } from "@/components/shared/ChatbotPanel";
 import { useChatbot } from "@/lib/chatbot/useChatbot";
+import { TENANT_BRAND_DEFAULTS } from "@/lib/tenant-brand";
 
 export function AdminAssistant() {
+  const { data: session } = useSession();
+  const brand = session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS;
   const [open, setOpen] = useState(false);
   const chat = useChatbot("admin");
+  const title = `${brand.display_name} Admin Assistant`;
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
       {open && (
         <div className="mb-3">
           <ChatbotPanel
-            title="GWMS Admin Assistant"
+            title={title}
             emptyState={
               <>
                 Ask how to do something in the admin portal.
@@ -37,7 +42,7 @@ export function AdminAssistant() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label={open ? "Close Admin Assistant" : "Open Admin Assistant"}
+        aria-label={open ? `Close ${title}` : `Open ${title}`}
         title={open ? undefined : "Need help? Ask the admin assistant"}
         className="h-14 w-14 rounded-full bg-brand-navy text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
       >
