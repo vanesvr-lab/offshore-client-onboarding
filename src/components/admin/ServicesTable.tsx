@@ -6,9 +6,17 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,8 +37,15 @@ export interface ServiceRow {
   primary_profile_name: string | null;
 }
 
+export interface AdminOption {
+  id: string;
+  name: string;
+}
+
 interface Props {
   services: ServiceRow[];
+  admins: AdminOption[];
+  currentUserId: string;
 }
 
 function relativeTime(iso: string): string {
@@ -46,12 +61,51 @@ function relativeTime(iso: string): string {
   return `${mo}mo ago`;
 }
 
-export function ServicesTable({ services }: Props) {
+export function ServicesTable({ services, admins, currentUserId }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+  const initialAssigned = searchParams.get("assigned");
+  const initialMine = searchParams.get("mine") === "1";
+
+  // "all" | "unassigned" | <admin user_id>
+  const [assignedFilter, setAssignedFilter] = useState<string>(
+    initialMine ? currentUserId : (initialAssigned ?? "all"),
+  );
+  const [mine, setMine] = useState(initialMine);
+
+  // Reflect filter state back into the URL so a copied link reproduces
+  // the view + reloads survive.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (mine) {
+      next.set("mine", "1");
+      next.delete("assigned");
+    } else if (assignedFilter !== "all") {
+      next.set("assigned", assignedFilter);
+      next.delete("mine");
+    } else {
+      next.delete("mine");
+      next.delete("assigned");
+    }
+    const qs = next.toString();
+    router.replace(qs ? `/admin/queue?${qs}` : "/admin/queue", {
+      scroll: false,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignedFilter, mine]);
+
   const filtered = useMemo(() => {
     return services
+      .filter((s) => {
+        if (mine) return s.assigned_admin_id === currentUserId;
+        if (assignedFilter === "all") return true;
+        if (assignedFilter === "unassigned") return s.assigned_admin_id == null;
+        return s.assigned_admin_id === assignedFilter;
+      })
       .filter((s) => {
         if (!search) return true;
         const q = search.toLowerCase();
@@ -66,7 +120,7 @@ export function ServicesTable({ services }: Props) {
         const tb = new Date(b.updated_at).getTime();
         return sortDir === "desc" ? tb - ta : ta - tb;
       });
-  }, [services, search, sortDir]);
+  }, [services, search, sortDir, assignedFilter, mine, currentUserId]);
 
   return (
     <div>
@@ -77,6 +131,46 @@ export function ServicesTable({ services }: Props) {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
         />
+
+        <Select
+          value={mine ? "__mine__" : assignedFilter}
+          onValueChange={(v) => {
+            if (!v) return;
+            if (v === "__mine__") {
+              setMine(true);
+            } else {
+              setMine(false);
+              setAssignedFilter(v);
+            }
+          }}
+        >
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Assigned Officer" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All officers</SelectItem>
+            <SelectItem value="unassigned">— Unassigned —</SelectItem>
+            {admins.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <button
+          type="button"
+          onClick={() => setMine((v) => !v)}
+          className={cn(
+            "text-xs px-3 py-1.5 rounded-full border transition-colors",
+            mine
+              ? "border-brand-navy bg-brand-navy text-white"
+              : "border-brand-navy/30 bg-brand-navy/5 text-brand-navy hover:bg-brand-navy/10",
+          )}
+        >
+          {mine ? "✓ Assigned to me" : "Assigned to me"}
+        </button>
+
         <span className="text-sm text-gray-500 ml-auto">
           {filtered.length} result{filtered.length !== 1 ? "s" : ""}
         </span>

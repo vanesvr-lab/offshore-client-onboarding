@@ -1,7 +1,12 @@
+import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { auth } from "@/lib/auth";
 import { getTenantId } from "@/lib/tenant";
-import { ServicesTable, type ServiceRow } from "@/components/admin/ServicesTable";
+import {
+  ServicesTable,
+  type ServiceRow,
+  type AdminOption,
+} from "@/components/admin/ServicesTable";
 import { CreateClientModal } from "@/components/admin/CreateClientModal";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +28,7 @@ interface RawServiceRow {
 
 export default async function QueuePage() {
   const session = await auth();
+  if (!session || session.user.role !== "admin") redirect("/login");
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
@@ -49,6 +55,19 @@ export default async function QueuePage() {
     .eq("is_deleted", false)
     .neq("status", "draft")
     .order("updated_at", { ascending: false });
+
+  const { data: rawAdmins } = await supabase
+    .from("admin_users")
+    .select("user_id, users!inner(full_name, email)");
+  const admins: AdminOption[] = (
+    (rawAdmins as unknown as Array<{
+      user_id: string;
+      users: { full_name: string | null; email: string | null } | null;
+    }> | null) ?? []
+  ).map((a) => ({
+    id: a.user_id,
+    name: a.users?.full_name ?? a.users?.email ?? "Unnamed admin",
+  }));
 
   const services: ServiceRow[] = (rawServices as unknown as RawServiceRow[] | null ?? []).map((s) => {
     const roles = s.profile_service_roles ?? [];
@@ -80,7 +99,11 @@ export default async function QueuePage() {
         </div>
         <CreateClientModal />
       </div>
-      <ServicesTable services={services} />
+      <ServicesTable
+        services={services}
+        admins={admins}
+        currentUserId={session.user.id as string}
+      />
     </div>
   );
 }

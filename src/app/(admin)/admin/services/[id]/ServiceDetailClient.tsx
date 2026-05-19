@@ -31,6 +31,7 @@ import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { ServiceAuditTrailCard } from "@/components/admin/ServiceAuditTrailCard";
+import { AssignedOfficerCard } from "@/components/admin/AssignedOfficerCard";
 import { AdminPermissionsProvider } from "@/lib/admin-permissions-context";
 import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker";
 import type { VerificationResult } from "@/types";
@@ -6293,6 +6294,19 @@ export function ServiceDetailClient({
           // Documents fall through to scroll-only by design — their
           // internal expansion lives inside each PersonCard / doc tab.
           onJumpToSection={handleStepClick}
+        />
+
+        {/* B-130 — Assigned Officer card. Inline select with PATCH on
+              change; disabled (with tooltip) for roles that lack
+              data_access=edit. */}
+        <AssignedOfficerCard
+          serviceId={service.id}
+          assignedAdminId={
+            (service as unknown as { assigned_admin_id?: string | null })
+              .assigned_admin_id ?? null
+          }
+          admins={adminUsers}
+          adminPermissions={adminPermissions}
         />
 
         {/* ── Status Change (B-093) — B-121 promoted to slot 3 of the

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { isValidServiceStatus, SERVICE_STATUS_ALL } from "@/lib/services/statusChain";
+import { hasDataAccess } from "@/lib/admin-permissions";
 
 /** PATCH /api/admin/services/[id] — Update service fields */
 export async function PATCH(
@@ -22,6 +23,9 @@ export async function PATCH(
     "status", "service_details",
     "loe_received", "loe_received_at",
     "invoice_sent_at", "payment_received_at",
+    // B-130 — service officer assignment. Has its own data_access=edit
+    // gate below; the audit trigger on services logs every change.
+    "assigned_admin_id",
   ];
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of ALLOWED) {
@@ -56,6 +60,40 @@ export async function PATCH(
 
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
+
+  // B-130 — assignment changes require data_access=edit (Super User /
+  // Manager / Officer by default; Junior Officer + Auditor are
+  // 'view'-only and can't assign). Validate the target user is an
+  // actual admin so a malformed body can't park a random user_id on
+  // the FK.
+  if ("assigned_admin_id" in patch) {
+    if (!hasDataAccess(session.user.adminPermissions, "edit")) {
+      return NextResponse.json(
+        { error: "Your role can't assign or reassign services." },
+        { status: 403 },
+      );
+    }
+    const next = patch.assigned_admin_id;
+    if (next !== null && typeof next !== "string") {
+      return NextResponse.json(
+        { error: "assigned_admin_id must be a user id or null" },
+        { status: 400 },
+      );
+    }
+    if (typeof next === "string") {
+      const { data: adminRow } = await supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", next)
+        .maybeSingle();
+      if (!adminRow) {
+        return NextResponse.json(
+          { error: "Target user is not an admin." },
+          { status: 400 },
+        );
+      }
+    }
+  }
 
   // B-093 — capture the previous status before applying the patch so we can
   // write a status_changed audit_log row when status moves. The right-rail
