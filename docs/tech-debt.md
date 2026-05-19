@@ -9,6 +9,20 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-137)
+
+- **Verification-context signature for precise drift detection.** *Severity: Low.*
+  *Spawned by:* [B-137](cli-brief-stale-context-banner-b137.md).
+  *What:* B-137 flags stale context when `client_profiles.updated_at > documents.verified_at` (or the kyc equivalent). This false-positives when admin edits a profile field that doesn't feed the AI prompt — phone, work_email, address_line_2 in a non-address-comparison context, etc. The fix is more precise: write a `verification_context_signature` text column on `documents` containing a hash of the fields actually used in the AI prompt at verification time; compare hashes instead of timestamps. Cleaner banner, but more code surface (the hash logic must stay in sync with the prompt). Estimate: ~3 hours.
+  *Why deferred:* False positives are cheap — admin clicks Re-run AI, the same verdict comes back. Revisit when the banner becomes noisy enough to ignore.
+
+- **List-view drift indicator.** *Severity: Low.*
+  *Spawned by:* [B-137](cli-brief-stale-context-banner-b137.md).
+  *What:* B-137's banner shows only when admin opens the per-document dialog. During bulk review (Documents tab on the service page) admin doesn't see which docs have stale verification until they click into each one. A small list-level chip / icon ("Stale" badge on the row) would surface drift earlier. Estimate: half-day.
+  *Why deferred:* Per-doc banner covers the high-leverage path (open the doc, see the drift, click Re-run AI). List-level surfacing is a nice-to-have once bulk review is the dominant workflow.
+
+---
+
 ## 2026-05-19 (B-136)
 
 - **Proof of Company Address structured extraction.** *Severity: Low.*

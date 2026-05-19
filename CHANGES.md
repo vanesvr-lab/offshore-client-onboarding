@@ -13,6 +13,30 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-137 — Stale-context banner on document detail (done 2026-05-19)
+
+AI verification runs at upload time against whatever profile/KYC data exists then. Later edits (name fills, address corrections, occupation updates) make the prior verification result stale — but the document UI kept showing the original verdict with no signal that the context had drifted. B-137 surfaces drift on the document detail dialog with a blue banner and a one-click Re-run AI button. This replaces the earlier-floated `ai_deferred = true` doc-type approach: deferring AI verification only handled the upload-before-save window, while timestamp-based drift detection covers every edit path (initial upload before form save, admin edits, rep KYC re-fill, etc.).
+
+### Batch 1 — Detection + banner (Claude Code)
+
+- `src/app/(admin)/admin/services/[id]/page.tsx` (`ServiceDoc` type) and `src/components/shared/DocumentDetailDialog.tsx` (`DocumentDetailDoc` type) both gained two new fields: `verified_at: string | null` and `context_is_stale?: boolean`.
+- `loadServiceDetail.ts`:
+  - Both documents queries (service-scoped + B-132 personal docs) now select `verified_at` and join `client_profiles(updated_at, client_profile_kyc(updated_at))`.
+  - After the query resolves, a post-fetch loop computes `context_is_stale = (profile.updated_at > verified_at) OR (kyc.updated_at > verified_at)` per doc, mutating the row in place. False on service-scoped docs (no `client_profile_id`) and on never-verified docs (no `verified_at`).
+- `DocumentDetailDialog`:
+  - Mirrors `doc.context_is_stale` into local state so a successful Re-run AI flips the banner off instantly without waiting for the parent's RSC refresh. `useEffect` re-syncs when the prop changes.
+  - New blue banner above the Status section, only when `contextIsStale === true`. Copy: "Profile info has changed — This document was verified before the profile was updated. Re-run AI to refresh."
+  - The banner's Re-run AI button fires `POST /api/documents/[id]/verify-with-context` (which refreshes `verified_at` server-side); on success the local state updates and the banner disappears.
+  - The existing ADMIN REVIEW "Re-run AI" button still fires the same path it always has (`/api/admin/documents/[id]/rerun-ai`) — the two share the same local state updates so the dialog stays consistent regardless of which button fired.
+
+### Batch 2 — Tech debt (Claude Code)
+
+- Two new Open entries in `docs/tech-debt.md` (and Tech Debt Tracker below):
+  - Verification-context signature for precise drift detection — `updated_at` comparison false-positives when admin edits a profile field that doesn't affect verification (e.g. phone). A hash of the fields actually used in the AI prompt would be more precise.
+  - List-view drift indicator — today the banner only shows once admin opens the per-document dialog. A list-level chip ("1 doc has stale verification") would surface drift earlier during bulk review.
+
+---
+
 ## B-136 — Structured address extraction (done 2026-05-19)
 
 Extends the AI extraction config for "Proof of Residential Address" from 3 fields to 9. Each structured component of the address now extracts to its own form field. Depends on B-135 (the persistence fix) for the end-to-end Re-apply flow; independent diff otherwise.
@@ -7021,6 +7045,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 38 | **Demo-document expected-value manifest** | Low | Each `docs/demo-documents/<persona>/<name>.pdf` should ship a sibling `manifest.json` listing the values the AI is expected to extract (`full_name`, `date_of_birth`, `passport_country`, etc.). With that in place we can write an end-to-end Playwright spec that uploads the doc, clicks Re-apply, then asserts the form / DB reflects the manifest — turning regressions in the prefill flow into a failing test instead of a manual demo-day catch. Estimate: ~30 minutes per doc + one spec. Spawned by [B-135](docs/cli-brief-kyc-prefill-bug-b135.md). |
 | 39 | **Proof of Company Address structured extraction** | Low | B-136 wired structured address extraction for "Proof of Residential Address". The corporate variant ("Proof of Company Address") still has empty `ai_extraction_fields` and emits no structured registered-office data. Schema differs slightly from residential (e.g. registered office vs. trading address, may include registered agent / company secretary lines), so this gets its own seed entry rather than reusing the residential set. Worth doing once substance § 3.3 office-premises review or incorporation-document validation needs structured data. Estimate: ~30 minutes. Spawned by [B-136](docs/cli-brief-structured-address-extraction-b136.md). |
 | 40 | **AI hint regression risk for ISO3 country codes** | Low | B-136's `address_country` extraction instructs the AI to return ISO 3166-1 alpha-3 codes via plain English in the ai_hint. If the model drifts and starts returning full country names occasionally, the CountrySelect's lenient matching papers it over for known names but won't help for less common countries. The proper defense is a regression test that uploads each demo document and asserts the expected structured fields are extracted (overlaps with tech debt #38). Estimate: ~2 hours once #38's manifest format is settled. Spawned by [B-136](docs/cli-brief-structured-address-extraction-b136.md). |
+| 41 | **Verification-context signature for precise drift detection** | Low | B-137 uses `profile.updated_at > doc.verified_at` (and the equivalent kyc comparison) to flag stale context. This false-positives when admin edits a profile field that doesn't actually feed the AI prompt (e.g. phone, work_email). False positives are cheap — admin clicks Re-run AI, same verdict comes back — but they're noise. Could add a `verification_context_signature` text column on `documents` (hash of the fields actually used in the AI prompt at verification time) and compare hashes instead of timestamps. Cleaner, but more code surface to keep the hash logic in sync with the prompt. Estimate: ~3 hours; defer until false positives become annoying. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
+| 42 | **List-view drift indicator** | Low | B-137's banner shows only when admin opens the per-document dialog. During bulk review (Document tab on the service page), admin doesn't see which docs have stale verification until they click into each one. A list-level chip ("1 doc has stale verification" / a small icon on the row) could surface drift earlier. Estimate: half-day; new brief if pitch demo highlights the gap. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
 
 ### Resolved
 
