@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Header } from "@/components/shared/Header";
 import { AdminAssistant } from "@/components/admin/AdminAssistant";
+import { getTenantId } from "@/lib/tenant";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -11,6 +12,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (session.user.role !== "admin") redirect("/dashboard");
 
   const supabase = createAdminClient();
+  const tenantId = getTenantId(session);
   const { data: user } = await supabase
     .from("users")
     .select("full_name, avatar_url")
@@ -19,6 +21,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const userName = user?.full_name ?? session.user.name;
   const avatarUrl = user?.avatar_url ?? null;
+
+  // B-130 — pending-review count drives the sidebar badge on /admin/reviews.
+  // Single indexed count via review_request_reviewers; sub-millisecond at
+  // typical volume.
+  const { count: pendingReviewCountRaw } = await supabase
+    .from("review_request_reviewers")
+    .select("request_id, review_requests!inner(status,tenant_id)", {
+      count: "exact",
+      head: true,
+    })
+    .eq("admin_id", session.user.id)
+    .eq("review_requests.status", "open")
+    .eq("review_requests.tenant_id", tenantId);
+  const pendingReviewCount = pendingReviewCountRaw ?? 0;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -29,6 +45,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           userName={userName}
           avatarUrl={avatarUrl}
           adminPermissions={session.user.adminPermissions ?? null}
+          pendingReviewCount={pendingReviewCount}
         />
         <main className="flex-1 min-w-0 overflow-auto">
           <div className="p-8">

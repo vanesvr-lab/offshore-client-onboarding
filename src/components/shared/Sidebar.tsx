@@ -21,6 +21,7 @@ import {
   UserCircle,
   FileStack,
   UserCog,
+  Inbox,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BrandMark } from "@/components/shared/BrandMark";
@@ -48,6 +49,10 @@ interface SidebarProps {
   /** B-127 — admin role permissions for nav-level gating. Client-side
    *  callers (ClientShell) leave this undefined and it's ignored. */
   adminPermissions?: SidebarPermissions | null;
+  /** B-130 — open peer/manager review requests where the current admin
+   *  is invited. Shown as a numeric badge next to the Reviews nav
+   *  item. Loaded server-side in the admin layout. */
+  pendingReviewCount?: number;
 }
 
 const ADMIN_NAV = [
@@ -55,6 +60,8 @@ const ADMIN_NAV = [
   { label: "Services", href: "/admin/services", icon: FileText, exact: true },
   { label: "Profiles", href: "/admin/profiles", icon: Users, exact: false },
   { label: "Queue", href: "/admin/queue", icon: ClipboardList, exact: false },
+  // B-130 — reviewer inbox; badge populated via SidebarProps.pendingReviewCount.
+  { label: "Reviews", href: "/admin/reviews", icon: Inbox, exact: false },
 ];
 
 // B-127 — `requireFlag` (when present) means the entry is hidden unless
@@ -86,11 +93,13 @@ function NavItem({
   label,
   icon: Icon,
   active,
+  badge,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
+  badge?: number;
 }) {
   return (
     <Link
@@ -108,7 +117,19 @@ function NavItem({
           active ? "text-brand-dark" : "text-brand-muted"
         )}
       />
-      {label}
+      <span className="flex-1">{label}</span>
+      {typeof badge === "number" && badge > 0 && (
+        <span
+          className={cn(
+            "min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold inline-flex items-center justify-center",
+            active
+              ? "bg-brand-dark text-brand-accent"
+              : "bg-brand-accent text-brand-dark",
+          )}
+        >
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -130,6 +151,7 @@ function SidebarContent({
   hasApplications,
   isPrimary = true,
   adminPermissions,
+  pendingReviewCount,
 }: Omit<SidebarProps, "mobileOpen" | "onMobileOpenChange">) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -201,6 +223,9 @@ function SidebarContent({
                 label={item.label}
                 icon={item.icon}
                 active={isActive(item.href, item.exact)}
+                badge={
+                  item.href === "/admin/reviews" ? pendingReviewCount : undefined
+                }
               />
             ))}
 
@@ -428,6 +453,7 @@ export function Sidebar({
   mobileOpen = false,
   onMobileOpenChange,
   adminPermissions,
+  pendingReviewCount,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -448,6 +474,7 @@ export function Sidebar({
           hasApplications={hasApplications}
           isPrimary={isPrimary}
           adminPermissions={adminPermissions}
+          pendingReviewCount={pendingReviewCount}
         />
       </aside>
 
@@ -464,6 +491,7 @@ export function Sidebar({
             hasApplications={hasApplications}
             isPrimary={isPrimary}
             adminPermissions={adminPermissions}
+            pendingReviewCount={pendingReviewCount}
           />
         </SheetContent>
       </Sheet>
