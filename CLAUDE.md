@@ -111,28 +111,98 @@ RESEND_FROM_EMAIL=support@elarix.io
 
 ## Data Model (important — read before touching queries)
 
+The data model is services-first. A `service` is the unit of work
+(one application/onboarding item per service); it has no `client_id`.
+People who participate in a service — Directors, Shareholders, UBOs —
+are `client_profiles` rows attached via `profile_service_roles`. Auth
+is Auth.js / NextAuth Credentials with bcrypt password_hash on `users`
+(primary) + `profiles` (legacy compat).
+
+### Modern model (use this for all new work)
+
 ```
-auth.users (Supabase Auth)
-    ↓ trigger auto-creates →
-profiles          -- personal info only (full_name, email, phone). NO role field.
-    ↓                              ↓
-admin_users       -- portal admins    client_users -- junction: user ↔ company (role: owner|member)
-                                           ↓
-                                      clients      -- the company entity (company_name)
-                                           ↓
-                                      applications -- client_id → clients.id (NOT profiles.id)
-                                           ↓
-                                      document_uploads
+users                  -- Auth.js identity. Columns: id, tenant_id, email,
+                          full_name, password_hash. UNIQUE(tenant_id, email).
+profiles               -- LEGACY mirror of users. set-password and the
+                          NextAuth provider write to both for backward
+                          compat. Not the source of truth.
+
+admin_users            -- portal admins. user_id → users(id) (FK repointed
+                          in 20260513014208). Admin role is derived from
+                          membership; there is NO `role` column on users.
+                          See "Admin role hierarchy" below for planned
+                          tiering.
+
+services               -- the unit of work. tenant_id + service_template_id +
+                          service_details (JSON) + status + service_number.
+                          NO client_id column.
+profile_service_roles  -- junction: client_profile ↔ service, with role
+                          ('director'|'shareholder'|'ubo'|'other'),
+                          can_manage, shareholding_percentage.
+client_profiles        -- KYC subjects. record_type='individual'|'organisation'
+                          (a corporate director is just a profile with
+                          record_type='organisation' and a full_name).
+                          One profile can have a `users` row paired by id
+                          so it can log in to the client portal.
+client_profile_kyc     -- the KYC questionnaire data per profile (one row).
+service_substance      -- FSC §3.2/§3.3/§3.4 substance assessment per
+                          service (UNIQUE on service_id).
+application_section_reviews  -- admin section-review state. Despite the
+                          column name, `application_id` now holds either
+                          legacy applications.id (1 stale row) or
+                          services.id going forward. See tech debt #26.
+audit_log              -- automatic via DB triggers on status/document/
+                          assessment changes; actor_role derived from
+                          admin_users / client_users membership.
 ```
 
-**Role is derived from table membership:**
-- User has row in `admin_users` → admin
-- User has row in `client_users` → client
-- Never read `profiles.role` — that column does not exist
+### Legacy tables (do NOT route new work through these)
 
-**Applications belong to the company, not the individual user.** All members of a company see all applications for that company via RLS.
+- `clients` — the old "company entity" with `company_name`. Still read
+  by some admin pages (queue, clients list, breadcrumbs) but no new
+  surface should write to it.
+- `client_users` — old junction (user ↔ clients with role
+  'owner'|'member'). Reads only.
+- `applications` — old per-service work-item table. Reads only; the
+  modern equivalent is `services`. The `application_section_reviews`
+  FK to `applications` was dropped in migration
+  `20260506155512_drop_section_reviews_application_fk.sql` so service
+  ids can be inserted.
 
-**`client_account_managers`** — tracks which admin is responsible for each client account over time. `ended_at IS NULL` = currently active. Assigning a new manager closes the previous row (sets `ended_at`) and inserts a new one.
+A full retirement of these three tables is tracked as separate tech
+debt (see "Legacy clients/applications cleanup" below).
+
+### How users come into the system
+
+The portal is **invite-only**:
+
+1. Admin creates a service in `/admin` from a template.
+2. Admin attaches `client_profiles` as Directors / Shareholders /
+   UBOs via the Add Director modal on the service detail page.
+3. Admin sends a KYC invite to a profile from the service detail
+   page. The recipient gets a magic-link email.
+4. Recipient clicks the link → lands on `/auth/set-password` →
+   bcrypt hash is written to both `users.password_hash` and
+   `profiles.password_hash` (for the legacy fallback during auth).
+5. They log in at `/login` and see the client portal.
+
+There is no self-registration. The legacy `/register` page + API
+were removed in B-126.
+
+### Role resolution
+
+- User has row in `admin_users` (FK → `users.id`) → admin.
+- User has a `client_profiles` row paired by id (or a legacy
+  `client_users` row) → client.
+- Never read `profiles.role` — that column does not exist.
+
+### Admin role hierarchy (planned, see tech debt #2)
+
+Today `admin_users` is flat — every admin can do everything. The
+planned hierarchy is Super User > Manager > Officer > Junior
+Officer. Keep features role-agnostic for now (don't hard-code
+"if super user…" branches), but design new admin surfaces so a
+later role-gating layer can be added without restructuring.
 
 ## Supabase Clients
 
@@ -241,19 +311,46 @@ npm run test:e2e:ui       # playwright UI mode
 - Run `npx playwright install --with-deps chromium` once locally before the first E2E run.
 - See `tests/README.md` for fixture conventions and adding new tests.
 
-## Admin Setup (one-time, already done for Jane Doe)
+## Admin Setup (manual until /admin/settings/admins ships — tech debt #4)
 
-1. Create user in Supabase Auth dashboard
-2. Run SQL:
-```sql
-UPDATE profiles SET full_name = 'Jane Doe' WHERE email = 'vanes.vr@gmail.com';
-INSERT INTO admin_users (user_id) SELECT id FROM profiles WHERE email = 'vanes.vr@gmail.com';
+Auth.js is the auth system (no Supabase Auth dashboard step). Admins
+need a row in `public.users` (with bcrypt password_hash) and a row in
+`public.admin_users` linking to that user. There's no UI yet, so:
+
+```bash
+# 1. Generate a bcrypt hash on the dev machine (cost 12):
+node -e "console.log(require('bcryptjs').hashSync('TempPass123!', 12))"
 ```
 
-## Known Future Migration
+```sql
+-- 2. In Supabase SQL editor:
+WITH new_user AS (
+  INSERT INTO public.users (email, full_name, password_hash)
+  VALUES ('newadmin@example.com', 'New Admin', '<paste-bcrypt-hash>')
+  RETURNING id
+)
+INSERT INTO public.admin_users (user_id) SELECT id FROM new_user;
+```
 
-**Auth: Supabase Auth must be replaced before production.**
-Supabase Auth was used for POC speed only. The production build should use self-hosted auth (Auth.js/NextAuth recommended). The data model, RLS policies, and all UI are unaffected — only `src/lib/supabase/client.ts`, `server.ts`, the login/register pages, and middleware need to change.
+They log in at `/login` with the temporary password → root redirect
+sees the `admin_users` row → lands on `/admin/dashboard`. There's no
+self-serve "change password" UI yet; admins set a new password via
+another bcrypt SQL update for now.
+
+## Known Future Migrations
+
+- **Legacy clients/applications cleanup** — `clients`, `client_users`,
+  and `applications` are no longer the source of truth for new work
+  but still get read by some admin pages and the AI verification
+  context lookup. Retire them by porting every remaining reader to
+  the services-first model, then dropping the tables in a single
+  migration (FK cascades + audit-log entity_type backfill required).
+  Tracked separately.
+
+- **Admin role hierarchy** — see tech debt #2. Today every admin can
+  do everything; the planned tiering is Super User > Manager >
+  Officer > Junior Officer with a `/admin/settings/admins` invite UI
+  (also tech debt #4).
 
 ## Code Quality Rules
 
