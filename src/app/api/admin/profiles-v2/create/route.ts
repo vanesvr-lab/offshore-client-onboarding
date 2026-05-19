@@ -3,6 +3,15 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { hasDataAccess } from "@/lib/admin-permissions";
+import {
+  sendFilingRepInvite,
+  upsertRepUser,
+} from "@/lib/filing-rep-invite";
+
+function isValidEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -17,10 +26,36 @@ export async function POST(request: Request) {
     record_type?: "individual" | "organisation";
     is_representative?: boolean;
     due_diligence_level?: "sdd" | "cdd" | "edd";
+    filing_rep_name?: string | null;
+    filing_rep_email?: string | null;
   };
 
   if (!body.full_name?.trim()) {
     return NextResponse.json({ error: "Full name is required" }, { status: 400 });
+  }
+
+  // B-131 — both filing_rep_* fields together or neither, matching the
+  // CHECK constraint on client_profiles. Permission to set the rep is
+  // gated on data_access=edit (Junior Officer + Auditor can't).
+  const repName = body.filing_rep_name?.trim() || null;
+  const repEmail = body.filing_rep_email?.trim().toLowerCase() || null;
+  if ((repName && !repEmail) || (!repName && repEmail)) {
+    return NextResponse.json(
+      { error: "Filing rep name and email must be set together" },
+      { status: 400 },
+    );
+  }
+  if (repEmail && !isValidEmail(repEmail)) {
+    return NextResponse.json(
+      { error: "Filing rep email is not a valid email address" },
+      { status: 400 },
+    );
+  }
+  if (repEmail && !hasDataAccess(session.user.adminPermissions, "edit")) {
+    return NextResponse.json(
+      { error: "Your role can't assign a filing representative." },
+      { status: 403 },
+    );
   }
 
   const supabase = createAdminClient();
@@ -53,6 +88,8 @@ export async function POST(request: Request) {
       record_type: body.record_type ?? "individual",
       is_representative: body.is_representative ?? false,
       due_diligence_level: body.due_diligence_level ?? "cdd",
+      filing_rep_name: repName,
+      filing_rep_email: repEmail,
     })
     .select("id")
     .single();
@@ -100,8 +137,33 @@ export async function POST(request: Request) {
       full_name: body.full_name.trim(),
       record_type: body.record_type ?? "individual",
       is_representative: body.is_representative ?? false,
+      filing_rep_email: repEmail,
     },
   });
+
+  // B-131 — invite the rep if one was attached. Best-effort: if the
+  // invite send fails we still return success for the profile create
+  // and log a console warning; the admin can re-trigger via PATCH.
+  if (repEmail && repName) {
+    try {
+      const repUserId = await upsertRepUser(
+        supabase,
+        tenantId,
+        repEmail,
+        repName,
+      );
+      await sendFilingRepInvite({
+        supabase,
+        userId: repUserId,
+        email: repEmail,
+        repName,
+        directorName: body.full_name.trim(),
+        tenantId,
+      });
+    } catch (err) {
+      console.error("[profiles-v2/create] filing rep invite failed", err);
+    }
+  }
 
   return NextResponse.json({ id: profile.id });
 }

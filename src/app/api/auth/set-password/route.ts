@@ -24,7 +24,16 @@ export async function POST(request: Request) {
   // password write; the recipient's role is determined by their
   // membership in `admin_users` (no client_profiles row), so the
   // post-set-password redirect lands them on the admin portal.
-  const validPurposes = ["invite", "profile_invite", "admin_invite"];
+  // B-131 — filing_rep_invite is a fourth valid purpose. Reps don't
+  // need a client_profiles row of their own; their access to a
+  // director's KYC long form is driven by the
+  // filing_rep_email-on-client_profiles match at request time.
+  const validPurposes = [
+    "invite",
+    "profile_invite",
+    "admin_invite",
+    "filing_rep_invite",
+  ];
   if (!validPurposes.includes(payload.purpose ?? "") || !payload.sub || !payload.email) {
     return NextResponse.json({ error: "Invalid token" }, { status: 400 });
   }

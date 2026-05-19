@@ -3,6 +3,15 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
+import { hasDataAccess } from "@/lib/admin-permissions";
+import {
+  sendFilingRepInvite,
+  upsertRepUser,
+} from "@/lib/filing-rep-invite";
+
+function isValidEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
 
 /** POST /api/admin/services/[id]/roles — Link an existing profile or create a new one */
 export async function POST(
@@ -24,6 +33,13 @@ export async function POST(
     full_name?: string;
     email?: string | null;
     record_type?: "individual" | "organisation";
+    // B-131 — when creating a new profile inline, parity with
+    // CreateProfileDialog: is_representative, due_diligence_level,
+    // and the optional filing rep.
+    is_representative?: boolean;
+    due_diligence_level?: "sdd" | "cdd" | "edd";
+    filing_rep_name?: string | null;
+    filing_rep_email?: string | null;
   };
 
   if (!body.role) {
@@ -31,6 +47,33 @@ export async function POST(
   }
   if (!body.client_profile_id && !body.full_name) {
     return NextResponse.json({ error: "client_profile_id or full_name is required" }, { status: 400 });
+  }
+
+  // B-131 — validate + permission-gate filing rep fields when supplied
+  // inline. (Same rules as the create-profile route.) Only meaningful
+  // when also creating a new profile inline; if client_profile_id is
+  // supplied, the rep is set via the dedicated profiles PATCH route.
+  const repName = body.filing_rep_name?.trim() || null;
+  const repEmail = body.filing_rep_email?.trim().toLowerCase() || null;
+  if (!body.client_profile_id) {
+    if ((repName && !repEmail) || (!repName && repEmail)) {
+      return NextResponse.json(
+        { error: "Filing rep name and email must be set together" },
+        { status: 400 },
+      );
+    }
+    if (repEmail && !isValidEmail(repEmail)) {
+      return NextResponse.json(
+        { error: "Filing rep email is not a valid email address" },
+        { status: 400 },
+      );
+    }
+    if (repEmail && !hasDataAccess(session.user.adminPermissions, "edit")) {
+      return NextResponse.json(
+        { error: "Your role can't assign a filing representative." },
+        { status: 403 },
+      );
+    }
   }
 
   const supabase = createAdminClient();
@@ -76,10 +119,12 @@ export async function POST(
           tenant_id: tenantId,
           user_id: null,
           record_type: body.record_type ?? "individual",
-          is_representative: false,
+          is_representative: body.is_representative ?? false,
           full_name: body.full_name,
           email: body.email ?? null,
-          due_diligence_level: "sdd",
+          due_diligence_level: body.due_diligence_level ?? "cdd",
+          filing_rep_name: repName,
+          filing_rep_email: repEmail,
         })
         .select("id")
         .single();
@@ -112,6 +157,32 @@ export async function POST(
           adverse_media_checked: false,
           pep_verified: false,
         });
+
+        // B-131 — best-effort filing rep invite when the inline-created
+        // profile has a rep attached.
+        if (repEmail && repName) {
+          try {
+            const repUserId = await upsertRepUser(
+              supabase,
+              tenantId,
+              repEmail,
+              repName,
+            );
+            await sendFilingRepInvite({
+              supabase,
+              userId: repUserId,
+              email: repEmail,
+              repName,
+              directorName: body.full_name ?? "",
+              tenantId,
+            });
+          } catch (err) {
+            console.error(
+              "[services/roles] filing rep invite failed",
+              err,
+            );
+          }
+        }
       }
     }
   }
