@@ -83,6 +83,13 @@ interface Props {
   /** Optional jump target — when the URL has ?reviewRequest=<id> the
    *  parent can highlight that row. */
   highlightRequestId?: string | null;
+  /** Optional handler invoked when the reviewer clicks a section inside
+   *  the detail modal. Receives the bare anchor id (e.g. "step-company-setup")
+   *  and is expected to (a) expand that section if collapsed and
+   *  (b) scroll it into view. The card calls `onClose()` on the modal
+   *  first, then delegates here after a short delay so Radix releases
+   *  the body scroll lock. */
+  onJumpToSection?: (anchorId: string) => void;
 }
 
 function sectionLabel(
@@ -123,6 +130,7 @@ export function ReviewRequestsCard({
   onOpenModal,
   onClosed,
   highlightRequestId,
+  onJumpToSection,
 }: Props) {
   const openRequests = useMemo(
     () => requests.filter((r) => r.status === "open"),
@@ -319,6 +327,7 @@ export function ReviewRequestsCard({
           onForceClose={() =>
             void closeRequest(detailRequest, "requester_force_closed")
           }
+          onJumpToSection={onJumpToSection}
         />
       )}
 
@@ -384,6 +393,7 @@ function ReviewRequestDetailDialog({
   closing,
   onMarkReviewed,
   onForceClose,
+  onJumpToSection,
 }: {
   open: boolean;
   request: HydratedReviewRequest;
@@ -393,6 +403,7 @@ function ReviewRequestDetailDialog({
   closing: boolean;
   onMarkReviewed: () => void;
   onForceClose: () => void;
+  onJumpToSection?: (anchorId: string) => void;
 }) {
   const isRequester = request.requester_id === currentUserId;
   const isInvitedReviewer = request.reviewers.some(
@@ -483,15 +494,22 @@ function ReviewRequestDetailDialog({
                     type="button"
                     onClick={() => {
                       onClose();
-                      // Defer scroll until the dialog has begun its close
-                      // animation — Radix locks body scroll while the
-                      // dialog is open, so scrollIntoView on the same
-                      // tick is a no-op.
+                      // Defer until the dialog has begun its close
+                      // animation — Radix locks body scroll while open,
+                      // so any open/scroll on the same tick is a no-op.
                       const targetId = href.replace(/^#/, "");
                       setTimeout(() => {
-                        document
-                          .getElementById(targetId)
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        if (onJumpToSection) {
+                          // Parent handler: expands the accordion section
+                          // and scrolls in one go.
+                          onJumpToSection(targetId);
+                        } else {
+                          // Fallback: scroll-only (used by surfaces that
+                          // don't supply an expand handler).
+                          document
+                            .getElementById(targetId)
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
                       }, 100);
                     }}
                     className="text-left text-brand-navy hover:text-brand-blue underline underline-offset-2 hover:no-underline"

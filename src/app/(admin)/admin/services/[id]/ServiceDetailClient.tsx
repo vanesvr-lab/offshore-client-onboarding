@@ -6276,6 +6276,12 @@ export function ServiceDetailClient({
             router.refresh();
           }}
           highlightRequestId={highlightReviewRequestId}
+          // B-125 followup — clicking a section inside the detail
+          // modal now expands the matching accordion (Company Setup /
+          // Financial / Banking) before scrolling. People & KYC +
+          // Documents fall through to scroll-only by design — their
+          // internal expansion lives inside each PersonCard / doc tab.
+          onJumpToSection={handleStepClick}
         />
 
         {/* ── Status Change (B-093) — B-121 promoted to slot 3 of the

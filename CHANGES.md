@@ -15,6 +15,12 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (done 2026-05-18)
 
+### 2026-05-18 — Followup 2: section click in review-request modal now expands the accordion (Claude Desktop)
+
+The previous followup made the section bullets clickable but only scrolled — if the target accordion section was collapsed, the reviewer landed on the section header and still had to click to expand. Wired the click into the parent's existing `handleStepClick(stepId)` in `ServiceDetailClient` (the same handler the right-rail step pills use). The card now accepts an `onJumpToSection?: (anchorId: string) => void` prop and, on section-bullet click, closes the modal then delegates to that handler after a 100ms delay (Radix scroll-lock release). The parent expands the target accordion (`company_setup` / `financial` / `banking`) and scrolls in one go via `requestAnimationFrame`. People & KYC + Documents fall through to scroll-only by design — their internal expansion lives inside each PersonCard / doc tab, not in the page-level accordion state.
+
+Files touched: `src/components/admin/ReviewRequestsCard.tsx`, `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`. Build clean.
+
 ### 2026-05-18 — Followup: section bullets in review-request modal now jump to the section (Claude Desktop)
 
 The eye-button detail dialog inside `ReviewRequestsCard` listed `request.sections` as plain text bullets, so a reviewer who opened a request had to mentally translate "Company Setup" into a manual scroll. The reviewer banner already had clickable anchor chips via a local `sectionAnchorHref` helper — same plumbing, different rendering.
