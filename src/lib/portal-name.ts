@@ -3,7 +3,7 @@
 // Non-admin viewers see: "Mauritius Offshore - Client Portal"
 // Admin viewers see:     "Mauritius Offshore - Admin Portal"
 //
-// Auth pages (login / register / set-password) render the brand-only
+// Auth pages (login / set-password) render the brand-only
 // string "Mauritius Offshore" because the role isn't known pre-auth.
 // Email headers stay on the legacy "Mauritius Offshore Client Portal"
 // wording on purpose (emails only go to clients).
