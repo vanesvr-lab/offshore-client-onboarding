@@ -13,6 +13,18 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-127 — Admin role hierarchy + /admin/settings/admins (in progress 2026-05-19)
+
+### 2026-05-19 — Batch 1: admin_roles schema + seed + backfill (Claude Code)
+
+Five-tier admin hierarchy landed at the schema layer. `admin_roles` table stores 10 permission flags per role (9 booleans + a tri-state `data_access`); five system rows seeded with the Vanessa-approved defaults — Super User (everything on), Manager (no settings/admin-mgmt/destructive), Officer (no approve_status_change / destructive / export / review), Junior Officer (view-only + audit-log read), Auditor (view-only + audit-log read + export, no change/communicate/review). `admin_users.role_id` added (nullable for now) with every existing admin backfilled to Super User so no one loses access. RLS admin-only via `is_admin()`. An `AFTER UPDATE` trigger on `admin_roles` writes one `audit_log` row per permission edit so Vanessa's tweaks in the UI are fully traceable.
+
+Migration: `supabase/migrations/20260519021442_admin_role_hierarchy.sql`. Pushed via `npm run db:push`; `npm run db:status` shows Local + Remote paired at `20260519021442`. The seed uses `ON CONFLICT (tenant_id, slug) DO NOTHING` so re-running the migration won't reset Vanessa's later permission edits. Trigger creation is guarded with `DROP TRIGGER IF EXISTS` before `CREATE TRIGGER` so the migration is replay-safe.
+
+Batches 2-6 (permission resolution on the NextAuth session, the `/admin/settings/admins` page + invite API, coarse gating across the five highest-leverage surfaces, self-protection on the admin APIs, CHANGES.md / tech-debt rollup) follow in this brief.
+
+---
+
 ## B-126 — Cleanup: remove /register + rewrite CLAUDE.md data model (done 2026-05-18)
 
 ### 2026-05-18 — Batch 1: /register page + API + login link deleted (Claude Code)
