@@ -9,6 +9,20 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-134)
+
+- **Audit auto-created rep profiles from B-134 backfill.** *Severity: Low.*
+  *Spawned by:* [B-134](cli-brief-unify-representatives-b134.md).
+  *What:* The B-134 migration backfilled `filing_rep_profile_id` from B-131's text columns. For each director, if no rep profile already existed for the rep's email it created one with minimal data: full_name from B-131's `filing_rep_name`, email, `record_type='individual'`, `is_representative=true`, `due_diligence_level='cdd'`. Other rep-profile fields (phone, address, EDD level if appropriate) were defaulted. Vanessa should audit `SELECT * FROM client_profiles WHERE is_representative = true AND created_at >= '<B-134 deploy date>'` and fill in the missing fields where relevant. Estimate: ~30 min.
+  *Why deferred:* The auto-created profiles work functionally (login + filing) with just email + full_name; the rest is polish for the admin's view.
+
+- **Per-rep "directors I file for" admin view.** *Severity: Low.*
+  *Spawned by:* [B-134](cli-brief-unify-representatives-b134.md).
+  *What:* Today admins see who each director's rep is via the per-director card on the service detail page, but there's no admin-side view showing "all directors using Rep X". Useful for compliance review of a single rep's portfolio (a corporate secretary or lawyer who files for 10 directors across 3 services). Two options: (a) add a column / drill-in on `/admin/profiles` for rep rows that lists their delegated directors, or (b) add a tab on the rep's profile detail page. Estimate: half-day; new brief if compliance pressure justifies it.
+  *Why deferred:* The pitch demo doesn't need it; admins can grep audit_log + `client_profiles` directly in the rare case they need this view today.
+
+---
+
 ## 2026-05-19 (B-133)
 
 - **Hide-vs-cascade convention for `service_profile_removals`.** *Severity: Low.*

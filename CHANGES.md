@@ -13,6 +13,58 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-134 — Unify representative model + dropdown pickers + KYC email multi-select (done 2026-05-19)
+
+B-131 introduced "Filed by a representative" as a separate concept from the existing `is_representative` flag, producing two parallel ways to capture reps (a real `client_profiles` row vs. two free-text columns on the director's row). B-134 collapses to ONE model: reps are first-class `client_profiles` rows (`is_representative = true`); directors point at them via `client_profiles.filing_rep_profile_id` (FK). The B-131 text columns are migrated and dropped.
+
+### Batch 1 — Schema (Claude Code)
+
+- Migration `20260519180119_unify_filing_rep_model.sql`:
+  - `ALTER client_profiles ADD COLUMN filing_rep_profile_id uuid REFERENCES client_profiles(id)`.
+  - Partial index `client_profiles_filing_rep_idx` on the FK WHERE NOT NULL.
+  - Backfill loop: for each director with `filing_rep_email` set, either reuse the existing rep profile (matched by tenant + lower(email) + `is_representative = true`) or create a new one, then write the FK.
+  - `audit_log` summary row (`actor_role='system'`, action `filing_rep_model_unified_backfill`, `new_value.linked_count`).
+  - Drop B-131's CHECK constraint (`client_profiles_filing_rep_consistency`) + text columns (`filing_rep_name`, `filing_rep_email`) + lookup index (`client_profiles_filing_rep_email_idx`).
+- `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote paired.
+
+### Batch 2 — Backend routes (Claude Code)
+
+- `src/lib/filing-rep-invite.ts`: `sendFilingRepInvite` now takes `{ supabase, repProfileId, directorName, tenantId }`. Internally resolves rep email + full_name from `client_profiles`, then upserts the `users` row + sends the magic-link.
+- `POST /api/admin/profiles-v2/create`, `PATCH /api/admin/profiles-v2/[id]`, `POST /api/admin/services/[id]/roles`: body schemas drop `filing_rep_name` / `filing_rep_email` and accept `filing_rep_profile_id: string | null`. Each validates the target is `is_representative = true` in the same tenant. `data_access = 'edit'` still gates the rep mutation.
+- `POST /api/profiles/kyc/save`: authorization extension now resolves the rep via the FK + joined `client_profiles.email` (with `is_representative = true` guard) instead of the old text-email match. Same audit-log story (`profile_kyc_saved_by_rep`).
+- `/app/(client)/filings/[profileId]/page.tsx`: same FK-based auth check.
+- `/app/(client)/dashboard/page.tsx`: "Filings on behalf of" now (1) finds the rep profile in this tenant by `ilike("email", sessionEmail) AND is_representative = true`, then (2) lists every `client_profiles` row with `filing_rep_profile_id = rep.id`.
+
+### Batch 3 — AddDirector cleanup + rep picker (Claude Code)
+
+- `AddProfileDialog` (in `ServiceDetailClient.tsx`): the redundant "This is a representative (no KYC required)" checkbox is gone (AddDirector adds directors, not reps). "Filed by a representative" still toggles; when checked it now reveals a `<select>` of existing reps in the tenant + a "+ Add new representative" link.
+- `CreateProfileDialog`: new `forceIsRepresentative?: boolean` prop. When true, hides the rep toggle, forces `is_representative: true` on submit, and the title reads "New Representative". Also dropped the B-131 text-input affordance entirely — reps are now attached after profile create.
+
+### Batch 4 — Per-director KYC card affordance (Claude Code)
+
+- `loadServiceDetail.ts`: roles select now includes `filing_rep_profile_id` + a joined `filing_rep:filing_rep_profile_id(id, full_name, email, is_representative)` alias so the per-director banner can render the rep name directly.
+- `types/index.ts`: `ClientProfile` extended with `filing_rep_profile_id` + optional `filing_rep` joined object. `RoleWithProfile` (the local SDC narrow type) mirrors the new fields so per-director access type-checks.
+- `PersonCard`:
+  - Banner email input is now wrapped in a hover-tinted container with a Pencil icon + tooltip "Edit director's email" (Vanessa flagged that the field looked read-only).
+  - New inline affordance next to the email: "+ Add representative for KYC" when no rep is set; "Filed by [name] [change]" when set. Both open a rep picker dialog with the same dropdown + inline-create UX from Batch 3.
+  - Save in the picker PATCHes `/api/admin/profiles-v2/[id]` with `filing_rep_profile_id` (or null to clear); calls `onRefresh()` on success.
+
+### Batch 5 — Request KYC multi-select (Claude Code)
+
+- `components/shared/InviteKycDialog.tsx`: replaced the single email input with a multi-select checkbox list. Each row shows the email on top + "Name · Role" beneath. Caller passes `recipients` + `defaultSelectedEmails`; the dialog returns an array of `service_communications` rows on success.
+- `POST /api/services/[id]/persons/[roleId]/send-invite`: body now accepts `recipientEmails: string[]` (legacy single `email` still accepted for direct-API callers). Loops the array: one `verification_codes` row + one Resend send + one `service_communications` row per recipient. Single rate-limit window tick per call (matches today's "I clicked Send" semantics).
+- `PersonCard` parent: builds the recipient list (director own + filing rep, when set) and defaults the rep when present, else the director's own email.
+
+### Batch 6 — CHANGES.md + tech debt (Claude Code)
+
+- Two new Open entries appended to `docs/tech-debt.md` (and Tech Debt Tracker below):
+  - Backfill audit for auto-created rep profiles — the B-134 migration only had B-131's `filing_rep_name` + `filing_rep_email` to work with; other rep-profile fields (phone, DD level beyond default `cdd`, address) were defaulted. Vanessa should audit `client_profiles WHERE is_representative = true AND created_at >= '<deploy date>'`.
+  - Per-rep "directors I file for" admin view — useful for compliance review of a single rep's portfolio.
+- Existing "Multiple filing reps per director" entry (B-131 spawn) stays open — same upgrade path still applies, just via a junction on the new FK.
+- B-131's "Filing rep field clarity" feedback is addressed by Batch 4's pencil icon + hover tint.
+
+---
+
 ## B-133 — Respect service_profile_removals (done 2026-05-19)
 
 "Remove from service" already upserts `service_profile_removals(service_id, client_profile_id)` server-side (leaving the underlying `profile_service_roles` row intact so future re-add restores roles cleanly per B-101 Batch 3's intent), but two display surfaces still rendered the removed profile.
@@ -6917,6 +6969,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 32 | **Chatbot "Was this helpful?" feedback capture** | Low | No thumbs-up / thumbs-down or any feedback signal on chatbot answers today. To drive content tuning we want at minimum a per-answer 👍/👎 with optional free-text comment, written to a new `chatbot_feedback` table keyed on `(question_text, answer_text, mode, audience, voted_at)`. New brief once the KB content needs refining beyond Vanessa's manual review. Spawned by [B-128](docs/cli-brief-chatbot-wire-up-b128.md). |
 | 33 | **Hide-vs-cascade convention for `service_profile_removals`** | Low | B-133 makes the queue + service detail HIDE per-service-removed profiles, but `profile_service_roles` rows stay intact so re-add via AddDirector restores cleanly. Any future caller that reads `profile_service_roles` directly outside `loadServiceDetail.ts` (a report, an external integration, ad-hoc SQL) will surface the removed profile unless it joins `service_profile_removals` too. Mitigations: introduce an `active_profile_service_roles` view that pre-joins the exclusion, or document the invariant loudly in the schema. Spawned by [B-133](docs/cli-brief-respect-profile-removals-b133.md). |
 | 34 | **Removals-filter audit for other admin surfaces** | Low | B-133 fixed the queue + service detail (and the four knock-on consumers: People & KYC, KYC progress %, B-132 document inheritance, peer review picker, section review aggregates). Remaining admin surfaces weren't audited — audit-log readouts, Communications dialog recipient picker, `/admin/services` (services list), `/admin/profiles/[id]`, etc. If a removed profile pops up anywhere, fix in a small follow-up. Spawned by [B-133](docs/cli-brief-respect-profile-removals-b133.md). |
+| 35 | **Audit auto-created rep profiles from B-134 backfill** | Low | The B-134 migration backfilled `filing_rep_profile_id` from B-131's `filing_rep_name` + `filing_rep_email` columns. For each director, if no rep profile already existed for that email it created one with minimal data (full_name from `filing_rep_name`, email, `record_type='individual'`, `is_representative=true`, `due_diligence_level='cdd'`). Vanessa should audit `client_profiles WHERE is_representative = true AND created_at >= '<B-134 deploy date>'` and fill in missing fields (phone, address, real DD level). ~30 min audit task. Spawned by [B-134](docs/cli-brief-unify-representatives-b134.md). |
+| 36 | **Per-rep "directors I file for" admin view** | Low | Today admins see who each director's rep is via the per-director card on the service detail page, but there's no admin-side view showing "all directors using Rep X". Useful for compliance review of a single rep's portfolio (a corporate secretary or lawyer who files for 10 directors across 3 services). Add a column to `/admin/profiles` reps-only view or a new tab on rep profile detail. Estimate: half-day; new brief. Spawned by [B-134](docs/cli-brief-unify-representatives-b134.md). |
 
 ### Resolved
 
