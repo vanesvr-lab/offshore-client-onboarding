@@ -9,6 +9,20 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-135)
+
+- **KYC prefill mapping audit.** *Severity: Low.*
+  *Spawned by:* [B-135](cli-brief-kyc-prefill-bug-b135.md).
+  *What:* B-135's fix adds an implicit fallback in `computePrefillableFields` — if a doc_type's `ai_extraction_fields[].prefill_field` is missing/null and the row's `key` already names a `KYC_PREFILLABLE_FIELDS` column, the key is used as the prefill target. This unblocked the demo passport (the seeded "Certified Passport Copy" doc_type had `prefill_field: null` for `date_of_birth` + `passport_country`). The fallback is convenient, but if a future doc_type wants an extraction key that *coincidentally* matches a KYC column to NOT prefill, the fallback would surprise. Audit pass: run `seed-ai-defaults` against prod to refresh explicit mappings, then for any `ai_extraction_fields` row whose `key` is in `KYC_PREFILLABLE_FIELDS` and whose `prefill_field` should remain null, rename the key. Estimate: ~30 minutes.
+  *Why deferred:* The implicit fallback is conservative (only triggers when `prefill_field` is absent) and matches the user's reasonable expectation that an extracted field named `date_of_birth` fills the `date_of_birth` form field. No production doc_type today has a conflicting `key`-without-prefill case.
+
+- **Demo-document expected-value manifest.** *Severity: Low.*
+  *Spawned by:* [B-135](cli-brief-kyc-prefill-bug-b135.md).
+  *What:* Each `docs/demo-documents/<persona>/<name>.pdf` should ship a sibling `manifest.json` listing the values the AI is expected to extract (`full_name`, `date_of_birth`, `passport_country`, etc.). With manifests in place a Playwright spec can upload each demo doc, click Re-apply, then assert the form + DB reflect the manifest — converting regressions in the prefill flow into a failing test instead of a demo-day surprise. Estimate: ~30 minutes per doc + one shared spec.
+  *Why deferred:* The B-135 fix is verified manually; a full automated end-to-end is nice-to-have until the demo cohort grows.
+
+---
+
 ## 2026-05-19 (B-134)
 
 - **Audit auto-created rep profiles from B-134 backfill.** *Severity: Low.*

@@ -13,6 +13,31 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-135 — KYC prefill bug fix (done 2026-05-19)
+
+**Symptom.** Demo passport upload for Tony Stark: the AI extracted all six identity fields correctly (full_name, date_of_birth, nationality, passport_country, passport_number, passport_expiry) and the document-detail "EXTRACTED FIELDS" panel displayed all six, but after clicking "Fill from uploaded document" only four persisted to `client_profile_kyc`. Direct DB inspection confirmed `date_of_birth` and `passport_country` stayed NULL.
+
+**Root cause (two compounding bugs).**
+
+1. **Stale `ai_extraction_fields` config in document_types.** `computePrefillableFields` filtered out any extraction row whose explicit `prefill_field` was missing/null, even when the extraction key (`f.key`) itself already named a whitelisted KYC column. The "Certified Passport Copy" doc_type in the demo DB was seeded before the B-117 work that added the explicit `prefill_field` entries for `date_of_birth` and `passport_country`, so those two rows had `prefill_field: null`. They were silently dropped from the payload before the POST ever ran.
+
+2. **Stale-state merge in `handlePrefillClick`.** After the bulk save succeeded, the form merged the requested `payload` back into stale React state via `{...prev, ...payload}`. Combined with the auto-save effect re-firing on `fields` change, this opened a small window where a concurrent save closure could overwrite the freshly-prefilled fields. Even with bug #1 fixed, this would have produced occasional regressions on slow networks.
+
+**Fix.**
+
+- `src/lib/kyc/computePrefillable.ts`: both `computeAvailableExtracts` and `computePrefillableFields` now fall back to `f.key` as the implicit prefill target when no explicit `prefill_field` is set AND the key already names a `KYC_PREFILLABLE_FIELDS` column. Behaviour is unchanged when `prefill_field` is explicitly set (or explicitly mapped to a non-KYC column).
+- `src/components/kyc/IndividualKycForm.tsx`: `handlePrefillClick` now reads the route's response (`record` + `profile`) and overrides each prefillable form field from the canonical post-UPDATE values, rather than merging the requested payload into prev. No more stale-state race.
+- `src/app/api/profiles/kyc/save/route.ts`: the route now echoes both the updated `client_profile_kyc` row AND the updated `client_profiles` columns it touched, so the form can splice both tables' canonical values without a second fetch.
+
+**Verification.** Re-uploading the demo passport on a freshly-reset KYC row now writes all six extracted values on a single Re-apply click. Tested against `docs/demo-documents/tony-stark/01-passport-certified-copy.pdf`.
+
+### Tech debt
+
+- New Open entry **#37**: prefill-flow robustness — Re-apply is now deterministic for whitelisted KYC columns, but the broader pattern of "AI extraction key → form field" still leans on doc_type seed configuration. If the configured mapping is genuinely meant to send an extracted key to a NON-prefillable destination, the implicit fallback won't help. A future audit should reconcile doc_type seeds against the live `KYC_PREFILLABLE_FIELDS` set.
+- New Open entry **#38**: demo-document manifest — each `docs/demo-documents/*.pdf` should ship a sibling `manifest.json` of expected extracted values, so end-to-end tests of the prefill flow have a ground-truth target and AI drift surfaces immediately. ~30 minute task.
+
+---
+
 ## B-134 — Unify representative model + dropdown pickers + KYC email multi-select (done 2026-05-19)
 
 B-131 introduced "Filed by a representative" as a separate concept from the existing `is_representative` flag, producing two parallel ways to capture reps (a real `client_profiles` row vs. two free-text columns on the director's row). B-134 collapses to ONE model: reps are first-class `client_profiles` rows (`is_representative = true`); directors point at them via `client_profiles.filing_rep_profile_id` (FK). The B-131 text columns are migrated and dropped.
@@ -6971,6 +6996,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 34 | **Removals-filter audit for other admin surfaces** | Low | B-133 fixed the queue + service detail (and the four knock-on consumers: People & KYC, KYC progress %, B-132 document inheritance, peer review picker, section review aggregates). Remaining admin surfaces weren't audited — audit-log readouts, Communications dialog recipient picker, `/admin/services` (services list), `/admin/profiles/[id]`, etc. If a removed profile pops up anywhere, fix in a small follow-up. Spawned by [B-133](docs/cli-brief-respect-profile-removals-b133.md). |
 | 35 | **Audit auto-created rep profiles from B-134 backfill** | Low | The B-134 migration backfilled `filing_rep_profile_id` from B-131's `filing_rep_name` + `filing_rep_email` columns. For each director, if no rep profile already existed for that email it created one with minimal data (full_name from `filing_rep_name`, email, `record_type='individual'`, `is_representative=true`, `due_diligence_level='cdd'`). Vanessa should audit `client_profiles WHERE is_representative = true AND created_at >= '<B-134 deploy date>'` and fill in missing fields (phone, address, real DD level). ~30 min audit task. Spawned by [B-134](docs/cli-brief-unify-representatives-b134.md). |
 | 36 | **Per-rep "directors I file for" admin view** | Low | Today admins see who each director's rep is via the per-director card on the service detail page, but there's no admin-side view showing "all directors using Rep X". Useful for compliance review of a single rep's portfolio (a corporate secretary or lawyer who files for 10 directors across 3 services). Add a column to `/admin/profiles` reps-only view or a new tab on rep profile detail. Estimate: half-day; new brief. Spawned by [B-134](docs/cli-brief-unify-representatives-b134.md). |
+| 37 | **KYC prefill mapping audit** | Low | B-135 added an implicit fallback in `computePrefillableFields`: if a doc_type's `ai_extraction_fields[].prefill_field` is unset and the row's `key` already names a `KYC_PREFILLABLE_FIELDS` column, the key is used as the target. This unblocks the demo passport (which had `prefill_field: null` for `date_of_birth` + `passport_country` in the seeded doc_type config). The implicit mapping is convenient, but if a future doc_type genuinely wants an extraction key that *coincidentally* matches a KYC column to NOT prefill, the fallback would surprise. Audit doc_type seeds + the live `document_types.ai_extraction_fields` rows against `KYC_PREFILLABLE_FIELDS` to either set the explicit mapping or rename the key. Spawned by [B-135](docs/cli-brief-kyc-prefill-bug-b135.md). |
+| 38 | **Demo-document expected-value manifest** | Low | Each `docs/demo-documents/<persona>/<name>.pdf` should ship a sibling `manifest.json` listing the values the AI is expected to extract (`full_name`, `date_of_birth`, `passport_country`, etc.). With that in place we can write an end-to-end Playwright spec that uploads the doc, clicks Re-apply, then asserts the form / DB reflects the manifest — turning regressions in the prefill flow into a failing test instead of a manual demo-day catch. Estimate: ~30 minutes per doc + one spec. Spawned by [B-135](docs/cli-brief-kyc-prefill-bug-b135.md). |
 
 ### Resolved
 
