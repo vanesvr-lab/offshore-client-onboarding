@@ -13,6 +13,64 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-138 — Legacy profiles FK sweep (done 2026-05-19)
+
+Reported bug: admins created via the modern invite flow (or the SQL-only path documented in CLAUDE.md's Admin Setup section) couldn't be attached as reviewers on a peer-review request — `Failed to attach reviewers: insert or update on table "review_request_reviewers" violates foreign key constraint "review_request_reviewers_admin_id_fkey"`. Their session's `user_id` exists in `public.users` but not in legacy `public.profiles`, and B-118's FK still pointed at profiles. B-138 swept every admin-actor FK still on profiles and repointed them to users(id).
+
+### Batch 1 — Audit + migration (Claude Code)
+
+Audit query (`information_schema.referential_constraints` joined to `key_column_usage`) returned 26 FKs whose target table is `public.profiles`. Per the brief's default rule (`*_by` / `admin_*` / `requester_*` / `assigned_*` / `closed_by` / `actor_*` → admin actor; `profile_id` / `user_id` → client actor), 24 of the 26 were repointed; 2 were explicitly left alone.
+
+**Pre-flight orphan check:** all 24 candidate columns returned zero rows whose value isn't in `public.users` — verified live against prod before writing the migration, and the migration's `DO $$ ... RAISE EXCEPTION ... END$$` block re-runs the same check at apply time so a race couldn't smuggle an orphan in.
+
+**Migration `20260519200444_repoint_profiles_fks_to_users.sql`** drops + re-adds each FK targeting `users(id)`. Same DO-block pattern as `20260513014208_admin_users_fk_repoint_to_users.sql`. `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote paired. Post-migration query confirms zero admin-actor FKs left on profiles (only the two intentional client-actor ones remain).
+
+**Repointed (24 admin-actor FKs):**
+
+| Table | Column | Why this is an admin actor |
+|---|---|---|
+| `application_section_reviews` | `reviewed_by` | admin reviewer |
+| `audit_log` | `actor_id` | actor on every audit entry (mixed admin/client/system, all now unified on `users`) |
+| `client_account_managers` | `admin_id` | the AM admin |
+| `client_account_managers` | `assigned_by` | admin who assigned the AM |
+| `client_processes` | `started_by` | admin who started the process |
+| `client_users` | `invited_by` | admin who invited the client |
+| `clients` | `deleted_by` | admin who soft-deleted |
+| `document_links` | `linked_by` | admin (B-118 review-flow linking) |
+| `document_uploads` | `uploaded_by` | uploader (mixed, but all session users are in `users` post-B-127) |
+| `documents` | `uploaded_by` | same as above |
+| `email_log` | `sent_by` | admin or system process |
+| `knowledge_base` | `created_by` | admin authoring KB content |
+| `kyc_records` | `filled_by` | session user (client / rep / admin — all in `users` post-B-127) |
+| `kyc_records` | `invite_sent_by` | admin who sent the KYC invite |
+| `kyc_records` | `risk_rated_by` | admin compliance officer |
+| `kyc_records` | `senior_management_approved_by` | admin |
+| `reference_forms` | `created_by` | admin authoring the reference form |
+| `review_request_reviewers` | `admin_id` | **the reported bug** |
+| `review_requests` | `closed_by` | admin who closed |
+| `review_requests` | `requester_id` | admin who requested the review |
+| `service_actions` | `assigned_to` | admin assignee |
+| `service_actions` | `completed_by` | admin completer |
+| `service_substance` | `admin_assessed_by` | column name even includes "admin" |
+| `submitted_forms` | `uploaded_by` | session user (mixed, all in `users`) |
+
+**Left alone (2 client-actor FKs):**
+
+| Table | Column | Why |
+|---|---|---|
+| `client_users` | `user_id` | The client themselves in the deprecated client-owner junction — still legitimately a profiles reference in legacy code paths. |
+| `kyc_records` | `profile_id` | Legacy "client owner of this kyc_records row" pointer; matches `applications.profile_id` style. |
+
+**Orphan rows:** none, across all 24 repointed columns.
+
+### Batch 2 — Tech debt (Claude Code)
+
+- No new Open entries — the brief's optional "ambiguous profiles FKs" item didn't trigger (the default rule cleanly partitioned all 26 audited FKs into admin-actor vs client-actor with no ambiguity).
+- New Open entry #43: `mixed-actor *_by columns still encoded as "admin-actor" in B-138` — six columns (audit_log.actor_id, client_processes.started_by, document_uploads.uploaded_by, documents.uploaded_by, kyc_records.filled_by, submitted_forms.uploaded_by) are written by session users that could be admin OR client OR rep. Post-B-127 they all live in `public.users` so the FK is correct, but the column name + table comment may suggest admin-only. Documentation pass to capture which columns are mixed-actor would help the next person reading the schema. Estimate: ~30 minutes.
+- Existing #29 "Legacy clients/applications cleanup" unchanged — that's a broader retirement, not just an FK repoint. B-138 closes the FK side of the same legacy-auth migration story.
+
+---
+
 ## B-137 — Stale-context banner on document detail (done 2026-05-19)
 
 AI verification runs at upload time against whatever profile/KYC data exists then. Later edits (name fills, address corrections, occupation updates) make the prior verification result stale — but the document UI kept showing the original verdict with no signal that the context had drifted. B-137 surfaces drift on the document detail dialog with a blue banner and a one-click Re-run AI button. This replaces the earlier-floated `ai_deferred = true` doc-type approach: deferring AI verification only handled the upload-before-save window, while timestamp-based drift detection covers every edit path (initial upload before form save, admin edits, rep KYC re-fill, etc.).
@@ -7047,6 +7105,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 40 | **AI hint regression risk for ISO3 country codes** | Low | B-136's `address_country` extraction instructs the AI to return ISO 3166-1 alpha-3 codes via plain English in the ai_hint. If the model drifts and starts returning full country names occasionally, the CountrySelect's lenient matching papers it over for known names but won't help for less common countries. The proper defense is a regression test that uploads each demo document and asserts the expected structured fields are extracted (overlaps with tech debt #38). Estimate: ~2 hours once #38's manifest format is settled. Spawned by [B-136](docs/cli-brief-structured-address-extraction-b136.md). |
 | 41 | **Verification-context signature for precise drift detection** | Low | B-137 uses `profile.updated_at > doc.verified_at` (and the equivalent kyc comparison) to flag stale context. This false-positives when admin edits a profile field that doesn't actually feed the AI prompt (e.g. phone, work_email). False positives are cheap — admin clicks Re-run AI, same verdict comes back — but they're noise. Could add a `verification_context_signature` text column on `documents` (hash of the fields actually used in the AI prompt at verification time) and compare hashes instead of timestamps. Cleaner, but more code surface to keep the hash logic in sync with the prompt. Estimate: ~3 hours; defer until false positives become annoying. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
 | 42 | **List-view drift indicator** | Low | B-137's banner shows only when admin opens the per-document dialog. During bulk review (Document tab on the service page), admin doesn't see which docs have stale verification until they click into each one. A list-level chip ("1 doc has stale verification" / a small icon on the row) could surface drift earlier. Estimate: half-day; new brief if pitch demo highlights the gap. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
+| 43 | **Mixed-actor `*_by` columns documented as admin-actor in B-138** | Low | Six of the 24 FKs repointed in B-138 (audit_log.actor_id, client_processes.started_by, document_uploads.uploaded_by, documents.uploaded_by, kyc_records.filled_by, submitted_forms.uploaded_by) are written by session users that could be admin OR client OR filing rep. Post-B-127 they all live in `public.users` so the FK is correct, but the column name + sometimes-stale table comments may suggest admin-only writers. A documentation pass would capture which columns are mixed-actor to keep the schema legible for the next person reading it. Estimate: ~30 minutes. Spawned by [B-138](docs/cli-brief-legacy-profiles-fk-sweep-b138.md). |
 
 ### Resolved
 

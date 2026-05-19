@@ -9,6 +9,15 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-138)
+
+- **Mixed-actor `*_by` columns documented as admin-actor in B-138.** *Severity: Low.*
+  *Spawned by:* [B-138](cli-brief-legacy-profiles-fk-sweep-b138.md).
+  *What:* B-138 repointed 24 admin-actor FKs from `public.profiles(id)` to `public.users(id)`. Six of those are actually mixed-actor by intent — `audit_log.actor_id`, `client_processes.started_by`, `document_uploads.uploaded_by`, `documents.uploaded_by`, `kyc_records.filled_by`, `submitted_forms.uploaded_by` are written by session users that can be admins, clients, or filing reps. Post-B-127 they all live in `public.users` so the FK target is correct, but column names + table comments may still suggest admin-only writers. A documentation pass over those six columns (CREATE TABLE COMMENT or a code-side comment in each consumer route) would keep the schema legible for the next reader. Estimate: ~30 minutes.
+  *Why deferred:* The migration itself is correct; this is purely a clarity polish item.
+
+---
+
 ## 2026-05-19 (B-137)
 
 - **Verification-context signature for precise drift detection.** *Severity: Low.*
