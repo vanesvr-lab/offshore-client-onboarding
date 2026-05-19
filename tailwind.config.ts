@@ -12,7 +12,12 @@ const config: Config = {
       colors: {
         brand: {
           dark: "#0F172A",
-          navy: "#1e3a8a",
+          // B-129 — brand-navy bridges to the per-tenant primary_color
+          // via the --brand-primary CSS variable set on <html> by the
+          // root layout (RGB triplet for opacity-modifier support). The
+          // fallback (30 58 138) matches the legacy #1e3a8a default so
+          // pre-session contexts still render the original blue.
+          navy: "rgb(var(--brand-primary, 30 58 138) / <alpha-value>)",
           blue: "#3b82f6",
           light: "#90cdf4",
           accent: "#F59E0B",
