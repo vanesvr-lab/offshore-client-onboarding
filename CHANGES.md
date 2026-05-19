@@ -13,6 +13,27 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-136 — Structured address extraction (done 2026-05-19)
+
+Extends the AI extraction config for "Proof of Residential Address" from 3 fields to 9. Each structured component of the address now extracts to its own form field. Depends on B-135 (the persistence fix) for the end-to-end Re-apply flow; independent diff otherwise.
+
+### Batch 1 — Migration + seed update (Claude Code)
+
+- Migration `20260519193630_proof_of_address_structured_fields.sql`:
+  - `UPDATE document_types SET ai_extraction_fields = '...'` for the "Proof of Residential Address" row.
+  - New entries: `address_line_1`, `address_line_2`, `address_city`, `address_state`, `address_postal_code`, `address_country` — each maps to the matching `prefill_field` on the form. Composite `address_on_document → address` retained for backward compatibility.
+  - `address_country` ai_hint instructs the AI to return ISO3 codes directly (matching B-100's CountrySelect format).
+- `src/app/api/admin/migrations/seed-ai-defaults/route.ts` — mirrors the same 9-field config so re-running the seed endpoint is idempotent with the migration.
+- `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote paired. (First attempt failed because the migration included `updated_at = now()` and `document_types` has no `updated_at` column; the `updated_at` line was removed and the migration applied cleanly on retry — the failed attempt was atomic and left no partial state.)
+
+### Batch 2 — Tech debt (Claude Code)
+
+- Two new Open entries appended to `docs/tech-debt.md` (and Tech Debt Tracker below):
+  - Proof of Company Address — the corporate variant still has empty `ai_extraction_fields`. Apply the same structured-extraction pattern when the corporate address surface matters (substance review § 3.3, incorporation document validation).
+  - AI hint regression risk — the ISO3 country-code instruction lives in plain English in the ai_hint. If the AI drifts to returning full country names, the CountrySelect's lenient matching will paper over it but the demo will look noisy. A scheduled regression test that uploads each demo doc and asserts the structured extraction is the right defense.
+
+---
+
 ## B-135 — KYC prefill bug fix (done 2026-05-19)
 
 **Symptom.** Demo passport upload for Tony Stark: the AI extracted all six identity fields correctly (full_name, date_of_birth, nationality, passport_country, passport_number, passport_expiry) and the document-detail "EXTRACTED FIELDS" panel displayed all six, but after clicking "Fill from uploaded document" only four persisted to `client_profile_kyc`. Direct DB inspection confirmed `date_of_birth` and `passport_country` stayed NULL.
@@ -6998,6 +7019,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 36 | **Per-rep "directors I file for" admin view** | Low | Today admins see who each director's rep is via the per-director card on the service detail page, but there's no admin-side view showing "all directors using Rep X". Useful for compliance review of a single rep's portfolio (a corporate secretary or lawyer who files for 10 directors across 3 services). Add a column to `/admin/profiles` reps-only view or a new tab on rep profile detail. Estimate: half-day; new brief. Spawned by [B-134](docs/cli-brief-unify-representatives-b134.md). |
 | 37 | **KYC prefill mapping audit** | Low | B-135 added an implicit fallback in `computePrefillableFields`: if a doc_type's `ai_extraction_fields[].prefill_field` is unset and the row's `key` already names a `KYC_PREFILLABLE_FIELDS` column, the key is used as the target. This unblocks the demo passport (which had `prefill_field: null` for `date_of_birth` + `passport_country` in the seeded doc_type config). The implicit mapping is convenient, but if a future doc_type genuinely wants an extraction key that *coincidentally* matches a KYC column to NOT prefill, the fallback would surprise. Audit doc_type seeds + the live `document_types.ai_extraction_fields` rows against `KYC_PREFILLABLE_FIELDS` to either set the explicit mapping or rename the key. Spawned by [B-135](docs/cli-brief-kyc-prefill-bug-b135.md). |
 | 38 | **Demo-document expected-value manifest** | Low | Each `docs/demo-documents/<persona>/<name>.pdf` should ship a sibling `manifest.json` listing the values the AI is expected to extract (`full_name`, `date_of_birth`, `passport_country`, etc.). With that in place we can write an end-to-end Playwright spec that uploads the doc, clicks Re-apply, then asserts the form / DB reflects the manifest — turning regressions in the prefill flow into a failing test instead of a manual demo-day catch. Estimate: ~30 minutes per doc + one spec. Spawned by [B-135](docs/cli-brief-kyc-prefill-bug-b135.md). |
+| 39 | **Proof of Company Address structured extraction** | Low | B-136 wired structured address extraction for "Proof of Residential Address". The corporate variant ("Proof of Company Address") still has empty `ai_extraction_fields` and emits no structured registered-office data. Schema differs slightly from residential (e.g. registered office vs. trading address, may include registered agent / company secretary lines), so this gets its own seed entry rather than reusing the residential set. Worth doing once substance § 3.3 office-premises review or incorporation-document validation needs structured data. Estimate: ~30 minutes. Spawned by [B-136](docs/cli-brief-structured-address-extraction-b136.md). |
+| 40 | **AI hint regression risk for ISO3 country codes** | Low | B-136's `address_country` extraction instructs the AI to return ISO 3166-1 alpha-3 codes via plain English in the ai_hint. If the model drifts and starts returning full country names occasionally, the CountrySelect's lenient matching papers it over for known names but won't help for less common countries. The proper defense is a regression test that uploads each demo document and asserts the expected structured fields are extracted (overlaps with tech debt #38). Estimate: ~2 hours once #38's manifest format is settled. Spawned by [B-136](docs/cli-brief-structured-address-extraction-b136.md). |
 
 ### Resolved
 

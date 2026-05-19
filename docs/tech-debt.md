@@ -9,6 +9,20 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-136)
+
+- **Proof of Company Address structured extraction.** *Severity: Low.*
+  *Spawned by:* [B-136](cli-brief-structured-address-extraction-b136.md).
+  *What:* B-136 wired structured extraction (`address_line_1`, `address_line_2`, `address_city`, `address_state`, `address_postal_code`, `address_country`) for "Proof of Residential Address". The corporate variant ("Proof of Company Address") still has empty `ai_extraction_fields` and emits no structured registered-office data. Schema differs slightly from residential (registered office vs. trading address, may include registered agent / company secretary lines), so it gets its own seed entry rather than reusing the residential set. Apply the same pattern when substance § 3.3 office-premises review or incorporation-document validation needs structured data. Estimate: ~30 minutes.
+  *Why deferred:* The pitch demo doesn't need it yet; residential-address structured extraction was the live pain point.
+
+- **AI hint regression risk for ISO3 country codes.** *Severity: Low.*
+  *Spawned by:* [B-136](cli-brief-structured-address-extraction-b136.md).
+  *What:* B-136's `address_country` extraction asks the AI to return ISO 3166-1 alpha-3 codes via plain English in the ai_hint. If the model drifts and starts returning full country names, the CountrySelect's lenient matching papers it over for common entries but won't help for less common countries. The proper defense is a regression test that uploads each demo document and asserts the expected structured fields are extracted (overlaps with B-135's tech-debt #38 demo-document manifest). Estimate: ~2 hours once the manifest format is settled.
+  *Why deferred:* The single observed extraction for `address_country` returned `"USA"` correctly; no drift observed. The fallback (CountrySelect leniency) catches the common cases for now.
+
+---
+
 ## 2026-05-19 (B-135)
 
 - **KYC prefill mapping audit.** *Severity: Low.*
