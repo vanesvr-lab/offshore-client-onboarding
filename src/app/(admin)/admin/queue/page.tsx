@@ -21,9 +21,11 @@ interface RawServiceRow {
   assigned_admin: { id: string; full_name: string | null; email: string | null } | null;
   service_templates: { name: string } | null;
   profile_service_roles: Array<{
+    client_profile_id: string | null;
     can_manage: boolean | null;
     client_profiles: { id: string; full_name: string | null; email: string | null } | null;
   }> | null;
+  service_profile_removals: Array<{ client_profile_id: string }> | null;
 }
 
 export default async function QueuePage() {
@@ -46,9 +48,11 @@ export default async function QueuePage() {
       assigned_admin:users!services_assigned_admin_id_fkey(id, full_name, email),
       service_templates(name),
       profile_service_roles(
+        client_profile_id,
         can_manage,
         client_profiles(id, full_name, email)
-      )
+      ),
+      service_profile_removals(client_profile_id)
     `,
     )
     .eq("tenant_id", tenantId)
@@ -70,10 +74,15 @@ export default async function QueuePage() {
   }));
 
   const services: ServiceRow[] = (rawServices as unknown as RawServiceRow[] | null ?? []).map((s) => {
-    const roles = s.profile_service_roles ?? [];
+    const removedIds = new Set(
+      (s.service_profile_removals ?? []).map((r) => r.client_profile_id),
+    );
+    const activeRoles = (s.profile_service_roles ?? []).filter(
+      (r) => r.client_profile_id && !removedIds.has(r.client_profile_id),
+    );
     const primary =
-      roles.find((r) => r.can_manage)?.client_profiles ??
-      roles[0]?.client_profiles ??
+      activeRoles.find((r) => r.can_manage)?.client_profiles ??
+      activeRoles[0]?.client_profiles ??
       null;
     return {
       id: s.id,
