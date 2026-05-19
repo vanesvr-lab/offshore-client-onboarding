@@ -24,6 +24,10 @@ export type ServiceDoc = {
   expiry_date: string | null;
   document_type_id: string | null;
   client_profile_id: string | null;
+  /** B-132 — null when the doc is profile-scoped (personal KYC doc:
+   *  identity / financial / compliance). Non-null when it's tied to a
+   *  specific service (e.g. an entity Certificate of Incorporation). */
+  service_id: string | null;
   document_types: { id?: string; name: string; category: string; valid_for_months: number | null } | null;
   client_profiles: { id: string; full_name: string | null } | null;
 };

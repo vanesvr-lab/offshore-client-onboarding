@@ -85,15 +85,39 @@ export default async function ServicesPage() {
 
   const serviceIds = services.map((s) => s.id);
 
-  // Batch-fetch documents + audit_log "last updated by" in parallel
-  const [{ data: allDocs }, { data: lastAuditRows }] = await Promise.all([
+  // Batch-fetch documents + audit_log "last updated by" in parallel.
+  // B-132 — also pull profile-scoped personal docs (service_id IS NULL)
+  // for any profile attached to one of these services. The per-service
+  // bucket below adds them to whichever services the profile is on.
+  const attachedProfileIds = Array.from(
+    new Set(
+      services
+        .flatMap((s) => s.profile_service_roles ?? [])
+        .map((r) => r.client_profiles?.id)
+        .filter((v): v is string => !!v),
+    ),
+  );
+  const [
+    { data: allDocs },
+    { data: personalDocs },
+    { data: lastAuditRows },
+  ] = await Promise.all([
     serviceIds.length > 0
       ? supabase
           .from("documents")
-          .select("id, service_id, verification_status")
+          .select("id, service_id, client_profile_id, verification_status")
           .in("service_id", serviceIds)
           .eq("is_active", true)
-      : Promise.resolve({ data: [] as { id: string; service_id: string; verification_status: string }[] }),
+      : Promise.resolve({ data: [] as { id: string; service_id: string | null; client_profile_id: string | null; verification_status: string }[] }),
+
+    attachedProfileIds.length > 0
+      ? supabase
+          .from("documents")
+          .select("id, service_id, client_profile_id, verification_status")
+          .is("service_id", null)
+          .eq("is_active", true)
+          .in("client_profile_id", attachedProfileIds)
+      : Promise.resolve({ data: [] as { id: string; service_id: string | null; client_profile_id: string | null; verification_status: string }[] }),
 
     serviceIds.length > 0
       ? supabase
@@ -115,9 +139,39 @@ export default async function ServicesPage() {
 
   const docsByService = new Map<string, { verification_status: string }[]>();
   for (const doc of allDocs ?? []) {
-    const d = doc as { id: string; service_id: string; verification_status: string };
+    const d = doc as { id: string; service_id: string | null; client_profile_id: string | null; verification_status: string };
+    if (!d.service_id) continue; // defensive: service-scoped query
     if (!docsByService.has(d.service_id)) docsByService.set(d.service_id, []);
     docsByService.get(d.service_id)!.push({ verification_status: d.verification_status });
+  }
+
+  // B-132 — for each personal doc, attribute it to every service the
+  // owning profile is currently attached to. The same passport row may
+  // appear in two services' progress counts; that matches the new
+  // mental model ("Bruce's passport is satisfied on every service he
+  // is on, courtesy of one upload").
+  const personalDocsByProfile = new Map<string, { verification_status: string }[]>();
+  for (const doc of personalDocs ?? []) {
+    const d = doc as { id: string; client_profile_id: string | null; verification_status: string };
+    if (!d.client_profile_id) continue;
+    if (!personalDocsByProfile.has(d.client_profile_id))
+      personalDocsByProfile.set(d.client_profile_id, []);
+    personalDocsByProfile.get(d.client_profile_id)!.push({
+      verification_status: d.verification_status,
+    });
+  }
+  for (const svc of services) {
+    const bucket = docsByService.get(svc.id) ?? [];
+    const seen = new Set<string>();
+    for (const r of svc.profile_service_roles ?? []) {
+      const pid = r.client_profiles?.id;
+      if (!pid || seen.has(pid)) continue;
+      seen.add(pid);
+      const personal = personalDocsByProfile.get(pid) ?? [];
+      if (personal.length === 0) continue;
+      bucket.push(...personal);
+    }
+    if (bucket.length > 0) docsByService.set(svc.id, bucket);
   }
 
   // Build admin rows with pre-computed section percentages

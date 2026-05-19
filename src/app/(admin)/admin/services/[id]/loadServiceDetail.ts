@@ -148,6 +148,7 @@ export async function loadServiceDetail(
         id, file_name, file_path, verification_status, verification_result,
         admin_status, admin_status_note, admin_status_by, admin_status_at,
         mime_type, uploaded_at, expiry_date, document_type_id, client_profile_id,
+        service_id,
         document_types(id, name, category, valid_for_months),
         client_profiles(id, full_name)
       `)
@@ -282,6 +283,50 @@ export async function loadServiceDetail(
     ? ((waiversRes.data ?? []) as Array<{ client_profile_id: string | null }>)
         .filter((w) => !w.client_profile_id || !removedProfileIds.has(w.client_profile_id))
     : (waiversRes.data ?? []);
+
+  // B-132 — surface personal KYC documents (identity / financial /
+  // compliance) belonging to any profile attached to this service.
+  // Those rows have service_id = NULL and follow the profile across
+  // every service they're on. Query separately and merge into
+  // docsRes; deduped by document id so a row that's already in the
+  // service-scoped result doesn't appear twice.
+  const attachedProfileIds = Array.from(
+    new Set(
+      ((filteredRoles as unknown as Array<{ client_profile_id: string | null }>) ?? [])
+        .map((r) => r.client_profile_id)
+        .filter((v): v is string => !!v),
+    ),
+  );
+  if (attachedProfileIds.length > 0) {
+    const { data: personalDocs } = await supabase
+      .from("documents")
+      .select(`
+        id, file_name, file_path, verification_status, verification_result,
+        admin_status, admin_status_note, admin_status_by, admin_status_at,
+        mime_type, uploaded_at, expiry_date, document_type_id, client_profile_id,
+        service_id,
+        document_types(id, name, category, valid_for_months),
+        client_profiles(id, full_name)
+      `)
+      .is("service_id", null)
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true)
+      .in("client_profile_id", attachedProfileIds);
+    if (personalDocs && personalDocs.length > 0) {
+      const seen = new Set(
+        ((docsRes.data ?? []) as Array<{ id: string }>).map((d) => d.id),
+      );
+      const additions = (personalDocs as Array<{ id: string }>).filter(
+        (d) => !seen.has(d.id),
+      );
+      if (additions.length > 0) {
+        docsRes.data = [
+          ...((docsRes.data ?? []) as unknown as Record<string, unknown>[]),
+          ...(additions as unknown as Record<string, unknown>[]),
+        ] as typeof docsRes.data;
+      }
+    }
+  }
 
   // Template actions + substance ──────────────────────────────────────────
   const serviceTemplateId = (serviceRes.data as unknown as {
