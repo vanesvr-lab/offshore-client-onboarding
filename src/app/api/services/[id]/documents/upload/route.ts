@@ -78,7 +78,7 @@ export async function POST(
   const { data: docTypeRow } = await supabase
     .from("document_types")
     .select(
-      "name, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields, ai_deferred"
+      "name, category, ai_verification_rules, verification_rules_text, ai_enabled, ai_extraction_enabled, ai_extraction_fields, ai_deferred"
     )
     .eq("id", documentTypeId)
     .maybeSingle();
@@ -90,16 +90,29 @@ export async function POST(
   const aiDeferred = docTypeRow?.ai_deferred === true;
   const initialVerificationStatus = aiEnabled ? "pending" : "not_run";
 
-  // Upsert documents row (one per document type per profile per service)
-  const { data: existing } = await supabase
+  // B-132 — identity / financial / compliance docs follow the profile,
+  // not the service. Store service_id = NULL and key the upsert on
+  // (profile, type) so a passport replace on Service B supersedes
+  // the one originally uploaded on Service A.
+  const PERSONAL_CATEGORIES = ["identity", "financial", "compliance"] as const;
+  const isPersonal =
+    !!docTypeRow?.category &&
+    (PERSONAL_CATEGORIES as readonly string[]).includes(docTypeRow.category) &&
+    !!targetProfileId;
+
+  let existingQuery = supabase
     .from("documents")
     .select("id")
-    .eq("service_id", serviceId)
     .eq("document_type_id", documentTypeId)
     .eq("client_profile_id", targetProfileId)
     .eq("tenant_id", tenantId)
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("is_active", true);
+  if (isPersonal) {
+    existingQuery = existingQuery.is("service_id", null);
+  } else {
+    existingQuery = existingQuery.eq("service_id", serviceId);
+  }
+  const { data: existing } = await existingQuery.maybeSingle();
 
   const selectFields =
     "id, file_name, verification_status, verification_result, uploaded_at, document_type_id, client_profile_id, admin_status, prefill_dismissed_at, document_types(name, category)";
@@ -134,7 +147,8 @@ export async function POST(
       .from("documents")
       .insert({
         tenant_id: tenantId,
-        service_id: serviceId,
+        // B-132 — personal categories live profile-scoped (NULL).
+        service_id: isPersonal ? null : serviceId,
         document_type_id: documentTypeId,
         client_profile_id: targetProfileId,
         file_name: file.name,
