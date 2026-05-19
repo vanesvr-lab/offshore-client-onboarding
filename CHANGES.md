@@ -13,6 +13,59 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-126 — Cleanup: remove /register + rewrite CLAUDE.md data model (done 2026-05-18)
+
+### 2026-05-18 — Batch 1: /register page + API + login link deleted (Claude Code)
+
+The portal has been invite-only since the Auth.js migration (B-098) and the services-first refactor — admin creates the service, attaches `client_profiles` as Directors / Shareholders / UBOs, and emails a magic link that lands on `/auth/set-password`. The legacy `/register` self-signup path wrote into the old `clients` + `client_users` tables and was the only surface still funnelling new users through that shape. Nothing in the modern flow links to it, but it was still reachable by direct URL and was loud enough on the login screen ("Don't have an account? Register") to actively mislead admins setting up a new client.
+
+Deleted:
+
+- `src/app/(auth)/register/page.tsx` — the page itself.
+- `src/app/api/auth/register/route.ts` — the POST endpoint it called.
+- `src/app/(auth)/register/` and `src/app/api/auth/register/` directories.
+- The "Don't have an account? Register" `<Link>` block at the bottom of `src/app/(auth)/login/page.tsx` plus the now-unused `import Link from "next/link"`.
+- The "register" mention in `src/lib/portal-name.ts`'s leading comment — auth pages are now "login / set-password" only.
+
+Verification: `grep -rn "/register\|/api/auth/register" src/ tests/` returns zero hits. `npm run build` and `npm run lint` both pass (only pre-existing `profileRolesMap` exhaustive-deps warnings, unrelated to this brief). The Next.js route list confirms `/register` is no longer present.
+
+Out of scope (per brief): dropping the `clients` / `client_users` / `applications` tables. That sweep is now tech-debt #29 (Open) — see Batch 3 below.
+
+### 2026-05-18 — Batch 2: CLAUDE.md rewrite for services-first (Claude Code)
+
+The Data Model / Admin Setup / Known Future Migration sections of `CLAUDE.md` still described the legacy `auth.users → profiles → client_users → clients → applications` path. The current model is services-first: `services` has no `client_id`, `client_profiles` rows hold KYC subjects, and clients are invite-only. The stale doc caused a Desktop session on 2026-05-18 to give the wrong onboarding story for ~30 minutes — the rewrite is corrective.
+
+**Data Model** — replaced the ASCII tree with two grouped tables (Modern model / Legacy tables) plus three explanatory subsections (How users come into the system / Role resolution / Admin role hierarchy). The modern block now documents `users` (Auth.js identity, bcrypt password_hash), `profiles` (legacy mirror, dual-write target for set-password), `admin_users` (FK repointed to `users.id` in migration `20260513014208`), `services` (no `client_id`), `profile_service_roles`, `client_profiles`, `client_profile_kyc`, `service_substance`, `application_section_reviews` (with the column-name caveat from tech-debt #26), and `audit_log`. The legacy block flags `clients` / `client_users` / `applications` as read-only-until-retired with a forward pointer to the new tech-debt #29. The "How users come into the system" subsection walks the invite-only flow end-to-end (admin creates service → attaches profile → sends magic link → recipient sets password → both `users.password_hash` and `profiles.password_hash` get written → login at `/login`) and explicitly notes that B-126 removed `/register`.
+
+**Admin Setup** — replaced the "Create user in Supabase Auth dashboard" + `UPDATE profiles SET full_name` SQL with the modern bcrypt + `INSERT INTO public.users` + `INSERT INTO public.admin_users` flow. The bcrypt snippet uses `bcryptjs.hashSync('TempPass123!', 12)` to match the cost factor the app uses, and the SQL is a single CTE so admins can paste it into the Supabase SQL editor without worrying about ordering. The header now flags the section as "manual until `/admin/settings/admins` ships" with a pointer to tech-debt #4.
+
+**Known Future Migration** — renamed plural ("Migrations"). The obsolete "Supabase Auth must be replaced" paragraph is gone — Auth.js landed in B-098 and `admin_users` FK was repointed to `users` in `20260513014208`, so the migration is already done. Replaced with two forward-looking entries: legacy `clients` / `applications` cleanup (Open tech-debt #29) and admin role hierarchy (Open tech-debt #2 + #4).
+
+Verification (per brief): grep for "Supabase Auth dashboard", "clients.company_name" (as canonical), and "applications.client_id" outside the Legacy subsection — all four remaining hits are intentional (negation phrasing, explicit "NO client_id column" framing, the legacy table caveat). The Data Model intro now opens with "The data model is services-first."
+
+### 2026-05-18 — Batch 3: Tech Debt Tracker — #13 resolved, #29 added (Claude Code)
+
+`CHANGES.md` Tech Debt Tracker:
+
+- **#13 "CLAUDE.md is partially outdated"** moved from Open to Resolved with date `2026-05-18` and note "B-126: CLAUDE.md Data Model + Admin Setup + Known Future Migration sections rewritten to reflect services-first model (no Supabase Auth, services has no client_id, client_profiles for KYC subjects, invite-only flow)."
+- **#29 "Legacy clients/applications cleanup"** added to Open at Medium severity, scoped to the ~25 admin surfaces that still read `clients` / `client_users` / `applications` (queue, clients list, applications detail header, breadcrumbs on `/admin/clients/[id]/*`, AI verification context, audit-log writes). Recommends a feature-flag rollout — porting readers one surface at a time before dropping the tables in a single migration with FK cascades + `audit_log.entity_type` backfill.
+
+`docs/tech-debt.md` (canonical newest-at-top log per CLAUDE.md):
+
+- Added a top-of-2026-05-18 entry mirroring the Legacy cleanup tech-debt, with the same severity + spawned-by pointer to B-126.
+- Added a strike-through marker for #13 ("~~CLAUDE.md is partially outdated~~ — resolved B-126 (2026-05-18)") just below so the resolution is greppable from the log itself.
+
+**Files touched across B-126:**
+
+- *Batch 1:* `src/app/(auth)/register/page.tsx` (deleted), `src/app/api/auth/register/route.ts` (deleted), `src/app/(auth)/login/page.tsx`, `src/lib/portal-name.ts`.
+- *Batch 2:* `CLAUDE.md`.
+- *Batch 3:* `CHANGES.md` (Tech Debt Tracker tables — moved #13 to Resolved, added #29 to Open), `docs/tech-debt.md` (two new bullets at the top of the 2026-05-18 section).
+- *Batch 4:* `CHANGES.md` (this entry).
+
+Build green; lint green (same pre-existing warnings unrelated to this brief).
+
+---
+
 ## B-125 — Substance Review buttons + local director count + Milestones / Audit Trail polish (done 2026-05-18)
 
 ### 2026-05-18 — Followup 2: section click in review-request modal now expands the accordion (Claude Desktop)
@@ -6399,7 +6452,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 10 | **Verification checklist is a placeholder** | Low | The "Verification Checklist" card on the application detail page is 6 static items. Needs real automation logic + DB column to track completion. |
 | 11 | **No real-time updates** | Medium | Pages don't push live updates — users have to navigate or refresh to see admin changes. Could use Supabase Realtime or Server-Sent Events. |
 | 12 | **`force-dynamic` everywhere** | Low | Disables Next.js caching globally on data pages. Works but loses perf benefits. Better long-term: tag-based revalidation via `revalidateTag()`. |
-| 13 | **CLAUDE.md is partially outdated** | Low | Sections still reference Supabase Auth (replaced by Auth.js). Should be updated to reflect current architecture. |
 | 15 | **`supabase/README.md` has outdated SQL** | Low | Step 3 references `profiles.role` and `profiles.company_name` columns that don't exist. |
 | 17 | **Knowledge base AI integration is "fail-open"** | Low | If `loadRelevantKnowledgeBase()` errors (e.g. table missing, query fails), it returns an empty string and verification proceeds without KB context. Good for resilience but means a silent KB outage won't be noticed. Add monitoring/alerting later. |
 | 18 | **Knowledge base `applies_to` filter is naive** | Low | Currently only filters on `applies_to.document_type` exact-match (case-insensitive). Doesn't support template-id matching, tag-based matching, or fuzzy matching. Good enough for MVP. Should expand once we have real KB content. |
@@ -6410,6 +6462,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 26 | **`application_section_reviews.application_id` stores service ids** | Medium | B-073 ports section reviews to `/admin/services/[id]` while reusing the existing table from B-068. The column name is misleading — it now holds either `applications.id` (legacy path, 1 stale test row) or `services.id` (modern path, going forward). The FK to `applications(id)` was dropped in `20260506155512_drop_section_reviews_application_fk.sql` so service-id inserts succeed; UUID v4 collision risk between the two ID spaces is statistically zero. Once the legacy `applications` table is fully retired, rename the column to `subject_id` (or `service_id`), reinstate a typed FK, and rename `/api/admin/applications/[id]/section-reviews` to a service-prefixed path. Affects: `application_section_reviews` table, `/api/admin/applications/[id]/section-reviews/*` route handlers, and any component prop named `applicationId` that's now passed a service id (`AdminApplicationSectionsProvider`, `AdminKycPersonReviewPanel`, `SectionReviewButton`, `SectionReviewPanel`). |
 | 27 | **No identity-attribute uniqueness constraints** | Medium | B-059 added a unique-email constraint on `client_profiles` `(tenant_id, lower(email))`. Identity-level checks (passport_number, tax_identification_number, legal_name + date_of_birth) live on `client_profile_kyc` and aren't constrained — meaning two profiles could legitimately end up with the same passport number through two separate flows. Revisit when the data model around manager-vs-KYC roles is settled. Strongest candidates for a future constraint: `(tenant_id, passport_number) WHERE passport_number IS NOT NULL`, and a soft warning on `(tenant_id, full_name, date_of_birth)`. |
 | 28 | **Legacy `kyc_records`-based profile-create routes still in tree** | Low | `src/app/api/admin/create-profile/route.ts` and `src/app/api/profiles/create/route.ts` insert into the legacy `kyc_records` + `profile_roles` tables instead of the modern `client_profiles` + `profile_service_roles`. They escaped the B-059 unique-email guard for that reason. Confirm they're no longer hit (grep callers, watch logs for a release cycle), then delete both routes. If still hit, port them to `client_profiles` and add the same lookup-then-insert guard. |
+| 29 | **Legacy clients/applications cleanup** | Medium | `clients`, `client_users`, and `applications` are read by ~25 admin surfaces (queue, clients list, applications detail header, breadcrumbs on `/admin/clients/[id]/*`, AI verification context, audit-log writes) but no new work routes through them. Retire by porting every reader to the services-first model, then dropping the tables in one migration with FK cascades + audit_log entity_type backfill. Estimate: 2-3 days; needs a dedicated brief and a feature flag rollout. Spawned by [B-126](docs/cli-brief-register-cleanup-claude-md-rewrite-b126.md). |
 
 ### Resolved
 
@@ -6420,4 +6473,5 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 19 | Sidebar has no mobile collapse | 2026-05-04 | B-052: client `Sidebar` now renders inside a `Sheet` drawer below `md:` (state in new `ClientShell`, opened from a burger button in `Header`). Wizard pages, KYC fill, dashboard, applications/[id], and services/[id] all reflow cleanly at 375px. Document upload gains a native camera capture path on mobile. Admin sidebar deferred — see #20. |
 | 25 | Admin KYC view is parallel, not inline read-only mirror | 2026-05-07 | B-074 made the inline review affordances appear inside `KycLongForm` but kept every field hardcoded `disabled`, treating admin as a read-only reviewer. **B-078 corrects that** — admin now has full edit rights on `/admin/services/[id]` Step 4: KYC long-form fields are typeable, role assignments toggle through the same dirty tracker, the sticky banner is inline-editable for full_name + email, and document Replace is wired into `DocumentDetailDialog`. One Save / Cancel bar per profile commits everything via `PATCH /api/admin/profiles/[id]/kyc-fields`; nav guard prevents losing changes; `audit_log` writes `profile_kyc_updated` per save event and `document_replaced` per replace. Per-section doc-row visibility was also corrected to category-based instead of extraction-only — fixes the bug where uploaded docs didn't show as source docs unless they had AI extractions. |
 | 16 | Shell `ANTHROPIC_API_KEY=""` overrode `.env.local` | 2026-04-19 | B-031: `package.json` `dev` script now prefixes `unset ANTHROPIC_API_KEY &&` so `.env.local` always wins. |
+| 13 | CLAUDE.md is partially outdated | 2026-05-18 | B-126: CLAUDE.md Data Model + Admin Setup + Known Future Migration sections rewritten to reflect services-first model (no Supabase Auth, services has no client_id, client_profiles for KYC subjects, invite-only flow). |
 

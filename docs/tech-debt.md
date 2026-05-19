@@ -11,6 +11,13 @@ remove after 30 days.
 
 ## 2026-05-18
 
+- **Legacy clients/applications cleanup.** *Severity: Medium.*
+  *Spawned by:* [B-126](cli-brief-register-cleanup-claude-md-rewrite-b126.md).
+  *What:* `clients`, `client_users`, and `applications` are no longer the source of truth for new work but still get read by ~25 admin surfaces (queue, clients list, applications detail header, breadcrumbs on `/admin/clients/[id]/*`, AI verification context, audit-log writes). Retire by porting every reader to the services-first model, then dropping the tables in one migration with FK cascades + `audit_log.entity_type` backfill. Estimated 2–3 days; needs a dedicated brief and a feature-flag rollout (don't flip readers in one commit). Tracked alongside Open #29 in the CHANGES.md Tech Debt Tracker.
+  *Why deferred:* Touches enough surfaces that it needs its own brief + careful migration ordering. The B-126 doc rewrite made the legacy-vs-modern split explicit in CLAUDE.md so contributors don't get confused while this lingers.
+
+- ~~CLAUDE.md is partially outdated~~ — *resolved B-126 (2026-05-18).* The Data Model / Admin Setup / Known Future Migration sections were rewritten to the services-first model. Open #13 in CHANGES.md's Tech Debt Tracker has been moved to Resolved.
+
 - **`client_profile_kyc.is_local_resident_director` is no longer read by app code.**
   *Spawned by:* [B-125](cli-brief-substance-review-and-audit-trail-polish-b125.md).
   *What:* B-125 unified the People & KYC header chip's local-director count to use the same predicate as the badge in `ProfileRowBadges` (`passport_country === "MUS"` + role includes `director` + not `is_representative`). The legacy manually-managed `is_local_resident_director` boolean on `client_profile_kyc` is now write-orphaned: nothing in the app reads it and only the original B-100 seed and ad-hoc admin SQL write it. Drop the column in a cleanup migration once a final grep confirms zero consumers (CLI checked at B-125 time — 0 reads). Leaving in place to avoid a migration just for this; safe to drop.
