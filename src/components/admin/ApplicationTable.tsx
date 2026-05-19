@@ -1,3 +1,9 @@
+// LEGACY — reads from the `applications` table which is no longer the
+// source of truth for new work. The Queue page now uses
+// `ServicesTable.tsx` (B-130). This component stays in place only for
+// the remaining admin pages still reading from `applications`; once the
+// legacy-tables cleanup brief lands, delete this file.
+
 "use client";
 
 import { useState } from "react";
