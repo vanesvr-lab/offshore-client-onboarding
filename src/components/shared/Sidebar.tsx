@@ -20,10 +20,19 @@ import {
   Shield,
   UserCircle,
   FileStack,
+  UserCog,
 } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { portalName } from "@/lib/portal-name";
+import type { PermissionFlag } from "@/lib/admin-permissions";
+
+// B-127 — Sidebar accepts a permissions snapshot so the admin nav can
+// hide the entire Settings group (gated on settings_access) and the
+// individual "Admins" item (gated on admin_mgmt_access). Passing the
+// whole AdminPermissions object would couple the Sidebar tightly to
+// the type; a slim record is enough.
+type SidebarPermissions = Partial<Record<PermissionFlag, boolean>>;
 
 interface SidebarProps {
   role: "admin" | "client";
@@ -36,6 +45,9 @@ interface SidebarProps {
   /** Mobile drawer open state (controlled by parent layout). */
   mobileOpen?: boolean;
   onMobileOpenChange?: (open: boolean) => void;
+  /** B-127 — admin role permissions for nav-level gating. Client-side
+   *  callers (ClientShell) leave this undefined and it's ignored. */
+  adminPermissions?: SidebarPermissions | null;
 }
 
 const ADMIN_NAV = [
@@ -45,7 +57,19 @@ const ADMIN_NAV = [
   { label: "Queue", href: "/admin/queue", icon: ClipboardList, exact: false },
 ];
 
-const ADMIN_SETTINGS_NAV = [
+// B-127 — `requireFlag` (when present) means the entry is hidden unless
+// the caller's adminPermissions has that flag set to true. Items without
+// it inherit the section's gate (the whole Settings section is gated on
+// settings_access in SidebarContent below).
+type AdminSettingsNavItem = {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  exact: boolean;
+  requireFlag?: PermissionFlag;
+};
+
+const ADMIN_SETTINGS_NAV: AdminSettingsNavItem[] = [
   { label: "Templates", href: "/admin/settings/templates", icon: FileText, exact: false },
   { label: "Verification Rules", href: "/admin/settings/rules", icon: ShieldCheck, exact: false },
   { label: "Document Types", href: "/admin/settings/document-types", icon: Files, exact: false },
@@ -54,6 +78,7 @@ const ADMIN_SETTINGS_NAV = [
   { label: "Role Requirements", href: "/admin/settings/role-requirements", icon: UserCheck, exact: false },
   { label: "Knowledge Base", href: "/admin/settings/knowledge-base", icon: BookOpen, exact: false },
   { label: "Workflow", href: "/admin/settings/workflow", icon: GitBranch, exact: false },
+  { label: "Admins", href: "/admin/settings/admins", icon: UserCog, exact: false, requireFlag: "admin_mgmt_access" },
 ];
 
 function NavItem({
@@ -104,6 +129,7 @@ function SidebarContent({
   avatarUrl,
   hasApplications,
   isPrimary = true,
+  adminPermissions,
 }: Omit<SidebarProps, "mobileOpen" | "onMobileOpenChange">) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -187,17 +213,33 @@ function SidebarContent({
               />
             ))}
 
-            <div className="border-t border-white/10 my-3" />
-            <SectionHeader label="Settings" />
-            {ADMIN_SETTINGS_NAV.map((item) => (
-              <NavItem
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                icon={item.icon}
-                active={isActive(item.href, item.exact)}
-              />
-            ))}
+            {/* B-127 — entire Settings group is gated on settings_access.
+                The "Admins" entry inside the group is additionally gated
+                on admin_mgmt_access via its `requireFlag` property. When
+                adminPermissions isn't provided (legacy callers) the
+                section is shown unrestricted — back-compat. */}
+            {(adminPermissions == null || adminPermissions.settings_access === true) && (
+              <>
+                <div className="border-t border-white/10 my-3" />
+                <SectionHeader label="Settings" />
+                {ADMIN_SETTINGS_NAV
+                  .filter(
+                    (item) =>
+                      !item.requireFlag ||
+                      adminPermissions == null ||
+                      adminPermissions[item.requireFlag] === true,
+                  )
+                  .map((item) => (
+                    <NavItem
+                      key={item.href}
+                      href={item.href}
+                      label={item.label}
+                      icon={item.icon}
+                      active={isActive(item.href, item.exact)}
+                    />
+                  ))}
+              </>
+            )}
 
             {/* B-101 Batch 4 — admin account settings */}
             <div className="border-t border-white/10 my-3" />
@@ -394,6 +436,7 @@ export function Sidebar({
   isPrimary = true,
   mobileOpen = false,
   onMobileOpenChange,
+  adminPermissions,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -413,6 +456,7 @@ export function Sidebar({
           avatarUrl={avatarUrl}
           hasApplications={hasApplications}
           isPrimary={isPrimary}
+          adminPermissions={adminPermissions}
         />
       </aside>
 
@@ -428,6 +472,7 @@ export function Sidebar({
             userName={userName}
             hasApplications={hasApplications}
             isPrimary={isPrimary}
+            adminPermissions={adminPermissions}
           />
         </SheetContent>
       </Sheet>

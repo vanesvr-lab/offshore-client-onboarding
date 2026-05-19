@@ -19,7 +19,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid or expired invite link" }, { status: 400 });
   }
 
-  const validPurposes = ["invite", "profile_invite"];
+  // B-127 — admin invites mint JWTs with purpose=admin_invite. Treated
+  // the same as the legacy `invite` / `profile_invite` paths for the
+  // password write; the recipient's role is determined by their
+  // membership in `admin_users` (no client_profiles row), so the
+  // post-set-password redirect lands them on the admin portal.
+  const validPurposes = ["invite", "profile_invite", "admin_invite"];
   if (!validPurposes.includes(payload.purpose ?? "") || !payload.sub || !payload.email) {
     return NextResponse.json({ error: "Invalid token" }, { status: 400 });
   }
