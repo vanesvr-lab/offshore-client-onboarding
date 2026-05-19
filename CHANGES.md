@@ -13,6 +13,12 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-141 — Center the unsaved-changes bar (done 2026-05-19)
+
+Follow-up to B-139. The previous fix wrapped the bar in a `max-w-7xl mx-auto` container and added a `lg:mr-20` button-group margin, but kept `justify-between` — Cancel + Save still hugged the right edge of the 1280 px content column, which still felt right-aligned on a 1920 px monitor. Switched to a single centered cluster: `justify-center` + `gap-6` on the outer flex, message and button group grouped together. The `lg:mr-20` safety guard moved from the button group up to the outer flex so the whole centered cluster still clears the B-128 chat bubble. Bar copy, button labels, and behaviour all unchanged.
+
+---
+
 ## B-140 — Remove duplicate Assigned Officer UI (done 2026-05-19)
 
 Two changes to the service-detail right rail:
