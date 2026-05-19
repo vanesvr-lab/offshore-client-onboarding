@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
+import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -15,15 +16,43 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient();
 
-  // Verify this kyc record belongs to tenant
+  // Verify this kyc record belongs to tenant + pull the parent profile so
+  // B-131 can decide whether the caller is the director themselves or a
+  // delegated filing rep.
   const { data: existing } = await supabase
     .from("client_profile_kyc")
-    .select("id, client_profile_id")
+    .select(
+      "id, client_profile_id, client_profiles(id, user_id, email, filing_rep_email)",
+    )
     .eq("id", kycRecordId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
 
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // B-131 — accept either the director (matched by users.id or email) or
+  // the filing rep (matched by filing_rep_email). Admin sessions can
+  // always save (admins use the admin-specific endpoint normally, but
+  // a stray call shouldn't 403).
+  const profile = (existing as unknown as {
+    client_profiles: {
+      user_id: string | null;
+      email: string | null;
+      filing_rep_email: string | null;
+    } | null;
+  }).client_profiles;
+  const sessionEmail = (session.user.email ?? "").toLowerCase();
+  const profileEmail = (profile?.email ?? "").toLowerCase();
+  const repEmail = (profile?.filing_rep_email ?? "").toLowerCase();
+  const isAdmin = session.user.role === "admin";
+  const isOwner =
+    !!profile?.user_id && profile.user_id === session.user.id;
+  const isEmailOwner =
+    !!profileEmail && profileEmail === sessionEmail;
+  const isFilingRep = !!repEmail && repEmail === sessionEmail;
+  if (!isAdmin && !isOwner && !isEmailOwner && !isFilingRep) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Clean date/boolean fields
   const DATE_FIELDS = ["date_of_birth", "passport_expiry", "date_of_incorporation"];
@@ -113,6 +142,27 @@ export async function POST(request: Request) {
       .update(profileUpdates)
       .eq("id", existing.client_profile_id)
       .eq("tenant_id", tenantId);
+  }
+
+  // B-131 — capture rep-driven KYC saves in audit_log so the paper
+  // trail distinguishes "filed by the director themselves" from
+  // "filed by their representative". Self-driven saves remain silent
+  // (auto-save fires per field and would flood the log).
+  if (isFilingRep && !isOwner && !isEmailOwner) {
+    await writeAuditLog(supabase, {
+      actor_id: session.user.id,
+      actor_role: "client",
+      actor_name: session.user.name ?? session.user.email ?? "Filing rep",
+      action: "profile_kyc_saved_by_rep",
+      entity_type: "client_profile_kyc",
+      entity_id: kycRecordId,
+      previous_value: null,
+      new_value: {
+        fields_touched: Object.keys(cleanedFields),
+        profile_fields_touched: Object.keys(profileUpdates),
+        client_profile_id: existing.client_profile_id,
+      },
+    });
   }
 
   return NextResponse.json({ record: updated });
