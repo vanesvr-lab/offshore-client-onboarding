@@ -1,24 +1,33 @@
-# B-129 — Tenant brand centralization (remove hardcoded GWMS + Mauritius)
+# B-129 — Tenant brand centralization + Elarix vendor brand + branded header
 
 ## Why
 
-Vanessa is pitching the platform to GWMS Ltd. Today "GWMS" appears as a hardcoded literal in 33 places across 14 files (email templates, portal copy, AI assistant widgets, the floating chat bubble, KYC forms, audit emails) and "Mauritius" appears in 36 places across 20 files (footers, form labels, country defaults). The `tenants` table already exists with one row (`name='GWMS Ltd'`, `slug='gwms'`, default UUID `a1b2c3d4-...`) but the application code never reads from it — the seeded `name` field is decorative.
+Vanessa is pitching the platform. Today "GWMS" appears as a hardcoded literal in 33 places across 14 files (email templates, portal copy, AI assistant widgets, the floating chat bubble, KYC forms, audit emails) and "Mauritius" appears in 36 places across 20 files (footers, form labels, country defaults). The `tenants` table already exists with one row (`name='GWMS Ltd'`, `slug='gwms'`, default UUID `a1b2c3d4-...`) but the application code never reads from it — the seeded `name` field is decorative. The portal heading "Mauritius Offshore - Admin Portal" is also a hardcoded string in `src/lib/portal-name.ts`.
 
-B-129 wires the actually-rendered strings to the `tenants.settings` JSON column so:
+B-129 wires the actually-rendered strings to the `tenants.settings` JSON column AND surfaces the Elarix platform-vendor brand alongside the tenant brand. After B-129:
 
-1. **Pitch demos:** Vanessa changes one row in Supabase SQL editor before a demo (e.g. `settings.display_name = 'Acme Holdings Demo Ltd'`) and the entire portal rebrands without a deploy.
-2. **Multi-tenant readiness:** every render path now resolves brand from the active tenant. When tech debt #1 ships, no per-template surgery needed.
-3. **Cleanup:** `src/lib/tenant.ts` has stale "GWMS" comments; gone after B-129.
+1. **Pitch demos:** Vanessa changes one row in Supabase SQL editor before a demo (e.g. `settings.display_name = 'Acme Holdings Demo Ltd'`) and the entire portal rebrands without a deploy. The seed default is **`XYZ Ltd`** (a neutral placeholder she changes per pitch).
+2. **Two-axis branding visible:** the header reads:
+   ```
+   XYZ Ltd - Admin Portal                              ← tenant brand
+   Powered by [Elarix logo] Elarix · The intelligent portal for client due diligence and compliance   ← platform brand
+   ```
+   The tenant brand is per-row in `tenants.settings`. The Elarix platform brand is a single set of constants (env-overridable for white-label deployments).
+3. **Multi-tenant readiness:** every render path now resolves brand from the active tenant. When tech debt #1 ships, no per-template surgery needed.
+4. **Cleanup:** `src/lib/tenant.ts` and `src/lib/portal-name.ts` have stale "GWMS" / "Mauritius Offshore" hardcodes; gone after B-129.
 
-The Elarix vendor brand (the AI service / `support@elarix.io` env var / "Elarix AI assistant" mentions) is **NOT** touched — that's a separate axis (platform vendor vs tenant company). If Vanessa later wants to sell white-label, B-131 handles it.
+**Two distinct brand axes** (which is why this brief grew):
+
+- **Tenant brand** (`tenants.settings`): the customer company that owns the portal instance. Today: XYZ Ltd. Pitched: GWMS Ltd. Multi-tenant future: one row per management company.
+- **Platform vendor brand** (constants in `src/lib/platform-brand.ts`): the platform vendor — Elarix. Same across all tenants by default, env-overridable for white-label resellers.
 
 ## Out of scope (do NOT do in B-129)
 
-- **`/admin/settings/branding` admin UI** — Vanessa edits the JSON directly via Supabase SQL editor for the pitch. The polished editor UI is B-130.
-- **Elarix vendor-brand abstraction** — kept as-is per the design conversation.
+- **`/admin/settings/branding` admin UI** — Vanessa edits the tenant JSON directly via Supabase SQL editor for the pitch. The polished editor UI is B-130.
 - **Tailwind theme overhaul** — B-129 wires `primary_color` to a single CSS custom property at `<html>` level and bridges via Tailwind config so existing `bg-brand-navy` classes pick up the dynamic value. A full theme-tokens overhaul (semantic tokens, dark mode, etc.) is separate scope.
 - **Per-locale formatting** (currency, date format) tied to `country` — B-129 only uses `country` as a display string. Locale-aware formatting is a future brief.
-- **Email FROM address** — `RESEND_FROM_EMAIL` env var stays unchanged (it's an Elarix domain — separate axis).
+- **Email FROM address** — `RESEND_FROM_EMAIL` env var stays unchanged for now.
+- **Customer-facing Elarix removal / white-label** — env vars are in place (Batch 7), but no admin UI to flip the platform brand off. If/when Vanessa sells fully-white-label resold instances, that's B-131.
 
 ## Field shape
 
@@ -62,23 +71,40 @@ Use `npx supabase migration new seed_tenant_brand` to generate the timestamp.
 
 ```sql
 -- B-129 — Populate tenants.settings with the brand fields for the
--- existing GWMS row. Idempotent: uses `||` merge so it preserves any
+-- existing tenant row. Idempotent: uses `||` merge so it preserves any
 -- other settings keys that may have been added separately.
+--
+-- Seed values use "XYZ Ltd" as the neutral placeholder display name.
+-- For a real GWMS pitch demo, Vanessa updates display_name +
+-- portal_name + footer_text via SQL editor before the call.
 
 UPDATE public.tenants
 SET settings = settings || jsonb_build_object(
-  'display_name',   'GWMS Ltd',
-  'portal_name',    'GWMS Client Portal',
+  'display_name',   'XYZ Ltd',
+  'portal_name',    'XYZ Ltd Client Portal',
   'country',        'Mauritius',
   'support_email',  'support@elarix.io',
   'logo_url',       null,
-  'footer_text',    'GWMS Client Portal | Mauritius',
+  'footer_text',    '{portal_name} | {country}',
   'primary_color',  '#1e3a8a'
 )
 WHERE slug = 'gwms';
 ```
 
-Re-running the migration with the SAME values is a no-op merge. If Vanessa edits any field via SQL editor for a demo (e.g. sets `display_name = 'Demo Co'`), re-running the migration overwrites her edits back to the GWMS defaults — which is intentional behavior for migrations (idempotent restore to seed state).
+Note the `footer_text` value uses `{portal_name}` / `{country}` placeholders — the `formatFooter()` helper (Batch 2) resolves them at render time. This way changing `portal_name` flows through to the footer automatically.
+
+Re-running the migration with the SAME values is a no-op merge. If Vanessa edits any field via SQL editor for a demo (e.g. sets `display_name = 'GWMS Ltd'` for the actual pitch), re-running the migration overwrites her edits back to the XYZ defaults — which is intentional behavior for migrations (idempotent restore to seed state). She can keep a snippet ready:
+
+```sql
+-- Quick pitch-mode SQL (paste into Supabase SQL editor before a call):
+UPDATE public.tenants
+SET settings = settings || jsonb_build_object(
+  'display_name',  'GWMS Ltd',
+  'portal_name',   'GWMS Client Portal',
+  'primary_color', '#1e3a8a'  -- adjust to prospect's brand color
+)
+WHERE slug = 'gwms';
+```
 
 ### Migration lifecycle (CLI is responsible for the full cycle)
 
@@ -100,10 +126,11 @@ SELECT slug, settings FROM public.tenants WHERE slug = 'gwms';
 ### Commit message (Batch 1)
 
 ```
-feat(db): seed tenant brand fields on GWMS row (B-129)
+feat(db): seed tenant brand fields on default tenant row (B-129)
 
-Populates tenants.settings with display_name, portal_name, country,
-support_email, logo_url, footer_text, primary_color. Idempotent
+Populates tenants.settings with display_name (XYZ Ltd), portal_name,
+country, support_email, logo_url, footer_text (templated with
+{portal_name} / {country} placeholders), primary_color. Idempotent
 JSON merge so other settings keys are preserved. Foundation for
 removing the 33 hardcoded "GWMS" + 36 hardcoded "Mauritius" strings.
 ```
@@ -478,6 +505,169 @@ the portal rebrand.
 
 ---
 
+## Batch 7 — Elarix platform-vendor brand + branded header
+
+This batch makes the platform vendor (Elarix) visible in the header alongside the tenant brand. The two are deliberately separate: tenant brand changes per customer; platform brand is the same across the product (env-overridable for white-label resellers).
+
+### New file: `src/lib/platform-brand.ts`
+
+```ts
+// B-129 Batch 7 — Platform vendor brand (separate axis from tenant brand).
+// Hardcoded constants with env-var overrides so a white-label
+// deployment can rebrand the platform vendor without code changes.
+
+export const PLATFORM_BRAND = {
+  name: process.env.NEXT_PUBLIC_PLATFORM_NAME ?? "Elarix",
+  tagline:
+    process.env.NEXT_PUBLIC_PLATFORM_TAGLINE ??
+    "The intelligent portal for client due diligence and compliance",
+  logo_url: process.env.NEXT_PUBLIC_PLATFORM_LOGO_URL ?? "/elarix-logo.png",
+} as const;
+
+export type PlatformBrand = typeof PLATFORM_BRAND;
+```
+
+### Asset: `public/elarix-logo.png`
+
+Vanessa supplies this from outside the brief — a transparent PNG of the Elarix logo. She'll save it to `public/elarix-logo.png` before testing. The `BrandedHeader` component (below) has an `onError` handler that hides the image if the file is missing, so CLI does NOT commit a placeholder.
+
+### Update `src/lib/portal-name.ts`
+
+Replace the file contents entirely (the legacy "Mauritius Offshore" hardcodes go away):
+
+```ts
+// B-129 Batch 7 — Portal heading composed from tenant brand + role.
+// The old "Mauritius Offshore" hardcoded prefix is removed.
+
+import type { TenantBrand } from "@/lib/tenant-brand";
+
+export function portalHeading(brand: TenantBrand, isAdmin: boolean): string {
+  const role = isAdmin ? "Admin" : "Client";
+  return `${brand.display_name} - ${role} Portal`;
+}
+
+/** Fallback for auth pages (login / set-password) where there's no
+ *  session yet. Returns just the platform name to avoid leaking the
+ *  tenant identity to unauthenticated visitors. */
+export function authPageHeading(): string {
+  return "Sign in";
+}
+```
+
+Note: existing callers use `portalName(isAdmin)`. New API is `portalHeading(brand, isAdmin)`. CLI must update callers — see "Files to update" below.
+
+### New component: `src/components/shared/BrandedHeader.tsx`
+
+```tsx
+"use client";
+import { useSession } from "next-auth/react";
+import { PLATFORM_BRAND } from "@/lib/platform-brand";
+import { portalHeading } from "@/lib/portal-name";
+import { TENANT_BRAND_DEFAULTS } from "@/lib/tenant-brand";
+
+interface Props {
+  isAdmin: boolean;
+  /** If true, hides the tagline (for narrow sidebars). Logo + name still show. */
+  compact?: boolean;
+}
+
+export function BrandedHeader({ isAdmin, compact }: Props) {
+  const { data: session } = useSession();
+  const brand = session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS;
+  const heading = portalHeading(brand, isAdmin);
+
+  return (
+    <div className="space-y-0.5 min-w-0">
+      <h1 className="text-base font-semibold text-gray-900 leading-tight truncate">
+        {heading}
+      </h1>
+      <p className="text-[11px] text-gray-500 flex items-center gap-1.5 leading-tight">
+        <span className="text-gray-400">Powered by</span>
+        <img
+          src={PLATFORM_BRAND.logo_url}
+          alt={PLATFORM_BRAND.name}
+          className="h-4 w-4 object-contain shrink-0"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+        <span className="font-medium text-gray-700">{PLATFORM_BRAND.name}</span>
+        {!compact && (
+          <>
+            <span className="text-gray-400 mx-0.5 hidden lg:inline">·</span>
+            <span className="text-gray-500 hidden lg:inline truncate">
+              {PLATFORM_BRAND.tagline}
+            </span>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+```
+
+**Design notes for the component:**
+
+- `useSession()` is fine because the header lives inside authenticated layouts. For pre-auth pages, see the auth-page note below.
+- `compact` prop lets the same component render in a narrower context (e.g. a slim sidebar on `md:` breakpoints) without the tagline.
+- The tagline is hidden below `lg:` because it doesn't fit in a 260px sidebar without truncation. On wider screens (header bar across the top), it shows.
+- The `onError` handler ensures a missing logo file doesn't show a broken-image icon — the text-only "Powered by Elarix" fallback still reads cleanly.
+
+### Files to update (replace existing portalName usage)
+
+CLI: grep `portalName\|BRAND_NAME` and update each call site:
+
+| File | What to do |
+|------|-----------|
+| `src/components/shared/Header.tsx` | Replace `<h1>{portalName(isAdmin)}</h1>` (or equivalent) with `<BrandedHeader isAdmin={isAdmin} />`. Pass `compact={true}` only if the existing layout is too narrow to fit the wider variant. |
+| `src/components/shared/Sidebar.tsx` | Same — replace `portalName()` with `<BrandedHeader isAdmin={isAdmin} compact />`. The sidebar is the narrow surface, so compact mode is the right default. |
+| `src/components/shared/Navbar.tsx` | Same — `<BrandedHeader isAdmin={isAdmin} />`. |
+| `src/app/(auth)/login/page.tsx` | Drop the `BRAND_NAME` import. Use the static `authPageHeading()` string ("Sign in") above the form. Pre-auth pages don't render `BrandedHeader` because there's no session to resolve the tenant. |
+| `src/app/auth/set-password/page.tsx` | Same — replace `BRAND_NAME` usage with `authPageHeading()`. |
+
+After updating: `grep portalName src/` and `grep BRAND_NAME src/` should both return zero hits.
+
+### Verification (Batch 7)
+
+Manual:
+1. Log in as an admin → confirm the sidebar header shows:
+   ```
+   XYZ Ltd - Admin Portal
+   Powered by [Elarix logo] Elarix
+   ```
+   Tagline is hidden at sidebar width (the sidebar is `< lg:` so the tagline is conditionally hidden).
+2. View any page with the top header bar (if there is one) → tagline shows on wide screens (`lg:` and above).
+3. SQL editor: `UPDATE tenants SET settings = settings || jsonb_build_object('display_name', 'Demo Inc') WHERE slug = 'gwms';`
+4. Log out + back in → header now reads "Demo Inc - Admin Portal".
+5. Env var override: stop dev server, set `NEXT_PUBLIC_PLATFORM_NAME=AcmeCloud`, restart → subtitle now reads "Powered by AcmeCloud".
+6. Delete or rename `public/elarix-logo.png` → reload → image hides via `onError`, text-only "Powered by Elarix" still reads cleanly.
+7. Auth pages (`/login`, `/auth/set-password`) → confirm they show "Sign in" or equivalent, no tenant name leaked pre-auth.
+
+### Commit message (Batch 7)
+
+```
+feat: Elarix platform vendor brand + BrandedHeader (B-129)
+
+New src/lib/platform-brand.ts exposes PLATFORM_BRAND constants
+(name, tagline, logo_url) with env-var overrides for white-label.
+src/lib/portal-name.ts now composes the heading from tenant brand
++ role instead of the hardcoded "Mauritius Offshore" prefix.
+
+BrandedHeader is the new shared component used in Header /
+Sidebar / Navbar. Renders:
+
+  [Tenant display_name] - [Admin|Client] Portal
+  Powered by [logo] Elarix · The intelligent portal for client
+  due diligence and compliance
+
+Tagline hides below lg: so the sidebar (narrow) doesn't overflow.
+Logo file falls back to text-only via onError. Auth pages
+(/login, /auth/set-password) use a simple "Sign in" heading
+that doesn't leak the tenant identity pre-session.
+```
+
+---
+
 ## Batch 6 — CHANGES.md + tech debt
 
 ### CHANGES.md
@@ -505,15 +695,24 @@ pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev
 ## End-of-brief checklist (CLI)
 
 1. **Migration lifecycle (Batch 1):** write, commit + push file, `db:push`, `db:status`, CHANGES.md.
-2. **Per-batch commits:** six commits. Stage by filename — never `git add .` or `git add -A`.
+2. **Per-batch commits:** seven commits total (Batches 1-7). Stage by filename — never `git add .` or `git add -A`.
 3. **Final check:** `git status` clean + branch up-to-date with origin/main.
 4. **Dev server restart** from main project dir.
 5. **One-line summary in chat** when done.
 
+## Pre-flight (Vanessa)
+
+Before running the dev server post-deploy, save the Elarix logo to `public/elarix-logo.png`:
+
+- Take the Elarix logo PNG that's been shared.
+- Strip the white background (macOS Preview → Tools → Instant Alpha → click white → Delete → Export as PNG; or remove.bg; or Photopea).
+- Save the transparent PNG to `public/elarix-logo.png` in the repo root.
+- If the file is missing when the dev server starts, the `BrandedHeader`'s `onError` handler hides the image and the text-only "Powered by Elarix" still reads cleanly — so it's not blocking, just less polished.
+
 ## Out-of-scope reminders
 
 - No admin UI for editing the brand — that's B-130.
-- No Elarix vendor-brand abstraction — separate axis.
+- No fully customer-facing white-label switch (Elarix-off mode) — B-131 if needed.
 - No per-locale formatting (currencies, dates).
 - No FSC compliance label abstraction.
-- No environment-variable-driven brand override.
+- No env-var override for the tenant brand (only the platform brand has env-var overrides — tenant brand always lives in the DB).
