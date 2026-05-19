@@ -9,6 +9,15 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-139)
+
+- **Audit other floating / sticky UI for chat-bubble collisions.** *Severity: Low.*
+  *Spawned by:* [B-139](cli-brief-unsaved-changes-bar-layout-b139.md).
+  *What:* B-139 fixed the unsaved-changes bar — Cancel + Save buttons were getting clipped by the B-128 chat assistant bubble at bottom-right. Fix: `max-w-7xl mx-auto` container around the bar's content + `lg:mr-20` safety margin on the button group. If toast notifications, banners, or floating action buttons start clipping the bubble too, apply the same pattern. No collisions known today; this is a defensive note. Estimate: ~30 minutes per surface.
+  *Why deferred:* No second offender reported yet.
+
+---
+
 ## 2026-05-19 (B-138)
 
 - **Mixed-actor `*_by` columns documented as admin-actor in B-138.** *Severity: Low.*

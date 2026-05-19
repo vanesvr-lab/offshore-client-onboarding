@@ -13,6 +13,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-139 — Unsaved-changes bar collides with chat bubble (done 2026-05-19)
+
+The sticky bottom-of-page "You have unsaved changes" bar on `/admin/services/[id]` rendered its Cancel + Save changes buttons flush against the viewport's right edge, where the B-128 chat assistant bubble partially obscured Save changes. Wrapped the bar's content in a `max-w-7xl mx-auto px-6` container so the buttons land at the right edge of the page's content column instead of the viewport edge, plus a `lg:mr-20` safety guard on the button group so it can never sit within 80 px of the viewport regardless of viewport width. Layout-only change to `ServiceDetailClient.tsx` ~line 7013; bar copy, button behaviour, and the chat widget's position are unchanged.
+
+### Tech debt
+
+- New Open entry #44: audit other floating / sticky UI for chat-bubble collisions — toasts, banners, floating action buttons. If a future one clips the bubble, apply the same pattern (max-width container + safety margin).
+
+---
+
 ## B-138 — Legacy profiles FK sweep (done 2026-05-19)
 
 Reported bug: admins created via the modern invite flow (or the SQL-only path documented in CLAUDE.md's Admin Setup section) couldn't be attached as reviewers on a peer-review request — `Failed to attach reviewers: insert or update on table "review_request_reviewers" violates foreign key constraint "review_request_reviewers_admin_id_fkey"`. Their session's `user_id` exists in `public.users` but not in legacy `public.profiles`, and B-118's FK still pointed at profiles. B-138 swept every admin-actor FK still on profiles and repointed them to users(id).
@@ -7106,6 +7116,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 41 | **Verification-context signature for precise drift detection** | Low | B-137 uses `profile.updated_at > doc.verified_at` (and the equivalent kyc comparison) to flag stale context. This false-positives when admin edits a profile field that doesn't actually feed the AI prompt (e.g. phone, work_email). False positives are cheap — admin clicks Re-run AI, same verdict comes back — but they're noise. Could add a `verification_context_signature` text column on `documents` (hash of the fields actually used in the AI prompt at verification time) and compare hashes instead of timestamps. Cleaner, but more code surface to keep the hash logic in sync with the prompt. Estimate: ~3 hours; defer until false positives become annoying. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
 | 42 | **List-view drift indicator** | Low | B-137's banner shows only when admin opens the per-document dialog. During bulk review (Document tab on the service page), admin doesn't see which docs have stale verification until they click into each one. A list-level chip ("1 doc has stale verification" / a small icon on the row) could surface drift earlier. Estimate: half-day; new brief if pitch demo highlights the gap. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
 | 43 | **Mixed-actor `*_by` columns documented as admin-actor in B-138** | Low | Six of the 24 FKs repointed in B-138 (audit_log.actor_id, client_processes.started_by, document_uploads.uploaded_by, documents.uploaded_by, kyc_records.filled_by, submitted_forms.uploaded_by) are written by session users that could be admin OR client OR filing rep. Post-B-127 they all live in `public.users` so the FK is correct, but the column name + sometimes-stale table comments may suggest admin-only writers. A documentation pass would capture which columns are mixed-actor to keep the schema legible for the next person reading it. Estimate: ~30 minutes. Spawned by [B-138](docs/cli-brief-legacy-profiles-fk-sweep-b138.md). |
+| 44 | **Audit other floating / sticky UI for chat-bubble collisions** | Low | B-139 fixed the unsaved-changes bar (Cancel + Save buttons were being obscured by the B-128 chat bubble) via a `max-w-7xl mx-auto` container + `lg:mr-20` safety margin. The same pattern likely applies if toasts, banners, or floating action buttons start clipping the bubble in future. No known issues today; spawned defensively in case adjacent surfaces follow the same anti-pattern. Spawned by [B-139](docs/cli-brief-unsaved-changes-bar-layout-b139.md). |
 
 ### Resolved
 
