@@ -14,6 +14,9 @@ export type ServiceDoc = {
   file_path: string;
   verification_status: string;
   verification_result: Record<string, unknown> | null;
+  /** B-137 — when the AI verification last ran. Compared against the
+   *  profile/KYC `updated_at` to compute `context_is_stale`. */
+  verified_at: string | null;
   admin_status: string | null;
   admin_status_note: string | null;
   admin_status_by: string | null;
@@ -30,6 +33,12 @@ export type ServiceDoc = {
   service_id: string | null;
   document_types: { id?: string; name: string; category: string; valid_for_months: number | null } | null;
   client_profiles: { id: string; full_name: string | null } | null;
+  /** B-137 — true when the document's parent profile (or its KYC row)
+   *  was modified after the AI's `verified_at`. Drives the blue
+   *  "Profile info has changed" banner on the document detail dialog
+   *  with a one-click Re-run AI button. Only set on per-person docs
+   *  (client_profile_id != null) where verified_at is non-null. */
+  context_is_stale?: boolean;
 };
 
 export type DocumentUpdateRequest = {

@@ -26,13 +26,25 @@ export interface DocumentDetailDoc {
   document_type_id?: string | null;
   verification_status?: string | null;
   verification_result?: Record<string, unknown> | null;
+  /** B-137 — when the AI verification last ran. Used together with
+   *  `context_is_stale` to drive the stale-context banner. */
+  verified_at?: string | null;
   admin_status?: string | null;
   admin_status_note?: string | null;
   admin_status_at?: string | null;
   /** B-097 — manual override / OCR-extracted expiry. */
   expiry_date?: string | null;
+  /** B-137 — true when the parent profile or its KYC row was modified
+   *  after `verified_at`. Drives the blue "Profile info has changed"
+   *  banner. Server-computed in the document data loader. */
+  context_is_stale?: boolean;
   document_types?: { name: string; category?: string; valid_for_months?: number | null } | null;
   client_profiles?: { full_name: string | null } | null;
+  /** B-137 — required by the banner's Re-run AI button so we can keep
+   *  the dialog working when triggered from the per-person profile
+   *  page (no service context). Optional; falls back to the
+   *  per-person verification path if not set. */
+  client_profile_id?: string | null;
 }
 
 interface Recipient {
@@ -102,6 +114,12 @@ export function DocumentDetailDialog({
   const [aiStatus, setAiStatus] = useState<string | null>(doc.verification_status ?? null);
   const [aiVerResult, setAiVerResult] = useState<Record<string, unknown> | null>(doc.verification_result ?? null);
   const [rerunning, setRerunning] = useState(false);
+  // B-137 — local mirror of the stale-context flag so it can flip
+  // false immediately after a successful Re-run AI without waiting for
+  // the parent's RSC refresh. Sync with the prop in a useEffect below.
+  const [contextIsStale, setContextIsStale] = useState<boolean>(
+    doc.context_is_stale === true,
+  );
 
   // B-097 — manual expiry override state.
   const initialExpiryYmd = doc.expiry_date ? doc.expiry_date.slice(0, 10) : "";
@@ -120,6 +138,13 @@ export function DocumentDetailDialog({
     setAiStatus(doc.verification_status ?? null);
     setAiVerResult(doc.verification_result ?? null);
   }, [doc.verification_status, doc.verification_result]);
+
+  // B-137 — re-sync the stale-context banner whenever the parent
+  // re-fetches and hands us a fresh doc (e.g. RSC refresh after a
+  // profile save).
+  useEffect(() => {
+    setContextIsStale(doc.context_is_stale === true);
+  }, [doc.context_is_stale]);
 
   // Fetch signed URL when dialog opens
   useEffect(() => {
@@ -253,9 +278,50 @@ export function DocumentDetailDialog({
         setAiStatus(data.document.verification_status ?? null);
         setAiVerResult(data.document.verification_result ?? null);
       }
+      // B-137 — re-running AI refreshes `verified_at` on the doc, so
+      // the stale-context signal is cleared by definition. Flip the
+      // local mirror immediately so the banner disappears without
+      // waiting for the parent's RSC refresh.
+      setContextIsStale(false);
       toast.success("AI verification re-ran", { position: "top-right" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Re-run failed");
+    } finally {
+      setRerunning(false);
+    }
+  }
+
+  // B-137 — Re-run AI from the stale-context banner. Uses the
+  // per-person verify-with-context route (admin or rep both have
+  // access), and the existing `handleRerunAi` admin-route path stays
+  // available for the ADMIN REVIEW section's button. The two share
+  // the same local state updates so the dialog stays consistent
+  // regardless of which button fired.
+  async function handleStaleBannerRerun() {
+    setRerunning(true);
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/verify-with-context`, {
+        method: "POST",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        verificationStatus?: string;
+        result?: Record<string, unknown> | null;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Re-run failed");
+      if (data.verificationStatus) {
+        setAiStatus(data.verificationStatus);
+      }
+      if (data.result) {
+        setAiVerResult(data.result);
+      }
+      setContextIsStale(false);
+      toast.success("AI verification re-ran", { position: "top-right" });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Re-run failed", {
+        position: "top-right",
+      });
     } finally {
       setRerunning(false);
     }
@@ -394,6 +460,42 @@ export function DocumentDetailDialog({
             </div>
 
             <div className="p-5 space-y-5">
+              {/* B-137 — stale-context banner: the profile (or its KYC
+                  row) was edited after the AI's verified_at, so the
+                  current verification result was rendered against
+                  now-stale context. One-click Re-run AI clears it. */}
+              {contextIsStale && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-900 flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <RefreshCw className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">Profile info has changed</p>
+                      <p className="text-xs text-blue-800 mt-0.5">
+                        This document was verified before the profile was updated. Re-run AI to refresh.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => void handleStaleBannerRerun()}
+                    disabled={rerunning}
+                    className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 h-8 text-xs"
+                  >
+                    {rerunning ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        Re-running…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Re-run AI
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
               {/* Two-track status */}
               <section>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Status</p>

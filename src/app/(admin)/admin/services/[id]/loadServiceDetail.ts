@@ -147,11 +147,12 @@ export async function loadServiceDetail(
       .from("documents")
       .select(`
         id, file_name, file_path, verification_status, verification_result,
+        verified_at,
         admin_status, admin_status_note, admin_status_by, admin_status_at,
         mime_type, uploaded_at, expiry_date, document_type_id, client_profile_id,
         service_id,
         document_types(id, name, category, valid_for_months),
-        client_profiles(id, full_name)
+        client_profiles(id, full_name, updated_at, client_profile_kyc(updated_at))
       `)
       .eq("service_id", serviceId)
       .eq("is_active", true),
@@ -303,11 +304,12 @@ export async function loadServiceDetail(
       .from("documents")
       .select(`
         id, file_name, file_path, verification_status, verification_result,
+        verified_at,
         admin_status, admin_status_note, admin_status_by, admin_status_at,
         mime_type, uploaded_at, expiry_date, document_type_id, client_profile_id,
         service_id,
         document_types(id, name, category, valid_for_months),
-        client_profiles(id, full_name)
+        client_profiles(id, full_name, updated_at, client_profile_kyc(updated_at))
       `)
       .is("service_id", null)
       .eq("tenant_id", tenantId)
@@ -565,6 +567,45 @@ export async function loadServiceDetail(
     supabase,
     reviewRequestRows,
   );
+
+  // B-137 — compute `context_is_stale` per per-person doc: the AI's
+  // verification ran against context that's now older than the
+  // profile's (or KYC row's) most recent update. False positives are
+  // fine (admin clicks Re-run AI and the same verdict comes back); the
+  // banner is purely a discoverability nudge. We mutate the doc rows
+  // in place so the same flag survives the type cast below into
+  // `ServiceDoc[]`.
+  type RawDocForStaleness = {
+    verified_at?: string | null;
+    client_profile_id?: string | null;
+    client_profiles?:
+      | {
+          updated_at?: string | null;
+          client_profile_kyc?:
+            | Array<{ updated_at?: string | null }>
+            | { updated_at?: string | null }
+            | null;
+        }
+      | null;
+    context_is_stale?: boolean;
+  };
+  const rawDocs = (docsRes.data ?? []) as Array<Record<string, unknown>> & RawDocForStaleness[];
+  for (const doc of rawDocs) {
+    const verifiedAt = doc.verified_at ?? null;
+    if (!verifiedAt || !doc.client_profile_id) {
+      doc.context_is_stale = false;
+      continue;
+    }
+    const profile = doc.client_profiles ?? null;
+    const profileUpdatedAt = profile?.updated_at ?? null;
+    const kycRow = Array.isArray(profile?.client_profile_kyc)
+      ? profile?.client_profile_kyc?.[0] ?? null
+      : (profile?.client_profile_kyc ?? null);
+    const kycUpdatedAt = kycRow?.updated_at ?? null;
+    doc.context_is_stale =
+      (!!profileUpdatedAt && profileUpdatedAt > verifiedAt) ||
+      (!!kycUpdatedAt && kycUpdatedAt > verifiedAt);
+  }
 
   return {
     service: serviceRes.data as unknown as ServiceWithTemplate,
