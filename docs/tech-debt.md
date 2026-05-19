@@ -9,6 +9,35 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-131)
+
+- **Rep notifications — director isn't pinged when their rep edits KYC.** *Severity: Low.*
+  *Spawned by:* [B-131](cli-brief-inline-profile-create-and-filing-reps-b131.md).
+  *What:* When a filing rep saves KYC on behalf of a director, the director receives no email. The change is captured in `audit_log` as `profile_kyc_saved_by_rep`, but no outbound notification fires. If we want "your rep just updated your KYC, here's what changed" emails (with a per-change diff or a once-a-day digest), add a hook to the rep-driven save path that builds the diff + sends via Resend. ~2 hours; new brief when needed.
+  *Why deferred:* Pitch demo doesn't need it; the audit row covers the compliance angle.
+
+- **Multiple filing reps per director.** *Severity: Low.*
+  *Spawned by:* [B-131](cli-brief-inline-profile-create-and-filing-reps-b131.md).
+  *What:* B-131 supports exactly one rep per profile via two columns (`filing_rep_name`, `filing_rep_email`). If a need arises for joint reps (e.g. two lawyers, primary + backup), add a junction table `client_profile_filing_reps (client_profile_id, rep_user_id, rep_name, created_at)` and adapt the dashboard / `/filings` queries. Estimate: ~half-day, plus a migration that backfills the existing two-column data.
+  *Why deferred:* One rep is the common case and matches today's UX.
+
+- **Rep access is KYC-only; no broader delegation.** *Severity: Low.*
+  *Spawned by:* [B-131](cli-brief-inline-profile-create-and-filing-reps-b131.md).
+  *What:* Filing reps can only edit the delegated director&apos;s KYC long form via `/filings/[profileId]`. They cannot manage milestones, see the audit trail, add other directors, upload service-level documents, etc. If clients want broader delegation ("power-of-attorney mode"), extend the rep-auth check across more routes (service-level write endpoints, document upload, KYC submit) gated on the same `filing_rep_email` match. Estimate: 1-2 days.
+  *Why deferred:* Most rep use-cases today are pure KYC paperwork; broader scope wasn&apos;t requested.
+
+- **Revoke / replace rep is implicit, not workflow-driven.** *Severity: Low.*
+  *Spawned by:* [B-131](cli-brief-inline-profile-create-and-filing-reps-b131.md).
+  *What:* To remove or replace a rep, an admin edits `filing_rep_email` on the profile (PATCH route). When the value changes to a new address, the new rep gets an invite; the old rep simply loses dashboard access on next page load (the email-match query no longer includes the profile). There&apos;s no explicit "revoke" toast, no email to the dropped rep, and the orphan `users` row stays in place. If revocation needs a formal flow (notification + audit ceremony), add a dedicated PATCH path. ~1 hour.
+  *Why deferred:* Implicit revocation is enough for the pitch; the audit trail still captures the email change.
+
+- **`/api/profiles/kyc/save` was previously open to any authenticated user in tenant.** *Severity: Low.*
+  *Spawned by:* [B-131](cli-brief-inline-profile-create-and-filing-reps-b131.md).
+  *What:* The save endpoint historically accepted any session with no per-profile authorization check. B-131 tightened it to require either profile ownership (user_id match), email-on-profile match, or filing-rep email match — but the legacy `/kyc` page reads from `kyc_records` (legacy table), not `client_profiles`. The newer modern-table KYC paths now pass that gate; if any code path still expects pre-B-131 permissive behaviour we&apos;ll surface it as a 403. Audit reach: grep for `/api/profiles/kyc/save` callers and verify each one&apos;s session matches the new contract.
+  *Why deferred:* No known failing caller. Documenting so future debugging starts here.
+
+---
+
 ## 2026-05-19 (B-130)
 
 - **Legacy clients/applications cleanup — Queue migrated, ~10-15 surfaces remain.** *Severity: Medium.*

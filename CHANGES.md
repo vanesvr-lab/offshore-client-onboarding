@@ -13,6 +13,64 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-131 — Inline profile create + filing rep delegation (done 2026-05-19)
+
+Two pitch-prep gaps closed in one pass: NewServiceWizard now has a "+ Create new profile" affordance (parity with /admin/profiles and the AddDirector modal on the service detail), and `client_profiles` gains a filing-rep delegation pattern — a corporate secretary / lawyer / accountant who fills KYC on behalf of a director, identified by email + a magic-link login.
+
+### Batch 1 — schema (Claude Code)
+
+- Migration `20260519071316_client_profiles_filing_rep.sql`:
+  - `client_profiles.filing_rep_name text` + `filing_rep_email text` (both nullable).
+  - Functional partial index `client_profiles_filing_rep_email_idx ON client_profiles(lower(filing_rep_email)) WHERE filing_rep_email IS NOT NULL` — at-login lookup ("give me every profile where filing_rep_email = my email") is the hot path.
+  - CHECK constraint `client_profiles_filing_rep_consistency` — both fields or neither, backing the UI-level validation.
+- `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote paired.
+
+### Batch 2 — APIs + invite helper (Claude Code)
+
+- `src/lib/filing-rep-invite.ts` (new):
+  - `upsertRepUser` — finds the rep&apos;s `users` row by `(tenant_id, lower(email))` or inserts a fresh one + mirrors to `profiles` for the NextAuth credentials fallback path. Returns the user id.
+  - `sendFilingRepInvite` — mints a 24h `purpose="filing_rep_invite"` JWT and posts a branded magic-link email via Resend (tenant brand H1 + Powered by Elarix footer).
+- `POST /api/admin/profiles-v2/create`, `PATCH /api/admin/profiles-v2/[id]`, and `POST /api/admin/services/[id]/roles` (the "create new profile" branch) all accept `filing_rep_name` + `filing_rep_email`. Both-or-neither validated; rep mutations gated on `data_access=edit` (Junior Officer + Auditor → 403). Invite is best-effort (failures log + the profile still saves; admin can re-PATCH to retry).
+- The PATCH route also re-validates the post-update pair-or-neither state against the existing row so a partial flip (clear only the name, leave the email) returns a 400 instead of breaking the DB CHECK.
+- `src/app/api/auth/set-password/route.ts` adds `filing_rep_invite` to its `validPurposes` list so reps reuse the existing /auth/set-password flow.
+
+### Batch 3 — UI (Claude Code)
+
+- `CreateProfileDialog`: new bottom section with a "Filed by a representative" checkbox + rep name / email inputs; same validation as the API (both-required-together, simple email regex). `onCreated` now passes back a `CreatedProfileSummary` (id + the displayable fields) so callers can splice the new row into local state without a refetch.
+- `NewServiceWizard` Step 2: new "+ Create new" button next to the search input; opens the CreateProfileDialog above, auto-adds the newly-created profile to selected roles with the default `director` role. Local `profiles` state preserves prior list + appended row through the wizard.
+- AddDirector modal on the service detail page: gained the `is_representative` checkbox, `due_diligence_level` select, and the same filing-rep affordance — parity with CreateProfileDialog. Form state resets on dialog close.
+
+### Batch 4 — client portal section (Claude Code)
+
+- `src/components/client/FilingsOnBehalfOf.tsx` (new): renders a list of delegated profiles with director name, service numbers + roles, and a chevron link to `/filings/[profileId]`. Section hides when empty.
+- `src/app/(client)/dashboard/page.tsx`: query `client_profiles` where `filing_rep_email ILIKE session.user.email`, scoped to tenant + non-deleted. The query runs ahead of the `clientProfileId` check so a rep with no `client_profiles` row of their own still sees the section above the "getting your account ready" copy. All three render paths (no profile / no services / normal dashboard) now render the section above their existing content.
+
+### Batch 5 — rep-facing KYC editor (Claude Code)
+
+- `src/app/(client)/filings/[profileId]/page.tsx` (new): server component. Auth-gates on `session.user.email === client_profiles.filing_rep_email` (case-insensitive); a mismatch redirects to `/dashboard?error=not-a-filing-rep`. Loads the profile + its `client_profile_kyc` row + document catalog, adapts the modern data into the legacy `KycRecord` shape the existing `IndividualKycForm` / `OrganisationKycForm` components expect, and renders whichever form matches `record_type`. Profiles whose KYC row hasn&apos;t been initialised render a placeholder + back link rather than crashing the form.
+- `POST /api/profiles/kyc/save` authorization extended: accepts director (matched by `users.id` or email), filing rep (matched by `filing_rep_email`), or admin. 403s everyone else.
+- Rep-driven saves write a `profile_kyc_saved_by_rep` audit_log row capturing the rep&apos;s user id, the kyc record id, the client_profile_id, and the field keys touched. Self-driven saves stay silent — auto-save fires per field and would otherwise flood the log.
+
+### Batch 6 — docs (Claude Code)
+
+- This CHANGES.md entry.
+- `docs/tech-debt.md` — new 2026-05-19 (B-131) section: rep notifications follow-up, multiple reps per director, broader rep delegation, revoke flow, and a note on the tightened `/api/profiles/kyc/save` authorization.
+
+### Permission recap
+
+- **Setting / changing a filing rep:** any admin with `data_access=edit` (Super User / Manager / Officer). Junior Officer + Auditor → 403.
+- **Rep access to delegated KYC:** any user whose session email matches `filing_rep_email` on at least one `client_profiles` row. No admin flag involved; access is driven entirely by the email match at request time.
+
+### Migration push status
+
+- `20260519071316_client_profiles_filing_rep.sql` — applied to prod via `npm run db:push` on 2026-05-19; `npm run db:status` confirms Local + Remote pair.
+
+### Dev server restart
+
+- End-of-brief restart from the main project dir: `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`.
+
+---
+
 ## B-130 — Services queue modernization + assigned officer + reviews inbox (done 2026-05-19)
 
 Three connected gaps from the pitch-prep walkthrough — the legacy
