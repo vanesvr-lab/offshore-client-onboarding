@@ -42,6 +42,16 @@ export async function PATCH(
         { status: 400 },
       );
     }
+    // B-127 — committing a status transition (forward or override) requires
+    // approve_status_change. A `change_status`-only role can see the button
+    // but the UI renders it disabled with a tooltip; if a curl bypasses
+    // the UI, this 403 catches it.
+    if (!session.user.adminPermissions?.approve_status_change) {
+      return NextResponse.json(
+        { error: "Your role doesn't have permission to commit a status change." },
+        { status: 403 },
+      );
+    }
   }
 
   const supabase = createAdminClient();

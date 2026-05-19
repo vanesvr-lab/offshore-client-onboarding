@@ -12,6 +12,7 @@ import {
   ConnectedSectionHeader,
   ConnectedNotesHistory,
 } from "./AdminApplicationSections";
+import { useHasFlag } from "@/lib/admin-permissions-context";
 import type { ServiceSubstance, SubstanceAssessment } from "@/types";
 
 // B-072 Batch 4 — FSC §3.2/§3.3/§3.4 substance review form. Admin-only.
@@ -307,8 +308,14 @@ export function SubstanceReviewForm({
 
   const notesRequired =
     state.admin_assessment === "fail" || state.admin_assessment === "review";
+  // B-127 — committing a substance assessment is a review action and
+  // gated on can_review. Tri-state autosaves (saveTri) are plain edits
+  // and stay unblocked — the bottom Save is the assessment commit.
+  const canReview = useHasFlag("can_review");
   const canSave =
-    !saving && (!notesRequired || state.admin_assessment_notes.trim().length > 0);
+    canReview &&
+    !saving &&
+    (!notesRequired || state.admin_assessment_notes.trim().length > 0);
 
   async function handleSave() {
     if (!canSave) return;
@@ -534,7 +541,12 @@ export function SubstanceReviewForm({
                 type="button"
                 onClick={() => void handleSave()}
                 disabled={!canSave}
-                className="bg-brand-navy hover:bg-brand-blue"
+                title={
+                  canReview
+                    ? undefined
+                    : "Your role can't sign off on reviews."
+                }
+                className="bg-brand-navy hover:bg-brand-blue disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
                 Save substance review

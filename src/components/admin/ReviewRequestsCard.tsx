@@ -27,6 +27,7 @@ import {
   PEOPLE_KYC_PROFILE_KEY,
   sectionAnchorHref,
 } from "@/lib/review-requests/sections";
+import { useHasFlag } from "@/lib/admin-permissions-context";
 import type {
   HydratedReviewRequest,
   ReviewClosedReason,
@@ -150,6 +151,9 @@ export function ReviewRequestsCard({
     null,
   );
   const [closingId, setClosingId] = useState<string | null>(null);
+  // B-127 — Mark-as-reviewed (the small green check icon + the detail
+  // dialog's Mark Reviewed button) is a review action.
+  const canReview = useHasFlag("can_review");
 
   async function closeRequest(
     req: HydratedReviewRequest,
@@ -281,9 +285,13 @@ export function ReviewRequestsCard({
                       </IconAction>
                       {isInvitedReviewer && (
                         <IconAction
-                          label="Mark as reviewed"
+                          label={
+                            canReview
+                              ? "Mark as reviewed"
+                              : "Your role can't sign off on reviews."
+                          }
                           tone="emerald"
-                          disabled={closingId === req.id}
+                          disabled={closingId === req.id || !canReview}
                           onClick={() => void closeRequest(req, "reviewer_marked")}
                         >
                           <Check className="h-4 w-4" />
@@ -410,6 +418,9 @@ function ReviewRequestDetailDialog({
     (r) => r.admin_id === currentUserId,
   );
   const isOpen = request.status === "open";
+  // B-127 — detail dialog also reads the can_review flag so its
+  // "Mark as reviewed" button stays in sync with the table's icon.
+  const canReview = useHasFlag("can_review");
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-xl w-[min(100vw-2rem,36rem)]">
@@ -529,8 +540,13 @@ function ReviewRequestDetailDialog({
           {isOpen && isInvitedReviewer && (
             <Button
               onClick={onMarkReviewed}
-              disabled={closing}
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={closing || !canReview}
+              title={
+                canReview
+                  ? undefined
+                  : "Your role can't sign off on reviews."
+              }
+              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Check className="h-3.5 w-3.5 mr-1" />
               Mark as reviewed

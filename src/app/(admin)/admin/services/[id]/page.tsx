@@ -142,7 +142,11 @@ export default async function ServiceDetailPage({
 
   return (
     <div>
-      <ServiceDetailClient {...payload} currentUserId={session.user.id as string} />
+      <ServiceDetailClient
+        {...payload}
+        currentUserId={session.user.id as string}
+        adminPermissions={session.user.adminPermissions ?? null}
+      />
     </div>
   );
 }

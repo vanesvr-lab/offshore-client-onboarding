@@ -11,6 +11,13 @@ export async function POST(
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // B-127 — soft-delete is gated on `destructive_actions`.
+  if (!session.user.adminPermissions?.destructive_actions) {
+    return NextResponse.json(
+      { error: "Your role doesn't have permission to delete clients." },
+      { status: 403 },
+    );
+  }
 
   const { confirmationText } = await request.json() as { confirmationText?: string };
   if (confirmationText !== "DELETE") {

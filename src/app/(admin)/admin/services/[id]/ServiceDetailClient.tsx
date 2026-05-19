@@ -31,6 +31,7 @@ import { DocumentDetailDialog } from "@/components/shared/DocumentDetailDialog";
 import type { DocumentDetailDoc } from "@/components/shared/DocumentDetailDialog";
 import { ServiceCollapsibleSection } from "@/components/admin/ServiceCollapsibleSection";
 import { ServiceAuditTrailCard } from "@/components/admin/ServiceAuditTrailCard";
+import { AdminPermissionsProvider } from "@/lib/admin-permissions-context";
 import { FieldProvenanceMarker } from "@/components/admin/FieldProvenanceMarker";
 import type { VerificationResult } from "@/types";
 import {
@@ -3753,6 +3754,10 @@ interface Props {
   // `ReviewWizardClient`, not here, so this stays a pure read-only flag.
   reviewMode?: boolean;
   reviewStep?: number;
+  /** B-127 — admin role permission flags from the NextAuth session.
+   *  Drives gating of the right-rail status buttons, destructive
+   *  affordances, and the review buttons in this page. */
+  adminPermissions?: import("@/lib/admin-permissions").AdminPermissions | null;
 }
 
 // B-098 — forward chain + override list now come from the single source
@@ -4390,6 +4395,7 @@ export function ServiceDetailClient({
   submittedFormsByRefId,
   reviewMode = false,
   reviewStep = 0,
+  adminPermissions = null,
 }: Props) {
   const router = useRouter();
   const [service, setService] = useState(initialService);
@@ -5514,6 +5520,7 @@ export function ServiceDetailClient({
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
+    <AdminPermissionsProvider value={adminPermissions ?? null}>
     <AdminApplicationSectionsProvider
       applicationId={service.id}
       initialReviews={sectionReviews}
@@ -5959,7 +5966,11 @@ export function ServiceDetailClient({
                       adminNamesByUserId={adminNamesByUserId}
                       onRefresh={handleRolesRefresh}
                       onProfileSaved={handleProfileSaved}
-                      onRemoved={handleProfileRemoved}
+                      onRemoved={
+                        adminPermissions?.destructive_actions
+                          ? handleProfileRemoved
+                          : undefined
+                      }
                       onDdLevelChanged={handleProfileDdLevelChanged}
                       onCommunicationSent={appendCommunication}
                       pendingItems={
@@ -6329,41 +6340,58 @@ export function ServiceDetailClient({
           {/* Row 4 — actions. B-098: nextStage falls back to the last
               forward step so the button label doesn't collapse at
               terminals (active / rejected / closed); button stays
-              greyed in that case. */}
+              greyed in that case.
+              B-127 — Move-to / Override are now permission-gated:
+              - Hidden if !change_status.
+              - Disabled with a "propose-only" tooltip when change_status
+                is true but approve_status_change is false.
+              - Override dropdown only renders when approve_status_change
+                is true. */}
           {(() => {
             const nextStage = getNextStage(service.status);
             const isTerminal = nextStage === null;
             const fallback = SERVICE_STATUS_FORWARD_CHAIN[SERVICE_STATUS_FORWARD_CHAIN.length - 1];
             const nextLabel = SERVICE_STATUS_LABELS[nextStage ?? fallback];
+            const canChange = !!adminPermissions?.change_status;
+            const canApprove = !!adminPermissions?.approve_status_change;
+            if (!canChange) return null;
+            const cantCommit = !canApprove;
+            const moveDisabled = isTerminal || updatingStatus || cantCommit;
+            const moveTooltip = cantCommit
+              ? "Awaiting approver — your role can propose but not commit."
+              : undefined;
             return (
               <div className="flex items-center gap-2 pt-1">
                 <Button
                   onClick={() => nextStage && void updateStatus(nextStage)}
-                  disabled={isTerminal || updatingStatus}
-                  className={`flex-1 h-9 text-xs ${BTN_PRIMARY} ${isTerminal ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={moveDisabled}
+                  title={moveTooltip}
+                  className={`flex-1 h-9 text-xs ${BTN_PRIMARY} ${moveDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   Move to {nextLabel}
                 </Button>
 
-                <div className="relative">
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      requestOverride(e.target.value);
-                      e.currentTarget.value = "";
-                    }}
-                    disabled={updatingStatus}
-                    className="h-9 rounded-md border border-gray-300 bg-white pl-2.5 pr-6 text-xs cursor-pointer appearance-none hover:bg-gray-50"
-                  >
-                    <option value="">Stage Override</option>
-                    {SERVICE_STATUS_ALL.map((s) => (
-                      <option key={s} value={s} disabled={s === service.status}>
-                        {SERVICE_STATUS_LABELS[s]}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-                </div>
+                {canApprove && (
+                  <div className="relative">
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        requestOverride(e.target.value);
+                        e.currentTarget.value = "";
+                      }}
+                      disabled={updatingStatus}
+                      className="h-9 rounded-md border border-gray-300 bg-white pl-2.5 pr-6 text-xs cursor-pointer appearance-none hover:bg-gray-50"
+                    >
+                      <option value="">Stage Override</option>
+                      {SERVICE_STATUS_ALL.map((s) => (
+                        <option key={s} value={s} disabled={s === service.status}>
+                          {SERVICE_STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                  </div>
+                )}
 
                 {updatingStatus && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
               </div>
@@ -6591,5 +6619,6 @@ export function ServiceDetailClient({
       )}
     </div>
     </AdminApplicationSectionsProvider>
+    </AdminPermissionsProvider>
   );
 }

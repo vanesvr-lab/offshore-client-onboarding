@@ -125,6 +125,15 @@ export async function PUT(
         { status: 400 }
       );
     }
+    // B-127 — committing an admin_assessment is a review action.
+    // Plain criterion autosaves (the Yes/No/Unknown PUTs that don't
+    // include admin_assessment) stay unblocked.
+    if (!session.user.adminPermissions?.can_review) {
+      return NextResponse.json(
+        { error: "Your role can't sign off on reviews." },
+        { status: 403 },
+      );
+    }
   }
 
   const nowIso = new Date().toISOString();

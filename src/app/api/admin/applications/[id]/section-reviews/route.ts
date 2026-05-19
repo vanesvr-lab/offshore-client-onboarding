@@ -39,6 +39,15 @@ export async function POST(
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // B-127 — section-review commit is gated on `can_review`. Officers
+  // and Junior Officers don't sign off; the UI renders the button
+  // disabled with a tooltip; this 403 guards the server.
+  if (!session.user.adminPermissions?.can_review) {
+    return NextResponse.json(
+      { error: "Your role can't sign off on reviews." },
+      { status: 403 },
+    );
+  }
 
   let body: {
     section_key?: string;

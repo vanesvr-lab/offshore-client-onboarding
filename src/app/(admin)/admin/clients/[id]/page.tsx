@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,8 @@ export default async function ClientDetailPage({
 }: {
   params: { id: string };
 }) {
+  const session = await auth();
+  const canDelete = !!session?.user.adminPermissions?.destructive_actions;
   const supabase = createAdminClient();
 
   const [
@@ -306,21 +309,23 @@ export default async function ClientDetailPage({
             requirements={(allRequirements ?? []) as unknown as DueDiligenceRequirement[]}
           />
 
-          {/* Danger zone */}
-          <div className="rounded-lg border border-red-100 p-4">
-            <p className="text-sm font-medium text-red-700 mb-2">Danger Zone</p>
-            <p className="text-xs text-gray-500 mb-3">
-              Permanently hides this client and disables their login. Cannot be undone.
-            </p>
-            <DeleteClientButton
-              clientId={client.id}
-              clientName={client.company_name}
-              contactName={users[0]?.profiles?.full_name ?? null}
-              contactEmail={users[0]?.profiles?.email ?? null}
-              applicationCount={applications.length}
-              documentCount={0}
-            />
-          </div>
+          {/* Danger zone — B-127: hidden when destructive_actions is off. */}
+          {canDelete && (
+            <div className="rounded-lg border border-red-100 p-4">
+              <p className="text-sm font-medium text-red-700 mb-2">Danger Zone</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Permanently hides this client and disables their login. Cannot be undone.
+              </p>
+              <DeleteClientButton
+                clientId={client.id}
+                clientName={client.company_name}
+                contactName={users[0]?.profiles?.full_name ?? null}
+                contactEmail={users[0]?.profiles?.email ?? null}
+                applicationCount={applications.length}
+                documentCount={0}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

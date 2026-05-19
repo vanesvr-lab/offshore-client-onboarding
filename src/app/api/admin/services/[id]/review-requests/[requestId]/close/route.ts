@@ -47,6 +47,20 @@ export async function POST(
     );
   }
 
+  // B-127 — marking a peer/manager review request reviewed is a
+  // review action. Requester-driven force-close is gated on the
+  // existing requester identity check below and isn't a review event,
+  // so it stays unrestricted.
+  if (
+    reason === "reviewer_marked" &&
+    !session.user.adminPermissions?.can_review
+  ) {
+    return NextResponse.json(
+      { error: "Your role can't sign off on reviews." },
+      { status: 403 },
+    );
+  }
+
   // Verify the request exists, is open, belongs to this service + tenant.
   const { data: req, error: fetchErr } = await supabase
     .from("review_requests")

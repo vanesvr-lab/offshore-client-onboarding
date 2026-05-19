@@ -27,6 +27,14 @@ export async function POST(
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // B-127 — soft-deleting a profile from a service is a destructive
+  // action; gated on `destructive_actions`.
+  if (!session.user.adminPermissions?.destructive_actions) {
+    return NextResponse.json(
+      { error: "Your role doesn't have permission to remove profiles." },
+      { status: 403 },
+    );
+  }
 
   const { id: serviceId, profileId } = await params;
   if (!serviceId || !profileId) {

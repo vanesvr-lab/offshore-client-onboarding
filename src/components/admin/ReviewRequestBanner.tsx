@@ -14,6 +14,7 @@ import {
   PEOPLE_KYC_PROFILE_KEY,
   sectionAnchorHref,
 } from "@/lib/review-requests/sections";
+import { useHasFlag } from "@/lib/admin-permissions-context";
 import type {
   HydratedReviewRequest,
   ReviewClosedReason,
@@ -61,6 +62,8 @@ export function ReviewRequestBanner({
   const bannerRef = useRef<HTMLDivElement>(null);
   const [closing, setClosing] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
+  // B-127 — the banner's "Mark as reviewed" CTA is a review action.
+  const canReview = useHasFlag("can_review");
 
   // Filter to open requests where current user is invited as a reviewer.
   const eligible = useMemo(
@@ -189,8 +192,13 @@ export function ReviewRequestBanner({
         </div>
         <Button
           size="sm"
-          className="bg-green-600 hover:bg-green-700 text-white gap-1.5 shrink-0"
-          disabled={closing}
+          className="bg-green-600 hover:bg-green-700 text-white gap-1.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={closing || !canReview}
+          title={
+            canReview
+              ? undefined
+              : "Your role can't sign off on reviews."
+          }
           onClick={() => void markReviewed(active)}
         >
           <Check className="h-3.5 w-3.5" />
