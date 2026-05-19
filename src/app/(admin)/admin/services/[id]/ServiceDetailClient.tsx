@@ -6984,16 +6984,21 @@ export function ServiceDetailClient({
       {/* Fixed bottom save bar — only shows when changes are pending.
           B-139 — Buttons used to render flush against the viewport's
           right edge and got partially obscured by the B-128 chat
-          bubble. Wrap content in a max-w-7xl + mx-auto container so
-          Cancel + Save land at the right edge of the page's content
-          column (where the eye expects them), plus a lg:mr-20 guard
-          on the button group so it can never sit within 80px of the
-          viewport edge regardless of viewport width. */}
+          bubble. Wrapped in a max-w-7xl + mx-auto container with a
+          lg:mr-20 safety guard so the cluster never sits within 80px
+          of the viewport edge.
+          B-141 — switched from justify-between (which kept the
+          buttons hugging the right edge of the 1280px content
+          column) to a single centered cluster: message + buttons
+          grouped with `gap-6` and `justify-center` so the whole
+          control sits in the horizontal middle of the viewport.
+          The lg:mr-20 moved up from the button group to the outer
+          flex so the centered cluster still clears the chat bubble. */}
       {!reviewMode && pendingChanges && (
         <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg py-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
-          <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-6 flex items-center justify-center gap-6 lg:mr-20">
             <p className="text-sm text-amber-600 font-medium">You have unsaved changes</p>
-            <div className="flex items-center gap-2 mr-0 lg:mr-20">
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"
