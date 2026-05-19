@@ -9,6 +9,30 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-132)
+
+- **Document expiry alerts.** *Severity: Low.*
+  *Spawned by:* [B-132](cli-brief-profile-scoped-documents-b132.md).
+  *What:* `document_types.valid_for_months` defines how long a doc stays valid, and the per-row UI already computes "Expires in N days / Expired" pills. There&apos;s no proactive alert when a doc is approaching or past expiry — admins only see it when they happen to open the service. Useful for compliance refresh workflows; could surface as a dashboard widget or a daily email digest. Estimate: ~half-day.
+  *Why deferred:* Pitch demo doesn&apos;t need it; the per-row pill catches it during normal review.
+
+- **Document categorization may be wrong in legacy seed data.** *Severity: Med.*
+  *Spawned by:* [B-132](cli-brief-profile-scoped-documents-b132.md).
+  *What:* The Batch 1 backfill assumed `document_types.category IN ('identity','financial','compliance')` correctly identifies personal docs. If any seeded category was mislabeled (e.g. a corporate doc accidentally categorized as 'compliance'), it was backfilled to `service_id = NULL` and now surfaces on every service the profile is on — a leak across services. Audit the `document_types` table after deploy and reclassify if needed; the per-doc `audit_log` row from the migration captures the count but not the individual rows. Estimate: ~1 hour to audit, plus migration time if any rows need fixing.
+  *Why deferred:* The categorisation has been stable across recent briefs; treat as a post-deploy sanity check rather than blocking work.
+
+- **Cross-service document audit trail.** *Severity: Low.*
+  *Spawned by:* [B-132](cli-brief-profile-scoped-documents-b132.md).
+  *What:* When a personal doc is replaced on Service A, the change isn&apos;t reflected in Service B&apos;s audit_log — the upload route writes one audit row tied to the originating service. The doc itself is updated everywhere (correct), but a Service B admin reading the audit trail won&apos;t see the replace event. If GWMS audit pressure requires per-service audit on every doc replace, augment the audit writer to fan out one row per service the profile is currently on. Estimate: ~2 hours.
+  *Why deferred:* The single audit row already captures the actor, the doc, and the previous filename; tracing across services is a power-user analysis (and `audit_log` filtering can recover it from the doc id).
+
+- **`/api/admin/processes/[id]/upload` doesn&apos;t set service_id at all.** *Severity: Low.*
+  *Spawned by:* [B-132](cli-brief-profile-scoped-documents-b132.md).
+  *What:* The legacy `client_processes` upload route inserts into `documents` without setting `service_id`. Pre-B-132 this would have errored (NOT NULL). Now it silently sets NULL, which classifies every process-uploaded doc as profile-scoped even if it&apos;s a corporate doc. Decide whether that&apos;s correct (most process docs are entity-level) and either set the process&apos;s associated service_id or accept the new semantics. Estimate: ~1 hour after a category audit.
+  *Why deferred:* Legacy code path; the broader retirement of `applications` / processes is its own brief.
+
+---
+
 ## 2026-05-19 (B-131)
 
 - **Rep notifications — director isn't pinged when their rep edits KYC.** *Severity: Low.*

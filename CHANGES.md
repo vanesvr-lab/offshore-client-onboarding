@@ -13,6 +13,58 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-132 — Profile-scoped documents (done 2026-05-19)
+
+Personal KYC documents (identity / financial / compliance) now follow the person rather than a single service. A passport uploaded for Bruce on Service A automatically surfaces on every other service Bruce is on; replacing it anywhere replaces it everywhere. Service-scoped corporate docs (e.g. Certificate of Incorporation for the entity being formed) remain tied to their service.
+
+### Batch 1 — schema + backfill (Claude Code)
+
+- Migration `20260519072750_documents_profile_scoped.sql`:
+  - `ALTER documents.service_id DROP NOT NULL`.
+  - Backfill: every active doc whose `document_types.category` is `identity`, `financial`, or `compliance` gets `service_id = NULL`.
+  - Audit summary row (`actor_role='system'`, action `documents_profile_scoped_backfill`, `new_value.backfilled_count = <n>`) — one row, not per-doc, so the audit log doesn&apos;t flood.
+  - Partial index `documents_profile_scoped_idx ON documents(client_profile_id) WHERE service_id IS NULL AND is_active = true` for the new union queries.
+- `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote paired.
+
+### Batch 2 — upload routes (Claude Code)
+
+- `src/app/api/admin/services/[id]/documents/upload/route.ts` and `src/app/api/services/[id]/documents/upload/route.ts` both:
+  - Read `document_types.category` up front. `PERSONAL_CATEGORIES = ['identity','financial','compliance']`.
+  - For personal docs the replace-lookup key switches to `(client_profile_id, document_type_id) WHERE service_id IS NULL` so a re-upload on Service B correctly supersedes a previously-active row uploaded on Service A.
+  - Insert path writes `service_id = isPersonal ? null : currentServiceId`. Service-scoped corporate docs keep their existing `(service_id, document_type_id)` upsert key.
+- Other doc-insert paths (`/api/documents/upload-external`, `/api/admin/processes/[id]/upload`) already omit `service_id` in their inserts; they continue to work because the column is now nullable. Behaviour for those legacy routes is unchanged.
+
+### Batch 3 — query rewrite (Claude Code)
+
+- `loadServiceDetail.ts`: after the initial Promise.all resolves, run a follow-up `documents` query filtering on `service_id IS NULL AND client_profile_id IN <attached profile ids>`. Merge into the service-scoped result, deduped by document id, before the final return. The original service-scoped query now also selects `service_id` so downstream UI can branch on profile-scoped vs service-scoped. `ServiceDoc` type extended with `service_id: string | null`.
+- `src/app/(admin)/admin/services/page.tsx` (admin services list): same pattern — fetch personal docs by attached profile ids in parallel with the existing service-scoped fetch, then attribute each personal doc to every service its profile is on so the per-service progress meter counts personal docs correctly.
+
+### Batch 4 — UI "Personal" badge (Claude Code)
+
+- `KycDocRowData` gains `is_profile_scoped?: boolean`, populated at every construction site in `ServiceDetailClient.tsx` (KycLongForm section rows, the Address subsection, and the service-level docs grid) from the underlying doc&apos;s `service_id` (NULL → personal).
+- `KycDocRow` renders a small purple `Personal` pill with a Users lucide icon next to the document name, ahead of the verification / admin-status badge. Hover tooltip: "This document is attached to the person, not this service. Changes apply across every service they're on."
+
+### Batch 5 — docs (Claude Code)
+
+- This CHANGES.md entry.
+- `docs/tech-debt.md` — new 2026-05-19 (B-132) section: document expiry alerts, post-deploy `document_types.category` audit (the backfill trusted whatever the source data said), cross-service audit-log fanout, and a note on the legacy `/api/admin/processes/[id]/upload` route now silently writing `service_id = NULL`.
+
+### Mental model recap
+
+- `documents.service_id IS NULL` ↔ personal KYC doc on a profile (shared across every service that profile is on).
+- `documents.service_id IS NOT NULL` ↔ service-scoped corporate / entity doc.
+- Replace pattern keys on `(client_profile_id, document_type_id)` for personal docs and `(service_id, document_type_id)` for everything else.
+
+### Migration push status
+
+- `20260519072750_documents_profile_scoped.sql` — applied to prod via `npm run db:push` on 2026-05-19; `npm run db:status` confirms Local + Remote pair.
+
+### Dev server restart
+
+- End-of-brief restart from the main project dir: `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`.
+
+---
+
 ## B-131 — Inline profile create + filing rep delegation (done 2026-05-19)
 
 Two pitch-prep gaps closed in one pass: NewServiceWizard now has a "+ Create new profile" affordance (parity with /admin/profiles and the AddDirector modal on the service detail), and `client_profiles` gains a filing-rep delegation pattern — a corporate secretary / lawyer / accountant who fills KYC on behalf of a director, identified by email + a magic-link login.
