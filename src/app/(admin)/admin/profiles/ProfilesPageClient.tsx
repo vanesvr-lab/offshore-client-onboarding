@@ -213,9 +213,9 @@ export function ProfilesPageClient({ profiles }: Props) {
       <CreateProfileDialog
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        onCreated={(id) => {
+        onCreated={(summary) => {
           setShowCreate(false);
-          router.push(`/admin/profiles/${id}`);
+          router.push(`/admin/profiles/${summary.id}`);
         }}
       />
     </div>

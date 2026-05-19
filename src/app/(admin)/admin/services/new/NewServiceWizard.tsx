@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronRight, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DynamicServiceForm } from "@/components/shared/DynamicServiceForm";
+import {
+  CreateProfileDialog,
+  type CreatedProfileSummary,
+} from "@/components/admin/CreateProfileDialog";
 import type { ServiceField } from "@/components/shared/DynamicServiceForm";
 import type { ClientProfile } from "@/types";
 
@@ -117,12 +121,14 @@ function StepAddPeople({
   onAdd,
   onRemove,
   onUpdateRole,
+  onCreateNew,
 }: {
   profiles: ClientProfile[];
   selectedRoles: SelectedRole[];
   onAdd: (profile: ClientProfile) => void;
   onRemove: (profileId: string) => void;
   onUpdateRole: (profileId: string, field: string, value: unknown) => void;
+  onCreateNew: () => void;
 }) {
   const [search, setSearch] = useState("");
   const selectedIds = new Set(selectedRoles.map((r) => r.profile.id));
@@ -144,13 +150,23 @@ function StepAddPeople({
 
       {/* Search + add */}
       <div>
-        <input
-          type="text"
-          placeholder="Search profiles by name or email…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue mb-2"
-        />
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            placeholder="Search profiles by name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+          />
+          <Button
+            variant="outline"
+            onClick={onCreateNew}
+            className="shrink-0"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Create new
+          </Button>
+        </div>
         <div className="max-h-40 overflow-y-auto border rounded-lg divide-y">
           {available.length === 0 ? (
             <p className="px-3 py-3 text-sm text-gray-400 text-center">
@@ -339,13 +355,18 @@ function StepReview({
 
 // ─── Main wizard ─────────────────────────────────────────────────────────────
 
-export function NewServiceWizard({ templates, profiles }: Props) {
+export function NewServiceWizard({ templates, profiles: initialProfiles }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<SelectedRole[]>([]);
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  // B-131 — local profile state so a newly-created profile from
+  // CreateProfileDialog can be appended without a server refetch.
+  const [profiles, setProfiles] = useState<ClientProfile[]>(initialProfiles);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
 
@@ -354,6 +375,34 @@ export function NewServiceWizard({ templates, profiles }: Props) {
       ...prev,
       { profile, role: "director", can_manage: false, shareholding_percentage: "" },
     ]);
+  }
+
+  function handleCreated(summary: CreatedProfileSummary) {
+    // Build a minimal ClientProfile from the dialog's summary so the
+    // wizard can both list it and auto-add it as a director. Fields
+    // we don't know post-create (tenant_id, timestamps) fall back to
+    // safe placeholders — they'll be re-fetched on the next full page
+    // load when the wizard sends the create-service request.
+    const newProfile: ClientProfile = {
+      id: summary.id,
+      tenant_id: "",
+      user_id: null,
+      record_type: summary.record_type,
+      is_representative: summary.is_representative,
+      full_name: summary.full_name,
+      email: summary.email,
+      phone: summary.phone,
+      address: null,
+      due_diligence_level: summary.due_diligence_level,
+      is_deleted: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setProfiles((prev) =>
+      prev.some((p) => p.id === newProfile.id) ? prev : [newProfile, ...prev],
+    );
+    setCreateOpen(false);
+    addProfile(newProfile);
   }
 
   function removeProfile(profileId: string) {
@@ -435,6 +484,7 @@ export function NewServiceWizard({ templates, profiles }: Props) {
             onAdd={addProfile}
             onRemove={removeProfile}
             onUpdateRole={updateRole}
+            onCreateNew={() => setCreateOpen(true)}
           />
         )}
         {step === 2 && selectedTemplate && (
@@ -452,6 +502,12 @@ export function NewServiceWizard({ templates, profiles }: Props) {
           />
         )}
       </div>
+
+      <CreateProfileDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={handleCreated}
+      />
 
       {/* Navigation */}
       <div className="flex items-center justify-between mt-8 pt-6 border-t">

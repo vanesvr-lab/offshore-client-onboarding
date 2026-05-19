@@ -338,6 +338,13 @@ function AddProfileDialog({
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newType, setNewType] = useState<"individual" | "organisation">("individual");
+  // B-131 — parity with CreateProfileDialog: is_representative,
+  // due_diligence_level, and the filing-rep affordance.
+  const [newIsRepresentative, setNewIsRepresentative] = useState(false);
+  const [newDdLevel, setNewDdLevel] = useState<"sdd" | "cdd" | "edd">("cdd");
+  const [hasFilingRep, setHasFilingRep] = useState(false);
+  const [filingRepName, setFilingRepName] = useState("");
+  const [filingRepEmail, setFilingRepEmail] = useState("");
   const [saving, setSaving] = useState(false);
 
   const roleTitle = defaultRole === "ubo" ? "UBO" : defaultRole.charAt(0).toUpperCase() + defaultRole.slice(1);
@@ -368,15 +375,43 @@ function AddProfileDialog({
       setNewName("");
       setNewEmail("");
       setNewType("individual");
+      setNewIsRepresentative(false);
+      setNewDdLevel("cdd");
+      setHasFilingRep(false);
+      setFilingRepName("");
+      setFilingRepEmail("");
     }
   }
 
+  function isValidEmailLocal(s: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
   async function handleSubmit() {
+    if (!selected && hasFilingRep) {
+      if (!filingRepName.trim() || !filingRepEmail.trim()) {
+        toast.error("Filing rep name and email are required", { position: "top-right" });
+        return;
+      }
+      if (!isValidEmailLocal(filingRepEmail.trim())) {
+        toast.error("Filing rep email is not valid", { position: "top-right" });
+        return;
+      }
+    }
     setSaving(true);
     try {
       const body = selected
         ? { client_profile_id: selected.id, role: defaultRole }
-        : { full_name: newName.trim(), email: newEmail.trim() || null, record_type: newType, role: defaultRole };
+        : {
+            full_name: newName.trim(),
+            email: newEmail.trim() || null,
+            record_type: newType,
+            role: defaultRole,
+            is_representative: newIsRepresentative,
+            due_diligence_level: newDdLevel,
+            filing_rep_name: hasFilingRep ? filingRepName.trim() : null,
+            filing_rep_email: hasFilingRep ? filingRepEmail.trim() : null,
+          };
 
       const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
         method: "POST",
@@ -525,6 +560,73 @@ function AddProfileDialog({
                   placeholder="jane@example.com"
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 />
+              </div>
+
+              {/* B-131 — Representative toggle */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="add-prof-is-rep"
+                  checked={newIsRepresentative}
+                  onChange={(e) => { setNewIsRepresentative(e.target.checked); setSelected(null); }}
+                  className="rounded border-gray-300"
+                />
+                <label htmlFor="add-prof-is-rep" className="text-sm text-gray-700">
+                  This is a representative (no KYC required)
+                </label>
+              </div>
+
+              {/* B-131 — Due diligence level */}
+              {!newIsRepresentative && (
+                <div>
+                  <label className="text-xs font-medium text-gray-700 mb-1 block">Due Diligence Level</label>
+                  <select
+                    value={newDdLevel}
+                    onChange={(e) => { setNewDdLevel(e.target.value as "sdd" | "cdd" | "edd"); setSelected(null); }}
+                    className="w-full h-9 rounded-md border border-gray-200 px-3 text-sm bg-white text-gray-900"
+                  >
+                    <option value="sdd">SDD — Simplified</option>
+                    <option value="cdd">CDD — Standard</option>
+                    <option value="edd">EDD — Enhanced</option>
+                  </select>
+                </div>
+              )}
+
+              {/* B-131 — Filing rep affordance */}
+              <div className="border-t pt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="add-prof-has-rep"
+                    checked={hasFilingRep}
+                    onChange={(e) => { setHasFilingRep(e.target.checked); setSelected(null); }}
+                    className="rounded border-gray-300"
+                  />
+                  <label htmlFor="add-prof-has-rep" className="text-sm text-gray-700">
+                    Filed by a representative
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 -mt-1 ml-6">
+                  Someone else fills KYC paperwork on this person&apos;s behalf — e.g. a corporate secretary, lawyer, or accountant. They&apos;ll get a login link.
+                </p>
+                {hasFilingRep && (
+                  <div className="space-y-2 ml-6">
+                    <input
+                      type="text"
+                      value={filingRepName}
+                      onChange={(e) => setFilingRepName(e.target.value)}
+                      placeholder="Representative's full name"
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                    />
+                    <input
+                      type="email"
+                      value={filingRepEmail}
+                      onChange={(e) => setFilingRepEmail(e.target.value)}
+                      placeholder="Representative's email"
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

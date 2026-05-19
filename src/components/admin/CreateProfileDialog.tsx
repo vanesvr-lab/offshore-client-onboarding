@@ -12,10 +12,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+export interface CreatedProfileSummary {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  record_type: "individual" | "organisation";
+  is_representative: boolean;
+  due_diligence_level: "sdd" | "cdd" | "edd";
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  onCreated: (id: string) => void;
+  /** Receives a summary of the newly-created profile so parents can
+   *  splice it into local state without a refetch. */
+  onCreated: (summary: CreatedProfileSummary) => void;
 }
 
 export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
@@ -25,12 +37,29 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
   const [recordType, setRecordType] = useState<"individual" | "organisation">("individual");
   const [isRepresentative, setIsRepresentative] = useState(false);
   const [ddLevel, setDdLevel] = useState<"sdd" | "cdd" | "edd">("cdd");
+  const [hasFilingRep, setHasFilingRep] = useState(false);
+  const [filingRepName, setFilingRepName] = useState("");
+  const [filingRepEmail, setFilingRepEmail] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function isValidEmail(s: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
 
   async function handleCreate() {
     if (!fullName.trim()) {
       toast.error("Full name is required");
       return;
+    }
+    if (hasFilingRep) {
+      if (!filingRepName.trim() || !filingRepEmail.trim()) {
+        toast.error("Filing rep name and email are required");
+        return;
+      }
+      if (!isValidEmail(filingRepEmail.trim())) {
+        toast.error("Filing rep email is not valid");
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -44,6 +73,8 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
           record_type: recordType,
           is_representative: isRepresentative,
           due_diligence_level: ddLevel,
+          filing_rep_name: hasFilingRep ? filingRepName.trim() : null,
+          filing_rep_email: hasFilingRep ? filingRepEmail.trim() : null,
         }),
       });
       const data = (await res.json()) as { id?: string; error?: string };
@@ -56,7 +87,18 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
       setRecordType("individual");
       setIsRepresentative(false);
       setDdLevel("cdd");
-      onCreated(data.id!);
+      setHasFilingRep(false);
+      setFilingRepName("");
+      setFilingRepEmail("");
+      onCreated({
+        id: data.id!,
+        full_name: fullName.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        record_type: recordType,
+        is_representative: isRepresentative,
+        due_diligence_level: ddLevel,
+      });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create");
     } finally {
@@ -155,6 +197,42 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
               </select>
             </div>
           )}
+
+          {/* B-131 — Filing representative delegation */}
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="has-filing-rep"
+                checked={hasFilingRep}
+                onChange={(e) => setHasFilingRep(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <label htmlFor="has-filing-rep" className="text-sm text-gray-700">
+                Filed by a representative
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 -mt-1 ml-6">
+              Someone else fills KYC paperwork on this person&apos;s behalf —
+              e.g. a corporate secretary, lawyer, or accountant. They&apos;ll
+              get a login link.
+            </p>
+            {hasFilingRep && (
+              <div className="space-y-2 ml-6">
+                <Input
+                  value={filingRepName}
+                  onChange={(e) => setFilingRepName(e.target.value)}
+                  placeholder="Representative's full name"
+                />
+                <Input
+                  type="email"
+                  value={filingRepEmail}
+                  onChange={(e) => setFilingRepEmail(e.target.value)}
+                  placeholder="Representative's email"
+                />
+              </div>
+            )}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">
