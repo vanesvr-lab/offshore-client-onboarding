@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import {
   getStatusBadgeClass,
   getStatusLabel,
+  SERVICE_STATUS_ALL,
 } from "@/lib/services/statusChain";
 
 export interface ServiceRow {
@@ -48,6 +49,22 @@ interface Props {
   currentUserId: string;
 }
 
+// Default selection excludes "closed" so the queue shows active work
+// only — matches the legacy `neq("status", "draft")` intent (closed
+// services hide unless explicitly requested).
+const DEFAULT_STATUS_SELECTION = SERVICE_STATUS_ALL.filter(
+  (s) => s !== "closed",
+) as readonly string[];
+
+function parseStatusParam(raw: string | null): string[] {
+  if (raw == null) return [...DEFAULT_STATUS_SELECTION];
+  if (raw === "") return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => (SERVICE_STATUS_ALL as readonly string[]).includes(s));
+}
+
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.round(ms / 60000);
@@ -70,12 +87,16 @@ export function ServicesTable({ services, admins, currentUserId }: Props) {
 
   const initialAssigned = searchParams.get("assigned");
   const initialMine = searchParams.get("mine") === "1";
+  const initialStatusParam = searchParams.get("status");
 
   // "all" | "unassigned" | <admin user_id>
   const [assignedFilter, setAssignedFilter] = useState<string>(
     initialMine ? currentUserId : (initialAssigned ?? "all"),
   );
   const [mine, setMine] = useState(initialMine);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(
+    parseStatusParam(initialStatusParam),
+  );
 
   // Reflect filter state back into the URL so a copied link reproduces
   // the view + reloads survive.
@@ -91,15 +112,36 @@ export function ServicesTable({ services, admins, currentUserId }: Props) {
       next.delete("mine");
       next.delete("assigned");
     }
+    const statusJoined = selectedStatuses.join(",");
+    const defaultJoined = (DEFAULT_STATUS_SELECTION as string[]).join(",");
+    if (statusJoined === defaultJoined) {
+      next.delete("status");
+    } else {
+      // Empty string when no chips are selected is meaningful — "show
+      // nothing"; otherwise the param holds the active list.
+      next.set("status", statusJoined);
+    }
     const qs = next.toString();
     router.replace(qs ? `/admin/queue?${qs}` : "/admin/queue", {
       scroll: false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignedFilter, mine]);
+  }, [assignedFilter, mine, selectedStatuses]);
+
+  function toggleStatus(status: string) {
+    setSelectedStatuses((prev) =>
+      prev.includes(status)
+        ? prev.filter((s) => s !== status)
+        : [...prev, status],
+    );
+  }
 
   const filtered = useMemo(() => {
     return services
+      .filter((s) => {
+        if (selectedStatuses.length === 0) return false;
+        return selectedStatuses.includes(s.status);
+      })
       .filter((s) => {
         if (mine) return s.assigned_admin_id === currentUserId;
         if (assignedFilter === "all") return true;
@@ -120,10 +162,42 @@ export function ServicesTable({ services, admins, currentUserId }: Props) {
         const tb = new Date(b.updated_at).getTime();
         return sortDir === "desc" ? tb - ta : ta - tb;
       });
-  }, [services, search, sortDir, assignedFilter, mine, currentUserId]);
+  }, [
+    services,
+    search,
+    sortDir,
+    selectedStatuses,
+    assignedFilter,
+    mine,
+    currentUserId,
+  ]);
 
   return (
     <div>
+      {/* B-130 — multi-select status chip row. Toggleable; default
+          excludes "Closed" so the queue shows active work only. */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {SERVICE_STATUS_ALL.map((status) => {
+          const active = selectedStatuses.includes(status);
+          return (
+            <button
+              key={status}
+              type="button"
+              onClick={() => toggleStatus(status)}
+              aria-pressed={active}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                active
+                  ? "border-brand-navy bg-brand-navy text-white"
+                  : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50",
+              )}
+            >
+              {getStatusLabel(status)}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
           placeholder="Search by service #, client or template…"
