@@ -9,6 +9,24 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-128)
+
+- **Chatbot multi-turn memory.** *Severity: Low.*
+  *Spawned by:* [B-128](cli-brief-chatbot-wire-up-b128.md).
+  *What:* Each question to `/api/chatbot/ask` is independent today — `useChatbot.ask` only passes the current question, no prior turns. If users start asking follow-ups ("what about that one?", "and the next step?"), wire a `history: ChatMessage[]` array through to the search API + LLM context window. The hook already keeps the transcript in memory for the visual; the work is on the wire format + the LLM prompt scaffolding (and a re-think of the system prompt to handle multi-turn ambiguity).
+  *Why deferred:* Multi-turn is one of those features that's easy to add badly and hard to add well; wait until usage data shows real pain.
+
+- **Chatbot "Was this helpful?" feedback capture.** *Severity: Low.*
+  *Spawned by:* [B-128](cli-brief-chatbot-wire-up-b128.md).
+  *What:* No 👍/👎 or any feedback signal on chatbot answers. To drive content tuning, add per-answer voting → write to a new `chatbot_feedback` table keyed on `(question_text, answer_text, mode, audience, voted_at)` plus an optional free-text comment. UI: small thumbs row under each assistant message.
+  *Why deferred:* No content-tuning workflow yet — adding a vote pipeline without a "review the votes" surface puts the signal in the floor. Revisit once Vanessa's first review-pass on the seed entries lands.
+
+- ~~AI assistant messages are hardcoded~~ — *resolved B-128 (2026-05-19).* The real chatbot widget is now wired on both shells and powered by the seeded `knowledge_base` (43 entries) + LLM fallback. The legacy hardcoded card in `ApplicationStatusPanel` is now redundant; queue a follow-up sweep to delete it once usage telemetry shows users go to the new widget.
+
+- **Chatbot KB lookup is fail-open (still).** *Severity: Low.* B-128 did not change the verifier-side "return empty on error" behaviour from #17, and the chatbot's KB call has the same shape — when the Supabase query errors, the search returns `[]` and the user sees the LLM fallback's "no information yet" sentence. There's no telemetry to alert on a silent KB outage. Tracked separately as Open #17.
+
+---
+
 ## 2026-05-19
 
 - **Fine-grained role gating sweep.** *Severity: Medium.*

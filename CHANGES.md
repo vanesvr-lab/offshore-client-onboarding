@@ -13,7 +13,66 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
-## B-128 — Chatbot wire-up + KB seed (in progress 2026-05-19)
+## B-128 — Chatbot wire-up + KB seed (done 2026-05-19)
+
+### 2026-05-19 — Batch 6: tech debt rollup (Claude Code)
+
+`CHANGES.md` Tech Debt Tracker:
+
+- **#9 "AI assistant messages are hardcoded"** moved Open → Resolved with note: "B-128 ships the real chatbot widget on both the client and admin shells. Powered by `knowledge_base` filtered by `applies_to.audience` + claude-opus-4-6 fallback. The legacy hardcoded chat card in `ApplicationStatusPanel` is now redundant; remove it in a follow-up sweep once usage telemetry shows the new widget is the primary entry point."
+- **#17 "Knowledge base AI integration is fail-open"** stays Open — B-128 doesn't change the fail-open behaviour of the verifier-side KB lookup. The chatbot's KB call has the same shape (returns empty array on error, falls through to "no information"). Note in CHANGES.md so it doesn't get confused for resolved.
+- **#31 (new Open) "Chatbot multi-turn memory"** — questions are independent today. If users start asking follow-ups ("what about X?"), wire conversation history into the search API + LLM context. New brief if/when it becomes a real pain point.
+- **#32 (new Open) "Chatbot 'Was this helpful?' feedback capture"** — capture thumbs-up / thumbs-down on each answer to drive content tuning. New brief once content needs refining.
+
+`docs/tech-debt.md` (canonical newest-at-top log): new 2026-05-19 entries mirror #31 + #32 plus a strike-through marker for #9.
+
+End-of-brief dev-server restart per memory: from the main project dir, `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`.
+
+### 2026-05-19 — Batch 5: chatbot UX polish (folded into Batches 3-4)
+
+All five polish items shipped inside the Batch 3 + Batch 4 commits as part of the shared hook and panel, rather than as a separate post-pass:
+
+- **Send debounce (300ms)** lives in `useChatbot.ask` via a `lastSendAtRef` timestamp — rapid double-Enter / double-click only fires one request.
+- **Typing indicator** — three pulsing dots in the transcript while the request is in flight (`ChatbotPanel`'s `loading` branch). Pulse stagger via `animationDelay`.
+- **Reset transcript** — `RotateCcw` icon button in the panel header. Appears only once the transcript has at least one message so the empty state is uncluttered.
+- **Bubble hover tooltip** — `title="Need help? Ask the assistant"` on the closed-state bubble (both widgets). Suppressed when the panel is open so the X button doesn't carry a stale tooltip.
+- **Anonymous error reporting** — every fetch is wrapped in try/catch; failures `console.error(...)` for the developer console and surface a friendly amber error bubble to the user. No telemetry pipeline yet — that's #31's territory if it ever matters.
+
+### 2026-05-19 — Batch 4: admin-side chatbot widget (Claude Code)
+
+`src/components/admin/AdminAssistant.tsx` — same shape as the client widget. Bubble + panel render as a fixed bottom-right element in the admin shell (`src/app/(admin)/layout.tsx`). Calls `/api/chatbot/ask` with `audience: 'admin'`. Empty-state copy is admin-flavoured: examples reference "override a service stage" and "edit AI verification rules" instead of the client-side "upload a document".
+
+The admin layout previously mounted the client-side `FloatingAssistantWidget` by mistake (legacy from the B-101 placeholder before B-128 differentiated the two surfaces). Replaced with the new `AdminAssistant` so the request body correctly carries `audience='admin'` and the response filters to admin + both entries.
+
+Both widgets share the `useChatbot(audience)` hook and the `ChatbotPanel` component — only the bubble container, title string, and empty-state copy differ.
+
+### 2026-05-19 — Batch 3: client widget wire-up (Claude Code)
+
+`FloatingAssistantWidget` was a UI-only placeholder from B-101 — static welcome bubble + a disabled input row pointing users at `support@elarix.io`. B-128 replaces it with a real chat surface that POSTs to `/api/chatbot/ask` with `audience='client'`.
+
+Three new shared modules carry the work (intentionally factored so the admin widget in Batch 4 reuses them as-is):
+
+- **`src/lib/chatbot/useChatbot.ts`** — state machine. Owns the message transcript array + the in-flight loading flag + a 300ms debounce ref. Exposes `ask(question)`, `reset()`, plus `messages` / `loading`. Each successful response shape (`keyword` / `llm` / `error`) gets its own discriminated message type so the renderer can branch without re-parsing the response.
+- **`src/components/shared/ChatbotPanel.tsx`** — presentational. 380 × 500 px panel on desktop, capped to `calc(100vw-3rem) × calc(100vh-6rem)` on smaller viewports. Brand-navy header with the title + reset button (appears once there's any message in the transcript) + close button. Transcript area has `aria-live="polite"` and auto-scrolls to the latest message. Input row: textarea (Enter to send, Shift+Enter for newline, disabled during loading) plus a send-icon button. Esc closes via a window-level keydown listener.
+- **`src/components/shared/MiniMarkdown.tsx`** — minimal markdown renderer for the KB content. Handles the subset the seed content uses (headers H1-H4, bold/italic, inline code, code fences, bullet/ordered lists, inline links, blockquotes) without pulling in `react-markdown` or `remark/rehype`. ~250 lines of regex-driven parsing — adequate for the well-formed content under our control.
+
+Render branches per message type:
+
+- **Keyword matches** render as a list of expandable cards (one per match). Each card's header shows the match title; clicking expands the full markdown body inline.
+- **LLM answer** renders the natural-language answer via `MiniMarkdown`, then a "Sources" expander below listing the candidate titles the LLM had access to.
+- **Error** renders as an amber bubble with the server's message.
+
+The empty state below the welcome line lists two example questions (italic, slightly faded) to scaffold the user's mental model: "How do I upload a document?" / "What does my application status mean?". `ClientShell` mounting is unchanged — only `FloatingAssistantWidget` internals were swapped.
+
+### 2026-05-19 — Batch 2: search API + LLM fallback (Claude Code)
+
+`POST /api/chatbot/ask` is the single entry point for both widgets. Body is `{ question: string, audience: 'admin' | 'client' }`; response is `{ mode: 'keyword' | 'llm' | 'error', ... }`. Public (no auth) because the client widget calls it from `ClientShell`; audience filtering is server-side so a client request can't surface admin-only content even if the body claimed otherwise.
+
+**Search (`src/lib/chatbot/search.ts`).** Loads every `is_active = true` row from `knowledge_base`, filters by `applies_to.audience` matching the request audience or `"both"`. Ranks in JS — full-question substring in title = 10, per-keyword in title = 5, per-keyword in content = 1. Returns the top 5 with rank > 0. The GIN tsvector index added by the Batch 1 migration is in place for when a server-side ranker is justified (an `RPC` function with `plainto_tsquery` + `ts_rank`); at v1 the table is ~50 rows so the local pass is fine and identical in UX.
+
+**LLM fallback (`src/lib/chatbot/llmFallback.ts`).** Triggered when zero keyword matches surface. Pulls up to 10 audience-relevant entries via `loadCandidatesByAudience` and passes them to `claude-opus-4-6` with a strict system prompt: answer ONLY from the provided knowledge entries, refuse with the fixed sentence `"I don't have that information yet — try asking your account manager."` if the answer isn't covered, no invention. Anthropic SDK is lazy-instantiated the same way as `verifyDocument.ts` so a missing `ANTHROPIC_API_KEY` doesn't break module load.
+
+**Endpoint guards.** Question is required + max 500 chars; audience must be one of the two valid strings. Anthropic / Supabase / network failures inside the try/catch return `mode='error'` with a friendly message (HTTP 200 — the client widget treats the error mode as a regular message bubble, not a fetch failure, so the typing indicator clears cleanly).
 
 ### 2026-05-19 — Batch 1: chatbot KB seed migration (Claude Code)
 
@@ -6540,7 +6599,6 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 6 | **`src/lib/supabase/client.ts` is dead code** | Low | No longer imported anywhere after Auth.js migration. Safe to delete. |
 | 7 | **`src/components/shared/Navbar.tsx` is dead code** | Low | Replaced by `Sidebar.tsx`. Safe to delete. |
 | 8 | **In-memory rate limiter** | Medium | `src/lib/rate-limit.ts` resets on every server restart and doesn't work across multiple Vercel instances. Replace with Upstash Redis or Vercel KV before scaling. |
-| 9 | **AI assistant messages are hardcoded** | Low | `getAssistantMessage()` in ApplicationStatusPanel returns static strings by status. Not real AI yet. |
 | 10 | **Verification checklist is a placeholder** | Low | The "Verification Checklist" card on the application detail page is 6 static items. Needs real automation logic + DB column to track completion. |
 | 11 | **No real-time updates** | Medium | Pages don't push live updates — users have to navigate or refresh to see admin changes. Could use Supabase Realtime or Server-Sent Events. |
 | 12 | **`force-dynamic` everywhere** | Low | Disables Next.js caching globally on data pages. Works but loses perf benefits. Better long-term: tag-based revalidation via `revalidateTag()`. |
@@ -6556,6 +6614,8 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 28 | **Legacy `kyc_records`-based profile-create routes still in tree** | Low | `src/app/api/admin/create-profile/route.ts` and `src/app/api/profiles/create/route.ts` insert into the legacy `kyc_records` + `profile_roles` tables instead of the modern `client_profiles` + `profile_service_roles`. They escaped the B-059 unique-email guard for that reason. Confirm they're no longer hit (grep callers, watch logs for a release cycle), then delete both routes. If still hit, port them to `client_profiles` and add the same lookup-then-insert guard. |
 | 29 | **Legacy clients/applications cleanup** | Medium | `clients`, `client_users`, and `applications` are read by ~25 admin surfaces (queue, clients list, applications detail header, breadcrumbs on `/admin/clients/[id]/*`, AI verification context, audit-log writes) but no new work routes through them. Retire by porting every reader to the services-first model, then dropping the tables in one migration with FK cascades + audit_log entity_type backfill. Estimate: 2-3 days; needs a dedicated brief and a feature flag rollout. Spawned by [B-126](docs/cli-brief-register-cleanup-claude-md-rewrite-b126.md). |
 | 30 | **Fine-grained role gating sweep** | Medium | B-127 wired the 5 highest-leverage gates (settings, admin mgmt, status change, destructive, review buttons) but the remaining ~20 admin surfaces still grant unconditional access where they should check the matching `adminPermissions` flag. Examples: KYC editing affordances on `/admin/services/[id]` (should consult `data_access`), the Communications dialog send button (`send_communications`), the edit affordances on the clients list, the Document Replace actions on `DocumentDetailDialog`, etc. Walk every `/admin/*` page + `/api/admin/*` route and wire the matching permission check. Estimate: 1-2 days; new brief B-128. |
+| 31 | **Chatbot multi-turn memory** | Low | Each question is independent today — `useChatbot.ask` only passes the current question to `/api/chatbot/ask`, with no prior turns in the body. If users start asking follow-ups ("what about that one?", "and the next step?"), wire a `history` array through to the search API + the LLM context window. Wait until paste-style usage data shows this is a real pain point — multi-turn is one of those features that's easy to add badly and hard to add well. Spawned by [B-128](docs/cli-brief-chatbot-wire-up-b128.md). |
+| 32 | **Chatbot "Was this helpful?" feedback capture** | Low | No thumbs-up / thumbs-down or any feedback signal on chatbot answers today. To drive content tuning we want at minimum a per-answer 👍/👎 with optional free-text comment, written to a new `chatbot_feedback` table keyed on `(question_text, answer_text, mode, audience, voted_at)`. New brief once the KB content needs refining beyond Vanessa's manual review. Spawned by [B-128](docs/cli-brief-chatbot-wire-up-b128.md). |
 
 ### Resolved
 
@@ -6569,4 +6629,5 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 13 | CLAUDE.md is partially outdated | 2026-05-18 | B-126: CLAUDE.md Data Model + Admin Setup + Known Future Migration sections rewritten to reflect services-first model (no Supabase Auth, services has no client_id, client_profiles for KYC subjects, invite-only flow). |
 | 2 | All admins are equal | 2026-05-19 | B-127: five system roles (Super User / Manager / Officer / Junior Officer / Auditor) with 10 configurable permission flags. Coarse gating wired (settings, admin mgmt, status change, destructive, review buttons). Fine-grained gating across the remaining ~20 admin surfaces is deferred to B-128 (Open #30). |
 | 4 | No invite/onboarding flow for admins | 2026-05-19 | B-127: `/admin/settings/admins` ships with magic-link invite + role assignment + remove + per-role permission editor. The page is gated on the `admin_mgmt_access` flag. |
+| 9 | AI assistant messages are hardcoded | 2026-05-19 | B-128: real chatbot widget mounted on both the client + admin shells. Powered by `knowledge_base` filtered by `applies_to.audience` + claude-opus-4-6 fallback. The legacy hardcoded chat card in `ApplicationStatusPanel` is now redundant; remove it in a follow-up sweep once usage telemetry shows the new widget is the primary entry point. The 2026-04-07 partial-resolution row above (Knowledge Base feeding verification prompts) is now fully resolved by this one. |
 
