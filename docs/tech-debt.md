@@ -9,6 +9,30 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-130)
+
+- **Legacy clients/applications cleanup — Queue migrated, ~10-15 surfaces remain.** *Severity: Medium.*
+  *Spawned by:* [B-130](cli-brief-services-queue-modernization-b130.md) (incremental progress on the older B-126 entry below).
+  *What:* B-130 migrated `/admin/queue` from the legacy `applications` table to the modern `services` table; `ApplicationTable.tsx` is marked `// LEGACY` and kept in place for the remaining readers. Surfaces still reading from `applications` / `clients` / `client_users`: admin clients list + breadcrumbs, application detail header on `/admin/applications/[id]`, AI verification context lookup, several audit-log writes, the dashboard's recent-activity card. Full retirement still needs a dedicated brief that ports each reader, then drops the tables in one migration with FK cascades + `audit_log.entity_type` backfill.
+  *Why deferred:* B-130 was scoped to the queue surface only; full sweep is its own brief (estimate 2-3 days). The older B-126 entry below stays open as the umbrella.
+
+- **Reviews inbox could surface as a dashboard widget.** *Severity: Low.*
+  *Spawned by:* [B-130](cli-brief-services-queue-modernization-b130.md).
+  *What:* Today open reviews show as a sidebar badge + dedicated `/admin/reviews` page. Admins who land on `/admin/dashboard` first miss the badge until they look at the nav. Add a small "Reviews awaiting you" card at the top of the dashboard that links straight into `/admin/reviews` (or shows up to 3 inline rows with the same "Mark as reviewed" action). ~2-3 hours; new brief when usage shows admins are bouncing between dashboard and sidebar.
+  *Why deferred:* Sidebar badge is enough for now; rejecting unnecessary surface area.
+
+- **Assigned officer is admin-only — not visible to clients.** *Severity: Low.*
+  *Spawned by:* [B-130](cli-brief-services-queue-modernization-b130.md).
+  *What:* `services.assigned_admin_id` populates the admin-side right-rail card + queue filter, but the client portal doesn't surface "Your account manager is X" anywhere. Add it to the client-side service detail header (with name + email/contact) once Vanessa decides on the client-facing contract. ~half-day including the email-template tie-in.
+  *Why deferred:* No client-side UX brief yet; pitch demo is admin-centric.
+
+- **No multi-officer assignment or workload-balancing UI.** *Severity: Low.*
+  *Spawned by:* [B-130](cli-brief-services-queue-modernization-b130.md).
+  *What:* B-130 ships a single `assigned_admin_id` per service. If GWMS wants "primary + backup" or "lead + reviewer pair" assignments, that's a new `service_assignments` junction table. Workload-balancing (per-officer queue size + 1-click reassignment) is also explicitly out of scope. Each is a separate brief (~1 day each) when an operational need surfaces.
+  *Why deferred:* Single-officer assignment covers the current operational model.
+
+---
+
 ## 2026-05-19 (B-129)
 
 - **Admin UI for editing tenant brand.** *Severity: Low.*

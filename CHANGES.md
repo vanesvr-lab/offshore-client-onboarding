@@ -13,6 +13,73 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-130 — Services queue modernization + assigned officer + reviews inbox (done 2026-05-19)
+
+Three connected gaps from the pitch-prep walkthrough — the legacy
+`/admin/queue` reading the wrong table, no aggregate "reviews assigned
+to me" view, and no way to claim ownership of a service — addressed
+in one pass: queue migrated to `services`, new `assigned_admin_id`
+column with assignment UI + filter + audit trigger, new `/admin/reviews`
+reviewer inbox + sidebar badge.
+
+### Batch 1 — schema seed (Claude Code)
+
+- Migration `20260519054617_services_assigned_admin.sql`:
+  - `services.assigned_admin_id uuid REFERENCES users(id)` (nullable)
+  - `services_assigned_admin_idx` index for the queue's filter query
+  - `log_service_assignment_change()` plpgsql function + `service_assignment_audit` trigger (AFTER UPDATE on `services`) writes a `service_assignment_changed` audit row with previous/new admin ids whenever the value flips. `auth.uid()` populates `actor_id`.
+- `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote paired.
+
+### Batch 2 — `/admin/queue` migrated from `applications` → `services` (Claude Code)
+
+- `src/app/(admin)/admin/queue/page.tsx` rewritten to query `services` with a nested select pulling `service_templates(name)`, `profile_service_roles(can_manage, client_profiles(...))` (primary profile = first `can_manage` row; falls back to first attached profile), and the new `assigned_admin:users!services_assigned_admin_id_fkey(...)` join. Tenant-scoped, soft-delete-aware, excludes `draft`.
+- `src/components/admin/ServicesTable.tsx` (new): client component with service-#-as-link, primary client name, template, colored status badge, assigned-to name, and relative-time updated column (hover shows full timestamp). Sortable on updated. Client-side search across service #, client name, and template.
+- `src/components/admin/ApplicationTable.tsx` annotated with a `// LEGACY` header pointing readers at `ServicesTable.tsx`; the legacy file stays in place for the remaining admin surfaces still reading from `applications` (covered in tech debt's legacy-cleanup entry).
+
+### Batch 3 — assignment UI + PATCH route + queue filter (Claude Code)
+
+- `src/components/admin/AssignedOfficerCard.tsx` (new): right-rail card in `ServiceDetailClient`, placed above the existing Status card. Inline `<Select>` with PATCH-on-change semantics; disabled (with a tooltip and a sub-label) for roles that lack `data_access=edit`. Optimistic state with rollback on API error.
+- `PATCH /api/admin/services/[id]` extended:
+  - `assigned_admin_id` added to the allowlist.
+  - Separate gate: changes to `assigned_admin_id` require `hasDataAccess(adminPermissions, "edit")` (Super User / Manager / Officer by default; Junior Officer + Auditor → 403).
+  - Non-null target ids are validated against `admin_users.user_id` before persisting so a malformed body can't park a stray FK on the column.
+  - The DB trigger (Batch 1) writes the audit row; no in-route `writeAuditLog` call needed.
+- `ServicesTable` extended with an Assigned-Officer `<Select>` ("All officers" / "— Unassigned —" / per-admin entries) and an "Assigned to me" pill chip. URL state via `?assigned=<user_id>` or `?mine=1`.
+
+### Batch 4 — multi-select status chip row (Claude Code)
+
+- Status chip row above the table; each chip is a toggle pulling its label + active-stage list from the existing `SERVICE_STATUS_ALL` constant in `src/lib/services/statusChain.ts` (so a future stage rename flows through automatically).
+- Default selection excludes `closed` (matches the legacy `neq("status", "draft")` intent — closed work hides unless explicitly requested).
+- URL state via `?status=start,document_collection,...` (param is omitted when the selection matches the default, keeping URLs short).
+
+### Batch 5 — `/admin/reviews` reviewer inbox + sidebar badge (Claude Code)
+
+- `src/app/(admin)/admin/reviews/page.tsx` (new): server component. Anchors the query on `review_request_reviewers (admin_id, request_id)` and `!inner`-joins back to `review_requests` filtered on `status='open'` + tenant. Resolves `people_kyc_profile` section profile names in one follow-up `client_profiles` query.
+- `src/components/admin/ReviewsInbox.tsx` (new): client component. Columns: requester, service (`service_number` + template name; link → `/admin/services/<id>?reviewRequest=<id>` so the existing B-118 banner highlights on landing), sections (first label + "+N" with tooltip listing all), note preview (80 chars + hover-tooltip with full text), relative-time, "Mark as reviewed" button. The button POSTs to the existing `/api/admin/services/<service_id>/review-requests/<id>/close` endpoint with `reason="reviewer_marked"` so the existing email + audit path is reused.
+- `src/components/shared/Sidebar.tsx`: new `Reviews` nav item with `Inbox` icon and an optional `badge` slot on `NavItem`. Active-state colors flip the badge from accent-on-dark to dark-on-accent.
+- `src/app/(admin)/layout.tsx`: single indexed `head:true` count query on `review_request_reviewers` joined to `review_requests` (admin_id = session.user.id, status=open, tenant scoped) feeds the badge.
+
+### Batch 6 — docs (Claude Code)
+
+- This CHANGES.md entry.
+- `docs/tech-debt.md` — new 2026-05-19 (B-130) section: incremental progress note on the legacy `clients`/`applications` cleanup (queue migrated, ~10-15 readers still to port), plus three follow-up entries: dashboard reviews widget, client-portal visibility of assigned officer, multi-officer assignment + workload-balancing UI.
+
+### Permission model recap
+
+- **Reassigning an officer:** any admin with `data_access='edit'` (Super User / Manager / Officer).
+- **Marking a review request reviewed** (inbox button): existing `can_review` flag (Super User + Manager). The existing close API enforces this; the inbox doesn't add a second layer.
+- **Seeing the Reviews page:** any admin can navigate to `/admin/reviews`; the page is empty when nothing is assigned to them.
+
+### Migration push status
+
+- `20260519054617_services_assigned_admin.sql` — applied to prod via `npm run db:push` on 2026-05-19; `npm run db:status` confirms Local + Remote pair.
+
+### Dev server restart
+
+- End-of-brief restart from the main project dir (per memory's CLI-owns-restart convention): `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`.
+
+---
+
 ## B-129 — Tenant brand centralization + Elarix vendor brand (done 2026-05-19)
 
 Removes the 33 hardcoded `"GWMS"` and 36 hardcoded `"Mauritius"` literals
