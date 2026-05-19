@@ -4,6 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { DashboardClient } from "@/components/client/DashboardClient";
 import {
+  FilingsOnBehalfOf,
+  type FilingForRow,
+} from "@/components/client/FilingsOnBehalfOf";
+import {
   calcSectionCompletion,
   calcKycCompletion,
 } from "@/lib/utils/serviceCompletion";
@@ -29,23 +33,82 @@ export default async function DashboardPage() {
   if (!session) redirect("/login");
 
   const clientProfileId = session.user.clientProfileId;
+  const supabase = createAdminClient();
+  const tenantId = getTenantId(session);
 
-  if (!clientProfileId) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
-        <p className="text-lg font-semibold text-brand-navy">Getting your account ready</p>
-        <p className="text-sm text-gray-500">
-          Your profile is being set up. Please check back shortly or contact your account manager.
-        </p>
-        <Link href="/kyc">
-          <Button variant="outline">Complete your KYC</Button>
-        </Link>
-      </div>
+  // B-131 — load every profile that has the current user as a filing
+  // rep. Functional index on lower(filing_rep_email) keeps this fast.
+  const sessionEmail = (session.user.email ?? "").toLowerCase();
+  let filingFor: FilingForRow[] = [];
+  if (sessionEmail) {
+    const { data: rawFilingFor } = await supabase
+      .from("client_profiles")
+      .select(
+        `
+        id, full_name, record_type, due_diligence_level,
+        profile_service_roles(
+          role,
+          services(id, service_number)
+        )
+      `,
+      )
+      .eq("tenant_id", tenantId)
+      .eq("is_deleted", false)
+      .ilike("filing_rep_email", sessionEmail);
+    type RawFilingRow = {
+      id: string;
+      full_name: string;
+      record_type: "individual" | "organisation";
+      due_diligence_level: "sdd" | "cdd" | "edd";
+      profile_service_roles: Array<{
+        role: string;
+        services: { id: string; service_number: string | null } | null;
+      }> | null;
+    };
+    filingFor = ((rawFilingFor as unknown as RawFilingRow[] | null) ?? []).map(
+      (p) => ({
+        id: p.id,
+        full_name: p.full_name,
+        record_type: p.record_type,
+        due_diligence_level: p.due_diligence_level,
+        roles: (p.profile_service_roles ?? [])
+          .filter((r) => !!r.services)
+          .map((r) => ({
+            role: r.role,
+            service_id: r.services!.id,
+            service_number: r.services!.service_number,
+          })),
+      }),
     );
   }
 
-  const supabase = createAdminClient();
-  const tenantId = getTenantId(session);
+  if (!clientProfileId) {
+    // B-131 — a user without their own client_profiles row may still be
+    // a filing rep on someone else's profile. Render the rep section
+    // (when non-empty) above the "getting ready" copy.
+    return (
+      <div className="space-y-6">
+        <FilingsOnBehalfOf rows={filingFor} />
+        <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
+          <p className="text-lg font-semibold text-brand-navy">
+            {filingFor.length > 0
+              ? "You don't have your own services here yet."
+              : "Getting your account ready"}
+          </p>
+          <p className="text-sm text-gray-500">
+            {filingFor.length > 0
+              ? "Use the section above to file KYC on behalf of others."
+              : "Your profile is being set up. Please check back shortly or contact your account manager."}
+          </p>
+          {clientProfileId == null && filingFor.length === 0 && (
+            <Link href="/kyc">
+              <Button variant="outline">Complete your KYC</Button>
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Fetch managed services for this profile
   const { data: roleRows } = await supabase
@@ -74,11 +137,14 @@ export default async function DashboardPage() {
 
   if (services.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
-        <p className="text-lg font-semibold text-brand-navy">No services yet</p>
-        <p className="text-sm text-gray-500">
-          Your account manager will link services to your profile shortly.
-        </p>
+      <div className="space-y-6">
+        <FilingsOnBehalfOf rows={filingFor} />
+        <div className="flex flex-col items-center justify-center min-h-[300px] text-center space-y-3">
+          <p className="text-lg font-semibold text-brand-navy">No services yet</p>
+          <p className="text-sm text-gray-500">
+            Your account manager will link services to your profile shortly.
+          </p>
+        </div>
       </div>
     );
   }
@@ -176,11 +242,14 @@ export default async function DashboardPage() {
   const firstName = rawName && !looksLikeEmail ? (rawName.split(/\s+/)[0] ?? null) : null;
 
   return (
-    <DashboardClient
-      userName={userName}
-      firstName={firstName}
-      services={serviceCards}
-      allComplete={allComplete}
-    />
+    <div className="space-y-6">
+      <FilingsOnBehalfOf rows={filingFor} />
+      <DashboardClient
+        userName={userName}
+        firstName={firstName}
+        services={serviceCards}
+        allComplete={allComplete}
+      />
+    </div>
   );
 }
