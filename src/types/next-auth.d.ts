@@ -1,5 +1,6 @@
 import { DefaultSession } from "next-auth";
 import type { AdminPermissions } from "@/lib/admin-permissions";
+import type { TenantBrand } from "@/lib/tenant-brand";
 
 declare module "next-auth" {
   interface Session {
@@ -14,6 +15,8 @@ declare module "next-auth" {
       tenantId: string;
       /** B-127 — admin role + 10 permission flags. Null for client users. */
       adminPermissions: AdminPermissions | null;
+      /** B-129 — tenant brand resolved from tenants.settings. */
+      tenantBrand: TenantBrand;
     } & DefaultSession["user"];
   }
 }

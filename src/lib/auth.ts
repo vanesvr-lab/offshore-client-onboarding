@@ -4,6 +4,11 @@ import bcrypt from "bcryptjs";
 import { createAdminClient } from "./supabase/admin";
 import { DEFAULT_TENANT_ID } from "./tenant";
 import { loadAdminPermissions, type AdminPermissions } from "./admin-permissions";
+import {
+  getTenantBrand,
+  TENANT_BRAND_DEFAULTS,
+  type TenantBrand,
+} from "./tenant-brand";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   providers: [
@@ -92,6 +97,14 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
             ? await loadAdminPermissions(supabase, user.id)
             : null;
 
+        // B-129 — resolve the tenant brand from tenants.settings so
+        // every render path can read it from session.user.tenantBrand
+        // without a per-render DB hit.
+        const tenantBrand = await getTenantBrand(
+          supabase,
+          user.tenant_id ?? DEFAULT_TENANT_ID
+        );
+
         return {
           id: user.id,
           email: user.email,
@@ -101,6 +114,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           clientProfileId,
           tenantId: user.tenant_id ?? DEFAULT_TENANT_ID,
           adminPermissions,
+          tenantBrand,
         };
       },
     }),
@@ -117,6 +131,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         // authorize). For client users this is null.
         token.adminPermissions =
           (user as { adminPermissions: AdminPermissions | null }).adminPermissions ?? null;
+        // B-129 — tenantBrand is set on first sign-in (from authorize).
+        token.tenantBrand =
+          (user as { tenantBrand: TenantBrand }).tenantBrand ?? TENANT_BRAND_DEFAULTS;
       }
       return token;
     },
@@ -128,6 +145,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       session.user.tenantId = (token.tenantId as string) ?? DEFAULT_TENANT_ID;
       session.user.adminPermissions =
         (token.adminPermissions as AdminPermissions | null) ?? null;
+      session.user.tenantBrand =
+        (token.tenantBrand as TenantBrand) ?? TENANT_BRAND_DEFAULTS;
       return session;
     },
   },
