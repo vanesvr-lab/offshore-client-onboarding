@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { createAdminClient } from "./supabase/admin";
 import { DEFAULT_TENANT_ID } from "./tenant";
+import { loadAdminPermissions, type AdminPermissions } from "./admin-permissions";
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   providers: [
@@ -84,6 +85,13 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           }
         }
 
+        // B-127 — for admins, resolve their role + 10 permission flags
+        // and cache the result on the JWT. Client users get null.
+        const adminPermissions =
+          user.role === "admin"
+            ? await loadAdminPermissions(supabase, user.id)
+            : null;
+
         return {
           id: user.id,
           email: user.email,
@@ -92,6 +100,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           is_primary,
           clientProfileId,
           tenantId: user.tenant_id ?? DEFAULT_TENANT_ID,
+          adminPermissions,
         };
       },
     }),
@@ -104,6 +113,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.is_primary = (user as { is_primary: boolean }).is_primary ?? true;
         token.clientProfileId = (user as { clientProfileId: string | null }).clientProfileId ?? null;
         token.tenantId = (user as { tenantId: string }).tenantId ?? DEFAULT_TENANT_ID;
+        // B-127 — adminPermissions is set on first sign-in (from
+        // authorize). For client users this is null.
+        token.adminPermissions =
+          (user as { adminPermissions: AdminPermissions | null }).adminPermissions ?? null;
       }
       return token;
     },
@@ -113,6 +126,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       session.user.is_primary = (token.is_primary as boolean) ?? true;
       session.user.clientProfileId = (token.clientProfileId as string | null) ?? null;
       session.user.tenantId = (token.tenantId as string) ?? DEFAULT_TENANT_ID;
+      session.user.adminPermissions =
+        (token.adminPermissions as AdminPermissions | null) ?? null;
       return session;
     },
   },
