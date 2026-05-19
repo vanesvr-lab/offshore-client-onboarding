@@ -1212,6 +1212,7 @@ function KycLongFormSection({
                   admin_status_at: d.admin_status_at ?? null,
                   expiry_date: d.expiry_date,
                   valid_for_months: d.document_types?.valid_for_months ?? null,
+                  is_profile_scoped: d.service_id == null,
                 };
                 return (
                   <KycDocRow
@@ -1329,6 +1330,7 @@ function KycLongFormSection({
                             admin_status_at: d.admin_status_at ?? null,
                             expiry_date: d.expiry_date,
                             valid_for_months: d.document_types?.valid_for_months ?? null,
+                            is_profile_scoped: d.service_id == null,
                           };
                           return (
                             <KycDocRow
@@ -2354,6 +2356,10 @@ function PersonCard({
           is_waived: waiver !== null,
           waived_at: waiver?.waived_at ?? null,
           waived_by_name: waivedByName,
+          // B-132 — service_id IS NULL means the doc lives on the
+          // profile (identity / financial / compliance) and is shared
+          // across every service the person is on.
+          is_profile_scoped: !!uploaded && uploaded.service_id == null,
         };
       }),
     }));
@@ -3592,6 +3598,7 @@ function AdminDocumentsSection({
                   admin_status_at: upload.admin_status_at ?? null,
                   expiry_date: upload.expiry_date,
                   valid_for_months: dt.valid_for_months ?? null,
+                  is_profile_scoped: upload.service_id == null,
                 }
               : {
                   id: null,

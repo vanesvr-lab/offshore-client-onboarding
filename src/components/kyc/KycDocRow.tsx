@@ -7,7 +7,7 @@
 // (wired by the caller via `onViewClick`) and admin's row exposes a
 // status pill regardless of "Uploaded" copy.
 
-import { CheckCircle2, FileText, Loader2, Upload, Eye } from "lucide-react";
+import { CheckCircle2, FileText, Loader2, Upload, Eye, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DocumentStatusBadge } from "@/components/shared/DocumentStatusBadge";
 import { computeDocumentExpiry } from "@/lib/documents/computeExpiry";
@@ -38,6 +38,10 @@ export interface KycDocRowData {
   is_waived?: boolean;
   waived_at?: string | null;
   waived_by_name?: string | null;
+  /** B-132 — true when the document is profile-scoped (service_id IS
+   *  NULL) and therefore shared across every service the owning
+   *  profile is on. Drives the purple "Personal" badge. */
+  is_profile_scoped?: boolean;
 }
 
 export interface KycDocRowProps {
@@ -90,6 +94,15 @@ export function KycDocRow({
           >
             {doc.document_name}
           </span>
+          {uploaded && doc.is_profile_scoped && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded-full shrink-0"
+              title="This document is attached to the person, not this service. Changes apply across every service they're on."
+            >
+              <Users className="h-3 w-3" />
+              Personal
+            </span>
+          )}
           {uploaded && (
             <DocumentStatusBadge
               aiStatus={doc.verification_status}
