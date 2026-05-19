@@ -9,6 +9,40 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-129)
+
+- **Admin UI for editing tenant brand.** *Severity: Low.*
+  *Spawned by:* [B-129](cli-brief-tenant-brand-centralization-b129.md).
+  *What:* B-129 wired the data path from `tenants.settings` → `session.user.tenantBrand` → every render surface, but the editing experience is still raw SQL. Build `/admin/settings/branding` with: display_name / portal_name / country / support_email / footer_text inputs, a colour picker bound to primary_color, and a logo uploader that writes to Supabase Storage (or an external URL). Gate behind a future `branding_access` permission flag.
+  *Why deferred:* Vanessa edits the JSON directly via Supabase SQL editor for the pitch demo — a polished editor UI isn't blocking. Tracked as B-130.
+
+- **Substance review labels are still Mauritius-hardcoded.** *Severity: Low.*
+  *Spawned by:* [B-129](cli-brief-tenant-brand-centralization-b129.md).
+  *What:* `SubstanceReviewForm` renders FSC §3.2-3.4 questions ("Has 2 Mauritius-resident directors?", "Principal bank account in Mauritius?", etc.) as hardcoded strings because they're jurisdiction-specific compliance, not generic copy. When (if) GWMS expands to other jurisdictions, the substance section needs a per-tenant compliance template — likely JSON config keyed on `tenants.country` or a dedicated `tenant_compliance_frameworks` table.
+  *Why deferred:* No multi-jurisdiction tenant on the roadmap. Estimate when it lands: 2-3 days; depends on the new jurisdiction's specific framework.
+
+- **Customer-facing white-label switch.** *Severity: Low.*
+  *Spawned by:* [B-129](cli-brief-tenant-brand-centralization-b129.md).
+  *What:* `PLATFORM_BRAND` is overridable via env vars (`NEXT_PUBLIC_PLATFORM_NAME` / `NEXT_PUBLIC_PLATFORM_TAGLINE` / `NEXT_PUBLIC_PLATFORM_LOGO_URL`) but there's no in-app flip to hide the "Powered by Elarix" line entirely for resold instances. If Vanessa sells fully-white-label deployments, add a `branding.show_platform_brand` flag (env or DB) + a small switch in `BrandedHeader`.
+  *Why deferred:* No reseller in pipeline yet. Tracked as a future B-131 if/when it becomes relevant.
+
+- **Per-locale formatting tied to `tenants.country`.** *Severity: Low.*
+  *Spawned by:* [B-129](cli-brief-tenant-brand-centralization-b129.md).
+  *What:* `brand.country` is rendered as a display string today (footer line, KYC tooltip). Date / currency / phone-number formatting is still hard-coded to en-US / MUR conventions in various utilities. When a non-Mauritius tenant is onboarded, locale formatting needs to follow `brand.country` (or a separate `locale` setting).
+  *Why deferred:* No second tenant; locale-aware formatting is touchier than copy substitution and warrants its own brief.
+
+- **Tenant brand staleness on session.** *Severity: Low.*
+  *Spawned by:* [B-129](cli-brief-tenant-brand-centralization-b129.md).
+  *What:* `session.user.tenantBrand` is stamped at NextAuth `authorize()` time and cached on the JWT for 8h. SQL edits to `tenants.settings` don't propagate to active sessions until each user logs out + back in. Same caveat as `adminPermissions` from B-127. Resolutions: (a) shorten JWT TTL, (b) revalidate brand on every request via middleware, (c) add a "force re-auth all users" admin button.
+  *Why deferred:* For the pitch demo Vanessa controls the timing — she edits then re-logs herself. Real multi-tenant operations will need (b) or (c).
+
+- **Multi-tenancy — data isolation, tenant resolution, admin UI.** *Severity: Med.*
+  *Spawned by:* [B-129](cli-brief-tenant-brand-centralization-b129.md).
+  *What:* B-129 centralized brand strings to `tenants.settings`, which means a new tenant inserted today would automatically have its own brand identity flow through every email + UI surface. The remaining multi-tenant work is: (1) per-tenant data isolation via RLS scoped to `tenant_id`, (2) tenant context resolution from session / subdomain / header, (3) admin UI for managing multiple tenants. None of those were in B-129's scope. This is the existing tech debt #1 from the legacy `CHANGES.md` tracker — B-129 makes the brand layer multi-tenant-ready but the data layer is the larger remaining lift.
+  *Why deferred:* Single tenant today; pitch demo only needs brand swap, not full data isolation.
+
+---
+
 ## 2026-05-19 (B-128)
 
 - **Chatbot multi-turn memory.** *Severity: Low.*

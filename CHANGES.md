@@ -13,6 +13,98 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-129 — Tenant brand centralization + Elarix vendor brand (done 2026-05-19)
+
+Removes the 33 hardcoded `"GWMS"` and 36 hardcoded `"Mauritius"` literals
+catalogued in the brief and routes every rendered string through one of two
+brand axes: per-tenant brand in `tenants.settings` (display_name,
+portal_name, country, support_email, logo_url, footer_text, primary_color)
+and platform-vendor brand in `src/lib/platform-brand.ts` (Elarix, env-var
+overridable). After B-129 a pitch-mode rebrand is one SQL UPDATE + a fresh
+login away, and the header reads `XYZ Ltd - Admin Portal / Powered by
+Elarix · …`.
+
+### Batch 1 — schema seed (Claude Code)
+
+- Migration `20260519044221_seed_tenant_brand.sql` populates the 7 brand
+  fields on the existing `tenants` row via `settings = settings || jsonb_build_object(...)` (idempotent JSON merge — preserves any other settings keys).
+- Seed defaults: `display_name='XYZ Ltd'`, `portal_name='XYZ Ltd Client
+  Portal'`, `country='Mauritius'`, `support_email='support@elarix.io'`,
+  `footer_text='{portal_name} | {country}'`, `primary_color='#1e3a8a'`,
+  `logo_url=null`.
+- `db:push` ran on 2026-05-19; `db:status` confirms Local + Remote pair
+  with no drift.
+
+### Batch 2 — TenantBrand type + helper + session enrichment (Claude Code)
+
+- `src/lib/tenant-brand.ts` (new): `TenantBrand` type, `TENANT_BRAND_DEFAULTS`, `getTenantBrand(supabase, tenantId)`, `formatFooter(brand)` (resolves `{portal_name}` / `{country}` placeholders).
+- `src/lib/auth.ts`: `authorize()` loads brand at sign-in and stamps it on the user object; `jwt()` + `session()` cache it on the JWT and expose it as `session.user.tenantBrand`. Same caching pattern as `adminPermissions` from B-127.
+- `src/types/next-auth.d.ts`: extended `Session["user"]` with `tenantBrand: TenantBrand`.
+
+### Batch 3 — replace 33 hardcoded "GWMS" reads (Claude Code)
+
+17 files (the 14 from the brief + 3 follow-ups in the same call paths) now read brand from `getTenantBrand(...)` server-side or `session?.user.tenantBrand ?? TENANT_BRAND_DEFAULTS` client-side:
+
+- Server routes: admin invite (`admins/route.ts`), admin resend invite (`admins/[id]/resend-invite/route.ts`), document update request (`documents/[id]/request-update/route.ts`), client KYC profile invite (`profiles/[id]/send-invite/route.ts`), service-person KYC invite (`services/[id]/persons/[roleId]/send-invite/route.ts`), peer-review request emails (`services/[id]/review-requests/route.ts` + close route + the helpers in `src/lib/review-requests/emails.ts`).
+- Chatbot LLM fallback: `src/lib/chatbot/llmFallback.ts` accepts `portalName` as a parameter, baked into the system prompt; `src/app/api/chatbot/ask/route.ts` resolves brand server-side from `DEFAULT_TENANT_ID` (route is public; no session).
+- Client components: `(client)/kyc/KycPageClient.tsx`, `kyc/IndividualKycForm.tsx`, `kyc/OrganisationKycForm.tsx` (FieldRow "Pre-filled by …"), `admin/AdminAssistant.tsx`, `shared/FloatingAssistantWidget.tsx`, `client/DashboardClient.tsx`.
+- File-level comment in `src/lib/tenant.ts` rewritten to point at the brand helper.
+
+Manual verification path: `grep -rn '"GWMS\|\`GWMS\|>GWMS' src/ --include="*.tsx" --include="*.ts"` returns zero hits; the only remaining `GWMS` reference is a non-rendered comment in `src/app/api/chatbot/ask/route.ts` describing the migration.
+
+### Batch 4 — replace 36 hardcoded "Mauritius" (where appropriate) (Claude Code)
+
+Replaced in display surfaces:
+
+- Email templates: `admin/clients/[id]/send-invite/route.ts`, `admin/processes/[id]/request-documents/route.ts`, `src/lib/email/sendEmail.ts` (H1, FROM name, footer line all read brand).
+- Help text: `KycIntroTooltip` uses `${brand.country} regulators require us to verify…` (falls back to a country-less variant when `brand.country` is empty).
+
+Intentionally kept hardcoded (documented in `docs/tech-debt.md` + a code comment on the relevant section):
+
+- `SubstanceReviewForm` (FSC §3.2-3.4 questions) — Mauritius-specific compliance labels. Code comment now flags that this whole section needs a per-tenant compliance template if the platform expands jurisdictions.
+- One-off migration scripts under `src/app/api/admin/migrations/*` — seed scripts that run against the current tenant only.
+- Country dropdown lists (`NewClientForm`, admin/client wizards, `MultiSelectCountry`, `EditableApplicationDetails`, `constants/countries.ts`) — `Mauritius` is one of the countries by name; nothing tenant-specific.
+- `src/lib/ai/verifyDocument.ts` system prompt — Mauritius compliance context for the AI is correct for the current tenant; would need to template if the platform sells to other jurisdictions.
+- TypeScript comments referencing "Mauritius-resident directors" in `types/index.ts` + `services/computePendingItems.ts` (B-121 context).
+- `placeholder="e.g. Mauritius"` jurisdiction-field hints in `KycStepWizard`, `PerPersonReviewWizard`, `apply/[templateId]/details`, `lib/kyc/sections.ts` — these are placeholder examples, not defaults; templating them would require restructuring the static SECTIONS config.
+
+### Batch 5 — logo + primary color (Claude Code)
+
+- `src/components/shared/BrandMark.tsx`: reads `session.user.tenantBrand.logo_url`; falls back to `/brand-logo.png` (and then the lucide `Landmark` glyph via `onError`). Uses `next/image` with `unoptimized` so external logo URLs work without `next.config.js` domain whitelisting.
+- `src/app/layout.tsx`: converted to an async server component. Calls `auth()`, reads `session.user.tenantBrand.primary_color`, converts hex → `"R G B"` triplet via a local `hexToRgbTriplet(hex)` helper, and injects it as `style={{"--brand-primary": rgb}}` on `<html>`. Metadata title changed from "Mauritius Offshore Portal" → generic "Client Portal" so the static `<title>` doesn't leak the tenant identity pre-auth.
+- `tailwind.config.ts`: `brand-navy` now resolves to `rgb(var(--brand-primary, 30 58 138) / <alpha-value>)` so existing `bg-brand-navy` and `bg-brand-navy/50` opacity-modifier classes pick up the dynamic value with a sensible legacy-blue fallback.
+
+Pitch demo path: `UPDATE tenants SET settings = settings || jsonb_build_object('primary_color', '#dc2626') WHERE slug='gwms';` → log out + back in → every brand-navy element renders red.
+
+### Batch 7 — Elarix platform vendor brand + BrandedHeader (Claude Code)
+
+- `src/lib/platform-brand.ts` (new): hardcoded constants `name='Elarix'`, `tagline='The intelligent portal for client due diligence and compliance'`, `logo_url='/elarix-logo.png'` — env-var overridable via `NEXT_PUBLIC_PLATFORM_NAME` / `_TAGLINE` / `_LOGO_URL`.
+- `public/elarix-logo.png` committed (Vanessa pre-flight).
+- `src/lib/portal-name.ts`: rewritten. `portalHeading(brand, isAdmin)` returns `"${brand.display_name} - Admin Portal"` (or `Client Portal`); `authPageHeading()` returns the generic `"Sign in"` string for pre-auth surfaces.
+- `src/components/shared/BrandedHeader.tsx` (new): two-line component. Line 1 = `portalHeading(...)`. Line 2 = `"Powered by [Elarix logo] Elarix · tagline"`. Props: `isAdmin: boolean`, `compact?: boolean` (hides the tagline; used in narrow sidebars), `variant?: "light" | "dark"` (color flip for the existing dark-bg surfaces). Logo `<img>` hides on `onError` so a missing file doesn't render a broken-image icon.
+- Updated callers: `Header.tsx`, `Sidebar.tsx` (`compact` mode), `Navbar.tsx` all render `<BrandedHeader>` instead of the legacy `portalName()` string. `/login` and `/auth/set-password` use `authPageHeading()` + `PLATFORM_BRAND.tagline` instead of the old `BRAND_NAME` import.
+
+`grep portalName src/` and `grep "BRAND_NAME\b" src/` both return zero non-trivial hits (only matches are the unrelated `portalName` parameter name inside `llmFallback.ts`).
+
+### Batch 6 — docs + tech debt (Claude Code)
+
+- This CHANGES.md entry.
+- `docs/tech-debt.md` — new 2026-05-19 (B-129) section with six entries: admin UI for editing brand (→ B-130), substance-review per-tenant compliance template, customer-facing white-label switch (→ B-131), per-locale formatting, session staleness on brand edits, multi-tenancy data isolation (subsuming legacy debt #1's data-isolation portion).
+
+### Env vars
+
+- New (optional): `NEXT_PUBLIC_PLATFORM_NAME`, `NEXT_PUBLIC_PLATFORM_TAGLINE`, `NEXT_PUBLIC_PLATFORM_LOGO_URL` — only set these in a white-label deployment. Unset = default Elarix.
+
+### Migration push status
+
+- `20260519044221_seed_tenant_brand.sql` — applied to prod via `npm run db:push` on 2026-05-19; `npm run db:status` confirms Local + Remote pair.
+
+### Dev server restart
+
+- End-of-brief restart from the main project dir (per memory's CLI-owns-restart convention): `pkill -f "next dev"; sleep 2; rm -rf .next; npm run dev`.
+
+---
+
 ## B-128 — Chatbot wire-up + KB seed (done 2026-05-19)
 
 ### 2026-05-19 — Batch 6: tech debt rollup (Claude Code)
