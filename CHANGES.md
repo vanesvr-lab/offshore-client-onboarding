@@ -13,6 +13,19 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-140 — Remove duplicate Assigned Officer UI (done 2026-05-19)
+
+Two changes to the service-detail right rail:
+
+1. **Deleted the legacy inline `<select>` Assigned Officer block** that wrote `service_details._assigned_admin_id` via PATCH on the JSON column. B-130 introduced the column-backed `AssignedOfficerCard` (immediately below Peer/Manager Review), but the legacy block was never removed — so the right rail rendered the affordance twice. Removed the inline block, the `assignedAdminId` derivation, and the `assignAdmin` handler. The orphaned `_assigned_admin_id` key in existing `service_details` JSON rows is left in place (cosmetic-only DB sweep tracked in tech debt #45).
+2. **Fixed `AssignedOfficerCard`'s trigger display.** When the assigned `user_id` wasn't resolvable in the `admins` prop, shadcn's `<SelectValue>` fell back to rendering the raw UUID — Vanessa's screenshot showed `4e71552a-7e24-48a2-a522-d1db02ee36ce` instead of a name. Replaced with a `<SelectValue>` that takes a children render function explicitly mapping `value` → `match.full_name ?? match.email ?? "Unnamed admin"`, with `"Unknown admin"` as the safe fallback. The `admins` query in `loadServiceDetail` was already unfiltered (only tenant-scoped), so no parent change needed.
+
+### Tech debt
+
+- New Open entry #45: orphan `_assigned_admin_id` JSON key cleanup (cosmetic-only, ~5 min `UPDATE services SET service_details = service_details - '_assigned_admin_id'`).
+
+---
+
 ## B-139 — Unsaved-changes bar collides with chat bubble (done 2026-05-19)
 
 The sticky bottom-of-page "You have unsaved changes" bar on `/admin/services/[id]` rendered its Cancel + Save changes buttons flush against the viewport's right edge, where the B-128 chat assistant bubble partially obscured Save changes. Wrapped the bar's content in a `max-w-7xl mx-auto px-6` container so the buttons land at the right edge of the page's content column instead of the viewport edge, plus a `lg:mr-20` safety guard on the button group so it can never sit within 80 px of the viewport regardless of viewport width. Layout-only change to `ServiceDetailClient.tsx` ~line 7013; bar copy, button behaviour, and the chat widget's position are unchanged.
@@ -7117,6 +7130,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 42 | **List-view drift indicator** | Low | B-137's banner shows only when admin opens the per-document dialog. During bulk review (Document tab on the service page), admin doesn't see which docs have stale verification until they click into each one. A list-level chip ("1 doc has stale verification" / a small icon on the row) could surface drift earlier. Estimate: half-day; new brief if pitch demo highlights the gap. Spawned by [B-137](docs/cli-brief-stale-context-banner-b137.md). |
 | 43 | **Mixed-actor `*_by` columns documented as admin-actor in B-138** | Low | Six of the 24 FKs repointed in B-138 (audit_log.actor_id, client_processes.started_by, document_uploads.uploaded_by, documents.uploaded_by, kyc_records.filled_by, submitted_forms.uploaded_by) are written by session users that could be admin OR client OR filing rep. Post-B-127 they all live in `public.users` so the FK is correct, but the column name + sometimes-stale table comments may suggest admin-only writers. A documentation pass would capture which columns are mixed-actor to keep the schema legible for the next person reading it. Estimate: ~30 minutes. Spawned by [B-138](docs/cli-brief-legacy-profiles-fk-sweep-b138.md). |
 | 44 | **Audit other floating / sticky UI for chat-bubble collisions** | Low | B-139 fixed the unsaved-changes bar (Cancel + Save buttons were being obscured by the B-128 chat bubble) via a `max-w-7xl mx-auto` container + `lg:mr-20` safety margin. The same pattern likely applies if toasts, banners, or floating action buttons start clipping the bubble in future. No known issues today; spawned defensively in case adjacent surfaces follow the same anti-pattern. Spawned by [B-139](docs/cli-brief-unsaved-changes-bar-layout-b139.md). |
+| 45 | **Orphan `_assigned_admin_id` JSON key in `service_details`** | Low | B-140 stopped reading from the legacy `service_details._assigned_admin_id` JSON path (column-backed `services.assigned_admin_id` is the source of truth post-B-130) but didn't clear the JSON key from existing rows. Nothing reads it, so it just sits as orphaned JSON. A future cosmetic sweep can `UPDATE services SET service_details = service_details - '_assigned_admin_id' WHERE service_details ? '_assigned_admin_id'`. Estimate: ~5 min. Spawned by [B-140](docs/cli-brief-remove-duplicate-assigned-officer-b140.md). |
 
 ### Resolved
 

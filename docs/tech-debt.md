@@ -9,6 +9,15 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-140)
+
+- **Orphan `_assigned_admin_id` JSON key in `service_details`.** *Severity: Low.*
+  *Spawned by:* [B-140](cli-brief-remove-duplicate-assigned-officer-b140.md).
+  *What:* B-140 stopped reading from `service_details._assigned_admin_id` (column-backed `services.assigned_admin_id` is the source of truth post-B-130). Existing rows still carry the orphan JSON key — nothing reads it, but it shows up if anyone inspects the raw JSON. Cosmetic cleanup: `UPDATE services SET service_details = service_details - '_assigned_admin_id' WHERE service_details ? '_assigned_admin_id';`. Estimate: ~5 min, plus a migration file to keep the change auditable.
+  *Why deferred:* Zero behavioural impact today; safe to bundle into a later schema-sweep migration.
+
+---
+
 ## 2026-05-19 (B-139)
 
 - **Audit other floating / sticky UI for chat-bubble collisions.** *Severity: Low.*
