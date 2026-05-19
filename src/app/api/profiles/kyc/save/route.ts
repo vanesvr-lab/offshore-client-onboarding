@@ -17,12 +17,12 @@ export async function POST(request: Request) {
   const supabase = createAdminClient();
 
   // Verify this kyc record belongs to tenant + pull the parent profile so
-  // B-131 can decide whether the caller is the director themselves or a
-  // delegated filing rep.
+  // B-131/B-134 can decide whether the caller is the director themselves
+  // or a delegated filing rep (matched by the FK to a rep profile).
   const { data: existing } = await supabase
     .from("client_profile_kyc")
     .select(
-      "id, client_profile_id, client_profiles(id, user_id, email, filing_rep_email)",
+      "id, client_profile_id, client_profiles(id, user_id, email, filing_rep_profile_id, filing_rep:filing_rep_profile_id(id, email, is_representative))",
     )
     .eq("id", kycRecordId)
     .eq("tenant_id", tenantId)
@@ -30,20 +30,30 @@ export async function POST(request: Request) {
 
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // B-131 — accept either the director (matched by users.id or email) or
-  // the filing rep (matched by filing_rep_email). Admin sessions can
+  // B-131/B-134 — accept either the director (matched by users.id or
+  // email) or the filing rep (matched against the FK's joined
+  // client_profiles.email + is_representative=true). Admin sessions can
   // always save (admins use the admin-specific endpoint normally, but
   // a stray call shouldn't 403).
   const profile = (existing as unknown as {
     client_profiles: {
       user_id: string | null;
       email: string | null;
-      filing_rep_email: string | null;
+      filing_rep_profile_id: string | null;
+      filing_rep: {
+        id: string;
+        email: string | null;
+        is_representative: boolean | null;
+      } | null;
     } | null;
   }).client_profiles;
   const sessionEmail = (session.user.email ?? "").toLowerCase();
   const profileEmail = (profile?.email ?? "").toLowerCase();
-  const repEmail = (profile?.filing_rep_email ?? "").toLowerCase();
+  const repEmail =
+    (profile?.filing_rep?.is_representative === true
+      ? (profile.filing_rep.email ?? "")
+      : ""
+    ).toLowerCase();
   const isAdmin = session.user.role === "admin";
   const isOwner =
     !!profile?.user_id && profile.user_id === session.user.id;

@@ -1,6 +1,7 @@
-// B-131 — Rep-facing KYC editor. Route is gated on
-// session.user.email matching client_profiles.filing_rep_email; the
-// save endpoint (POST /api/profiles/kyc/save) also enforces that
+// B-131/B-134 — Rep-facing KYC editor. Route is gated on
+// session.user.email matching the rep profile pointed at by
+// client_profiles.filing_rep_profile_id (where is_representative=true);
+// the save endpoint (POST /api/profiles/kyc/save) also enforces that
 // match so a direct API call from a stale tab would 403. Reuses the
 // existing IndividualKycForm / OrganisationKycForm components by
 // adapting client_profile_kyc (modern table) into the legacy
@@ -39,7 +40,8 @@ export default async function FilingPage({ params }: PageProps) {
     .select(
       `
       id, full_name, email, phone, address, record_type,
-      due_diligence_level, filing_rep_email, filing_rep_name,
+      due_diligence_level, filing_rep_profile_id,
+      filing_rep:filing_rep_profile_id(id, email, is_representative),
       client_profile_kyc(*)
     `,
     )
@@ -51,7 +53,13 @@ export default async function FilingPage({ params }: PageProps) {
   if (!profile) redirect("/dashboard");
 
   const sessionEmail = (session.user.email ?? "").toLowerCase();
-  const repEmail = (profile.filing_rep_email ?? "").toLowerCase();
+  const repRef = (profile as unknown as {
+    filing_rep: { email: string | null; is_representative: boolean | null } | null;
+  }).filing_rep;
+  const repEmail =
+    repRef?.is_representative === true
+      ? (repRef.email ?? "").toLowerCase()
+      : "";
   if (!repEmail || repEmail !== sessionEmail) {
     redirect("/dashboard?error=not-a-filing-rep");
   }

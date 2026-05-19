@@ -4,14 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { writeAuditLog } from "@/lib/audit/writeAuditLog";
 import { hasDataAccess } from "@/lib/admin-permissions";
-import {
-  sendFilingRepInvite,
-  upsertRepUser,
-} from "@/lib/filing-rep-invite";
-
-function isValidEmail(s: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
+import { sendFilingRepInvite } from "@/lib/filing-rep-invite";
 
 /** POST /api/admin/services/[id]/roles — Link an existing profile or create a new one */
 export async function POST(
@@ -34,12 +27,14 @@ export async function POST(
     email?: string | null;
     record_type?: "individual" | "organisation";
     // B-131 — when creating a new profile inline, parity with
-    // CreateProfileDialog: is_representative, due_diligence_level,
-    // and the optional filing rep.
+    // CreateProfileDialog: is_representative, due_diligence_level.
     is_representative?: boolean;
     due_diligence_level?: "sdd" | "cdd" | "edd";
-    filing_rep_name?: string | null;
-    filing_rep_email?: string | null;
+    // B-134 — director points at a rep profile (is_representative=true)
+    // via this FK. Replaces B-131's filing_rep_name + filing_rep_email
+    // text columns. Only used when creating a new profile inline; for
+    // an existing profile, set the rep via PATCH /profiles-v2/[id].
+    filing_rep_profile_id?: string | null;
   };
 
   if (!body.role) {
@@ -49,31 +44,17 @@ export async function POST(
     return NextResponse.json({ error: "client_profile_id or full_name is required" }, { status: 400 });
   }
 
-  // B-131 — validate + permission-gate filing rep fields when supplied
-  // inline. (Same rules as the create-profile route.) Only meaningful
-  // when also creating a new profile inline; if client_profile_id is
-  // supplied, the rep is set via the dedicated profiles PATCH route.
-  const repName = body.filing_rep_name?.trim() || null;
-  const repEmail = body.filing_rep_email?.trim().toLowerCase() || null;
-  if (!body.client_profile_id) {
-    if ((repName && !repEmail) || (!repName && repEmail)) {
-      return NextResponse.json(
-        { error: "Filing rep name and email must be set together" },
-        { status: 400 },
-      );
-    }
-    if (repEmail && !isValidEmail(repEmail)) {
-      return NextResponse.json(
-        { error: "Filing rep email is not a valid email address" },
-        { status: 400 },
-      );
-    }
-    if (repEmail && !hasDataAccess(session.user.adminPermissions, "edit")) {
-      return NextResponse.json(
-        { error: "Your role can't assign a filing representative." },
-        { status: 403 },
-      );
-    }
+  // B-134 — permission gate + validation for the rep FK. Only meaningful
+  // when creating a new profile inline; for an existing profile, the
+  // rep is set via /profiles-v2/[id] PATCH.
+  const repProfileId = body.client_profile_id
+    ? null
+    : (body.filing_rep_profile_id ?? null);
+  if (repProfileId && !hasDataAccess(session.user.adminPermissions, "edit")) {
+    return NextResponse.json(
+      { error: "Your role can't assign a filing representative." },
+      { status: 403 },
+    );
   }
 
   const supabase = createAdminClient();
@@ -89,6 +70,24 @@ export async function POST(
 
   if (!svc) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });
+  }
+
+  // B-134 — validate the rep profile is is_representative=true in this
+  // tenant before linking. DB FK only enforces existence; the role +
+  // tenant check happens here so a bad request errors clearly.
+  if (repProfileId) {
+    const { data: rep } = await supabase
+      .from("client_profiles")
+      .select("id, is_representative, is_deleted")
+      .eq("id", repProfileId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (!rep || rep.is_deleted || rep.is_representative !== true) {
+      return NextResponse.json(
+        { error: "Filing rep profile is not a valid representative" },
+        { status: 400 },
+      );
+    }
   }
 
   let profileId = body.client_profile_id;
@@ -123,8 +122,7 @@ export async function POST(
           full_name: body.full_name,
           email: body.email ?? null,
           due_diligence_level: body.due_diligence_level ?? "cdd",
-          filing_rep_name: repName,
-          filing_rep_email: repEmail,
+          filing_rep_profile_id: repProfileId,
         })
         .select("id")
         .single();
@@ -158,21 +156,13 @@ export async function POST(
           pep_verified: false,
         });
 
-        // B-131 — best-effort filing rep invite when the inline-created
-        // profile has a rep attached.
-        if (repEmail && repName) {
+        // B-131/B-134 — best-effort filing rep invite when the
+        // inline-created profile has a rep attached.
+        if (repProfileId) {
           try {
-            const repUserId = await upsertRepUser(
-              supabase,
-              tenantId,
-              repEmail,
-              repName,
-            );
             await sendFilingRepInvite({
               supabase,
-              userId: repUserId,
-              email: repEmail,
-              repName,
+              repProfileId,
               directorName: body.full_name ?? "",
               tenantId,
             });

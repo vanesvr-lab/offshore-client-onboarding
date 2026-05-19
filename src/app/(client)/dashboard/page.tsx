@@ -36,50 +36,63 @@ export default async function DashboardPage() {
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
-  // B-131 — load every profile that has the current user as a filing
-  // rep. Functional index on lower(filing_rep_email) keeps this fast.
+  // B-131/B-134 — load every director that has the current user as a
+  // filing rep. Two steps: (1) find the rep profile in this tenant whose
+  // email matches the session, (2) find every client_profiles row with
+  // filing_rep_profile_id = rep.id. Functional FK index keeps this fast.
   const sessionEmail = (session.user.email ?? "").toLowerCase();
   let filingFor: FilingForRow[] = [];
   if (sessionEmail) {
-    const { data: rawFilingFor } = await supabase
+    const { data: repProfile } = await supabase
       .from("client_profiles")
-      .select(
-        `
-        id, full_name, record_type, due_diligence_level,
-        profile_service_roles(
-          role,
-          services(id, service_number)
-        )
-      `,
-      )
+      .select("id")
       .eq("tenant_id", tenantId)
+      .ilike("email", sessionEmail)
+      .eq("is_representative", true)
       .eq("is_deleted", false)
-      .ilike("filing_rep_email", sessionEmail);
-    type RawFilingRow = {
-      id: string;
-      full_name: string;
-      record_type: "individual" | "organisation";
-      due_diligence_level: "sdd" | "cdd" | "edd";
-      profile_service_roles: Array<{
-        role: string;
-        services: { id: string; service_number: string | null } | null;
-      }> | null;
-    };
-    filingFor = ((rawFilingFor as unknown as RawFilingRow[] | null) ?? []).map(
-      (p) => ({
-        id: p.id,
-        full_name: p.full_name,
-        record_type: p.record_type,
-        due_diligence_level: p.due_diligence_level,
-        roles: (p.profile_service_roles ?? [])
-          .filter((r) => !!r.services)
-          .map((r) => ({
-            role: r.role,
-            service_id: r.services!.id,
-            service_number: r.services!.service_number,
-          })),
-      }),
-    );
+      .maybeSingle();
+
+    if (repProfile?.id) {
+      const { data: rawFilingFor } = await supabase
+        .from("client_profiles")
+        .select(
+          `
+          id, full_name, record_type, due_diligence_level,
+          profile_service_roles(
+            role,
+            services(id, service_number)
+          )
+        `,
+        )
+        .eq("tenant_id", tenantId)
+        .eq("is_deleted", false)
+        .eq("filing_rep_profile_id", repProfile.id);
+      type RawFilingRow = {
+        id: string;
+        full_name: string;
+        record_type: "individual" | "organisation";
+        due_diligence_level: "sdd" | "cdd" | "edd";
+        profile_service_roles: Array<{
+          role: string;
+          services: { id: string; service_number: string | null } | null;
+        }> | null;
+      };
+      filingFor = ((rawFilingFor as unknown as RawFilingRow[] | null) ?? []).map(
+        (p) => ({
+          id: p.id,
+          full_name: p.full_name,
+          record_type: p.record_type,
+          due_diligence_level: p.due_diligence_level,
+          roles: (p.profile_service_roles ?? [])
+            .filter((r) => !!r.services)
+            .map((r) => ({
+              role: r.role,
+              service_id: r.services!.id,
+              service_number: r.services!.service_number,
+            })),
+        }),
+      );
+    }
   }
 
   if (!clientProfileId) {

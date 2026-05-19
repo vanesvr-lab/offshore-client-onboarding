@@ -1,7 +1,7 @@
-// B-131 — "Filings on behalf of" section on the client dashboard.
-// Lists every client_profiles row where filing_rep_email matches the
-// current user. Click → /filings/[profileId] (Batch 5) for the
-// rep-facing KYC editor.
+// B-131/B-134 — "Filings on behalf of" section on the client dashboard.
+// Lists every client_profiles row whose filing_rep_profile_id FK points
+// at the rep profile matched by the current user's email. Click →
+// /filings/[profileId] for the rep-facing KYC editor.
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
