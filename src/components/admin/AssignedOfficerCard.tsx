@@ -94,7 +94,23 @@ export function AssignedOfficerCard({
               : undefined
           }
         >
-          <SelectValue placeholder="Select an officer" />
+          {/* B-140 — Render the resolved name explicitly. shadcn's
+              SelectValue would otherwise fall back to the raw `value`
+              (a user_id UUID) when the assigned admin isn't in the
+              `admins` list (e.g. they were removed from admin_users
+              after being assigned, or the prop loaded stale). "Unknown
+              admin" is the worst-case label so the UI never leaks an
+              internal id to the user. */}
+          <SelectValue placeholder="Select an officer">
+            {(() => {
+              if (value === UNASSIGNED) return "— Unassigned —";
+              const match = admins.find((a) => a.user_id === value);
+              if (match) {
+                return match.full_name ?? match.email ?? "Unnamed admin";
+              }
+              return "Unknown admin";
+            })()}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={UNASSIGNED}>— Unassigned —</SelectItem>

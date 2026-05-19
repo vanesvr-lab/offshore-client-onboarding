@@ -5812,25 +5812,12 @@ export function ServiceDetailClient({
     }
   }
 
-  // ── Assigned admin (stored in service_details._assigned_admin_id) ─────────
-
-  const assignedAdminId = (serviceDetails._assigned_admin_id as string | null) ?? null;
-
-  async function assignAdmin(userId: string | null) {
-    const updated = { ...serviceDetails, _assigned_admin_id: userId };
-    setServiceDetails(updated);
-    try {
-      await fetch(`/api/admin/services/${service.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ service_details: updated }),
-      });
-      setService((prev) => ({ ...prev, service_details: updated }));
-      toast.success("Account manager updated");
-    } catch {
-      toast.error("Failed to update manager");
-    }
-  }
+  // B-140 — The legacy `service_details._assigned_admin_id` JSON-backed
+  // Assigned Officer state + handler used to live here. B-130's
+  // <AssignedOfficerCard /> (column-backed via services.assigned_admin_id)
+  // is now the single source of truth; the JSON path is retired but the
+  // existing JSON key in each row is left in place (cosmetic-only sweep
+  // tracked in tech debt).
 
   // B-125 — actor/action filter derivation and date-range filtering
   // moved into `ServiceAuditTrailCard`. Raw `auditEntries` flow straight
@@ -6893,25 +6880,10 @@ export function ServiceDetailClient({
           localDirectorCount={localDirectorCount}
         />
 
-        {/* ── Assigned Officer ────────────────────────────────────────────── */}
-        <div className="bg-white border rounded-xl px-4 py-3 space-y-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assigned Officer</p>
-          <div className="relative">
-            <select
-              value={assignedAdminId ?? ""}
-              onChange={(e) => void assignAdmin(e.target.value || null)}
-              className="w-full h-8 rounded-lg border border-gray-200 pl-2 pr-6 text-xs appearance-none bg-white cursor-pointer"
-            >
-              <option value="">— Unassigned —</option>
-              {adminUsers.map((u) => (
-                <option key={u.user_id} value={u.user_id}>
-                  {u.full_name ?? u.email ?? u.user_id}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-          </div>
-        </div>
+        {/* B-140 — The duplicate Assigned Officer block (legacy
+              service_details._assigned_admin_id <select>) lived here.
+              Deleted; B-130's <AssignedOfficerCard /> above (under
+              Peer/Manager Review) is the single source of truth. */}
 
         {/* ── Communications (B-108) ──────────────────────────────────────── */}
         <ServiceCommunicationsCard communications={communications} />
