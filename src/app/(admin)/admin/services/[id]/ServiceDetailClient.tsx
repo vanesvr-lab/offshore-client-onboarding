@@ -82,6 +82,7 @@ import { MilestonesCard, type MilestoneField } from "@/components/admin/Mileston
 import { ReviewRequestsCard } from "@/components/admin/ReviewRequestsCard";
 import { ReviewRequestBanner } from "@/components/admin/ReviewRequestBanner";
 import { RequestReviewModal } from "@/components/admin/RequestReviewModal";
+import { CreateProfileDialog, type CreatedProfileSummary } from "@/components/admin/CreateProfileDialog";
 import type { HydratedReviewRequest } from "@/lib/review-requests/types";
 import { ServicePendingCard } from "@/components/admin/ServicePendingCard";
 import {
@@ -338,14 +339,32 @@ function AddProfileDialog({
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newType, setNewType] = useState<"individual" | "organisation">("individual");
-  // B-131 — parity with CreateProfileDialog: is_representative,
-  // due_diligence_level, and the filing-rep affordance.
-  const [newIsRepresentative, setNewIsRepresentative] = useState(false);
+  // B-131 — Due Diligence Level per director (no inline "this is a rep"
+  // toggle — AddDirector adds directors, reps come from the picker below).
   const [newDdLevel, setNewDdLevel] = useState<"sdd" | "cdd" | "edd">("cdd");
+  // B-134 — filing rep picker: dropdown of existing reps in this tenant
+  // + "+ Add new representative" opens CreateProfileDialog in
+  // forced-rep mode. Selecting a rep stores filing_rep_profile_id on
+  // the new director.
   const [hasFilingRep, setHasFilingRep] = useState(false);
-  const [filingRepName, setFilingRepName] = useState("");
-  const [filingRepEmail, setFilingRepEmail] = useState("");
+  const [selectedRepId, setSelectedRepId] = useState<string | null>(null);
+  const [showCreateRepDialog, setShowCreateRepDialog] = useState(false);
+  const [extraReps, setExtraReps] = useState<ClientProfile[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // Existing reps in the tenant — derived from `allProfiles` plus any
+  // rep just inline-created in this session that hasn't propagated to
+  // the parent prop yet.
+  const existingReps = useMemo(() => {
+    const byId = new Map<string, ClientProfile>();
+    for (const p of allProfiles) {
+      if (p.is_representative && !p.is_deleted) byId.set(p.id, p);
+    }
+    for (const p of extraReps) byId.set(p.id, p);
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.full_name ?? "").localeCompare(b.full_name ?? ""),
+    );
+  }, [allProfiles, extraReps]);
 
   const roleTitle = defaultRole === "ubo" ? "UBO" : defaultRole.charAt(0).toUpperCase() + defaultRole.slice(1);
 
@@ -375,28 +394,16 @@ function AddProfileDialog({
       setNewName("");
       setNewEmail("");
       setNewType("individual");
-      setNewIsRepresentative(false);
       setNewDdLevel("cdd");
       setHasFilingRep(false);
-      setFilingRepName("");
-      setFilingRepEmail("");
+      setSelectedRepId(null);
     }
   }
 
-  function isValidEmailLocal(s: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-  }
-
   async function handleSubmit() {
-    if (!selected && hasFilingRep) {
-      if (!filingRepName.trim() || !filingRepEmail.trim()) {
-        toast.error("Filing rep name and email are required", { position: "top-right" });
-        return;
-      }
-      if (!isValidEmailLocal(filingRepEmail.trim())) {
-        toast.error("Filing rep email is not valid", { position: "top-right" });
-        return;
-      }
+    if (!selected && hasFilingRep && !selectedRepId) {
+      toast.error("Pick a representative or uncheck the box", { position: "top-right" });
+      return;
     }
     setSaving(true);
     try {
@@ -407,10 +414,8 @@ function AddProfileDialog({
             email: newEmail.trim() || null,
             record_type: newType,
             role: defaultRole,
-            is_representative: newIsRepresentative,
             due_diligence_level: newDdLevel,
-            filing_rep_name: hasFilingRep ? filingRepName.trim() : null,
-            filing_rep_email: hasFilingRep ? filingRepEmail.trim() : null,
+            filing_rep_profile_id: hasFilingRep ? selectedRepId : null,
           };
 
       const res = await fetch(`/api/admin/services/${serviceId}/roles`, {
@@ -562,37 +567,24 @@ function AddProfileDialog({
                 />
               </div>
 
-              {/* B-131 — Representative toggle */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="add-prof-is-rep"
-                  checked={newIsRepresentative}
-                  onChange={(e) => { setNewIsRepresentative(e.target.checked); setSelected(null); }}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="add-prof-is-rep" className="text-sm text-gray-700">
-                  This is a representative (no KYC required)
-                </label>
+              {/* B-131 — Due diligence level for this director */}
+              <div>
+                <label className="text-xs font-medium text-gray-700 mb-1 block">Due Diligence Level</label>
+                <select
+                  value={newDdLevel}
+                  onChange={(e) => { setNewDdLevel(e.target.value as "sdd" | "cdd" | "edd"); setSelected(null); }}
+                  className="w-full h-9 rounded-md border border-gray-200 px-3 text-sm bg-white text-gray-900"
+                >
+                  <option value="sdd">SDD — Simplified</option>
+                  <option value="cdd">CDD — Standard</option>
+                  <option value="edd">EDD — Enhanced</option>
+                </select>
               </div>
 
-              {/* B-131 — Due diligence level */}
-              {!newIsRepresentative && (
-                <div>
-                  <label className="text-xs font-medium text-gray-700 mb-1 block">Due Diligence Level</label>
-                  <select
-                    value={newDdLevel}
-                    onChange={(e) => { setNewDdLevel(e.target.value as "sdd" | "cdd" | "edd"); setSelected(null); }}
-                    className="w-full h-9 rounded-md border border-gray-200 px-3 text-sm bg-white text-gray-900"
-                  >
-                    <option value="sdd">SDD — Simplified</option>
-                    <option value="cdd">CDD — Standard</option>
-                    <option value="edd">EDD — Enhanced</option>
-                  </select>
-                </div>
-              )}
-
-              {/* B-131 — Filing rep affordance */}
+              {/* B-134 — Filing rep picker: dropdown of existing reps in
+                  this tenant + "+ Add new representative" inline-create.
+                  Selecting a rep stores filing_rep_profile_id on the
+                  new director. */}
               <div className="border-t pt-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <input
@@ -611,25 +603,59 @@ function AddProfileDialog({
                 </p>
                 {hasFilingRep && (
                   <div className="space-y-2 ml-6">
-                    <input
-                      type="text"
-                      value={filingRepName}
-                      onChange={(e) => setFilingRepName(e.target.value)}
-                      placeholder="Representative's full name"
-                      className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    />
-                    <input
-                      type="email"
-                      value={filingRepEmail}
-                      onChange={(e) => setFilingRepEmail(e.target.value)}
-                      placeholder="Representative's email"
-                      className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                    />
+                    <label className="text-xs font-medium text-gray-700">Representative</label>
+                    <select
+                      value={selectedRepId ?? ""}
+                      onChange={(e) => setSelectedRepId(e.target.value || null)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+                    >
+                      <option value="">— Select a representative —</option>
+                      {existingReps.map((rep) => (
+                        <option key={rep.id} value={rep.id}>
+                          {rep.full_name}{rep.email ? ` — ${rep.email}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateRepDialog(true)}
+                      className="text-xs text-brand-navy hover:underline"
+                    >
+                      + Add new representative
+                    </button>
                   </div>
                 )}
               </div>
             </div>
           </div>
+
+          {/* B-134 — inline rep create. forceIsRepresentative locks the
+              new profile as a rep (no checkbox), title becomes
+              "New Representative". */}
+          {showCreateRepDialog && (
+            <CreateProfileDialog
+              open
+              onClose={() => setShowCreateRepDialog(false)}
+              forceIsRepresentative
+              onCreated={(summary: CreatedProfileSummary) => {
+                setShowCreateRepDialog(false);
+                setExtraReps((prev) =>
+                  prev.find((r) => r.id === summary.id)
+                    ? prev
+                    : [...prev, {
+                        id: summary.id,
+                        full_name: summary.full_name,
+                        email: summary.email,
+                        record_type: summary.record_type,
+                        is_representative: true,
+                        is_deleted: false,
+                        due_diligence_level: summary.due_diligence_level,
+                      } as unknown as ClientProfile],
+                );
+                setSelectedRepId(summary.id);
+              }}
+            />
+          )}
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline" size="sm" className={BTN_OUTLINE} />}>Cancel</DialogClose>

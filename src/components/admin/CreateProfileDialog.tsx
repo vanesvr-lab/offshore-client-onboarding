@@ -28,38 +28,34 @@ interface Props {
   /** Receives a summary of the newly-created profile so parents can
    *  splice it into local state without a refetch. */
   onCreated: (summary: CreatedProfileSummary) => void;
+  /** B-134 — when true, the dialog is locked to creating a
+   *  representative: the "This is a representative" toggle is hidden,
+   *  is_representative is forced to true on submit, and the title
+   *  reads "New Representative". Used by the AddDirector / per-director
+   *  rep pickers that need to inline-create a rep on the fly. */
+  forceIsRepresentative?: boolean;
 }
 
-export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
+export function CreateProfileDialog({
+  open,
+  onClose,
+  onCreated,
+  forceIsRepresentative = false,
+}: Props) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [recordType, setRecordType] = useState<"individual" | "organisation">("individual");
   const [isRepresentative, setIsRepresentative] = useState(false);
   const [ddLevel, setDdLevel] = useState<"sdd" | "cdd" | "edd">("cdd");
-  const [hasFilingRep, setHasFilingRep] = useState(false);
-  const [filingRepName, setFilingRepName] = useState("");
-  const [filingRepEmail, setFilingRepEmail] = useState("");
   const [saving, setSaving] = useState(false);
 
-  function isValidEmail(s: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-  }
+  const repFlag = forceIsRepresentative ? true : isRepresentative;
 
   async function handleCreate() {
     if (!fullName.trim()) {
       toast.error("Full name is required");
       return;
-    }
-    if (hasFilingRep) {
-      if (!filingRepName.trim() || !filingRepEmail.trim()) {
-        toast.error("Filing rep name and email are required");
-        return;
-      }
-      if (!isValidEmail(filingRepEmail.trim())) {
-        toast.error("Filing rep email is not valid");
-        return;
-      }
     }
     setSaving(true);
     try {
@@ -71,15 +67,22 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
           email: email.trim() || null,
           phone: phone.trim() || null,
           record_type: recordType,
-          is_representative: isRepresentative,
+          is_representative: repFlag,
           due_diligence_level: ddLevel,
-          filing_rep_name: hasFilingRep ? filingRepName.trim() : null,
-          filing_rep_email: hasFilingRep ? filingRepEmail.trim() : null,
         }),
       });
       const data = (await res.json()) as { id?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to create profile");
-      toast.success("Profile created");
+      toast.success(forceIsRepresentative ? "Representative created" : "Profile created");
+      const summary: CreatedProfileSummary = {
+        id: data.id!,
+        full_name: fullName.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        record_type: recordType,
+        is_representative: repFlag,
+        due_diligence_level: ddLevel,
+      };
       // Reset form
       setFullName("");
       setEmail("");
@@ -87,18 +90,7 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
       setRecordType("individual");
       setIsRepresentative(false);
       setDdLevel("cdd");
-      setHasFilingRep(false);
-      setFilingRepName("");
-      setFilingRepEmail("");
-      onCreated({
-        id: data.id!,
-        full_name: fullName.trim(),
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-        record_type: recordType,
-        is_representative: isRepresentative,
-        due_diligence_level: ddLevel,
-      });
+      onCreated(summary);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create");
     } finally {
@@ -110,7 +102,9 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="bg-white max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-brand-navy">New Profile</DialogTitle>
+          <DialogTitle className="text-brand-navy">
+            {forceIsRepresentative ? "New Representative" : "New Profile"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
@@ -134,19 +128,21 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
             </div>
           </div>
 
-          {/* Representative toggle */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={isRepresentative}
-              onChange={(e) => setIsRepresentative(e.target.checked)}
-              className="rounded border-gray-300"
-              id="is-rep"
-            />
-            <label htmlFor="is-rep" className="text-sm text-gray-700">
-              This is a representative (no KYC required)
-            </label>
-          </div>
+          {/* Representative toggle — hidden in forced-rep mode */}
+          {!forceIsRepresentative && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isRepresentative}
+                onChange={(e) => setIsRepresentative(e.target.checked)}
+                className="rounded border-gray-300"
+                id="is-rep"
+              />
+              <label htmlFor="is-rep" className="text-sm text-gray-700">
+                This is a representative (no KYC required)
+              </label>
+            </div>
+          )}
 
           {/* Name */}
           <div>
@@ -182,8 +178,8 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
             />
           </div>
 
-          {/* DD Level */}
-          {!isRepresentative && (
+          {/* DD Level — hidden for representatives */}
+          {!repFlag && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Due Diligence Level</label>
               <select
@@ -198,41 +194,11 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
             </div>
           )}
 
-          {/* B-131 — Filing representative delegation */}
-          <div className="border-t pt-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="has-filing-rep"
-                checked={hasFilingRep}
-                onChange={(e) => setHasFilingRep(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <label htmlFor="has-filing-rep" className="text-sm text-gray-700">
-                Filed by a representative
-              </label>
-            </div>
-            <p className="text-xs text-gray-500 -mt-1 ml-6">
-              Someone else fills KYC paperwork on this person&apos;s behalf —
-              e.g. a corporate secretary, lawyer, or accountant. They&apos;ll
-              get a login link.
-            </p>
-            {hasFilingRep && (
-              <div className="space-y-2 ml-6">
-                <Input
-                  value={filingRepName}
-                  onChange={(e) => setFilingRepName(e.target.value)}
-                  placeholder="Representative's full name"
-                />
-                <Input
-                  type="email"
-                  value={filingRepEmail}
-                  onChange={(e) => setFilingRepEmail(e.target.value)}
-                  placeholder="Representative's email"
-                />
-              </div>
-            )}
-          </div>
+          {/* B-134 — filing rep on a non-rep profile is set after
+              creation via the per-director affordance on the service
+              detail page (or via PATCH /api/admin/profiles-v2/[id]).
+              The standalone create flow no longer asks for it; the
+              text-input affordance from B-131 is gone. */}
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">
@@ -250,7 +216,7 @@ export function CreateProfileDialog({ open, onClose, onCreated }: Props) {
                   Creating…
                 </>
               ) : (
-                "Create Profile"
+                forceIsRepresentative ? "Create Representative" : "Create Profile"
               )}
             </Button>
           </div>
