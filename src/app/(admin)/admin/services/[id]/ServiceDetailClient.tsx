@@ -7009,28 +7009,37 @@ export function ServiceDetailClient({
         />
       )}
 
-      {/* Fixed bottom save bar — only shows when changes are pending */}
+      {/* Fixed bottom save bar — only shows when changes are pending.
+          B-139 — Buttons used to render flush against the viewport's
+          right edge and got partially obscured by the B-128 chat
+          bubble. Wrap content in a max-w-7xl + mx-auto container so
+          Cancel + Save land at the right edge of the page's content
+          column (where the eye expects them), plus a lg:mr-20 guard
+          on the button group so it can never sit within 80px of the
+          viewport edge regardless of viewport width. */}
       {!reviewMode && pendingChanges && (
-        <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg px-6 py-3 flex items-center justify-between z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
-          <p className="text-sm text-amber-600 font-medium">You have unsaved changes</p>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleCancel}
-              className={`h-8 text-xs ${BTN_OUTLINE}`}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void handleSave()}
-              disabled={saving}
-              className={`h-8 text-xs ${BTN_PRIMARY}`}
-            >
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Save changes
-            </Button>
+        <div className="fixed bottom-6 left-[260px] right-0 bg-white border-t border-x rounded-t-lg py-3 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+          <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+            <p className="text-sm text-amber-600 font-medium">You have unsaved changes</p>
+            <div className="flex items-center gap-2 mr-0 lg:mr-20">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCancel}
+                className={`h-8 text-xs ${BTN_OUTLINE}`}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void handleSave()}
+                disabled={saving}
+                className={`h-8 text-xs ${BTN_PRIMARY}`}
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save changes
+              </Button>
+            </div>
           </div>
         </div>
       )}
