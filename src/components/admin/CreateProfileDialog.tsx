@@ -59,6 +59,12 @@ export function CreateProfileDialog({
     }
     setSaving(true);
     try {
+      // B-143 — in forced-rep mode the Type selector is hidden and
+      // record_type is locked to "individual" (filing reps are
+      // humans, not organisations). Belt-and-suspenders: even if
+      // stale state somehow held "organisation", the POST always
+      // sends "individual" when forced.
+      const effectiveRecordType = forceIsRepresentative ? "individual" : recordType;
       const res = await fetch("/api/admin/profiles-v2/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,7 +72,7 @@ export function CreateProfileDialog({
           full_name: fullName.trim(),
           email: email.trim() || null,
           phone: phone.trim() || null,
-          record_type: recordType,
+          record_type: effectiveRecordType,
           is_representative: repFlag,
           due_diligence_level: ddLevel,
         }),
@@ -79,7 +85,7 @@ export function CreateProfileDialog({
         full_name: fullName.trim(),
         email: email.trim() || null,
         phone: phone.trim() || null,
-        record_type: recordType,
+        record_type: effectiveRecordType,
         is_representative: repFlag,
         due_diligence_level: ddLevel,
       };
@@ -108,25 +114,30 @@ export function CreateProfileDialog({
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
-          {/* Record type */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
-            <div className="flex gap-2">
-              {(["individual", "organisation"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setRecordType(t)}
-                  className={`flex-1 px-3 py-2 text-xs rounded-lg border capitalize transition-colors ${
-                    recordType === t
-                      ? "bg-brand-navy text-white border-brand-navy"
-                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
+          {/* Record type — hidden in forced-rep mode (B-143). Filing
+              representatives are humans filling KYC paperwork on
+              behalf of a director, so the rep must be an individual;
+              the POST body below locks record_type='individual' too. */}
+          {!forceIsRepresentative && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
+              <div className="flex gap-2">
+                {(["individual", "organisation"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setRecordType(t)}
+                    className={`flex-1 px-3 py-2 text-xs rounded-lg border capitalize transition-colors ${
+                      recordType === t
+                        ? "bg-brand-navy text-white border-brand-navy"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Representative toggle — hidden in forced-rep mode */}
           {!forceIsRepresentative && (
