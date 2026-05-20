@@ -114,10 +114,11 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
     if (search) {
       const q = search.toLowerCase();
       const refMatch = row.service_number?.toLowerCase().includes(q) ?? false;
+      const nameMatch = row.name?.toLowerCase().includes(q) ?? false;
       const managerMatch = row.managers.some((m) =>
         m.full_name.toLowerCase().includes(q)
       );
-      if (!refMatch && !managerMatch) return false;
+      if (!refMatch && !nameMatch && !managerMatch) return false;
     }
     return true;
   });
@@ -149,7 +150,7 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by ref number or manager name..."
+            placeholder="Search by ref, service name or manager..."
             className="pl-10"
           />
         </div>
@@ -212,9 +213,10 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
         <table className="w-full min-w-[900px]">
           <thead>
             <tr className="border-b bg-gray-50/50">
-              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[110px]">Ref</th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[200px]">Ref</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[110px]">Status</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[180px]">Managers</th>
+              <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[150px]">Assigned To</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[90px]">Co. Setup</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[90px]">Financial</th>
               <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase w-[90px]">Banking</th>
@@ -226,7 +228,7 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-sm text-gray-400">
+                <td colSpan={10} className="py-12 text-center text-sm text-gray-400">
                   {search || statusFilter !== "all" || templateFilter !== "all"
                     ? "No services match your filters"
                     : "No services yet"}
@@ -239,14 +241,22 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
                   className="border-b last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
                   onClick={() => router.push(`/admin/services/${row.id}`)}
                 >
-                  {/* Ref */}
+                  {/* Ref (+ service name secondary line per B-144) */}
                   <td className="py-3 px-4">
                     {row.service_number ? (
-                      <span className="text-sm font-semibold text-brand-navy font-mono">
+                      <div className="font-semibold text-brand-navy font-mono text-sm">
                         {row.service_number}
-                      </span>
+                      </div>
                     ) : (
                       <span className="text-xs text-gray-400 italic">No ref</span>
+                    )}
+                    {row.name && (
+                      <div
+                        className="text-xs text-gray-500 truncate max-w-[180px]"
+                        title={row.name}
+                      >
+                        {row.name}
+                      </div>
                     )}
                   </td>
 
@@ -258,6 +268,13 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
                   {/* Managers */}
                   <td className="py-3 px-4">
                     <ManagersCell managers={row.managers} />
+                  </td>
+
+                  {/* Assigned Officer (B-149, parity with /admin/queue) */}
+                  <td className="py-3 px-4 text-sm text-gray-700">
+                    {row.assigned_admin_name ?? (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </td>
 
                   {/* Company Setup */}
