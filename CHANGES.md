@@ -31,6 +31,13 @@ Pushed via `npm run db:push`; `npm run db:status` shows Local + Remote paired wi
 - `src/components/admin/ServicesTable.tsx` + `src/app/(admin)/admin/queue/page.tsx` — `ServiceRow` now carries `name`; the queue server query selects it; the Service # column renders the name as a smaller secondary line beneath the service_number (truncated at ~260 px with full text on hover via `title`); search input matches against `name` in addition to service_number / primary profile / template; placeholder copy updated to mention "name".
 - `src/app/api/admin/services/[id]/route.ts` — `name` added to the PATCH allowlist with `data_access === "edit"` gate (returns 403 otherwise) + non-empty trimmed string validation (returns 400 otherwise). DB trigger handles the audit row.
 
+### Batch 4 — Tech debt + docs
+
+Two follow-up items appended to `docs/tech-debt.md` (newest at the top, per the log convention):
+
+- **Service-name auto-rename signals** — if the primary director's name changes, the service's name doesn't auto-update. Optional follow-up: inline "Update service name to match new primary director?" suggestion. ~half-day.
+- **Bulk-rename UI for services** — no way to rename 20 services in one go. Add multi-select + bulk rename on `/admin/queue` if demand appears. ~1–2 hours.
+
 ---
 
 ## How to use this file

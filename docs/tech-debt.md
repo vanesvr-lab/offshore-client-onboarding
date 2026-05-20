@@ -9,6 +9,20 @@ remove after 30 days.
 
 ---
 
+## 2026-05-20 (B-144)
+
+- **Service-name auto-rename signals.** *Severity: Low.*
+  *Spawned by:* [B-144](cli-brief-service-name-b144.md).
+  *What:* Admin renames are purely manual today. If the primary director's name (or the client company name) changes after the service has been named, `services.name` does NOT auto-update — admins have to edit it themselves. If we later want optional inline suggestions ("Update service name to match new primary director?") on the service detail page, that's a follow-up. Estimate: ~half-day (suggestion UI + dismissal tracking).
+  *Why deferred:* Out of scope per the locked design decisions for B-144; nice-to-have rather than blocker since the existing name stays valid and the audit log captures any drift.
+
+- **Bulk-rename UI for services.** *Severity: Low.*
+  *Spawned by:* [B-144](cli-brief-service-name-b144.md).
+  *What:* No way to rename multiple services at once. If admins ever need to rename ~20 services after a client rebrand, they have to open each one and edit individually. Add a multi-select + bulk-rename affordance on `/admin/queue` (or `/admin/services`) when the demand materializes. Estimate: ~1–2 hours.
+  *Why deferred:* Not requested today; single-edit covers the common case.
+
+---
+
 ## 2026-05-19 (B-142)
 
 - **Grep sweep for remaining legacy `profiles` read-side lookups.** *Severity: Medium.*
