@@ -4688,8 +4688,17 @@ function ReviewWizardBottomNav({
     }
   }
 
+  // B-148 — when iterating profiles, the last profile's Next button
+  // advances the wizard one step (out of the substep) instead of trying
+  // to iterate to a non-existent next profile. Documents is always
+  // step 4 in the post-B-146 5-step layout, so "Continue to Documents"
+  // is the right copy on step 3 — but the underlying advance is
+  // generic (`goTo(step + 1)`).
+  const isLastProfile =
+    !!profileSubstep && profileSubstep.profileIndex >= totalProfilesInStep - 1;
+
   async function handleNext() {
-    if (profileSubstep) {
+    if (profileSubstep && !isLastProfile) {
       profileSubstep.onNextProfile();
       return;
     }
@@ -4729,14 +4738,20 @@ function ReviewWizardBottomNav({
   }
 
   const nextLabel = profileSubstep
-    ? "Next Profile"
+    ? isLastProfile
+      ? "Continue to Documents"
+      : "Next Profile"
     : isLastStep
       ? "Finish"
       : "Next";
   const prevLabel = profileSubstep ? "Back to list" : "Previous";
   const markLabel = profileSubstep ? "Mark Profile Reviewed" : "Mark as Reviewed";
+  // B-148 — never disable on the last profile. The button has different
+  // semantics there (advance to step 4) so the old "no next profile"
+  // disable would dead-end admins. Only disable mid-iteration.
   const nextDisabled = advancing
-    || (profileSubstep ? profileSubstep.profileIndex >= totalProfilesInStep - 1 : false);
+    || (!!profileSubstep && !isLastProfile
+      && profileSubstep.profileIndex >= totalProfilesInStep - 1);
 
   return (
     <>
