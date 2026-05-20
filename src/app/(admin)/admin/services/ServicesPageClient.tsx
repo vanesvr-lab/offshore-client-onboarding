@@ -5,14 +5,20 @@ import { useRouter } from "next/navigation";
 import { Search, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { MiniProgressBar } from "@/components/shared/MiniProgressBar";
 import type { AdminServiceRow, AdminOption } from "./page";
 import {
   SERVICE_STATUS_ALL,
-  SERVICE_STATUS_LABELS,
   getStatusBadgeClass,
   getStatusLabel,
-  type ServiceStatus,
 } from "@/lib/services/statusChain";
 
 interface Props {
@@ -23,15 +29,6 @@ interface Props {
   admins: AdminOption[];
   currentUserId: string;
 }
-
-type StatusFilter = "all" | ServiceStatus;
-
-// B-098 — filter list mirrors the new service status chain. Forward
-// stages first, then override-only terminals.
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  ...SERVICE_STATUS_ALL.map((s) => ({ value: s, label: SERVICE_STATUS_LABELS[s] })),
-];
 
 function statusBadge(status: string) {
   return (
@@ -99,18 +96,40 @@ function templateAbbr(name: string): string {
 }
 
 export function ServicesPageClient({ rows, templateOptions, admins, currentUserId }: Props) {
-  // B-149 — admins + currentUserId are wired in via Batch 1's data
-  // pipeline; the filter UI that consumes them lands in Batch 3.
-  void admins;
-  void currentUserId;
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // B-149 — status filter converts from single-select to a multi-select
+  // chip row (parity with /admin/queue's B-130 Batch 4). Empty set =
+  // no status filter applied (show all). Closed isn't excluded by
+  // default here because the services list view is the broader admin
+  // surface; admins explicitly toggle it off when they want active work.
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(new Set());
   const [templateFilter, setTemplateFilter] = useState<string>("all");
+  // B-149 — Assigned Officer dropdown + "Assigned to me" quick chip
+  // (parity with /admin/queue). `mine` overrides the dropdown when on.
+  const [assignedFilter, setAssignedFilter] = useState<string>("all");
+  const [mine, setMine] = useState(false);
+
+  function toggleStatus(s: string) {
+    setStatusFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }
 
   const filtered = rows.filter((row) => {
-    if (statusFilter !== "all" && row.status !== statusFilter) return false;
+    if (statusFilters.size > 0 && !statusFilters.has(row.status)) return false;
     if (templateFilter !== "all" && row.service_template_id !== templateFilter) return false;
+    // Mine takes precedence over the dropdown so the two don't double-narrow.
+    if (mine) {
+      if (row.assigned_admin_id !== currentUserId) return false;
+    } else if (assignedFilter === "unassigned") {
+      if (row.assigned_admin_id !== null) return false;
+    } else if (assignedFilter !== "all") {
+      if (row.assigned_admin_id !== assignedFilter) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       const refMatch = row.service_number?.toLowerCase().includes(q) ?? false;
@@ -144,68 +163,118 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
 
       {/* Filter bar */}
       <div className="flex flex-col gap-3 mb-5 p-4 bg-white border rounded-lg">
-        {/* Search */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by ref, service name or manager..."
-            className="pl-10"
-          />
+        {/* B-149 — multi-select status chip row (parity with the queue's
+            B-130 Batch 4). Empty = no status filter; clicking chips
+            multi-selects. getStatusLabel for human-readable labels. */}
+        <div className="flex flex-wrap gap-2">
+          {SERVICE_STATUS_ALL.map((s) => {
+            const active = statusFilters.has(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleStatus(s)}
+                aria-pressed={active}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  active
+                    ? "border-brand-navy bg-brand-navy text-white"
+                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50",
+                )}
+              >
+                {getStatusLabel(s)}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Service type + status filters */}
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          {/* Service type */}
-          {templateOptions.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-medium text-gray-500 shrink-0">Service:</span>
-              <button
-                onClick={() => setTemplateFilter("all")}
-                className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                  templateFilter === "all"
-                    ? "bg-brand-navy text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                All
-              </button>
-              {templateOptions.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTemplateFilter(t.id)}
-                  className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                    templateFilter === t.id
-                      ? "bg-brand-navy text-white"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                  title={t.name}
-                >
-                  {templateAbbr(t.name)}
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Search + assignee filter + "Assigned to me" chip */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative max-w-md flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by ref, service name or manager..."
+              className="pl-10"
+            />
+          </div>
 
-          {/* Status */}
+          <Select
+            value={mine ? "__mine__" : assignedFilter}
+            onValueChange={(v) => {
+              if (!v) return;
+              if (v === "__mine__") {
+                setMine(true);
+              } else {
+                setMine(false);
+                setAssignedFilter(v);
+              }
+            }}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Assigned Officer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All officers</SelectItem>
+              <SelectItem value="unassigned">— Unassigned —</SelectItem>
+              {admins.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <button
+            type="button"
+            onClick={() => setMine((v) => !v)}
+            className={cn(
+              "text-xs px-3 py-1.5 rounded-full border transition-colors",
+              mine
+                ? "border-brand-navy bg-brand-navy text-white"
+                : "border-brand-navy/30 bg-brand-navy/5 text-brand-navy hover:bg-brand-navy/10",
+            )}
+          >
+            {mine ? "✓ Assigned to me" : "Assigned to me"}
+          </button>
+
+          <span className="text-sm text-gray-500 ml-auto">
+            {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {/* Service-type chip row (kept from the original — unique to the
+            services list view; not present on the queue). */}
+        {templateOptions.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-medium text-gray-500 shrink-0">Status:</span>
-            {STATUS_FILTERS.map((f) => (
+            <span className="text-xs font-medium text-gray-500 shrink-0">Service:</span>
+            <button
+              onClick={() => setTemplateFilter("all")}
+              className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                templateFilter === "all"
+                  ? "bg-brand-navy text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              All
+            </button>
+            {templateOptions.map((t) => (
               <button
-                key={f.value}
-                onClick={() => setStatusFilter(f.value)}
+                key={t.id}
+                onClick={() => setTemplateFilter(t.id)}
                 className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                  statusFilter === f.value
+                  templateFilter === t.id
                     ? "bg-brand-navy text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
+                title={t.name}
               >
-                {f.label}
+                {templateAbbr(t.name)}
               </button>
             ))}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Table */}
@@ -229,7 +298,11 @@ export function ServicesPageClient({ rows, templateOptions, admins, currentUserI
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={10} className="py-12 text-center text-sm text-gray-400">
-                  {search || statusFilter !== "all" || templateFilter !== "all"
+                  {search ||
+                  statusFilters.size > 0 ||
+                  templateFilter !== "all" ||
+                  assignedFilter !== "all" ||
+                  mine
                     ? "No services match your filters"
                     : "No services yet"}
                 </td>
