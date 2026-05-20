@@ -4191,19 +4191,30 @@ const getNextStage = getNextStatus;
 // B-119 — `Actions` joins as a sixth step when the current template has
 // ≥1 binding in `service_template_actions`. Templates without bindings
 // (Trust / Domestic Co) keep the 5-step bar unchanged.
-const ADMIN_STEPS_SERVICES: AdminStep[] = [
+const ADMIN_STEPS_BASE: AdminStep[] = [
   { id: "step-company-setup", label: "Company Setup", sectionKeys: ["company_setup"] },
   { id: "step-financial",     label: "Financial",     sectionKeys: ["financial"] },
   { id: "step-banking",       label: "Banking",       sectionKeys: ["banking"] },
   { id: "step-people-kyc",    label: "People & KYC",  sectionKeys: ["people"] },
   { id: "step-documents",     label: "Documents",     sectionKeys: ["documents"] },
 ];
-// B-146 — Wizard is permanently 5 steps. The `hasActions` parameter is
-// kept for call-site stability; the Actions surface still renders OUTSIDE
-// the wizard on the regular service detail page when hasActions=true.
+
+const ADMIN_STEPS_WITH_ACTIONS: AdminStep[] = [
+  ...ADMIN_STEPS_BASE,
+  { id: "step-actions", label: "Actions", sectionKeys: ["actions"] },
+];
+
+// B-150 — Restore the conditional. The REGULAR service-detail page's top
+// step navigation honors `hasActions` so the Actions pill reappears
+// when the template binds at least one action (B-146 had over-collapsed
+// this builder, dropping the Actions handle from the regular page's
+// nav). The wizard's step list (see buildReviewStepSectionKeys /
+// buildReviewStepLabels) stays permanently 5 steps per B-146 — and the
+// wizard top bar's "Step N of M" line now reads from the wizard step
+// labels, not from the value returned here, so the extra Actions pill
+// can't leak into the wizard's indicator.
 function buildAdminSteps(hasActions: boolean): AdminStep[] {
-  void hasActions;
-  return ADMIN_STEPS_SERVICES;
+  return hasActions ? ADMIN_STEPS_WITH_ACTIONS : ADMIN_STEPS_BASE;
 }
 
 // B-111 Batch 2 — Pending card wrapper. Consumes the live section-reviews
@@ -4238,7 +4249,7 @@ function PendingCardWithState({
   requiredLocalDirectors?: number;
   localDirectorCount?: number;
 }) {
-  const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
+  const stepDefs = stepsOverride ?? ADMIN_STEPS_BASE;
   const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
   const sectionReviewsLive = useMemo(
@@ -4368,7 +4379,7 @@ function StepPillsWithState({
    *  Actions step appears in the pill bar. */
   steps?: AdminStep[];
 }) {
-  const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
+  const stepDefs = stepsOverride ?? ADMIN_STEPS_BASE;
   const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
   // `resolveCountBadge` is still called only so we keep the legacy
@@ -4438,7 +4449,7 @@ function ProgressMetersWithState({
    *  status `done` / total bound subsections. */
   actionSubsections?: PendingActionSubsection[];
 }) {
-  const stepDefs = stepsOverride ?? ADMIN_STEPS_SERVICES;
+  const stepDefs = stepsOverride ?? ADMIN_STEPS_BASE;
   const sectionKeys = stepDefs.map((s) => s.sectionKeys[0]);
   const { rows } = useSectionReviews(sectionKeys);
   const total = stepDefs.length;
@@ -4501,7 +4512,7 @@ const DD_LEVELS = [
 ] as const;
 
 // B-102 — Review Wizard step → application_section_reviews.section_key
-// mapping. Lives next to ADMIN_STEPS_SERVICES so future step additions
+// mapping. Lives next to ADMIN_STEPS_BASE so future step additions
 // stay obvious. `people` already exists for the People & KYC aggregate.
 // B-121 — when the current template has ≥1 action binding, Actions joins
 // as the 6th step (mirrors B-119's pill bar + Progress meters). Use the
@@ -4515,7 +4526,7 @@ const REVIEW_STEP_SECTION_KEYS = [
 ] as const;
 
 // B-109 Batch 1 — display labels for the SectionReviewPanel dialog header.
-// Mirrors ADMIN_STEPS_SERVICES labels; kept separate so the panel header
+// Mirrors ADMIN_STEPS_BASE labels; kept separate so the panel header
 // reads consistently if the step strip ever diverges visually.
 const REVIEW_STEP_LABELS = [
   "Company Setup",
@@ -4562,10 +4573,14 @@ function ReviewWizardTopBar({
   hasActions: boolean;
 }) {
   const router = useRouter();
-  const adminSteps = buildAdminSteps(hasActions);
+  // B-150 — wizard top bar reads its step count + label from the
+  // wizard-specific 5-step list, NOT from buildAdminSteps (which is now
+  // 6 again on hasActions=true templates per the regular page's nav).
+  // Keeps the wizard's "Step N of M: <label>" indicator aligned with
+  // the 5-circle <AdminReviewWizardStepIndicator/> below.
   const reviewSectionKeys = buildReviewStepSectionKeys(hasActions);
   const reviewLabels = buildReviewStepLabels(hasActions);
-  const stepLabel = adminSteps[step]?.label ?? "Review";
+  const stepLabel = reviewLabels[step] ?? "Review";
 
   // B-109 Batch 2 — step click navigates within the wizard. We don't
   // flush dirty edits here because the indicator sits in the always-on
@@ -4588,7 +4603,7 @@ function ReviewWizardTopBar({
               {service.service_templates?.name ?? "Service"} · Review/Update Wizard
             </p>
             <p className="text-sm font-semibold text-brand-navy truncate">
-              Step {step + 1} of {adminSteps.length}: {stepLabel}
+              Step {step + 1} of {reviewLabels.length}: {stepLabel}
               {profileLabel ? ` · ${profileLabel}` : ""}
             </p>
           </div>
