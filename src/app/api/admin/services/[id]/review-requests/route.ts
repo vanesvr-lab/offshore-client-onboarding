@@ -209,8 +209,9 @@ export async function POST(
   const [hydrated] = await hydrateReviewRequests(supabase, [inserted]);
 
   // Resolve requester email for the closed-by-reviewer reply-emails later.
+  // B-142 — read from `users` (post-B-127 auth source of truth).
   const { data: requesterProfile } = await supabase
-    .from("profiles")
+    .from("users")
     .select("full_name, email")
     .eq("id", session.user.id)
     .maybeSingle();

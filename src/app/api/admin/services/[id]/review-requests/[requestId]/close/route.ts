@@ -137,8 +137,11 @@ export async function POST(
     .select("service_number")
     .eq("id", serviceId)
     .maybeSingle();
+  // B-142 — read from `users` (post-B-127 auth source of truth);
+  // legacy `profiles` was missing admins created via the modern
+  // invite flow.
   const { data: requesterProfile } = await supabase
-    .from("profiles")
+    .from("users")
     .select("full_name, email")
     .eq("id", hydrated.requester_id)
     .maybeSingle();

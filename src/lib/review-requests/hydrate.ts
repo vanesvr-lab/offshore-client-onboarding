@@ -51,8 +51,13 @@ export async function hydrateReviewRequests(
 
   const profileLookup = new Map<string, { full_name: string | null; email: string | null }>();
   if (actorIds.size > 0) {
+    // B-142 — read from `users` (post-B-127 auth source of truth).
+    // Legacy `profiles` was missing admins created via the modern
+    // invite flow, so the UI rendered "Unknown" in the reviewers list.
+    // Variable / map name kept as `profiles` / `profileLookup` to
+    // minimise diff — cosmetic rename can come later.
     const { data: profiles } = await supabase
-      .from("profiles")
+      .from("users")
       .select("id, full_name, email")
       .in("id", Array.from(actorIds));
     for (const p of (profiles ?? []) as Array<{
