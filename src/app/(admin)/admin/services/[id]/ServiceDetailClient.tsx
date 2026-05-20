@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft, ChevronDown, CheckCircle, XCircle,
-  UserCheck, Building2, Users2, Plus, Loader2, Mail,
+  UserCheck, Building2, Users2, Users, Plus, Loader2, Mail,
   StickyNote, ShieldCheck,
   AlertTriangle, Bell, Eye,
   Trash2,
@@ -4623,6 +4623,7 @@ function ReviewWizardBottomNav({
   onSave,
   profileSubstep,
   totalProfilesInStep,
+  firstProfileId,
   stepPct,
   hasActions,
 }: {
@@ -4639,6 +4640,11 @@ function ReviewWizardBottomNav({
     onNextProfile: () => void;
   } | null;
   totalProfilesInStep: number;
+  /** B-146 — id of the first profile in the People & KYC list, in the
+   *  same order the wizard's per-profile iteration uses. Powers the
+   *  "Review Profiles (N)" entry button on step 3's list view. `null`
+   *  when the service has no profiles. */
+  firstProfileId: string | null;
   /** B-110 — completion % for the current step. Drives the
    *  Force-review override flow in the SectionReviewPanel dialog. */
   stepPct: number;
@@ -4755,6 +4761,24 @@ function ReviewWizardBottomNav({
             <CheckCircle className="h-4 w-4" />
             {markLabel}
           </button>
+          {/* B-146 — explicit entry into the per-profile iteration flow on
+              step 3 list view. Hidden when there are no profiles attached
+              (firstProfileId === null) or when already inside a profile
+              substep. Clicking sets ?profile=<id>; the existing
+              Next-Profile / Back-to-list logic takes over. */}
+          {step === 3 && !profileSubstep && firstProfileId && (
+            <button
+              type="button"
+              onClick={() => router.replace(
+                `/admin/services/${serviceId}/review?step=3&profile=${firstProfileId}`,
+              )}
+              disabled={advancing}
+              className="inline-flex items-center gap-1.5 rounded-full border border-brand-navy bg-white px-4 py-1.5 text-sm font-medium text-brand-navy hover:bg-gray-50 disabled:opacity-40"
+            >
+              <Users className="h-4 w-4" />
+              Review Profiles ({totalProfilesInStep})
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void handleNext()}
@@ -7041,6 +7065,7 @@ export function ServiceDetailClient({
           onSave={handleSaveReturningOk}
           profileSubstep={reviewProfileSubstep}
           totalProfilesInStep={uniqueRoles.length}
+          firstProfileId={uniqueRoles[0]?.person.client_profiles?.id ?? null}
           stepPct={
             // B-110 — per-step completion drives the Force-review override
             // in `SectionReviewPanel`. Mirrors REVIEW_STEP_SECTION_KEYS
