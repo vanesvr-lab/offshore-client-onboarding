@@ -4591,7 +4591,7 @@ function ReviewWizardTopBar({
           <div className="min-w-0">
             <p className="text-xs text-gray-500 leading-none">
               {service.service_number ? `${service.service_number} — ` : ""}
-              {service.service_templates?.name ?? "Service"} · Review Wizard
+              {service.service_templates?.name ?? "Service"} · Review/Update Wizard
             </p>
             <p className="text-sm font-semibold text-brand-navy truncate">
               Step {step + 1} of {adminSteps.length}: {stepLabel}
@@ -6190,7 +6190,7 @@ export function ServiceDetailClient({
             style={{ backgroundColor: "#24a0ed" }}
           >
             <Wand2 className="size-4" />
-            Review Wizard
+            Review/Update Wizard
           </Link>
         </div>
       </div>
