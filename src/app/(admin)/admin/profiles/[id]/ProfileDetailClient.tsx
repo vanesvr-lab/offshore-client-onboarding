@@ -17,9 +17,18 @@ import {
   ChevronDown,
   ToggleLeft,
   ToggleRight,
+  UserPlus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { CreateProfileDialog, type CreatedProfileSummary } from "@/components/admin/CreateProfileDialog";
 import type {
   ClientProfile,
   ClientProfileKyc,
@@ -39,6 +48,12 @@ import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
 import type { KycDocRowData } from "@/components/kyc/KycDocRow";
 import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 
+interface RepCandidate {
+  id: string;
+  full_name: string;
+  email: string | null;
+}
+
 interface Props {
   profile: ClientProfile;
   kyc: ClientProfileKyc | null;
@@ -48,6 +63,7 @@ interface Props {
   ddRequirements: DueDiligenceRequirement[];
   roleRequirements: RoleDocumentRequirement[];
   requirementOverrides: ProfileRequirementOverride[];
+  availableReps: RepCandidate[];
 }
 
 // B-147 — same category gating as the per-director card on
@@ -238,11 +254,83 @@ function RequirementsPanel({
   );
 }
 
-export function ProfileDetailClient({ profile, kyc, roles, documents, documentTypes, ddRequirements, roleRequirements, requirementOverrides }: Props) {
+export function ProfileDetailClient({ profile, kyc, roles, documents, documentTypes, ddRequirements, roleRequirements, requirementOverrides, availableReps }: Props) {
   const router = useRouter();
   const [ddLevel, setDdLevel] = useState(profile.due_diligence_level);
   const [savingDd, setSavingDd] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
+
+  // B-147 Batch 2 — filing-rep affordance state. Mirrors the inline UI on
+  // the service-detail per-director card. Uses the same picker dialog +
+  // CreateProfileDialog (forced-rep mode) flow; PATCH writes
+  // filing_rep_profile_id on /api/admin/profiles-v2/[id], same endpoint
+  // as the service-detail surface so the audit log + rep validation are
+  // shared.
+  const [repPickerOpen, setRepPickerOpen] = useState(false);
+  const [repPickerSelectedId, setRepPickerSelectedId] = useState<string | null>(
+    profile.filing_rep_profile_id ?? null,
+  );
+  const [savingRep, setSavingRep] = useState(false);
+  const [showCreateRepDialog, setShowCreateRepDialog] = useState(false);
+  const [extraReps, setExtraReps] = useState<RepCandidate[]>([]);
+
+  const repsForPicker = (() => {
+    const byId = new Map<string, RepCandidate>();
+    for (const r of availableReps) byId.set(r.id, r);
+    for (const r of extraReps) byId.set(r.id, r);
+    // Ensure the currently-linked rep shows in the dropdown even if it
+    // isn't in the pool (e.g. created by another admin since the page
+    // loaded).
+    if (
+      profile.filing_rep_profile_id &&
+      profile.filing_rep &&
+      !byId.has(profile.filing_rep_profile_id)
+    ) {
+      byId.set(profile.filing_rep_profile_id, {
+        id: profile.filing_rep_profile_id,
+        full_name: profile.filing_rep.full_name ?? "",
+        email: profile.filing_rep.email ?? null,
+      });
+    }
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.full_name ?? "").localeCompare(b.full_name ?? ""),
+    );
+  })();
+
+  function handleRepCreated(summary: CreatedProfileSummary) {
+    setShowCreateRepDialog(false);
+    const next: RepCandidate = {
+      id: summary.id,
+      full_name: summary.full_name,
+      email: summary.email,
+    };
+    setExtraReps((prev) =>
+      prev.some((r) => r.id === next.id) ? prev : [next, ...prev],
+    );
+    setRepPickerSelectedId(next.id);
+  }
+
+  async function saveFilingRep() {
+    setSavingRep(true);
+    try {
+      const res = await fetch(`/api/admin/profiles-v2/${profile.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filing_rep_profile_id: repPickerSelectedId ?? null }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to update");
+      toast.success(
+        repPickerSelectedId ? "Representative linked" : "Representative removed",
+      );
+      setRepPickerOpen(false);
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setSavingRep(false);
+    }
+  }
 
   const isRep = profile.is_representative;
   const isOrg = profile.record_type === "organisation";
@@ -464,6 +552,57 @@ export function ProfileDetailClient({ profile, kyc, roles, documents, documentTy
             </CardContent>
           </Card>
 
+          {/* B-147 Batch 2 — Filing-rep affordance. Same inline pattern as
+              the service-detail per-director card (B-134): "Filed by [name]
+              [change]" badge when a rep is linked, "+ Add representative
+              for KYC" button when not. Hidden for representative profiles
+              themselves (reps don't have reps). */}
+          {!isRep && (
+            <Card>
+              <CardContent className="py-3 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Shield className="h-4 w-4 text-gray-400" />
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Filing Representative
+                  </span>
+                </div>
+                {!profile.filing_rep_profile_id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRepPickerSelectedId(profile.filing_rep_profile_id ?? null);
+                      setRepPickerOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-brand-navy hover:text-brand-blue underline-offset-2 hover:underline"
+                  >
+                    <UserPlus className="h-3 w-3" />
+                    + Add representative for KYC
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-2 text-xs text-gray-600">
+                    <UserCheck className="h-3 w-3 text-purple-600" />
+                    <span>
+                      Filed by{" "}
+                      <span className="font-medium text-gray-800">
+                        {profile.filing_rep?.full_name ?? "representative"}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRepPickerSelectedId(profile.filing_rep_profile_id ?? null);
+                        setRepPickerOpen(true);
+                      }}
+                      className="text-[10px] text-gray-500 hover:text-gray-700 underline"
+                    >
+                      change
+                    </button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* B-147 — Rich editable KYC long form. Replaces the previous
               display-mostly <KycSection> grid. Same form components the
               client portal + filing-rep page use; saves via
@@ -637,6 +776,90 @@ export function ProfileDetailClient({ profile, kyc, roles, documents, documentTy
           )}
         </div>
       </div>
+
+      {/* B-147 Batch 2 — Filing-rep picker dialog. Same shape as the
+          service-detail per-director card's picker (B-134): existing
+          reps in a dropdown + an inline "+ Add new representative"
+          escape hatch that opens the forced-rep CreateProfileDialog.
+          Save PATCHes /api/admin/profiles-v2/[id] which writes
+          filing_rep_profile_id; router.refresh re-fetches the joined
+          rep display. */}
+      <Dialog
+        open={repPickerOpen}
+        onOpenChange={(open) => {
+          if (!savingRep) setRepPickerOpen(open);
+        }}
+      >
+        <DialogContent className="bg-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Filing representative for {profile.full_name ?? "this profile"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-gray-700">
+                Representative
+              </label>
+              <select
+                value={repPickerSelectedId ?? ""}
+                onChange={(e) => setRepPickerSelectedId(e.target.value || null)}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+              >
+                <option value="">— No representative —</option>
+                {repsForPicker.map((rep) => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.full_name}
+                    {rep.email ? ` — ${rep.email}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowCreateRepDialog(true)}
+                className="text-xs text-brand-navy hover:underline"
+              >
+                + Add new representative
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              The selected representative can complete KYC paperwork on
+              this profile&rsquo;s behalf and will receive a one-time
+              login link.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              disabled={savingRep}
+              onClick={() => setRepPickerOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                savingRep ||
+                (repPickerSelectedId ?? null) === (profile.filing_rep_profile_id ?? null)
+              }
+              onClick={() => void saveFilingRep()}
+            >
+              {savingRep ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+              ) : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {showCreateRepDialog && (
+        <CreateProfileDialog
+          open
+          onClose={() => setShowCreateRepDialog(false)}
+          forceIsRepresentative
+          onCreated={handleRepCreated}
+        />
+      )}
     </div>
   );
 }

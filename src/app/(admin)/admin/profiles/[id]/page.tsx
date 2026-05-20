@@ -23,10 +23,14 @@ export default async function ProfileDetailPage({
   // B-147 — `documentTypes` is needed by the rich KYC view: the form
   // components render inline upload widgets per type, and the new
   // KycDocsByCategory panel groups uploaded docs against this catalogue.
-  const [profileRes, kycRes, rolesRes, docsRes, docTypesRes] = await Promise.all([
+  // The `filing_rep` join mirrors the service-detail page so the
+  // filing-rep affordance has the rep's display name + email.
+  const [profileRes, kycRes, rolesRes, docsRes, docTypesRes, repsRes] = await Promise.all([
     supabase
       .from("client_profiles")
-      .select("*, users(email, is_active)")
+      .select(
+        "*, users(email, is_active), filing_rep:filing_rep_profile_id(id, full_name, email)",
+      )
       .eq("id", id)
       .eq("tenant_id", tenantId)
       .single(),
@@ -51,6 +55,18 @@ export default async function ProfileDetailPage({
       .select("*")
       .eq("is_active", true)
       .order("sort_order"),
+    // B-147 Batch 2 — pool of representative profiles in this tenant
+    // to populate the filing-rep picker. Limit to is_representative=true
+    // + not deleted; the dialog falls back to the joined `filing_rep`
+    // info if the currently-linked rep isn't in this list (e.g. created
+    // by another admin since this page loaded).
+    supabase
+      .from("client_profiles")
+      .select("id, full_name, email")
+      .eq("tenant_id", tenantId)
+      .eq("is_representative", true)
+      .eq("is_deleted", false)
+      .order("full_name"),
   ]);
 
   if (!profileRes.data) notFound();
@@ -100,6 +116,9 @@ export default async function ProfileDetailPage({
       ddRequirements={(ddReqsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       roleRequirements={(roleReqsRes.data ?? []) as unknown as RoleDocumentRequirement[]}
       requirementOverrides={(overridesRes.data ?? []) as unknown as ProfileRequirementOverride[]}
+      availableReps={
+        (repsRes.data ?? []) as unknown as Array<{ id: string; full_name: string; email: string | null }>
+      }
     />
   );
 }
