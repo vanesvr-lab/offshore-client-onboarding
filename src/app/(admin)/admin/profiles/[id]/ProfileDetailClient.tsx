@@ -15,124 +15,48 @@ import {
   Send,
   Loader2,
   ChevronDown,
-  FileText,
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import type { ClientProfile, ClientProfileKyc, ProfileServiceRole, DocumentRecord, DueDiligenceRequirement, RoleDocumentRequirement, ProfileRequirementOverride } from "@/types";
+import type {
+  ClientProfile,
+  ClientProfileKyc,
+  ProfileServiceRole,
+  DocumentRecord,
+  DocumentType,
+  DueDiligenceRequirement,
+  RoleDocumentRequirement,
+  ProfileRequirementOverride,
+  KycRecord,
+} from "@/types";
 import { getStatusBadgeClass, getStatusLabel } from "@/lib/services/statusChain";
+import { IndividualKycForm } from "@/components/kyc/IndividualKycForm";
+import { OrganisationKycForm } from "@/components/kyc/OrganisationKycForm";
+import { KycDocsSummary } from "@/components/kyc/KycDocsSummary";
+import { KycDocsByCategory } from "@/components/kyc/KycDocsByCategory";
+import type { KycDocRowData } from "@/components/kyc/KycDocRow";
+import { kycCategoryLabel, sortKycCategories } from "@/lib/kyc/categories";
 
 interface Props {
   profile: ClientProfile;
   kyc: ClientProfileKyc | null;
   roles: ProfileServiceRole[];
   documents: DocumentRecord[];
+  documentTypes: DocumentType[];
   ddRequirements: DueDiligenceRequirement[];
   roleRequirements: RoleDocumentRequirement[];
   requirementOverrides: ProfileRequirementOverride[];
 }
 
-// KYC field definitions for display
-const INDIVIDUAL_SECTIONS = [
-  {
-    title: "Identity",
-    fields: [
-      { key: "aliases", label: "Aliases" },
-      { key: "date_of_birth", label: "Date of Birth" },
-      { key: "nationality", label: "Nationality" },
-      { key: "passport_country", label: "Passport Country" },
-      { key: "passport_number", label: "Passport Number" },
-      { key: "passport_expiry", label: "Passport Expiry" },
-      { key: "occupation", label: "Occupation" },
-      { key: "tax_identification_number", label: "Tax ID" },
-    ],
-  },
-  {
-    title: "Financial",
-    fields: [
-      { key: "source_of_funds_description", label: "Source of Funds" },
-      { key: "source_of_wealth_description", label: "Source of Wealth" },
-    ],
-  },
-  {
-    title: "Declarations",
-    fields: [
-      { key: "is_pep", label: "Politically Exposed Person" },
-      { key: "pep_details", label: "PEP Details" },
-      { key: "legal_issues_declared", label: "Legal Issues Declared" },
-      { key: "legal_issues_details", label: "Legal Issue Details" },
-    ],
-  },
-];
-
-const ORG_SECTIONS = [
-  {
-    title: "Organisation Details",
-    fields: [
-      { key: "business_website", label: "Website" },
-      { key: "jurisdiction_incorporated", label: "Jurisdiction" },
-      { key: "date_of_incorporation", label: "Date of Incorporation" },
-      { key: "listed_or_unlisted", label: "Listed / Unlisted" },
-      { key: "jurisdiction_tax_residence", label: "Tax Jurisdiction" },
-      { key: "description_activity", label: "Business Activity" },
-      { key: "company_registration_number", label: "Registration #" },
-      { key: "industry_sector", label: "Industry" },
-      { key: "regulatory_licenses", label: "Licenses" },
-    ],
-  },
-];
-
-function KycSection({
-  title,
-  fields,
-  data,
-}: {
-  title: string;
-  fields: { key: string; label: string }[];
-  data: Record<string, unknown>;
-}) {
-  const [open, setOpen] = useState(true);
-  const filled = fields.filter((f) => data[f.key] != null && data[f.key] !== "").length;
-  const total = fields.length;
-  const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
-  const color = pct === 100 ? "text-green-600" : pct > 0 ? "text-amber-600" : "text-red-500";
-
-  return (
-    <div className="border rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-      >
-        <span className="text-sm font-medium text-gray-900">{title}</span>
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${color}`}>
-            {filled}/{total}
-          </span>
-          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
-        </div>
-      </button>
-      {open && (
-        <div className="px-4 py-3 grid grid-cols-2 gap-3">
-          {fields.map((f) => {
-            const val = data[f.key];
-            const display =
-              val === true ? "Yes" : val === false ? "No" : val != null ? String(val) : "—";
-            return (
-              <div key={f.key}>
-                <span className="text-[10px] uppercase text-gray-400 font-medium">{f.label}</span>
-                <p className={`text-sm ${val != null && val !== "" ? "text-gray-900" : "text-gray-300"}`}>
-                  {display}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+// B-147 — same category gating as the per-director card on
+// /admin/services/[id]: only "identity", "financial", "compliance"
+// document types belong in the KYC docs grid; everything else
+// (Service/Other) shows up on the service detail page instead.
+const KYC_DOC_CATEGORIES = ["identity", "financial", "compliance"] as const;
+const isKycDoc = (category: string | null | undefined): boolean =>
+  (KYC_DOC_CATEGORIES as readonly string[]).includes(category ?? "");
 
 function RequirementsPanel({
   profileId,
@@ -314,7 +238,7 @@ function RequirementsPanel({
   );
 }
 
-export function ProfileDetailClient({ profile, kyc, roles, documents, ddRequirements, roleRequirements, requirementOverrides }: Props) {
+export function ProfileDetailClient({ profile, kyc, roles, documents, documentTypes, ddRequirements, roleRequirements, requirementOverrides }: Props) {
   const router = useRouter();
   const [ddLevel, setDdLevel] = useState(profile.due_diligence_level);
   const [savingDd, setSavingDd] = useState(false);
@@ -325,7 +249,71 @@ export function ProfileDetailClient({ profile, kyc, roles, documents, ddRequirem
   const hasLogin = profile.user_id != null;
   const userInfo = profile.users as { email?: string; is_active?: boolean } | null;
 
-  const sections = isOrg ? ORG_SECTIONS : INDIVIDUAL_SECTIONS;
+  // B-147 — adapt `client_profile_kyc` + the profile contact fields into
+  // the legacy `KycRecord` shape that IndividualKycForm / OrganisationKycForm
+  // expect. The forms save via /api/profiles/kyc/save using `kycRecordId`,
+  // which the endpoint resolves against `client_profile_kyc.id` — so as
+  // long as we pass the row's id we're aligned. Mirrors the pattern used
+  // by /filings/[profileId]/page.tsx (B-134).
+  const kycRecord: KycRecord | null = kyc
+    ? ({
+        ...(kyc as unknown as Record<string, unknown>),
+        id: kyc.id,
+        record_type: profile.record_type,
+        full_name: profile.full_name,
+        email: profile.email,
+        phone: profile.phone,
+        address: profile.address,
+      } as unknown as KycRecord)
+    : null;
+
+  // B-147 — KYC documents grid + summary (same data model as
+  // ServiceDetailClient's PersonCard). Service-scoped waivers don't
+  // apply on the profile-canonical view, so the rows aren't marked
+  // as waived here. Document types outside identity/financial/compliance
+  // are filtered out (those belong on the service detail page).
+  const kycDocTypes = documentTypes.filter((dt) => isKycDoc(dt.category));
+  const kycDocsByCategory = (() => {
+    const groups: Record<string, DocumentType[]> = {};
+    for (const dt of kycDocTypes) {
+      const cat = dt.category || "additional";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(dt);
+    }
+    const present = sortKycCategories(Object.keys(groups));
+    return present.map((cat) => ({
+      key: cat,
+      label: kycCategoryLabel(cat),
+      docs: groups[cat].map<KycDocRowData>((dt) => {
+        const uploaded = documents.find((d) => d.document_type_id === dt.id);
+        return {
+          id: uploaded?.id ?? null,
+          document_type_id: dt.id,
+          document_name: dt.name,
+          is_uploaded: !!uploaded,
+          verification_status: uploaded?.verification_status ?? null,
+          admin_status: (uploaded as { admin_status?: string | null } | undefined)?.admin_status ?? null,
+          file_name: uploaded?.file_name ?? null,
+          mime_type: (uploaded as { mime_type?: string | null } | undefined)?.mime_type ?? null,
+          uploaded_at: uploaded?.uploaded_at ?? null,
+          verification_result: (uploaded?.verification_result as Record<string, unknown> | null) ?? null,
+          admin_status_note: (uploaded as { admin_status_note?: string | null } | undefined)?.admin_status_note ?? null,
+          admin_status_at: (uploaded as { admin_status_at?: string | null } | undefined)?.admin_status_at ?? null,
+          expiry_date: (uploaded as { expiry_date?: string | null } | undefined)?.expiry_date ?? null,
+          valid_for_months: dt.valid_for_months ?? null,
+          is_waived: false,
+          waived_at: null,
+          waived_by_name: null,
+          is_profile_scoped: !!uploaded && (uploaded as { service_id?: string | null }).service_id == null,
+        };
+      }),
+    }));
+  })();
+  const totalKycDocs = kycDocsByCategory.reduce((acc, c) => acc + c.docs.length, 0);
+  const totalKycUploaded = kycDocsByCategory.reduce(
+    (acc, c) => acc + c.docs.filter((d) => d.is_uploaded).length,
+    0,
+  );
 
   // Unique services from roles
   const serviceMap = new Map<string, { id: string; name: string; status: string; roles: string[]; canManage: boolean }>();
@@ -476,19 +464,24 @@ export function ProfileDetailClient({ profile, kyc, roles, documents, ddRequirem
             </CardContent>
           </Card>
 
-          {/* KYC Sections (only for non-representatives) */}
-          {!isRep && kyc && (
-            <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-gray-700">KYC Details</h2>
-              {sections.map((s) => (
-                <KycSection
-                  key={s.title}
-                  title={s.title}
-                  fields={s.fields}
-                  data={kyc as unknown as Record<string, unknown>}
-                />
-              ))}
-            </div>
+          {/* B-147 — Rich editable KYC long form. Replaces the previous
+              display-mostly <KycSection> grid. Same form components the
+              client portal + filing-rep page use; saves via
+              /api/profiles/kyc/save using `client_profile_kyc.id`. */}
+          {!isRep && kycRecord && (
+            isOrg ? (
+              <OrganisationKycForm
+                record={kycRecord}
+                documents={documents}
+                documentTypes={documentTypes}
+              />
+            ) : (
+              <IndividualKycForm
+                record={kycRecord}
+                documents={documents}
+                documentTypes={documentTypes}
+              />
+            )
           )}
 
           {isRep && (
@@ -509,32 +502,36 @@ export function ProfileDetailClient({ profile, kyc, roles, documents, ddRequirem
             />
           )}
 
-          {/* Documents */}
-          {documents.length > 0 && (
+          {/* B-147 — KYC Documents card. Replaces the previous flat
+              documents list with the per-category grid + summary header
+              used on the service-detail per-director card. Waiver
+              affordances stay disabled here because waivers are
+              service-scoped; admins manage them inside a specific
+              service. */}
+          {!isRep && totalKycDocs > 0 && (
             <Card>
               <CardHeader className="py-3">
-                <CardTitle className="text-sm text-brand-navy">Documents ({documents.length})</CardTitle>
+                <CardTitle className="text-sm text-brand-navy">KYC Documents</CardTitle>
+                <div className="mt-2">
+                  <KycDocsSummary
+                    uploadCount={totalKycUploaded}
+                    totalCount={totalKycDocs}
+                    byCategory={kycDocsByCategory.map((c) => ({
+                      key: c.key,
+                      label: c.label,
+                      uploaded: c.docs.filter((d) => d.is_uploaded).length,
+                      total: c.docs.length,
+                    }))}
+                  />
+                </div>
               </CardHeader>
-              <CardContent className="space-y-2">
-                {documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-gray-400" />
-                      <div>
-                        <p className="text-sm text-gray-900">{doc.file_name}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {(doc as unknown as { document_types?: { name: string } }).document_types?.name ?? "Unknown type"}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-xs ${
-                      doc.verification_status === "verified" ? "text-green-600" :
-                      doc.verification_status === "flagged" ? "text-amber-600" : "text-gray-400"
-                    }`}>
-                      {doc.verification_status}
-                    </span>
-                  </div>
-                ))}
+              <CardContent>
+                <KycDocsByCategory
+                  anchorPrefix={`admin-docs-${profile.id}`}
+                  showAdminControls
+                  categories={kycDocsByCategory}
+                  profileId={profile.id}
+                />
               </CardContent>
             </Card>
           )}

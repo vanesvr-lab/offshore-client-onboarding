@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantId } from "@/lib/tenant";
 import { ProfileDetailClient } from "./ProfileDetailClient";
-import type { ClientProfile, ClientProfileKyc, ProfileServiceRole, DocumentRecord, DueDiligenceRequirement, RoleDocumentRequirement, ProfileRequirementOverride } from "@/types";
+import type { ClientProfile, ClientProfileKyc, ProfileServiceRole, DocumentRecord, DocumentType, DueDiligenceRequirement, RoleDocumentRequirement, ProfileRequirementOverride } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,11 @@ export default async function ProfileDetailPage({
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
-  // Fetch profile + KYC + roles + documents in parallel
-  const [profileRes, kycRes, rolesRes, docsRes] = await Promise.all([
+  // Fetch profile + KYC + roles + documents + document type catalogue in parallel.
+  // B-147 — `documentTypes` is needed by the rich KYC view: the form
+  // components render inline upload widgets per type, and the new
+  // KycDocsByCategory panel groups uploaded docs against this catalogue.
+  const [profileRes, kycRes, rolesRes, docsRes, docTypesRes] = await Promise.all([
     supabase
       .from("client_profiles")
       .select("*, users(email, is_active)")
@@ -40,9 +43,14 @@ export default async function ProfileDetailPage({
       .eq("tenant_id", tenantId),
     supabase
       .from("documents")
-      .select("*, document_types(name, category)")
+      .select("*, document_types(*)")
       .eq("client_profile_id", id)
       .eq("is_active", true),
+    supabase
+      .from("document_types")
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order"),
   ]);
 
   if (!profileRes.data) notFound();
@@ -88,6 +96,7 @@ export default async function ProfileDetailPage({
       kyc={(kycRes.data ?? null) as unknown as ClientProfileKyc | null}
       roles={(rolesRes.data ?? []) as unknown as ProfileServiceRole[]}
       documents={(docsRes.data ?? []) as unknown as DocumentRecord[]}
+      documentTypes={(docTypesRes.data ?? []) as unknown as DocumentType[]}
       ddRequirements={(ddReqsRes.data ?? []) as unknown as DueDiligenceRequirement[]}
       roleRequirements={(roleReqsRes.data ?? []) as unknown as RoleDocumentRequirement[]}
       requirementOverrides={(overridesRes.data ?? []) as unknown as ProfileRequirementOverride[]}
