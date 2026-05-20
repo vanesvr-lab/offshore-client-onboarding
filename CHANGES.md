@@ -4,6 +4,23 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-144 — Service name (done 2026-05-20)
+
+Adds a human-recognizable `name` column to `services` so admins can identify them by something more memorable than the systematic `service_number`. `service_number` stays as the primary H1 everywhere; `name` renders as a supplementary line below it.
+
+### Batch 1 — Schema migration + backfill
+
+Migration `supabase/migrations/20260520033642_services_name.sql`:
+
+- `ADD COLUMN name text` to `public.services`
+- Backfilled every existing row to `"{Template name} ({service_number})"` (with `service_number` / `"Service"` as cascading fallbacks)
+- `NOT NULL` + `services_name_non_empty CHECK (length(trim(name)) > 0)`
+- `log_service_name_change()` trigger + `service_name_audit AFTER UPDATE` — every rename writes a `service_renamed` row to `audit_log` with before/after JSONB
+
+Pushed via `npm run db:push`; `npm run db:status` shows Local + Remote paired with no drift.
+
+---
+
 ## How to use this file
 
 - Before starting work: **read this file** to see what was last touched
