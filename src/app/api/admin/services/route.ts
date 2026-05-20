@@ -59,6 +59,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     service_template_id: string;
+    name: string;
     service_details?: Record<string, unknown>;
     roles?: Array<{
       client_profile_id: string;
@@ -72,6 +73,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "service_template_id is required" }, { status: 400 });
   }
 
+  if (typeof body.name !== "string" || body.name.trim().length === 0) {
+    return NextResponse.json({ error: "Service name is required" }, { status: 400 });
+  }
+
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
@@ -83,6 +88,7 @@ export async function POST(request: Request) {
     .insert({
       tenant_id: tenantId,
       service_template_id: body.service_template_id,
+      name: body.name.trim(),
       service_details: body.service_details ?? {},
       status: "start",
       ...(serviceNumber ? { service_number: serviceNumber } : {}),
@@ -118,6 +124,7 @@ export async function POST(request: Request) {
         new_value: {
           service_number: serviceNumber,
           service_template_id: body.service_template_id,
+          name: body.name.trim(),
           status: "start",
         },
       });
@@ -136,6 +143,7 @@ export async function POST(request: Request) {
     new_value: {
       service_number: serviceNumber,
       service_template_id: body.service_template_id,
+      name: body.name.trim(),
       status: "start",
     },
   });

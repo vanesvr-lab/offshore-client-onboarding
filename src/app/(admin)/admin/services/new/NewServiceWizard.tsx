@@ -66,10 +66,14 @@ function StepPickTemplate({
   templates,
   selectedId,
   onSelect,
+  name,
+  onNameChange,
 }: {
   templates: Template[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  name: string;
+  onNameChange: (value: string) => void;
 }) {
   return (
     <div>
@@ -109,6 +113,22 @@ function StepPickTemplate({
           ))}
         </div>
       )}
+
+      <div className="space-y-2 mt-6">
+        <label className="block text-sm font-medium text-gray-700">
+          Service name <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder="e.g. Acme Holdings GBC 2026"
+          className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+        />
+        <p className="text-xs text-gray-500">
+          A short label admins can recognize this service by. You can change it later.
+        </p>
+      </div>
     </div>
   );
 }
@@ -296,10 +316,12 @@ function StepServiceDetails({
 
 function StepReview({
   template,
+  name,
   selectedRoles,
   serviceDetails,
 }: {
   template: Template;
+  name: string;
   selectedRoles: SelectedRole[];
   serviceDetails: Record<string, unknown>;
 }) {
@@ -317,6 +339,10 @@ function StepReview({
       </div>
 
       <div className="border rounded-xl divide-y">
+        <div className="px-4 py-3">
+          <p className="text-xs font-medium text-gray-400 uppercase">Service name</p>
+          <p className="text-sm font-semibold text-brand-navy mt-0.5">{name || "—"}</p>
+        </div>
         <div className="px-4 py-3">
           <p className="text-xs font-medium text-gray-400 uppercase">Service type</p>
           <p className="text-sm font-semibold text-brand-navy mt-0.5">{template.name}</p>
@@ -359,6 +385,7 @@ export function NewServiceWizard({ templates, profiles: initialProfiles }: Props
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [name, setName] = useState("");
   const [selectedRoles, setSelectedRoles] = useState<SelectedRole[]>([]);
   const [serviceDetails, setServiceDetails] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -416,12 +443,13 @@ export function NewServiceWizard({ templates, profiles: initialProfiles }: Props
   }
 
   function canAdvance(): boolean {
-    if (step === 0) return selectedTemplateId !== null;
+    if (step === 0) return selectedTemplateId !== null && name.trim().length > 0;
     return true;
   }
 
   async function handleSubmit() {
     if (!selectedTemplateId) return;
+    if (name.trim().length === 0) return;
     setSubmitting(true);
     try {
       const res = await fetch("/api/admin/services", {
@@ -429,6 +457,7 @@ export function NewServiceWizard({ templates, profiles: initialProfiles }: Props
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           service_template_id: selectedTemplateId,
+          name: name.trim(),
           service_details: serviceDetails,
           roles: selectedRoles.map((sr) => ({
             client_profile_id: sr.profile.id,
@@ -475,6 +504,8 @@ export function NewServiceWizard({ templates, profiles: initialProfiles }: Props
             templates={templates}
             selectedId={selectedTemplateId}
             onSelect={setSelectedTemplateId}
+            name={name}
+            onNameChange={setName}
           />
         )}
         {step === 1 && (
@@ -497,6 +528,7 @@ export function NewServiceWizard({ templates, profiles: initialProfiles }: Props
         {step === 3 && selectedTemplate && (
           <StepReview
             template={selectedTemplate}
+            name={name}
             selectedRoles={selectedRoles}
             serviceDetails={serviceDetails}
           />
@@ -529,7 +561,7 @@ export function NewServiceWizard({ templates, profiles: initialProfiles }: Props
         ) : (
           <Button
             onClick={() => void handleSubmit()}
-            disabled={submitting || !selectedTemplateId}
+            disabled={submitting || !selectedTemplateId || name.trim().length === 0}
             className="bg-brand-navy hover:bg-brand-blue"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

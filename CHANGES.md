@@ -19,6 +19,11 @@ Migration `supabase/migrations/20260520033642_services_name.sql`:
 
 Pushed via `npm run db:push`; `npm run db:status` shows Local + Remote paired with no drift.
 
+### Batch 2 — NewServiceWizard requires a name
+
+- `src/app/(admin)/admin/services/new/NewServiceWizard.tsx` — Step 1 now renders a required `Service name` input under the template picker (autofilled placeholder `e.g. Acme Holdings GBC 2026`). `canAdvance()` for step 0 requires both a template AND `name.trim().length > 0`; the final `Create service` button also stays disabled until the name is non-empty. The Review step lists the chosen name as its first row.
+- `src/app/api/admin/services/route.ts` — POST body now accepts `name: string`; rejects `400 "Service name is required"` if absent/empty/whitespace-only; INSERT writes `name: body.name.trim()`; `service_created` audit entry includes the name in `new_value`.
+
 ---
 
 ## How to use this file
