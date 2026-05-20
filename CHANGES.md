@@ -4,6 +4,57 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-145 — Wider profiles→users read sweep (done 2026-05-20)
+
+Follow-up to B-142. The legacy admin-name lookup pattern (PostgREST nested-select `profiles:column(...)`, after B-138 repointed the underlying FKs to `users(id)`) still lived in 12 places — surfacing as "Unknown", "System", or blank labels in the audit trail, section-review byline, account-manager panel, applications page, clients pages, and submitted-form uploader names for any admin created through the modern invite flow.
+
+### Audit (Batch 1, folded into Batch 2's commit)
+
+`grep` confirmed the brief's 7 known sites + surfaced 3 not in the brief's list:
+
+- `clients/page.tsx` — `client_account_managers → profiles!admin_id(full_name)` (admin name on the legacy clients list)
+- `clients/[id]/page.tsx` — `admin_users → profiles(full_name, email)` (admin name dropdown on the legacy client detail page)
+- `loadServiceDetail.ts:510` — `.from("profiles")` direct lookup for `submitted_forms.uploaded_by` names
+
+Plus two ambiguous matches in `applications/[id]/page.tsx` (audit_log `profiles(full_name)` shorthand + `admin_users.profiles(...)`) that follow the same broken pattern — both flipped. Final tally: 12 query swaps.
+
+### Query swaps (Batch 2)
+
+Six paths, twelve queries:
+
+- `src/app/api/admin/clients/[id]/audit-trail/route.ts` — `profiles!actor_id` → `users!actor_id`
+- `src/app/api/admin/applications/[id]/section-reviews/route.ts` — two occurrences of `profiles:reviewed_by` → `users:reviewed_by`
+- `src/app/(admin)/admin/applications/[id]/page.tsx` — four selects: audit_log `profiles(full_name)`, `admin_users.profiles(full_name, email)`, section-review `profiles:reviewed_by`, `client_account_managers.profiles!admin_id`
+- `src/app/(admin)/admin/clients/page.tsx` — `client_account_managers.profiles!admin_id`
+- `src/app/(admin)/admin/clients/[id]/page.tsx` — `client_account_managers.profiles!admin_id` + `admin_users.profiles(full_name, email)`
+- `src/app/(admin)/admin/services/[id]/loadServiceDetail.ts` — `profiles:reviewed_by` + the `.from("profiles")` uploader lookup
+
+### Downstream row reads (Batch 2 same commit)
+
+Type `ApplicationSectionReview.profiles?` renamed to `users?` in `src/types/index.ts`. Ten consumers updated to read `row.users?.full_name` / `row.users?.email` instead of `row.profiles?.X`:
+
+- `src/components/admin/AuditTrail.tsx` — also updated its type prop
+- `src/components/admin/AccountManagerPanel.tsx` — `AdminOption` + `current` + `history` types + three render reads
+- `src/components/admin/ClientAuditTrailDialog.tsx` — entry type + render read
+- `src/components/admin/ServiceCollapsibleSection.tsx`
+- `src/components/admin/SectionHeader.tsx`
+- `src/components/admin/PerProfileReviewSummaryPanel.tsx` (two reads)
+- `src/components/admin/SectionNotesHistory.tsx` (two reads)
+- `src/lib/services/stepState.ts`
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` (three reads — section-review badges + section-status who phrase)
+- The `clients/page.tsx`, `clients/[id]/page.tsx`, `applications/[id]/page.tsx` server-component casts that flow into the components above
+
+### Intentional non-changes (per brief)
+
+`src/lib/auth.ts` (auth fallback), `src/lib/filing-rep-invite.ts`, `src/app/api/admin/admins/route.ts`, `src/app/api/admin/account/password/route.ts` (invite + password mirror writes), the legacy `create-client` / `clients/[id]/delete` flow, and the four `client_users → profiles` joins for CLIENT-user lookups (`/api/admin/clients/[id]/send-invite`, `/api/admin/processes/[id]/request-documents`, the `users[0]?.profiles` reads in `clients/[id]/page.tsx` and `clients/page.tsx`).
+
+### Tech debt
+
+- **Resolved**: the B-142 open entry "Grep sweep for remaining legacy `profiles` read-side lookups" — struck through in `docs/tech-debt.md` with a pointer back to this brief.
+- No new entries.
+
+---
+
 ## B-150 — Restore Actions step on regular page (done 2026-05-20)
 
 Regression fix on B-146. The wizard simplification collapsed `buildAdminSteps()` to always return a 5-step list, but that builder powers BOTH the wizard indicator AND the regular `/admin/services/[id]` page's top step navigation — so the Actions pill silently disappeared from the regular page's nav on templates with action bindings (GBC, AC, etc.). The Actions content block kept rendering (its `hasActionBindings && !reviewMode` gate was already correct), but admins lost the navigational handle to scroll to it.

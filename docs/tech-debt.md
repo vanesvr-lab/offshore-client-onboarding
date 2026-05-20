@@ -53,10 +53,7 @@ remove after 30 days.
 
 ## 2026-05-19 (B-142)
 
-- **Grep sweep for remaining legacy `profiles` read-side lookups.** *Severity: Medium.*
-  *Spawned by:* [B-142](cli-brief-reviewer-name-lookup-b142.md).
-  *What:* B-138 fixed the FK write side; B-142 fixed the three review-request name lookups. The same legacy-profiles pattern likely lives in other admin-name displays — audit-log actor name resolution, communications-dialog recipient picker, document `uploaded_by` attributions, etc. Each one will silently render "Unknown" (or fall back to "the user" / "an admin") for admins created via the modern invite flow until it's hit. Sweep: `grep -rn 'from("profiles")' src/` then triage — auth fallback (`src/lib/auth.ts`) + invite-mirror writes (`filing-rep-invite.ts`, `admins/route.ts`) stay; everything else evaluated for repointing to `users`. Estimate: ~half-day grep + fix + test.
-  *Why deferred:* Visible bug for reviewer-name list shipped today; other "Unknown" surfaces aren't user-blocking yet, so worth bundling into a single audit pass rather than chasing them one-by-one.
+- ~~**Grep sweep for remaining legacy `profiles` read-side lookups.** *Severity: Medium.* Spawned by [B-142](cli-brief-reviewer-name-lookup-b142.md); covered the audit-log actor name, account-manager panel, applications + clients pages, and submitted-form uploader lookups. **Resolved 2026-05-20 by [B-145](cli-brief-profiles-to-users-read-sweep-b145.md)** — twelve queries flipped from `profiles:column(...)` / `profiles!column(...)` / `.from("profiles")` to the `users` equivalent; downstream `row.profiles?.X` consumers in 10 files updated to `row.users?.X`. Intentional uses (auth fallback, invite-mirror writes, legacy client flows, client-side `client_users → profiles`) left in place.~~
 
 ---
 
