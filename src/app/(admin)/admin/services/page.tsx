@@ -15,11 +15,17 @@ export const dynamic = "force-dynamic";
 export type AdminServiceRow = {
   id: string;
   service_number: string | null;
+  // B-149 — service name (from B-144) surfaced under the ref in the
+  // table + matched by the search input.
+  name: string | null;
   status: string;
   service_template_id: string;
   service_template_name: string;
   created_at: string;
   updated_at: string;
+  // B-149 — Assigned Officer column (parity with /admin/queue, B-130).
+  assigned_admin_id: string | null;
+  assigned_admin_name: string | null;
   managers: { id: string; full_name: string }[];
   sectionPcts: {
     companySetup: number;
@@ -32,6 +38,11 @@ export type AdminServiceRow = {
   lastUpdatedBy: string | null;
 };
 
+export type AdminOption = {
+  id: string;
+  name: string;
+};
+
 export default async function ServicesPage() {
   const session = await auth();
   if (!session || session.user.role !== "admin") redirect("/login");
@@ -39,30 +50,54 @@ export default async function ServicesPage() {
   const supabase = createAdminClient();
   const tenantId = getTenantId(session);
 
+  // B-149 — extended select to pick up service `name` (B-144),
+  // `assigned_admin_id` + the joined admin user (B-130), and the
+  // service_profile_removals soft-removal table (B-133) so we can
+  // mirror the queue's filtering when deriving managers.
   const { data: rawServices } = await supabase
     .from("services")
     .select(`
       *,
+      assigned_admin:users!services_assigned_admin_id_fkey(id, full_name, email),
       service_templates(id, name, description, service_fields),
       profile_service_roles(
         id, role, can_manage,
         client_profiles(id, full_name, email, is_representative,
           client_profile_kyc(*)
         )
-      )
+      ),
+      service_profile_removals(client_profile_id)
     `)
     .eq("tenant_id", tenantId)
     .eq("is_deleted", false)
     .order("created_at", { ascending: false });
 
+  // B-149 — admins list feeds the Assigned Officer dropdown in
+  // ServicesPageClient. Same shape ServicesTable / queue uses.
+  const { data: rawAdmins } = await supabase
+    .from("admin_users")
+    .select("user_id, users!inner(full_name, email)");
+  const admins: AdminOption[] = (
+    (rawAdmins as unknown as Array<{
+      user_id: string;
+      users: { full_name: string | null; email: string | null } | null;
+    }> | null) ?? []
+  ).map((a) => ({
+    id: a.user_id,
+    name: a.users?.full_name ?? a.users?.email ?? "Unnamed admin",
+  }));
+
   const services = (rawServices ?? []) as unknown as Array<{
     id: string;
     service_number: string | null;
+    name: string | null;
     status: string;
     service_template_id: string;
     service_details: Record<string, unknown>;
     created_at: string;
     updated_at: string;
+    assigned_admin_id: string | null;
+    assigned_admin: { id: string; full_name: string | null; email: string | null } | null;
     service_templates: {
       id: string;
       name: string;
@@ -81,6 +116,7 @@ export default async function ServicesPage() {
         client_profile_kyc: Record<string, unknown> | null;
       } | null;
     }>;
+    service_profile_removals: Array<{ client_profile_id: string }> | null;
   }>;
 
   const serviceIds = services.map((s) => s.id);
@@ -181,7 +217,17 @@ export default async function ServicesPage() {
     const roles = svc.profile_service_roles ?? [];
     const docs = docsByService.get(svc.id) ?? [];
 
-    const managers = roles
+    // B-149 — respect B-133 soft removals when listing managers, so a
+    // profile detached from a service no longer appears as a manager
+    // here either (parity with the queue).
+    const removedIds = new Set(
+      (svc.service_profile_removals ?? []).map((r) => r.client_profile_id),
+    );
+    const activeRoles = roles.filter(
+      (r) => r.client_profiles?.id && !removedIds.has(r.client_profiles.id),
+    );
+
+    const managers = activeRoles
       .filter((r) => r.can_manage && r.client_profiles)
       .map((r) => ({ id: r.client_profiles!.id, full_name: r.client_profiles!.full_name }));
 
@@ -206,11 +252,14 @@ export default async function ServicesPage() {
     return {
       id: svc.id,
       service_number: svc.service_number,
+      name: svc.name,
       status: svc.status,
       service_template_id: svc.service_template_id,
       service_template_name: svc.service_templates?.name ?? "Untitled",
       created_at: svc.created_at,
       updated_at: svc.updated_at,
+      assigned_admin_id: svc.assigned_admin_id ?? null,
+      assigned_admin_name: svc.assigned_admin?.full_name ?? null,
       managers: uniqueManagers,
       sectionPcts: {
         companySetup: companySetupPct,
@@ -238,7 +287,12 @@ export default async function ServicesPage() {
 
   return (
     <div>
-      <ServicesPageClient rows={rows} templateOptions={templateOptions} />
+      <ServicesPageClient
+        rows={rows}
+        templateOptions={templateOptions}
+        admins={admins}
+        currentUserId={session.user.id as string}
+      />
     </div>
   );
 }

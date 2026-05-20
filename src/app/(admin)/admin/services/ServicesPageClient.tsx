@@ -6,7 +6,7 @@ import { Search, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MiniProgressBar } from "@/components/shared/MiniProgressBar";
-import type { AdminServiceRow } from "./page";
+import type { AdminServiceRow, AdminOption } from "./page";
 import {
   SERVICE_STATUS_ALL,
   SERVICE_STATUS_LABELS,
@@ -18,6 +18,10 @@ import {
 interface Props {
   rows: AdminServiceRow[];
   templateOptions: { id: string; name: string }[];
+  // B-149 — admins list + currentUserId feed the new Assigned Officer
+  // dropdown and the "Assigned to me" chip (parity with /admin/queue).
+  admins: AdminOption[];
+  currentUserId: string;
 }
 
 type StatusFilter = "all" | ServiceStatus;
@@ -94,7 +98,11 @@ function templateAbbr(name: string): string {
     .join("");
 }
 
-export function ServicesPageClient({ rows, templateOptions }: Props) {
+export function ServicesPageClient({ rows, templateOptions, admins, currentUserId }: Props) {
+  // B-149 — admins + currentUserId are wired in via Batch 1's data
+  // pipeline; the filter UI that consumes them lands in Batch 3.
+  void admins;
+  void currentUserId;
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
