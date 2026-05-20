@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 interface RawServiceRow {
   id: string;
   service_number: string | null;
+  name: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -40,6 +41,7 @@ export default async function QueuePage() {
       `
       id,
       service_number,
+      name,
       status,
       service_details,
       created_at,
@@ -87,6 +89,7 @@ export default async function QueuePage() {
     return {
       id: s.id,
       service_number: s.service_number,
+      name: s.name,
       status: s.status,
       created_at: s.created_at,
       updated_at: s.updated_at,

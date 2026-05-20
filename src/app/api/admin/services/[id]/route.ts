@@ -26,6 +26,9 @@ export async function PATCH(
     // B-130 — service officer assignment. Has its own data_access=edit
     // gate below; the audit trigger on services logs every change.
     "assigned_admin_id",
+    // B-144 — human-recognizable service name. Validated + gated below;
+    // the service_name_audit trigger logs every rename.
+    "name",
   ];
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of ALLOWED) {
@@ -34,6 +37,23 @@ export async function PATCH(
 
   if (Object.keys(patch).length === 1) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+  }
+
+  if ("name" in patch) {
+    if (!hasDataAccess(session.user.adminPermissions, "edit")) {
+      return NextResponse.json(
+        { error: "Your role can't rename services." },
+        { status: 403 },
+      );
+    }
+    const candidate = patch.name;
+    if (typeof candidate !== "string" || candidate.trim().length === 0) {
+      return NextResponse.json(
+        { error: "name must be a non-empty string" },
+        { status: 400 },
+      );
+    }
+    patch.name = candidate.trim();
   }
 
   // B-098 — guard against status values outside the canonical chain so a

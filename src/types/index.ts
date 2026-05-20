@@ -760,6 +760,10 @@ export interface ServiceRecord {
   tenant_id: string;
   service_template_id: string;
   service_number: string | null;
+  // B-144 — human-recognizable secondary label. Backfilled for all
+  // existing rows; NOT NULL going forward (POST validates non-empty
+  // trimmed string + DB CHECK enforces).
+  name: string;
   service_details: Record<string, unknown>;
   status: import("@/lib/services/statusChain").ServiceStatus;
   loe_received: boolean;

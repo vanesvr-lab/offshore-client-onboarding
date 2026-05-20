@@ -5829,6 +5829,53 @@ export function ServiceDetailClient({
     router.refresh();
   }
 
+  // B-144 — inline service-name edit. Pencil-icon affordance in the title
+  // block toggles `editingName`; the input saves on blur/Enter and reverts
+  // on Escape. PATCH /api/admin/services/[id] gates on data_access=edit;
+  // the service_name_audit trigger writes the audit row.
+  const canEditName = !!adminPermissions && adminPermissions.data_access === "edit";
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(service.name ?? "");
+  const [savingName, setSavingName] = useState(false);
+  useEffect(() => {
+    setNameDraft(service.name ?? "");
+  }, [service.name]);
+
+  async function saveName() {
+    const next = nameDraft.trim();
+    if (next.length === 0) {
+      toast.error("Service name can't be empty", { position: "top-right" });
+      setNameDraft(service.name ?? "");
+      setEditingName(false);
+      return;
+    }
+    if (next === service.name) {
+      setEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      const res = await fetch(`/api/admin/services/${service.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: next }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to rename service");
+      setService((prev) => ({ ...prev, name: next }));
+      toast.success("Service renamed", { position: "top-right" });
+      router.refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to rename service", {
+        position: "top-right",
+      });
+      setNameDraft(service.name ?? "");
+    } finally {
+      setSavingName(false);
+      setEditingName(false);
+    }
+  }
+
   // B-084 Batch 1 — per-profile save splice. PersonCard's `handleKycBarSave`
   // calls this on success with the post-update kyc/profile rows returned
   // from `PATCH /api/admin/profiles/[id]/kyc-fields`. Splicing into the
@@ -5966,15 +6013,55 @@ export function ServiceDetailClient({
         {/* Title + Save/Cancel */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="min-w-0">
-            {service.service_number && (
-              <span className="text-xs font-mono text-gray-400 mr-2">{service.service_number}</span>
-            )}
-            <h1 className="text-xl font-bold text-brand-navy inline">
-              {service.service_templates?.name ?? "Service"}
+            {/* B-144 — service_number remains the primary identifier (H1);
+                service.name renders as a supplementary line below with an
+                inline pencil-edit affordance (gated on data_access=edit). */}
+            <h1 className="text-xl font-bold text-brand-navy">
+              {service.service_number ?? "Service"}
             </h1>
-            {service.service_templates?.description && (
-              <p className="text-sm text-gray-400 mt-0.5">{service.service_templates.description}</p>
+            {(service.name || editingName) && (
+              <div className="mt-1 flex items-center gap-2">
+                {editingName ? (
+                  <input
+                    type="text"
+                    autoFocus
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onBlur={() => { void saveName(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void saveName();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setNameDraft(service.name ?? "");
+                        setEditingName(false);
+                      }
+                    }}
+                    disabled={savingName}
+                    className="text-sm font-medium text-gray-700 border rounded px-2 py-1 w-72 bg-white"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-gray-700">{service.name}</p>
+                )}
+                {canEditName && !editingName && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(true)}
+                    className="text-gray-400 hover:text-gray-600"
+                    title="Edit service name"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             )}
+            <p className="text-xs text-gray-500 mt-1">
+              {service.service_templates?.name ?? "Service"}
+              {service.service_templates?.description && (
+                <> · {service.service_templates.description}</>
+              )}
+            </p>
           </div>
 
         </div>

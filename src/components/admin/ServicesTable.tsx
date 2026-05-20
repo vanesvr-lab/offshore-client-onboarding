@@ -29,6 +29,9 @@ import {
 export interface ServiceRow {
   id: string;
   service_number: string | null;
+  // B-144 — human-recognizable secondary label rendered under the
+  // service_number in the Service # column. Backfilled for legacy rows.
+  name: string | null;
   status: string;
   updated_at: string;
   created_at: string;
@@ -153,6 +156,7 @@ export function ServicesTable({ services, admins, currentUserId }: Props) {
         const q = search.toLowerCase();
         return (
           s.service_number?.toLowerCase().includes(q) ||
+          s.name?.toLowerCase().includes(q) ||
           s.primary_profile_name?.toLowerCase().includes(q) ||
           s.template_name?.toLowerCase().includes(q)
         );
@@ -200,7 +204,7 @@ export function ServicesTable({ services, admins, currentUserId }: Props) {
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
-          placeholder="Search by service #, client or template…"
+          placeholder="Search by service #, name, client or template…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
@@ -303,9 +307,17 @@ export function ServicesTable({ services, admins, currentUserId }: Props) {
                   <td className="px-4 py-3 font-medium">
                     <Link
                       href={`/admin/services/${s.id}`}
-                      className="text-brand-navy hover:underline"
+                      className="block text-brand-navy hover:underline"
                     >
-                      {s.service_number ?? "—"}
+                      <div>{s.service_number ?? "—"}</div>
+                      {s.name && (
+                        <div
+                          className="text-xs font-normal text-gray-500 truncate max-w-[260px]"
+                          title={s.name}
+                        >
+                          {s.name}
+                        </div>
+                      )}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-700">

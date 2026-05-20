@@ -24,6 +24,13 @@ Pushed via `npm run db:push`; `npm run db:status` shows Local + Remote paired wi
 - `src/app/(admin)/admin/services/new/NewServiceWizard.tsx` — Step 1 now renders a required `Service name` input under the template picker (autofilled placeholder `e.g. Acme Holdings GBC 2026`). `canAdvance()` for step 0 requires both a template AND `name.trim().length > 0`; the final `Create service` button also stays disabled until the name is non-empty. The Review step lists the chosen name as its first row.
 - `src/app/api/admin/services/route.ts` — POST body now accepts `name: string`; rejects `400 "Service name is required"` if absent/empty/whitespace-only; INSERT writes `name: body.name.trim()`; `service_created` audit entry includes the name in `new_value`.
 
+### Batch 3 — Display name + inline edit + queue search
+
+- `src/types/index.ts` — `ServiceRecord` now has a `name: string` field (NOT NULL on the DB side; the legacy backfill from Batch 1 guarantees every existing row already satisfies the type).
+- `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx` — Title block restructured to put `service_number` back as the H1; `service.name` renders as a supplementary line below it with an inline pencil-edit affordance. The pencil only renders for admins whose role has `data_access === "edit"`. Editing swaps the `<p>` for an `<input>` that saves on blur or Enter (Escape reverts). Save calls `PATCH /api/admin/services/[id]` with `{ name }`; the trigger from Batch 1 writes the `service_renamed` audit row. Template name + description dropped to a smaller third line.
+- `src/components/admin/ServicesTable.tsx` + `src/app/(admin)/admin/queue/page.tsx` — `ServiceRow` now carries `name`; the queue server query selects it; the Service # column renders the name as a smaller secondary line beneath the service_number (truncated at ~260 px with full text on hover via `title`); search input matches against `name` in addition to service_number / primary profile / template; placeholder copy updated to mention "name".
+- `src/app/api/admin/services/[id]/route.ts` — `name` added to the PATCH allowlist with `data_access === "edit"` gate (returns 403 otherwise) + non-empty trimmed string validation (returns 400 otherwise). DB trigger handles the audit row.
+
 ---
 
 ## How to use this file
