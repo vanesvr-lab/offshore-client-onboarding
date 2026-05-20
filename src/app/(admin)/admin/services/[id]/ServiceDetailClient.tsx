@@ -4740,12 +4740,19 @@ function ReviewWizardBottomNav({
 
   return (
     <>
-      <div className="sticky bottom-0 z-30 bg-white border-t -mx-8 px-8 py-3 flex items-center justify-between gap-3 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
+      {/* B-146 — same fix shape as B-141 on the non-wizard save bar.
+          Outer container is `relative`; Previous absolutely-positions to
+          the left; Mark Reviewed + (optional Review Profiles) + Next
+          sit as a centered flex group in the horizontal middle. The
+          lg:mr-20 safety guard keeps the centered cluster clear of the
+          B-128 chat bubble on big screens. */}
+      <div className="sticky bottom-0 z-30 bg-white border-t -mx-8 px-8 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
+        <div className="relative flex items-center justify-center gap-2 lg:mr-20">
         <button
           type="button"
           onClick={() => void handlePrevious()}
           disabled={advancing || (!profileSubstep && isFirstStep)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-brand-navy bg-white px-4 py-1.5 text-sm font-medium text-brand-navy hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="absolute left-0 inline-flex items-center gap-1.5 rounded-full border border-brand-navy bg-white px-4 py-1.5 text-sm font-medium text-brand-navy hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronLeft className="h-4 w-4" />
           {prevLabel}
@@ -4789,6 +4796,7 @@ function ReviewWizardBottomNav({
             {nextLabel}
             <ChevronRight className="h-4 w-4" />
           </button>
+        </div>
         </div>
       </div>
       <SectionReviewPanel
