@@ -22,18 +22,23 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/utils/formatters";
 import type { ClientAccountManager } from "@/types";
 
+// B-145 — `admin_users.user_id` + `client_account_managers.admin_id`
+// FKs were repointed to public.users by B-138, so the PostgREST nested
+// select returns `users` instead of `profiles`. Modern-flow admins live
+// in users, so the legacy join silently returned null and the UI
+// rendered the bare user_id.
 interface AdminOption {
   user_id: string;
-  profiles: { full_name: string | null; email: string | null } | null;
+  users: { full_name: string | null; email: string | null } | null;
 }
 
 interface AccountManagerPanelProps {
   clientId: string;
   current: (ClientAccountManager & {
-    profiles: { full_name: string | null; email: string | null } | null;
+    users: { full_name: string | null; email: string | null } | null;
   }) | null;
   history: (ClientAccountManager & {
-    profiles: { full_name: string | null; email: string | null } | null;
+    users: { full_name: string | null; email: string | null } | null;
   })[];
   admins: AdminOption[];
 }
@@ -77,8 +82,8 @@ export function AccountManagerPanel({
   }
 
   const currentAdminName =
-    current?.profiles?.full_name ||
-    current?.profiles?.email ||
+    current?.users?.full_name ||
+    current?.users?.email ||
     "Unassigned";
 
   return (
@@ -123,7 +128,7 @@ export function AccountManagerPanel({
             <SelectContent>
               {admins.map((a) => (
                 <SelectItem key={a.user_id} value={a.user_id}>
-                  {a.profiles?.full_name || a.profiles?.email || a.user_id}
+                  {a.users?.full_name || a.users?.email || a.user_id}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -159,7 +164,7 @@ export function AccountManagerPanel({
                 {history.map((h) => (
                   <li key={h.id} className="text-xs text-gray-500 border-l-2 border-gray-200 pl-2">
                     <span className="font-medium text-gray-700">
-                      {h.profiles?.full_name || h.profiles?.email || "Unknown"}
+                      {h.users?.full_name || h.users?.email || "Unknown"}
                     </span>
                     <br />
                     {formatDate(h.started_at)}

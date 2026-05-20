@@ -6,7 +6,11 @@ import { formatDateTime } from "@/lib/utils/formatters";
 import type { AuditLogEntry } from "@/types";
 
 interface AuditTrailProps {
-  entries: (AuditLogEntry & { profiles?: { full_name: string | null } })[];
+  // B-145 — audit_log.actor_id was repointed to public.users by B-138,
+  // so the PostgREST nested-select now exposes the relationship as
+  // `users` (was `profiles`). Modern-flow admins live in users, so the
+  // legacy join silently returned null and the UI fell back to "System".
+  entries: (AuditLogEntry & { users?: { full_name: string | null } })[];
 }
 
 // B-125 — entries ≤3 days old read as relative ("2h ago" / "3d ago"); older
@@ -95,7 +99,7 @@ export function AuditTrail({ entries }: AuditTrailProps) {
           <tbody className="divide-y divide-gray-50">
             {entries.map((entry) => {
               const actorName =
-                entry.actor_name || entry.profiles?.full_name || "System";
+                entry.actor_name || entry.users?.full_name || "System";
               const actorRole = entry.actor_role || "system";
               const isOpen = expanded.has(entry.id);
 

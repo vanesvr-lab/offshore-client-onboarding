@@ -19,7 +19,7 @@ export async function GET(
   const supabase = createAdminClient();
   let query = supabase
     .from("application_section_reviews")
-    .select("*, profiles:reviewed_by(full_name)")
+    .select("*, users:reviewed_by(full_name)")
     .eq("application_id", params.id)
     .order("reviewed_at", { ascending: false });
 
@@ -103,7 +103,7 @@ export async function POST(
       force_reviewed: forceReviewed,
       reviewed_by: session.user.id,
     })
-    .select("*, profiles:reviewed_by(full_name)")
+    .select("*, users:reviewed_by(full_name)")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

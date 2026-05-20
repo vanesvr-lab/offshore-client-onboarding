@@ -197,7 +197,7 @@ export async function loadServiceDetail(
 
     supabase
       .from("application_section_reviews")
-      .select("*, profiles:reviewed_by(full_name)")
+      .select("*, users:reviewed_by(full_name)")
       .eq("application_id", serviceId)
       .order("reviewed_at", { ascending: false }),
 
@@ -506,8 +506,12 @@ export async function loadServiceDetail(
   const uploaderIds = Array.from(new Set(submittedRows.map((r) => r.uploaded_by)));
   let uploaderNameById: Record<string, string | null> = {};
   if (uploaderIds.length > 0) {
+    // B-145 — uploader name lookup now reads from public.users.
+    // submitted_forms.uploaded_by was repointed by B-138's FK migration;
+    // modern-flow admins live in users, not profiles, so the legacy
+    // lookup returned null and the UI fell back to "Unknown uploader".
     const { data: uploaders } = await supabase
-      .from("profiles")
+      .from("users")
       .select("id, full_name, email")
       .in("id", uploaderIds);
     uploaderNameById = Object.fromEntries(

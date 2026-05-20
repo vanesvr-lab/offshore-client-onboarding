@@ -1595,7 +1595,7 @@ function InlineReviewBadge({ sectionKey }: { sectionKey: string }) {
     <SectionReviewBadge
       status={currentStatus}
       reviewedAt={latest?.reviewed_at}
-      reviewerName={latest?.profiles?.full_name ?? null}
+      reviewerName={latest?.users?.full_name ?? null}
       notes={latest?.notes ?? null}
     />
   );
@@ -1650,7 +1650,7 @@ function PersonAggregateReviewBadge({
     <SectionReviewBadge
       status={status}
       reviewedAt={latest?.reviewed_at}
-      reviewerName={latest?.profiles?.full_name ?? null}
+      reviewerName={latest?.users?.full_name ?? null}
       notes={latest?.notes ?? null}
     />
   );
@@ -4340,7 +4340,7 @@ function buildStepTooltip({
   const completionPhrase =
     pct >= 100 ? "100% complete" : pct > 0 ? `${pct}% complete` : "Not started";
 
-  const who = review?.profiles?.full_name ?? null;
+  const who = review?.users?.full_name ?? null;
   const when = formatReviewedOn(review?.reviewed_at);
   const whoWhen = who && when ? ` by ${who} on ${when}` : when ? ` on ${when}` : who ? ` by ${who}` : "";
 

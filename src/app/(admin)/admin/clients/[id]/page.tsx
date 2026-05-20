@@ -57,14 +57,14 @@ export default async function ClientDetailPage({
         ),
         client_account_managers(
           id, client_id, admin_id, started_at, ended_at, notes, assigned_by, created_at,
-          profiles!admin_id(full_name, email)
+          users!admin_id(full_name, email)
         )
       `)
       .eq("id", params.id)
       .single(),
     supabase
       .from("admin_users")
-      .select("user_id, profiles(full_name, email)")
+      .select("user_id, users(full_name, email)")
       .order("created_at"),
     supabase
       .from("kyc_records")
@@ -122,7 +122,7 @@ export default async function ClientDetailPage({
   }[];
 
   const managerHistory = client.client_account_managers as unknown as (ClientAccountManager & {
-    profiles: { full_name: string | null; email: string | null } | null;
+    users: { full_name: string | null; email: string | null } | null;
   })[];
   const currentManager = managerHistory.find((m) => !m.ended_at) ?? null;
   const pastManagers = managerHistory.filter((m) => m.ended_at !== null);
@@ -293,9 +293,9 @@ export default async function ClientDetailPage({
           />
           <AccountManagerPanel
             clientId={client.id}
-            current={currentManager as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null }) | null}
-            history={pastManagers as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null })[]}
-            admins={(allAdmins || []) as unknown as { user_id: string; profiles: { full_name: string | null; email: string | null } | null }[]}
+            current={currentManager as unknown as (ClientAccountManager & { users: { full_name: string | null; email: string | null } | null }) | null}
+            history={pastManagers as unknown as (ClientAccountManager & { users: { full_name: string | null; email: string | null } | null })[]}
+            admins={(allAdmins || []) as unknown as { user_id: string; users: { full_name: string | null; email: string | null } | null }[]}
           />
           <SendInvitePanel
             clientId={client.id}

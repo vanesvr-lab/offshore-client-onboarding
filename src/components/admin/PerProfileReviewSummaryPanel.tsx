@@ -206,7 +206,7 @@ export function PerProfileReviewSummaryPanel({
             <SectionReviewBadge
               status={aggregate.status}
               reviewedAt={aggregate.latest?.reviewed_at}
-              reviewerName={aggregate.latest?.profiles?.full_name ?? null}
+              reviewerName={aggregate.latest?.users?.full_name ?? null}
               notes={aggregate.latest?.notes ?? null}
             />
           </div>
@@ -220,7 +220,7 @@ export function PerProfileReviewSummaryPanel({
               {subsections.map((s) => {
                 const row = rows.find((r) => r.sectionKey === s.key);
                 const latest = row?.latest ?? null;
-                const reviewerName = latest?.profiles?.full_name ?? null;
+                const reviewerName = latest?.users?.full_name ?? null;
                 const note = latest?.notes ?? null;
                 return (
                   <button

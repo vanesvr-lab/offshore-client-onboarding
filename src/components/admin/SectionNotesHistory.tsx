@@ -47,7 +47,7 @@ export function SectionNotesHistory({ reviews }: Props) {
       {open ? (
         <ul className="mt-3 space-y-3">
           {reviews.map((r) => {
-            const reviewer = r.profiles?.full_name?.trim() || "Admin";
+            const reviewer = r.users?.full_name?.trim() || "Admin";
             return (
               <li
                 key={r.id}
@@ -59,7 +59,7 @@ export function SectionNotesHistory({ reviews }: Props) {
                   <SectionReviewBadge
                     status={r.status}
                     reviewedAt={r.reviewed_at}
-                    reviewerName={r.profiles?.full_name ?? null}
+                    reviewerName={r.users?.full_name ?? null}
                     notes={r.notes}
                   />
                   <span className="text-gray-500">

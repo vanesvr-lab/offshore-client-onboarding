@@ -242,7 +242,7 @@ function SectionReviewControls({
       <SectionReviewBadge
         status={currentStatus}
         reviewedAt={latest?.reviewed_at}
-        reviewerName={latest?.profiles?.full_name ?? null}
+        reviewerName={latest?.users?.full_name ?? null}
         notes={latest?.notes ?? null}
       />
       <SectionReviewButton

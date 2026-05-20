@@ -45,7 +45,7 @@ export async function GET(
     .select(
       `id, application_id, actor_id, actor_role, actor_name, action,
        entity_type, entity_id, previous_value, new_value, detail, created_at,
-       profiles!actor_id(full_name, email)`,
+       users!actor_id(full_name, email)`,
       { count: "exact" }
     )
     .order("created_at", { ascending: false });

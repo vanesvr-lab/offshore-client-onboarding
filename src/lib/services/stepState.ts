@@ -87,7 +87,7 @@ export function pillStateTooltip(input: {
   reviewerName?: string | null;
 }): string {
   const { state, pct, review, reviewerName } = input;
-  const who = reviewerName ?? review?.profiles?.full_name ?? null;
+  const who = reviewerName ?? review?.users?.full_name ?? null;
   const when = review?.reviewed_at
     ? new Date(review.reviewed_at).toLocaleDateString("en-US", {
         month: "short",

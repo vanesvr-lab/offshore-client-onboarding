@@ -23,7 +23,7 @@ export default async function ClientsPage() {
         ),
         client_account_managers(
           ended_at,
-          profiles!admin_id(full_name)
+          users!admin_id(full_name)
         )
       `)
       .eq("is_deleted", false)
@@ -45,7 +45,7 @@ export default async function ClientsPage() {
     const activeManager = (
       client.client_account_managers as unknown as {
         ended_at: string | null;
-        profiles: { full_name: string | null } | null;
+        users: { full_name: string | null } | null;
       }[]
     )?.find((m) => !m.ended_at);
 
@@ -55,7 +55,7 @@ export default async function ClientsPage() {
       created_at: client.created_at,
       ownerName: owner?.profiles?.full_name ?? null,
       ownerEmail: owner?.profiles?.email ?? null,
-      managerName: activeManager?.profiles?.full_name ?? null,
+      managerName: activeManager?.users?.full_name ?? null,
       appCount: countMap[client.id] ?? 0,
     };
   });

@@ -835,8 +835,10 @@ export interface ApplicationSectionReview {
   /** B-110 — admin marked the section reviewed despite incomplete fields.
    *  Implies notes are non-null (server validates). */
   force_reviewed: boolean;
-  // joined optionally via reviewed_by → profiles(full_name)
-  profiles?: { full_name: string | null } | null;
+  // B-145 — joined optionally via reviewed_by → users(full_name).
+  // Was profiles(full_name) pre-B-138; repointed to users after the FK
+  // moved. Consumers read `row.users?.full_name`.
+  users?: { full_name: string | null } | null;
 }
 
 // B-072 — admin actions registry per service (substance review, bank

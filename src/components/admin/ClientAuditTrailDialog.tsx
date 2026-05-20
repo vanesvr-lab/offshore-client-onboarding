@@ -25,7 +25,9 @@ interface AuditEntry {
   new_value: Record<string, unknown> | null;
   detail: Record<string, unknown> | null;
   created_at: string;
-  profiles?: { full_name: string | null; email: string | null } | null;
+  // B-145 — audit-trail route now joins users(full_name, email) after
+  // B-138 repointed audit_log.actor_id FK to public.users.
+  users?: { full_name: string | null; email: string | null } | null;
   application?: { business_name: string | null; reference_number: string | null } | null;
 }
 
@@ -108,7 +110,7 @@ function EntryRow({
 
   const actorRole = entry.actor_role ?? "system";
   const actorName =
-    (entry.profiles as { full_name?: string | null } | null)?.full_name ??
+    (entry.users as { full_name?: string | null } | null)?.full_name ??
     entry.actor_name ??
     (actorRole === "system" ? "System" : "Unknown");
 

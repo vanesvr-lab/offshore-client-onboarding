@@ -72,7 +72,7 @@ export default async function ApplicationDetailPage({
       .order("uploaded_at"),
     supabase
       .from("audit_log")
-      .select("id, application_id, action, actor_id, actor_role, actor_name, entity_type, entity_id, previous_value, new_value, detail, created_at, profiles(full_name)")
+      .select("id, application_id, action, actor_id, actor_role, actor_name, entity_type, entity_id, previous_value, new_value, detail, created_at, users(full_name)")
       .eq("application_id", params.id)
       .order("created_at", { ascending: false }),
     supabase
@@ -82,11 +82,11 @@ export default async function ApplicationDetailPage({
       .order("sent_at", { ascending: false }),
     supabase
       .from("admin_users")
-      .select("user_id, profiles(full_name, email)")
+      .select("user_id, users(full_name, email)")
       .order("created_at"),
     supabase
       .from("application_section_reviews")
-      .select("*, profiles:reviewed_by(full_name)")
+      .select("*, users:reviewed_by(full_name)")
       .eq("application_id", params.id)
       .order("reviewed_at", { ascending: false }),
   ]);
@@ -134,7 +134,7 @@ export default async function ApplicationDetailPage({
   // Fetch account manager history
   const { data: managerHistory } = await supabase
     .from("client_account_managers")
-    .select("*, profiles!admin_id(full_name, email)")
+    .select("*, users!admin_id(full_name, email)")
     .eq("client_id", clientId)
     .order("started_at", { ascending: false });
 
@@ -404,9 +404,9 @@ export default async function ApplicationDetailPage({
 
           <AccountManagerPanel
             clientId={clientId}
-            current={currentManager as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null }) | null}
-            history={pastManagers as unknown as (ClientAccountManager & { profiles: { full_name: string | null; email: string | null } | null })[]}
-            admins={(allAdmins || []) as unknown as { user_id: string; profiles: { full_name: string | null; email: string | null } | null }[]}
+            current={currentManager as unknown as (ClientAccountManager & { users: { full_name: string | null; email: string | null } | null }) | null}
+            history={pastManagers as unknown as (ClientAccountManager & { users: { full_name: string | null; email: string | null } | null })[]}
+            admins={(allAdmins || []) as unknown as { user_id: string; users: { full_name: string | null; email: string | null } | null }[]}
           />
 
           <Card>
@@ -419,7 +419,7 @@ export default async function ApplicationDetailPage({
               <AuditTrail
                 entries={
                   (auditLog || []) as unknown as (AuditLogEntry & {
-                    profiles?: { full_name: string | null };
+                    users?: { full_name: string | null };
                   })[]
                 }
               />

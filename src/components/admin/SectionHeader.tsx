@@ -32,7 +32,7 @@ export function SectionHeader({
         <SectionReviewBadge
           status={currentStatus}
           reviewedAt={latestReview?.reviewed_at}
-          reviewerName={latestReview?.profiles?.full_name ?? null}
+          reviewerName={latestReview?.users?.full_name ?? null}
           notes={latestReview?.notes ?? null}
         />
       </div>
