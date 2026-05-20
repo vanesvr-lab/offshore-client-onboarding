@@ -13,6 +13,22 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-142 — Reviewer name lookup repointed to users (done 2026-05-19)
+
+Sibling read-side fix to B-138 (which repointed the FK write side). The Review request detail dialog rendered "Unknown" under REVIEWERS because three name-lookup queries still read from the legacy `public.profiles` table — admins created via the modern invite flow (or the SQL-only Super User path) exist in `public.users` only. Repointed:
+
+- `src/lib/review-requests/hydrate.ts` — the `profileLookup` map (variable name kept; cosmetic rename can come later).
+- `src/app/api/admin/services/[id]/review-requests/route.ts` — requester-name resolution for the created-request reply email.
+- `src/app/api/admin/services/[id]/review-requests/[requestId]/close/route.ts` — requester-name resolution for the close email.
+
+Columns (`id`, `full_name`, `email`) are identical between `users` and `profiles`, so the queries are otherwise unchanged. Three reads explicitly left alone per the brief: `src/lib/auth.ts:41` (auth fallback), `src/lib/filing-rep-invite.ts:67` and `src/app/api/admin/admins/route.ts:110` (invite-mirror writes that keep the auth fallback working).
+
+### Tech debt
+
+- New Open entry #46: grep sweep for the same read-side `profiles` lookup pattern in other admin-name displays (audit-log actor names, communications-dialog recipient picker, etc.) before the next "Unknown" report.
+
+---
+
 ## B-141 — Center the unsaved-changes bar (done 2026-05-19)
 
 Follow-up to B-139. The previous fix wrapped the bar in a `max-w-7xl mx-auto` container and added a `lg:mr-20` button-group margin, but kept `justify-between` — Cancel + Save still hugged the right edge of the 1280 px content column, which still felt right-aligned on a 1920 px monitor. Switched to a single centered cluster: `justify-center` + `gap-6` on the outer flex, message and button group grouped together. The `lg:mr-20` safety guard moved from the button group up to the outer flex so the whole centered cluster still clears the B-128 chat bubble. Bar copy, button labels, and behaviour all unchanged.
@@ -7137,6 +7153,7 @@ Track known shortcuts, known issues, and "we'll fix it later" items here. Add an
 | 43 | **Mixed-actor `*_by` columns documented as admin-actor in B-138** | Low | Six of the 24 FKs repointed in B-138 (audit_log.actor_id, client_processes.started_by, document_uploads.uploaded_by, documents.uploaded_by, kyc_records.filled_by, submitted_forms.uploaded_by) are written by session users that could be admin OR client OR filing rep. Post-B-127 they all live in `public.users` so the FK is correct, but the column name + sometimes-stale table comments may suggest admin-only writers. A documentation pass would capture which columns are mixed-actor to keep the schema legible for the next person reading it. Estimate: ~30 minutes. Spawned by [B-138](docs/cli-brief-legacy-profiles-fk-sweep-b138.md). |
 | 44 | **Audit other floating / sticky UI for chat-bubble collisions** | Low | B-139 fixed the unsaved-changes bar (Cancel + Save buttons were being obscured by the B-128 chat bubble) via a `max-w-7xl mx-auto` container + `lg:mr-20` safety margin. The same pattern likely applies if toasts, banners, or floating action buttons start clipping the bubble in future. No known issues today; spawned defensively in case adjacent surfaces follow the same anti-pattern. Spawned by [B-139](docs/cli-brief-unsaved-changes-bar-layout-b139.md). |
 | 45 | **Orphan `_assigned_admin_id` JSON key in `service_details`** | Low | B-140 stopped reading from the legacy `service_details._assigned_admin_id` JSON path (column-backed `services.assigned_admin_id` is the source of truth post-B-130) but didn't clear the JSON key from existing rows. Nothing reads it, so it just sits as orphaned JSON. A future cosmetic sweep can `UPDATE services SET service_details = service_details - '_assigned_admin_id' WHERE service_details ? '_assigned_admin_id'`. Estimate: ~5 min. Spawned by [B-140](docs/cli-brief-remove-duplicate-assigned-officer-b140.md). |
+| 46 | **Grep sweep for remaining legacy `profiles` read-side lookups** | Medium | B-138 fixed the FK write side and B-142 fixed the three review-request name lookups. The same legacy-profiles pattern likely exists in other admin-name displays — audit-log actor names, communications-dialog recipient picker, document `uploaded_by` attributions, etc. Each one will silently render "Unknown" (or worse, an `?? "the user"` fallback) for admins created via the modern invite flow until it's hit. Sweep: `grep -rn 'from("profiles")' src/` then triage by category (auth fallback / invite mirror = leave; everything else = consider repointing). Estimate: ~half-day grep + fix + test. Spawned by [B-142](docs/cli-brief-reviewer-name-lookup-b142.md). |
 
 ### Resolved
 

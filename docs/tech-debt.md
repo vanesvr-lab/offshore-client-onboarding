@@ -9,6 +9,15 @@ remove after 30 days.
 
 ---
 
+## 2026-05-19 (B-142)
+
+- **Grep sweep for remaining legacy `profiles` read-side lookups.** *Severity: Medium.*
+  *Spawned by:* [B-142](cli-brief-reviewer-name-lookup-b142.md).
+  *What:* B-138 fixed the FK write side; B-142 fixed the three review-request name lookups. The same legacy-profiles pattern likely lives in other admin-name displays — audit-log actor name resolution, communications-dialog recipient picker, document `uploaded_by` attributions, etc. Each one will silently render "Unknown" (or fall back to "the user" / "an admin") for admins created via the modern invite flow until it's hit. Sweep: `grep -rn 'from("profiles")' src/` then triage — auth fallback (`src/lib/auth.ts`) + invite-mirror writes (`filing-rep-invite.ts`, `admins/route.ts`) stay; everything else evaluated for repointing to `users`. Estimate: ~half-day grep + fix + test.
+  *Why deferred:* Visible bug for reviewer-name list shipped today; other "Unknown" surfaces aren't user-blocking yet, so worth bundling into a single audit pass rather than chasing them one-by-one.
+
+---
+
 ## 2026-05-19 (B-140)
 
 - **Orphan `_assigned_admin_id` JSON key in `service_details`.** *Severity: Low.*
