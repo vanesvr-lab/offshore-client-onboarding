@@ -13,6 +13,12 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-143 — Representative must be individual (done 2026-05-19)
+
+`CreateProfileDialog`'s forced-rep mode (opened from AddDirector's "+ Add new representative" inline create + the "+ Add representative for KYC" affordance on the per-director KYC card) used to let the user pick Individual or Organisation for the rep's record_type. Filing reps are humans filling KYC paperwork on behalf of a director, so the Type selector is now hidden when `forceIsRepresentative === true` and the POST body locks `record_type='individual'` regardless of any stale local state. Standalone `/admin/profiles` create flow is unchanged (corporate directors are still creatable there). No data migration for any organisation-typed reps that may already exist — admins can clean those up manually via the profiles page.
+
+---
+
 ## B-142 — Reviewer name lookup repointed to users (done 2026-05-19)
 
 Sibling read-side fix to B-138 (which repointed the FK write side). The Review request detail dialog rendered "Unknown" under REVIEWERS because three name-lookup queries still read from the legacy `public.profiles` table — admins created via the modern invite flow (or the SQL-only Super User path) exist in `public.users` only. Repointed:
