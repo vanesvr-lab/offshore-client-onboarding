@@ -4,6 +4,32 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-147 — Rich KYC view on profile detail page (done 2026-05-20)
+
+`/admin/profiles/[id]` was rendering a custom display-mostly `<KycSection>` grid + flat documents list, while the service-detail per-director card has a fully editable KYC long form + per-category docs grid. Both surfaces now use the same building blocks. No migration; all edits are in `src/app/(admin)/admin/profiles/[id]/`.
+
+### Batch 1 — Rich editable KYC view
+
+- `page.tsx` — now also loads the active `document_types` catalogue (with `*, document_types(*)` join expanded on the docs query) so the form components can render their inline upload widgets.
+- `ProfileDetailClient.tsx` — replaced the legacy `<KycSection>` custom component + `INDIVIDUAL_SECTIONS` / `ORG_SECTIONS` constants with `IndividualKycForm` / `OrganisationKycForm` (branched on `record_type`). `client_profile_kyc` is adapted into the legacy `KycRecord` shape the forms expect (mirrors the B-134 `/filings/[profileId]/page.tsx` pattern); saves go via `/api/profiles/kyc/save` against `client_profile_kyc.id`.
+- Replaced the flat documents list (Card with FileText icons) with `<KycDocsByCategory>` + `<KycDocsSummary>` panels. Categories built from `documentTypes` (filtered to `identity`/`financial`/`compliance`) joined against uploaded `documents`. Service-scoped waivers are NOT surfaced here — waiver management stays inside a specific service.
+- Profile-canonical mode only: no roles checkboxes, no Remove-from-service, no per-service section reviews. Edits persist via the existing endpoint which already accepts admin auth.
+
+### Batch 2 — Filing-rep affordance
+
+- `page.tsx` — joined `filing_rep:filing_rep_profile_id(id, full_name, email)` on the profile query + a new `availableReps` query (representative profiles in this tenant) to feed the picker.
+- `ProfileDetailClient.tsx` — added a Filing Representative card right above the KYC form (hidden for representative profiles themselves). Mirrors the B-134 inline pattern from the service-detail per-director card: "+ Add representative for KYC" button when none is set; "Filed by [name] [change]" badge when one is. Clicking opens a picker dialog with the rep dropdown + an inline "+ Add new representative" escape hatch that mounts the existing `CreateProfileDialog` in `forceIsRepresentative` mode. Save PATCHes `/api/admin/profiles-v2/[id]` with `filing_rep_profile_id` — same endpoint the service-detail surface uses.
+
+### Batch 3 — CHANGES.md + tech debt
+
+Three follow-up items appended to `docs/tech-debt.md`:
+
+- **"On services" list on profile detail** — surface every service the profile is attached to with its roles + status. ~1–2 hours; new brief when needed.
+- **Audit trail card on profile detail** — same as the service-detail Audit Trail card, filtered to events affecting this profile. ~2 hours.
+- **Shared `<ProfileKycCard>` component** — service-detail per-director card and the standalone profile page now mount the same building blocks independently. If both grow more affordances in parallel and drift, refactor into a shared wrapper with an optional `serviceId` switch. ~half-day; not urgent.
+
+---
+
 ## B-146 — Review/Update Wizard polish (done 2026-05-20)
 
 Four UX changes on the admin Review Wizard flow. No migration, no DB changes; all edits inside `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`. Route path stays `/review`.

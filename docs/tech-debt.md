@@ -9,6 +9,25 @@ remove after 30 days.
 
 ---
 
+## 2026-05-20 (B-147)
+
+- **"On services" list on the profile detail page.** *Severity: Low.*
+  *Spawned by:* [B-147](cli-brief-profile-detail-rich-kyc-view-b147.md).
+  *What:* A profile can be attached to multiple services (Director on GBC-0005, Shareholder on AC-0001, etc.). The standalone profile page already loads `profile_service_roles` (with the joined service + template) but only uses it for the existing Services right-rail card. A richer "On services" panel with grouped roles per service would give admins a one-page view of where a profile participates. Estimate: ~1–2 hours; carve a follow-up brief when the demand materializes.
+  *Why deferred:* Out of scope for the B-147 rich KYC view; the existing right-rail Services card already covers the common case.
+
+- **Audit trail card on the profile detail page.** *Severity: Low.*
+  *Spawned by:* [B-147](cli-brief-profile-detail-rich-kyc-view-b147.md).
+  *What:* Same idea as the service-detail right-rail Audit Trail card, but filtered to events affecting this profile (entity_type='client_profile' OR 'client_profile_kyc' with entity_id matching). Useful for tracing edits across services. Estimate: ~2 hours.
+  *Why deferred:* No-one's asked for it yet; defer until an actual investigation needs it.
+
+- **Eventual shared `<ProfileKycCard>` component.** *Severity: Low.*
+  *Spawned by:* [B-147](cli-brief-profile-detail-rich-kyc-view-b147.md).
+  *What:* `ServiceDetailClient`'s per-director card and `ProfileDetailClient` now mount the same building blocks (`IndividualKycForm` / `OrganisationKycForm` + `KycDocsByCategory` + `KycDocsSummary`) but each owns its own wiring (state, prop assembly, KYC docs category derivation). If both surfaces grow more affordances and drift, refactor into a shared wrapper that takes an optional `serviceId` for service-mode (with waiver controls + role checkboxes) vs profile-canonical mode (without). Estimate: ~half-day.
+  *Why deferred:* Premature; the duplication is small and both surfaces evolve at the same rate today. Revisit if either gets a follow-up that touches both.
+
+---
+
 ## 2026-05-20 (B-144)
 
 - **Service-name auto-rename signals.** *Severity: Low.*
