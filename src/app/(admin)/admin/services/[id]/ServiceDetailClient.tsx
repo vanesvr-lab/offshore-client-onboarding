@@ -4198,13 +4198,12 @@ const ADMIN_STEPS_SERVICES: AdminStep[] = [
   { id: "step-people-kyc",    label: "People & KYC",  sectionKeys: ["people"] },
   { id: "step-documents",     label: "Documents",     sectionKeys: ["documents"] },
 ];
-const ACTIONS_STEP: AdminStep = {
-  id: "step-actions",
-  label: "Actions",
-  sectionKeys: ["actions"],
-};
+// B-146 — Wizard is permanently 5 steps. The `hasActions` parameter is
+// kept for call-site stability; the Actions surface still renders OUTSIDE
+// the wizard on the regular service detail page when hasActions=true.
 function buildAdminSteps(hasActions: boolean): AdminStep[] {
-  return hasActions ? [...ADMIN_STEPS_SERVICES, ACTIONS_STEP] : ADMIN_STEPS_SERVICES;
+  void hasActions;
+  return ADMIN_STEPS_SERVICES;
 }
 
 // B-111 Batch 2 — Pending card wrapper. Consumes the live section-reviews
@@ -4526,23 +4525,18 @@ const REVIEW_STEP_LABELS = [
   "Documents",
 ] as const;
 
-// B-121 — same template-conditional rule as `buildAdminSteps`: Actions
-// shows up as the 6th step only when service_template_actions has ≥1
-// binding for this service's template. The wizard never reads the
-// 5-element constants directly any more — always go through these helpers.
-const ACTIONS_REVIEW_SECTION_KEY = "actions" as const;
-const ACTIONS_REVIEW_LABEL = "Actions" as const;
-
+// B-146 — Wizard step lists are permanently 5 entries. The `hasActions`
+// param is preserved for call-site stability; Actions still renders on
+// the regular service page when hasActions=true, but the wizard no longer
+// walks through it.
 function buildReviewStepSectionKeys(hasActions: boolean): readonly string[] {
-  return hasActions
-    ? [...REVIEW_STEP_SECTION_KEYS, ACTIONS_REVIEW_SECTION_KEY]
-    : REVIEW_STEP_SECTION_KEYS;
+  void hasActions;
+  return REVIEW_STEP_SECTION_KEYS;
 }
 
 function buildReviewStepLabels(hasActions: boolean): readonly string[] {
-  return hasActions
-    ? [...REVIEW_STEP_LABELS, ACTIONS_REVIEW_LABEL]
-    : REVIEW_STEP_LABELS;
+  void hasActions;
+  return REVIEW_STEP_LABELS;
 }
 
 const BRAND_REVIEW_BLUE = "#24a0ed";
@@ -6549,11 +6543,11 @@ export function ServiceDetailClient({
         {/* ── B-119 — Actions (Substance / Bank / Registration / FSC) ──── */}
         {/* Top-level section now — appears in the step pill bar between
             Documents and the admin sections only when the current
-            template has ≥1 binding. B-121 — Inside the Review Wizard,
-            Actions is its own step (#5, after Documents) instead of
-            bleeding into every section's body; gate by reviewStep so
-            only step 5 renders this block. */}
-        {hasActionBindings && (!reviewMode || reviewStep === 5) && (
+            template has ≥1 binding. B-146 — Actions is no longer part
+            of the Review/Update Wizard step list; it still renders here
+            on the regular service detail page when hasActions=true, but
+            never inside the wizard. */}
+        {hasActionBindings && !reviewMode && (
           <ServiceCollapsibleSection
             title="Actions"
             percentage={actionsPct}
