@@ -4,6 +4,20 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-150 — Restore Actions step on regular page (done 2026-05-20)
+
+Regression fix on B-146. The wizard simplification collapsed `buildAdminSteps()` to always return a 5-step list, but that builder powers BOTH the wizard indicator AND the regular `/admin/services/[id]` page's top step navigation — so the Actions pill silently disappeared from the regular page's nav on templates with action bindings (GBC, AC, etc.). The Actions content block kept rendering (its `hasActionBindings && !reviewMode` gate was already correct), but admins lost the navigational handle to scroll to it.
+
+`src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`:
+
+- `buildAdminSteps(hasActions)` honors `hasActions` again: returns 5 steps when false, 6 (with `step-actions` appended) when true. Renamed the underlying constant from `ADMIN_STEPS_SERVICES` to `ADMIN_STEPS_BASE` + introduced `ADMIN_STEPS_WITH_ACTIONS`. Three internal call sites (around lines 4252, 4382, 4452) updated to the new name.
+- `buildReviewStepSectionKeys()` and `buildReviewStepLabels()` left untouched — wizard stays always-5 per B-146 intent.
+- `ReviewWizardTopBar`: dropped the `adminSteps = buildAdminSteps(hasActions)` lookup because its `Step N of M: <label>` line would otherwise show "Step 6 of 6: Actions" on hasActions=true templates inside the wizard. Now reads `stepLabel` and the count directly from `reviewLabels` (the wizard's 5-step list), keeping the wizard's "Step N of M" indicator aligned with the 5-circle `<AdminReviewWizardStepIndicator/>` below it.
+
+No new tech debt.
+
+---
+
 ## B-148 — Last-profile advance to Documents (done 2026-05-20)
 
 Follow-up to B-146's "Review Profiles (N)" entry. When admins finished iterating profiles, the Next button on the last profile sat disabled — the only way forward was Back to list → Next, which felt like a dead end. Now the Next button on the last profile reads **"Continue to Documents"** and advances the wizard to step 4 (Documents), naturally dropping out of the `?profile=...` substep because `goTo()` writes only `?step=` on the URL.
