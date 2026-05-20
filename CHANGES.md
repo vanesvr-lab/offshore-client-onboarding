@@ -4,6 +4,16 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-148 — Last-profile advance to Documents (done 2026-05-20)
+
+Follow-up to B-146's "Review Profiles (N)" entry. When admins finished iterating profiles, the Next button on the last profile sat disabled — the only way forward was Back to list → Next, which felt like a dead end. Now the Next button on the last profile reads **"Continue to Documents"** and advances the wizard to step 4 (Documents), naturally dropping out of the `?profile=...` substep because `goTo()` writes only `?step=` on the URL.
+
+`ReviewWizardBottomNav` (in `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`) now computes `isLastProfile` once and branches in three places: `nextLabel` ("Next Profile" → "Continue to Documents" on the last one), `nextDisabled` (never disable on the last profile — semantics differ), and `handleNext` (calls `onNextProfile` mid-iteration; falls through to `goTo(step + 1)` on the last). Earlier profiles + non-profile steps + the Finish state are all unchanged.
+
+No new tech debt entries.
+
+---
+
 ## B-149 — /admin/services reaches parity with queue (done 2026-05-20)
 
 The services list (`/admin/services`) was a generation behind `/admin/queue` after B-130 (Assigned Officer + multi-select status + Assigned-to-me) and B-144 (Service Name) landed on the queue only. This brief back-fills those five capabilities into `ServicesPageClient` while keeping the per-section completion percentages (companySetup / financial / banking / peopleKyc / documents) that are unique to the services list.
