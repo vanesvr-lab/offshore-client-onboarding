@@ -4,6 +4,31 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-149 — /admin/services reaches parity with queue (done 2026-05-20)
+
+The services list (`/admin/services`) was a generation behind `/admin/queue` after B-130 (Assigned Officer + multi-select status + Assigned-to-me) and B-144 (Service Name) landed on the queue only. This brief back-fills those five capabilities into `ServicesPageClient` while keeping the per-section completion percentages (companySetup / financial / banking / peopleKyc / documents) that are unique to the services list.
+
+### Batch 1 — Page query + AdminServiceRow
+
+- `src/app/(admin)/admin/services/page.tsx` — services query now also selects `assigned_admin:users!services_assigned_admin_id_fkey(id, full_name, email)` and the `service_profile_removals(client_profile_id)` join. Inline raw type updated to match (adds `name`, `assigned_admin_id`, `assigned_admin`, `service_profile_removals`). `AdminServiceRow` gains `name`, `assigned_admin_id`, `assigned_admin_name`; a new `AdminOption` export feeds the filter dropdown. The row builder now uses `activeRoles` (filtered through `service_profile_removals`) when deriving `managers`, matching the queue's B-133 behaviour. Loaded an `admins` list from `admin_users` + joined users to pass alongside `currentUserId` to the client component.
+- `ServicesPageClient.tsx` — props extended with `admins: AdminOption[]` and `currentUserId: string`. Batch 1 doesn't render them yet (the values are wired in with `void` markers); the consuming UI lands in Batch 3.
+
+### Batch 2 — Name + Assigned Officer columns
+
+- `ServicesPageClient.tsx` — REF cell now stacks the service number on top with `row.name` underneath in a smaller muted line, truncated at 180 px with a `title` tooltip for the full value. A new ASSIGNED TO column sits between MANAGERS and CO. SETUP showing `assigned_admin_name` or a dashed placeholder. Search predicate extends to match against `row.name` in addition to ref + manager; placeholder copy updated to mention "service name". REF column widened to 200 px; empty-state colSpan bumped from 9 → 10.
+
+### Batch 3 — Multi-status chips + assignee filter + Assigned-to-me chip
+
+- `ServicesPageClient.tsx` — replaced the single-select status filter row (with the legacy `STATUS_FILTERS` constant) with a multi-select chip row over `SERVICE_STATUS_ALL`. Empty set = no status filter. Added an Assigned Officer dropdown (using the same `Select` primitive as the queue) with "All officers" / "— Unassigned —" / each admin. Added an "Assigned to me" pill chip; `mine` takes precedence over the dropdown so the two don't double-narrow. Empty-state message updated to acknowledge all five filter inputs. Service-type chip row preserved (unique to this surface).
+
+### Batch 4 — CHANGES.md + tech debt
+
+One follow-up item appended to `docs/tech-debt.md`:
+
+- **Eventual consolidation of `/admin/services` and `/admin/queue`** — both pages now share a substantial overlap of columns + filters. Consider merging into one component with an optional `showSectionPercentages` prop, or replacing `ServicesPageClient` entirely with `ServicesTable` augmented to render the percentages. ~half-day refactor; defer until both pages drift further.
+
+---
+
 ## B-147 — Rich KYC view on profile detail page (done 2026-05-20)
 
 `/admin/profiles/[id]` was rendering a custom display-mostly `<KycSection>` grid + flat documents list, while the service-detail per-director card has a fully editable KYC long form + per-category docs grid. Both surfaces now use the same building blocks. No migration; all edits are in `src/app/(admin)/admin/profiles/[id]/`.

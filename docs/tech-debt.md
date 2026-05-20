@@ -9,6 +9,15 @@ remove after 30 days.
 
 ---
 
+## 2026-05-20 (B-149)
+
+- **Eventual consolidation of `/admin/services` and `/admin/queue`.** *Severity: Low.*
+  *Spawned by:* [B-149](cli-brief-services-list-parity-with-queue-b149.md).
+  *What:* Both pages now share a substantial overlap: same status chip row, same search + assignee dropdown + Assigned-to-me chip, same REF column with service name secondary line, same ASSIGNED TO column. The queue's `ServicesTable` doesn't render the per-section completion percentages; the services list does. Either (a) merge into a single component with an optional `showSectionPercentages` prop, or (b) replace `ServicesPageClient` entirely with `ServicesTable` augmented to render the percentages. Estimate: ~half-day refactor; defer until both pages drift further or a third surface needs the same affordances.
+  *Why deferred:* Both pages work and stay in sync if the next change touches both — premature to consolidate today.
+
+---
+
 ## 2026-05-20 (B-147)
 
 - **"On services" list on the profile detail page.** *Severity: Low.*
