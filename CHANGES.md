@@ -4,6 +4,28 @@ This file is maintained by both **Claude Code** (CLI) and **Claude Desktop** to 
 
 ---
 
+## B-146 — Review/Update Wizard polish (done 2026-05-20)
+
+Four UX changes on the admin Review Wizard flow. No migration, no DB changes; all edits inside `src/app/(admin)/admin/services/[id]/ServiceDetailClient.tsx`. Route path stays `/review`.
+
+### Batch 1 — Rename "Review Wizard" → "Review/Update Wizard"
+
+The previous name implied read-only; the wizard actually lets admins edit fields as they walk through. Updated user-visible copy in two spots: the wizard's top-bar subtitle (`{template} · Review/Update Wizard`) and the entry button label on the regular service page. Code comments, route path (`/review`), and audit-log entries left alone per brief.
+
+### Batch 2 — Drop Actions step from the wizard
+
+`buildAdminSteps` / `buildReviewStepSectionKeys` / `buildReviewStepLabels` now always return the 5-entry list (Company Setup → Financial → Banking → People & KYC → Documents) regardless of `hasActions`. The `hasActions` parameter is preserved for call-site stability (marked `void` to satisfy the linter). The page-level Actions block gate flipped from `hasActions && (!reviewMode || reviewStep === 5)` to `hasActions && !reviewMode` — Actions still renders on the regular service detail page when the template has action bindings, but never inside the wizard. The dead `ACTIONS_STEP` / `ACTIONS_REVIEW_SECTION_KEY` / `ACTIONS_REVIEW_LABEL` constants were removed. The step indicator naturally shrinks from 6 circles to 5 because it reads `sectionKeys.length`.
+
+### Batch 3 — "Review Profiles (N)" entry button on step 3
+
+`ReviewWizardBottomNav` gained a new `firstProfileId: string | null` prop. When the wizard is on step 3's list view (`step === 3 && !profileSubstep && firstProfileId !== null`), a third action button renders between Mark Reviewed and Next: `Review Profiles (N)`. Clicking it navigates to `?step=3&profile=<firstProfileId>`; the existing Next-Profile / Back-to-list logic on the substep takes over from there. Button hides for services with no profiles. The id is sourced from `uniqueRoles[0]?.person.client_profiles?.id ?? null` at the call site so it matches the order the wizard's iteration uses.
+
+### Batch 4 — Center the bottom-nav action group
+
+Same fix shape as B-141 on the non-wizard save bar. The outer bottom-nav container is now `relative` with an inner `flex justify-center gap-2 lg:mr-20` row. Previous absolutely-positions to the left (`absolute left-0`); Mark Reviewed + (optional Review Profiles) + Next sit as a centered flex group in the horizontal middle. The `lg:mr-20` safety guard from B-141 carries over to keep the centered cluster clear of the B-128 chat bubble on big screens.
+
+---
+
 ## B-144 — Service name (done 2026-05-20)
 
 Adds a human-recognizable `name` column to `services` so admins can identify them by something more memorable than the systematic `service_number`. `service_number` stays as the primary H1 everywhere; `name` renders as a supplementary line below it.
